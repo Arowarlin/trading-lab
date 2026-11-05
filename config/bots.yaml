@@ -1,0 +1,43 @@
+# Catálogo de bots del laboratorio.
+# enabled: solo documenta intención; el orquestador (fase 7) lo respetará.
+
+bots:
+  - id: trend-spy
+    type: deterministic
+    strategy: trend
+    universe: [SPY, QQQ]
+    timeframe: 1d
+    enabled: true
+    description: Seguimiento de tendencia con filtro de régimen. Señal al cierre, ejecución en apertura.
+
+  - id: meanrev-large
+    type: deterministic
+    strategy: meanrev
+    universe: [AAPL, MSFT, NVDA, AMZN, GOOGL, META]
+    timeframe: 1d
+    enabled: false
+    description: Reversión a la media en grandes capitalizaciones. Requiere régimen lateral.
+
+  - id: llm-swing
+    type: llm
+    strategy: tradingagents
+    universe: [NVDA, AAPL, MSFT, SPY]
+    timeframe: 1d
+    enabled: false
+    description: Decisión diaria con TradingAgents. Caro en tiempo; 1 run por ticker y día.
+
+  - id: llm-filter
+    type: hybrid
+    strategy: deterministic+llm
+    universe: [SPY, QQQ, NVDA]
+    timeframe: 1d
+    enabled: false
+    description: Señal técnica rápida; el LLM solo valida contexto y noticias antes de operar.
+
+  - id: research-desk
+    type: research
+    strategy: trading-r1
+    universe: [SPY, NVDA, AAPL, MSFT]
+    timeframe: 1d
+    enabled: false
+    description: Informe pre-market y de cierre con Trading-R1, enviado a Telegram/PDF.

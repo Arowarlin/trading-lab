@@ -1,0 +1,31 @@
+# Configuración global del laboratorio
+mode: paper                 # paper | live  (live exige confirmación explícita)
+timezone: America/New_York
+starting_cash: 100000.0
+currency: USD
+
+llm:
+  base_url: http://127.0.0.1:1234/v1   # LM Studio
+  model: qwen3.8-27b
+  api_key: lm-studio
+  temperature: 0.2
+  max_tokens: 2048
+  timeout_s: 600
+
+risk:
+  max_position_pct: 0.10      # máximo 10% del equity por ticker
+  max_gross_exposure: 0.90    # máximo 90% invertido
+  max_positions: 8
+  daily_loss_limit_pct: 0.03  # kill switch diario
+  max_drawdown_pct: 0.15      # kill switch global
+  per_trade_risk_pct: 0.01    # 1% del equity arriesgado por operación
+  atr_stop_mult: 2.0
+
+execution:
+  broker: paper               # paper | alpaca
+  commission_bps: 1.0
+  slippage_bps: 5.0
+
+data:
+  provider: yahoo             # yahoo | alpaca
+  cache_dir: data/cache
