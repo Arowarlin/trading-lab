@@ -66,7 +66,8 @@ CREATE TABLE IF NOT EXISTS positions (
 );
 
 CREATE TABLE IF NOT EXISTS equity (
-    ts TEXT PRIMARY KEY,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts TEXT NOT NULL,
     cash REAL NOT NULL,
     positions_value REAL NOT NULL,
     equity REAL NOT NULL
@@ -100,7 +101,7 @@ CREATE INDEX IF NOT EXISTS idx_equity_ts ON equity(ts);
 
 
 def utcnow() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return datetime.now(timezone.utc).isoformat(timespec="milliseconds")
 
 
 @contextmanager
@@ -123,6 +124,29 @@ def init_db(path: str | Path) -> None:
     with connect(path) as con:
         con.execute("PRAGMA journal_mode=WAL")
         con.executescript(SCHEMA)
+        _migrate_equity(con)
+
+
+def _migrate_equity(con: sqlite3.Connection) -> None:
+    """`equity` pasó de ts como PK a id autoincremental (varios snapshots por segundo)."""
+    columns = [row["name"] for row in con.execute("PRAGMA table_info(equity)").fetchall()]
+    if columns and "id" not in columns:
+        con.executescript(
+            """
+            ALTER TABLE equity RENAME TO equity_old;
+            CREATE TABLE equity (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ts TEXT NOT NULL,
+                cash REAL NOT NULL,
+                positions_value REAL NOT NULL,
+                equity REAL NOT NULL
+            );
+            INSERT INTO equity(ts, cash, positions_value, equity)
+                SELECT ts, cash, positions_value, equity FROM equity_old ORDER BY ts;
+            DROP TABLE equity_old;
+            CREATE INDEX IF NOT EXISTS idx_equity_ts ON equity(ts);
+            """
+        )
 
 
 def log_event(path: str | Path, level: str, source: str, message: str, data: str | None = None) -> None:

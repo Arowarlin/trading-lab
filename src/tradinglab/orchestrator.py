@@ -1,0 +1,179 @@
+from __future__ import annotations
+
+import inspect
+from dataclasses import dataclass, field
+from pathlib import Path
+
+import yaml
+
+from .config import ROOT, Settings
+from .data import fetch
+from .indicators import atr
+from .risk import check_order, kill_switch, size_position
+from .strategies import STRATEGIES
+
+BOTS_FILE = ROOT / "config" / "bots.yaml"
+
+
+@dataclass
+class BotSpec:
+    id: str
+    type: str
+    strategy: str
+    universe: list[str]
+    timeframe: str = "1d"
+    enabled: bool = False
+    params: dict = field(default_factory=dict)
+    description: str = ""
+
+
+@dataclass
+class BotAction:
+    bot: str
+    ticker: str
+    target: float
+    price: float
+    held: float
+    desired: int
+    delta: int
+    status: str
+    detail: str = ""
+    order: dict | None = None
+
+
+def load_bots(path: Path | None = None) -> list[BotSpec]:
+    path = path or BOTS_FILE
+    raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    bots = []
+    for item in raw.get("bots", []):
+        bots.append(
+            BotSpec(
+                id=item["id"],
+                type=item.get("type", "deterministic"),
+                strategy=item["strategy"],
+                universe=[t.upper() for t in item.get("universe", [])],
+                timeframe=item.get("timeframe", "1d"),
+                enabled=bool(item.get("enabled", False)),
+                params=item.get("params", {}) or {},
+                description=item.get("description", ""),
+            )
+        )
+    return bots
+
+
+def _filtered_params(func, params: dict) -> dict:
+    allowed = set(inspect.signature(func).parameters)
+    return {k: v for k, v in params.items() if k in allowed}
+
+
+def run_bot(
+    spec: BotSpec,
+    settings: Settings,
+    broker,
+    *,
+    dry_run: bool = False,
+    start: str | None = None,
+) -> list[BotAction]:
+    """Evalúa un bot sobre su universo y ejecuta (o simula) los cambios."""
+    if spec.strategy not in STRATEGIES:
+        raise ValueError(f"Estrategia desconocida en bot {spec.id}: {spec.strategy}")
+
+    from datetime import date, timedelta
+
+    start = start or (date.today() - timedelta(days=365 * 8)).isoformat()
+    today = date.today().isoformat()
+    strategy_fn = STRATEGIES[spec.strategy]
+    params = _filtered_params(strategy_fn, spec.params)
+
+    actions: list[BotAction] = []
+    snap = broker.snapshot({})
+    killed, reason = kill_switch(broker.equity_series(), settings.risk)
+    if killed:
+        raise RuntimeError(f"KILL SWITCH: {reason}")
+
+    for ticker in spec.universe:
+        try:
+            df = fetch(ticker, start, today, settings.data.cache_dir)
+            result = strategy_fn(df, **params)
+            price = float(df["close"].iloc[-1])
+            atr_value = float(atr(df).iloc[-1])
+            target = float(result.target.iloc[-1])
+        except Exception as exc:
+            actions.append(
+                BotAction(spec.id, ticker, 0.0, 0.0, 0.0, 0, 0, "error", str(exc)[:200])
+            )
+            continue
+
+        snap = broker.snapshot({ticker: price})
+        held = next((p["qty"] for p in snap["positions"] if p["ticker"] == ticker), 0.0)
+
+        if target > 0:
+            desired = size_position(snap["equity"], price, atr_value, settings.risk)
+        else:
+            desired = 0
+
+        delta = int(desired - held)
+        action = BotAction(spec.id, ticker, target, price, held, desired, delta, "sin_cambios")
+
+        if delta == 0:
+            actions.append(action)
+            continue
+
+        if delta > 0:
+            check = check_order(
+                equity=snap["equity"],
+                cash=snap["cash"],
+                price=price,
+                qty=delta,
+                current_positions=len(snap["positions"]),
+                gross_exposure=snap["positions_value"],
+                cfg=settings.risk,
+            )
+            if not check.approved or check.qty <= 0:
+                action.status = "bloqueado"
+                action.detail = check.reason
+                actions.append(action)
+                continue
+            if check.qty < delta:
+                action.detail = check.reason
+            delta = check.qty
+            action.delta = delta
+
+        if dry_run:
+            action.status = "dry_run"
+            actions.append(action)
+            continue
+
+        try:
+            order = broker.submit_market(
+                ticker, delta, price, bot=spec.id, reason=f"target={target:.2f}"
+            )
+            action.status = "ejecutado"
+            action.order = order
+        except Exception as exc:
+            action.status = "error"
+            action.detail = str(exc)[:200]
+
+        actions.append(action)
+
+    return actions
+
+
+def run_all(
+    settings: Settings,
+    broker,
+    *,
+    only: str | None = None,
+    dry_run: bool = False,
+    include_disabled: bool = False,
+) -> list[BotAction]:
+    actions: list[BotAction] = []
+    for spec in load_bots():
+        if only and spec.id != only:
+            continue
+        if not spec.enabled and not include_disabled:
+            continue
+        if spec.type not in ("deterministic", "hybrid"):
+            continue
+        actions.extend(run_bot(spec, settings, broker, dry_run=dry_run))
+    return actions

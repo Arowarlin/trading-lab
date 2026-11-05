@@ -17,9 +17,11 @@ from .agents import AgentError, RATING_TO_TARGET, run_tradingagents
 from .backtest import run as run_backtest
 from .config import DEFAULT_DB, ROOT, get_settings
 from .db import connect, init_db, utcnow
-from .execution import PaperBroker
+from .execution import AlpacaError, PaperBroker, get_broker
 from .indicators import atr as atr_indicator
 from .llm import LLMClient
+from .orchestrator import run_all
+from .reporting import build_dashboard
 from .risk import check_order, kill_switch, size_position
 from .strategies import STRATEGIES
 
@@ -103,11 +105,20 @@ def doctor(network: bool = typer.Option(False, "--network", help="Probar descarg
 
     key = os.getenv("ALPACA_API_KEY")
     secret = os.getenv("ALPACA_SECRET_KEY")
-    table.add_row(
-        "Alpaca keys",
-        OK if (key and secret) else WARN,
-        "configuradas" if (key and secret) else "faltan en .env (paper trading)",
-    )
+    if key and secret:
+        try:
+            from .execution import AlpacaBroker
+
+            health = AlpacaBroker(paper=(settings.mode != "live") if settings else True).health()
+            table.add_row(
+                "Alpaca",
+                OK,
+                f"paper={health['paper']} · equity={health['equity']:,.2f} · status={health['status']}",
+            )
+        except Exception as exc:
+            table.add_row("Alpaca", FAIL, str(exc)[:160])
+    else:
+        table.add_row("Alpaca keys", WARN, "faltan en .env (paper trading)")
 
     # LM Studio
     if settings:
@@ -217,11 +228,9 @@ def run(
         console.print(f"[red]Estrategia desconocida:[/red] {strategy}")
         raise typer.Exit(2)
 
-    broker = PaperBroker(
+    broker = get_broker(
+        settings,
         DEFAULT_DB,
-        settings.starting_cash,
-        settings.execution.commission_bps,
-        settings.execution.slippage_bps,
     )
 
     df = data_mod.fetch(ticker.upper(), start or _default_start(), _today(), settings.data.cache_dir)
@@ -377,11 +386,9 @@ def agent_run(
             )
         return
 
-    broker = PaperBroker(
+    broker = get_broker(
+        settings,
         DEFAULT_DB,
-        settings.starting_cash,
-        settings.execution.commission_bps,
-        settings.execution.slippage_bps,
     )
     df = data_mod.fetch(ticker.upper(), _default_start(), _today(), settings.data.cache_dir)
     price = float(df["close"].iloc[-1])
@@ -442,11 +449,62 @@ def agent_run(
 
 
 @app.command()
+def orchestrate(
+    only: str = typer.Option(None, "--bot", help="Ejecutar solo este bot (id de bots.yaml)"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Calcular sin enviar órdenes"),
+    include_disabled: bool = typer.Option(False, "--include-disabled", help="Incluir bots con enabled: false"),
+) -> None:
+    """Ejecuta todos los bots habilitados del catálogo sobre el broker configurado."""
+    settings = get_settings()
+    init_db(DEFAULT_DB)
+
+    try:
+        broker = get_broker(settings, DEFAULT_DB)
+    except Exception as exc:
+        console.print(Panel(str(exc), title="Broker no disponible", style="bold red"))
+        raise typer.Exit(1)
+
+    try:
+        actions = run_all(
+            settings, broker, only=only, dry_run=dry_run, include_disabled=include_disabled
+        )
+    except Exception as exc:
+        console.print(Panel(str(exc)[-2000:], title="Orquestador detenido", style="bold red"))
+        raise typer.Exit(1)
+
+    if not actions:
+        console.print("[yellow]No hay bots habilitados. Revisa config/bots.yaml[/yellow]")
+        return
+
+    t = Table(title=f"Orquestador · broker={settings.execution.broker} · dry_run={dry_run}")
+    for col in ("Bot", "Ticker", "Target", "Precio", "Pos.", "Objetivo", "Delta", "Estado", "Detalle"):
+        t.add_column(col, justify="right" if col not in ("Bot", "Ticker", "Estado", "Detalle") else "left")
+    for a in actions:
+        color = {"ejecutado": "green", "error": "red", "bloqueado": "yellow"}.get(a.status, "dim")
+        t.add_row(
+            a.bot,
+            a.ticker,
+            f"{a.target:.0%}",
+            f"{a.price:,.2f}",
+            f"{a.held:g}",
+            str(a.desired),
+            f"{a.delta:+d}",
+            f"[{color}]{a.status}[/{color}]",
+            a.detail,
+        )
+    console.print(t)
+
+    executed = [a for a in actions if a.status == "ejecutado"]
+    if executed:
+        console.print(f"[green]{len(executed)} órdenes enviadas[/green]")
+
+
+@app.command()
 def status() -> None:
     """Muestra la cuenta paper, posiciones y últimas órdenes."""
     settings = get_settings()
     init_db(DEFAULT_DB)
-    broker = PaperBroker(DEFAULT_DB, settings.starting_cash, settings.execution.commission_bps, settings.execution.slippage_bps)
+    broker = get_broker(settings, DEFAULT_DB)
     snap = broker.snapshot()
 
     console.print(
@@ -518,7 +576,7 @@ def report() -> None:
     """Resumen de rendimiento de la cuenta paper."""
     settings = get_settings()
     init_db(DEFAULT_DB)
-    broker = PaperBroker(DEFAULT_DB, settings.starting_cash, settings.execution.commission_bps, settings.execution.slippage_bps)
+    broker = get_broker(settings, DEFAULT_DB)
     eq = broker.equity_series()
 
     if len(eq) < 2:
@@ -572,6 +630,17 @@ def list_bots() -> None:
             bot.get("description", ""),
         )
     console.print(t)
+
+
+@app.command()
+def dashboard() -> None:
+    """Genera reports/dashboard.html con equity, posiciones y órdenes."""
+    settings = get_settings()
+    init_db(DEFAULT_DB)
+    broker = get_broker(settings, DEFAULT_DB)
+    path = build_dashboard(settings, broker, DEFAULT_DB)
+    console.print(f"[green]Dashboard generado:[/green] {path}")
+    console.print("[dim]Ábrelo en el navegador o sírvelo con `python -m http.server -d reports`[/dim]")
 
 
 def main() -> None:

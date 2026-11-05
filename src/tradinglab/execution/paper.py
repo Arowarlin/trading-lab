@@ -137,7 +137,7 @@ class PaperBroker:
                 con.execute("SELECT COALESCE(SUM(qty * avg_price), 0) AS v FROM positions").fetchone()["v"]
             )
             con.execute(
-                "INSERT OR REPLACE INTO equity(ts, cash, positions_value, equity) VALUES(?,?,?,?)",
+                "INSERT INTO equity(ts, cash, positions_value, equity) VALUES(?,?,?,?)",
                 (utcnow(), new_cash, positions_value, new_cash + positions_value),
             )
 
@@ -155,7 +155,7 @@ class PaperBroker:
         snap = self.snapshot(prices)
         with connect(self.db_path) as con:
             con.execute(
-                "INSERT OR REPLACE INTO equity(ts, cash, positions_value, equity) VALUES(?,?,?,?)",
+                "INSERT INTO equity(ts, cash, positions_value, equity) VALUES(?,?,?,?)",
                 (utcnow(), snap["cash"], snap["positions_value"], snap["equity"]),
             )
         return float(snap["equity"])

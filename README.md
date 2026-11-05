@@ -17,10 +17,10 @@ Entorno multi-bot de trading sobre **TradingAgents** y **Trading-R1**, con LLM l
 | F2 | Repos instalados y verificados | ✅ TradingAgents · ⚠ Trading-R1 requiere WSL |
 | F3 | Núcleo del lab: config, SQLite, datos, riesgo | ✅ |
 | F4 | Backtester + estrategias deterministas | ✅ |
-| F5 | Alpaca paper + ejecución | ⏳ faltan claves |
+| F5 | Alpaca paper + ejecución | 🟡 adaptador escrito · faltan claves |
 | F6 | TradingAgents como fuente de señal | ✅ código · ⏳ falta modelo |
 | F7 | Trading-R1 (informes/Telegram) | ⏳ requiere WSL |
-| F8 | Dashboard y observabilidad | ⏳ |
+| F8 | Dashboard y observabilidad | ✅ `lab dashboard` (HTML) |
 | F9 | Paper trading continuo | ⏳ |
 
 ---
@@ -70,11 +70,16 @@ cd E:\trading-lab
 .\.venv\Scripts\lab.exe run SPY --strategy trend --dry-run   # señal sin orden
 .\.venv\Scripts\lab.exe run SPY --strategy trend             # orden paper
 
+.\.venv\Scripts\lab.exe orchestrate --dry-run                # todos los bots del catálogo
+.\.venv\Scripts\lab.exe orchestrate --bot trend-spy         # solo uno
+.\.venv\Scripts\lab.exe orchestrate --include-disabled      # incluye los apagados
+
 .\.venv\Scripts\lab.exe agent NVDA --date 2026-11-05         # solo decisión LLM
-.\.venv\Scripts\lab.exe agent-run NVDA --dry-run             # decisión + orden paper
+.\.venv\Scripts\lab.exe agent-run NVDA --dry-run             # decisión + orden
 
 .\.venv\Scripts\lab.exe status
 .\.venv\Scripts\lab.exe report
+.\.venv\Scripts\lab.exe dashboard                            # reports/dashboard.html
 .\.venv\Scripts\lab.exe bots
 .\.venv\Scripts\lab.exe llm-test
 ```
@@ -120,11 +125,13 @@ Atajo: `.\scripts\lab.ps1 <comando>`.
    ALPACA_SECRET_KEY=...
    ALPACA_BASE_URL=https://paper-api.alpaca.markets
    ```
-3. Cambia en `config/lab.yaml`: `execution.broker: alpaca`.
-4. `.\.venv\Scripts\lab.exe doctor` debe mostrar `Alpaca keys OK`.
+3. Cambia en `config/lab.yaml`: `execution.broker: alpaca` (y `mode: paper`).
+4. `.\.venv\Scripts\lab.exe doctor` debe mostrar `Alpaca OK` con el equity de la cuenta.
+5. Prueba: `.\.venv\Scripts\lab.exe orchestrate --dry-run` y luego sin `--dry-run`.
 
-El adaptador de ejecución real (Alpaca) es la siguiente pieza de código: hoy
-`PaperBroker` simula fills localmente, que es lo correcto para validar la lógica.
+Salvaguardas del adaptador: `mode: live` exige además `ALLOW_LIVE=YES` en el entorno.
+`PaperBroker` (simulador local) sigue siendo el broker por defecto y el recomendado
+para validar la lógica antes de tocar Alpaca.
 
 ---
 
