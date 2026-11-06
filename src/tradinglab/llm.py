@@ -115,10 +115,39 @@ class LLMClient:
                 "json_schema": {"name": "result", "strict": True, "schema": schema},
             }
         else:
-            response_format = {"type": "json_object"}
+            # LM Studio rechaza "json_object" (solo admite json_schema o text).
+            response_format = {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "result",
+                    "strict": False,
+                    "schema": {"type": "object", "additionalProperties": True},
+                },
+            }
 
-        raw = self.chat(messages, purpose=purpose, response_format=response_format)
         try:
-            return json.loads(raw)
+            raw = self.chat(messages, purpose=purpose, response_format=response_format)
+        except LLMError as exc:
+            # Compatibilidad con backends que no soportan response_format:
+            # se reintenta sin él y se confía en el prompt.
+            if "response_format" not in str(exc):
+                raise
+            raw = self.chat(messages, purpose=purpose, response_format=None)
+
+        try:
+            return json.loads(_strip_fences(raw))
         except json.JSONDecodeError as exc:
             raise LLMError(f"JSON inválido: {raw[:400]}") from exc
+
+
+def _strip_fences(text: str) -> str:
+    text = text.strip()
+    if not text.startswith("```"):
+        return text
+    body = text.split("```", 2)
+    if len(body) < 2:
+        return text
+    inner = body[1]
+    if inner.lower().startswith("json"):
+        inner = inner[4:]
+    return inner.strip()

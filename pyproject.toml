@@ -19,6 +19,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+mt5 = ["MetaTrader5>=5.0.45", "tzdata>=2024.1"]
 dev = ["pytest>=8.0", "ruff>=0.6"]
 
 [project.scripts]
@@ -34,3 +35,7 @@ packages = ["src/tradinglab"]
 [tool.ruff]
 line-length = 110
 target-version = "py312"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+norecursedirs = ["vendor", ".venv*", "data", "reports", "logs"]

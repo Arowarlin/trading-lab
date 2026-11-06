@@ -29,3 +29,23 @@ execution:
 data:
   provider: yahoo             # yahoo | alpaca
   cache_dir: data/cache
+
+# MetaTrader 5 (forex). El terminal ya está instalado.
+mt5:
+  terminal_path: null         # ej. "C:\\Program Files\\Darwinex MetaTrader 5\\terminal64.exe"
+  login: null                 # número de cuenta (mejor en .env: MT5_LOGIN)
+  server: null                # ej. "Darwinex-Live" / "FTMO-Server"
+  magic: 20261105
+  deviation: 20               # desviación máxima en puntos
+  default_symbol: EURUSD
+  dry_run: true               # el orquestador no envía órdenes salvo --execute
+  server_utc_offset_hours: null   # null = autodetectar (Darwinex ahora va en GMT+2)
+
+# Reglas de fondeo. Los valores viven en config/prop.yaml (verifícalos).
+prop:
+  enabled: false
+  firm: FTMO
+  phase: challenge            # challenge | verification | funded
+  account_size: 100000
+  buffer_pct: 0.10            # 10% del límite que el bot no usa
+  reset_tz: Europe/Prague

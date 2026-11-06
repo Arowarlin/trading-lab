@@ -17,10 +17,12 @@ from .agents import AgentError, RATING_TO_TARGET, run_tradingagents
 from .backtest import run as run_backtest
 from .config import DEFAULT_DB, ROOT, get_settings
 from .db import connect, init_db, utcnow
-from .execution import AlpacaError, PaperBroker, get_broker
+from .execution import AlpacaError, PaperBroker, get_broker, get_mt5_broker
 from .indicators import atr as atr_indicator
+from .instruments import InstrumentError, get_instrument, list_instruments
 from .llm import LLMClient
 from .orchestrator import run_all
+from .prop import AccountState, PropError, PropGuard, PropRules, from_yaml, ftmo, monte_carlo
 from .reporting import build_dashboard
 from .risk import check_order, kill_switch, size_position
 from .strategies import STRATEGIES
@@ -30,6 +32,10 @@ app = typer.Typer(
     no_args_is_help=True,
     help="TradingLab: datos, backtest, paper trading y agentes LLM.",
 )
+mt5_app = typer.Typer(no_args_is_help=True, help="MetaTrader 5: conexión, precios, sizing y órdenes.")
+prop_app = typer.Typer(no_args_is_help=True, help="Cuentas de fondeo: reglas, estado y Monte Carlo.")
+app.add_typer(mt5_app, name="mt5")
+app.add_typer(prop_app, name="prop")
 console = Console()
 
 OK = "[green]OK[/green]"
@@ -47,6 +53,82 @@ def _default_start() -> str:
 
 def _fmt_pct(value: float) -> str:
     return f"{value * 100:,.2f}%"
+
+
+# --------------------------------------------------------------------- helpers
+
+def _prop_rules(
+    firm: str | None = None,
+    phase: str | None = None,
+    account_size: float | None = None,
+    buffer_pct: float | None = None,
+) -> PropRules:
+    settings = get_settings()
+    firm = firm or settings.prop.firm
+    phase = phase or settings.prop.phase
+    size = float(account_size or settings.prop.account_size)
+    buffer = settings.prop.buffer_pct if buffer_pct is None else buffer_pct
+    try:
+        return from_yaml(firm, phase, size, buffer_pct=buffer)  # type: ignore[arg-type]
+    except KeyError:
+        console.print(f"[yellow]'{firm}' no está en config/prop.yaml; uso el preset FTMO.[/yellow]")
+        return ftmo(size, phase, buffer_pct=buffer)  # type: ignore[arg-type]
+
+
+def _mt5(settings, dry_run: bool = True):
+    from .execution.mt5 import MT5Error
+
+    broker = get_mt5_broker(settings, dry_run=dry_run)
+    try:
+        broker.connect()
+    except MT5Error as exc:
+        console.print(Panel(str(exc), title="MT5 no disponible", style="bold red"))
+        raise typer.Exit(1)
+    return broker
+
+
+def _quote_rate(broker, instrument) -> float:
+    """Unidades de la divisa cotizada por 1 USD."""
+    quote = instrument.quote_ccy.upper()
+    if quote == "USD":
+        return 1.0
+    try:
+        if quote in {"JPY", "CHF", "CAD"}:
+            return float(broker.tick(f"USD{quote}")["bid"])
+        return 1.0 / float(broker.tick(f"{quote}USD")["bid"])
+    except Exception as exc:
+        raise typer.BadParameter(
+            f"No pude obtener el cambio de {quote} a USD ({exc}). "
+            "Pásalo a mano con --quote-rate (unidades de la divisa por 1 USD)."
+        ) from exc
+
+
+def _prop_state_from_mt5(broker, rules: PropRules) -> AccountState:
+    acc = broker.health()
+    positions = broker.positions()
+    curve = broker.equity_series(180)
+    if len(curve) >= 2:
+        state = PropGuard.state_from_equity(
+            rules, curve, initial_balance=rules.account_size
+        )
+        state.equity = acc["equity"]
+        state.balance = acc["balance"]
+        state.open_positions = len(positions)
+        state.open_lots = sum(p["volume"] for p in positions)
+        state.server_time = None
+        return state
+
+    return AccountState(
+        balance=acc["balance"],
+        equity=acc["equity"],
+        initial_balance=rules.account_size,
+        day_start_balance=acc["balance"],
+        day_start_equity=acc["equity"] - acc.get("profit", 0.0),
+        peak_balance=acc["balance"],
+        peak_equity=acc["equity"],
+        open_positions=len(positions),
+        open_lots=sum(p["volume"] for p in positions),
+    )
 
 
 @app.command()
@@ -135,6 +217,42 @@ def doctor(network: bool = typer.Option(False, "--network", help="Probar descarg
                 )
         except Exception as exc:
             table.add_row("LM Studio", WARN, f"servidor no disponible: {str(exc)[:120]}")
+
+    # MetaTrader 5
+    if settings:
+        try:
+            from .execution.mt5 import MT5Broker
+
+            mt5 = MT5Broker(
+                path=settings.mt5.terminal_path,
+                login=settings.mt5.login,
+                server=settings.mt5.server,
+            )
+            health = mt5.connect()
+            mt5.shutdown()
+            table.add_row(
+                "MetaTrader 5",
+                OK if health["connected"] else WARN,
+                f"{health['server']} · {health['mode']} · equity={health['equity']:,.2f} "
+                f"· algo={'on' if health['trade_allowed'] else 'OFF'} "
+                f"· server GMT{health['server_utc_offset_hours']:+g}",
+            )
+        except Exception as exc:
+            table.add_row("MetaTrader 5", WARN, str(exc)[:160])
+
+    # Reglas de fondeo
+    if settings:
+        try:
+            rules = _prop_rules()
+            table.add_row("Fondeo", OK, rules.describe())
+            if rules.verify_against_contract:
+                table.add_row(
+                    "Reglas fondeo",
+                    WARN,
+                    "plantilla: verifica cada límite en el contrato de tu firma",
+                )
+        except Exception as exc:
+            table.add_row("Fondeo", FAIL, str(exc)[:160])
 
     # Datos
     if network:
@@ -641,6 +759,620 @@ def dashboard() -> None:
     path = build_dashboard(settings, broker, DEFAULT_DB)
     console.print(f"[green]Dashboard generado:[/green] {path}")
     console.print("[dim]Ábrelo en el navegador o sírvelo con `python -m http.server -d reports`[/dim]")
+
+
+def _print_guard(rules: PropRules, report) -> None:
+    color = {"ok": "green", "warn": "yellow", "block": "red", "breach": "bold red"}[report.severity]
+    console.print(Panel(report.summary(), title=f"[{color}]{rules.describe()}[/{color}]"))
+    if report.warnings:
+        for w in report.warnings:
+            console.print(f"[yellow]· {w}[/yellow]")
+
+
+# =============================================================== MetaTrader 5
+
+@mt5_app.command("status")
+def mt5_status() -> None:
+    """Conecta con el terminal y muestra cuenta, margen y permisos."""
+    settings = get_settings()
+    broker = _mt5(settings, dry_run=True)
+    try:
+        health = broker.health()
+    finally:
+        broker.shutdown()
+
+    t = Table(title="MetaTrader 5")
+    t.add_column("Campo", style="bold")
+    t.add_column("Valor", justify="right")
+    for key in (
+        "connected",
+        "trade_allowed",
+        "mode",
+        "login",
+        "server",
+        "company",
+        "currency",
+        "leverage",
+        "balance",
+        "equity",
+        "margin",
+        "margin_free",
+        "margin_level",
+        "server_utc_offset_hours",
+        "path",
+    ):
+        t.add_row(key, f"{health[key]:,.2f}" if isinstance(health[key], float) else str(health[key]))
+    console.print(t)
+
+    if health["mode"] == "real":
+        console.print(Panel("CUENTA REAL: las órdenes exigen ALLOW_LIVE=YES", style="bold red"))
+    if not health["trade_allowed"]:
+        console.print("[yellow]Algo Trading está desactivado en el terminal.[/yellow]")
+
+
+@mt5_app.command("symbols")
+def mt5_symbols(filter_: str = typer.Option(None, "--filter", "-f", help="Filtro de texto")) -> None:
+    """Lista el catálogo local de instrumentos con sus especificaciones."""
+    items = list_instruments()
+    if filter_:
+        f = filter_.upper()
+        items = [i for i in items if f in i.symbol]
+    t = Table(title=f"Instrumentos ({len(items)})")
+    t.add_column("Símbolo", style="bold")
+    t.add_column("Clase")
+    t.add_column("Tick", justify="right")
+    t.add_column("Tick $", justify="right")
+    t.add_column("Contrato", justify="right")
+    t.add_column("Lote mín/step/máx", justify="right")
+    for i in items:
+        tv = f"{i.tick_value:,.2f}" if i.tick_value is not None else "variable"
+        t.add_row(
+            i.symbol,
+            i.asset_class,
+            f"{i.tick_size:g}",
+            tv,
+            f"{i.contract_size:g}",
+            f"{i.min_lot:g}/{i.lot_step:g}/{i.max_lot:g}",
+        )
+    console.print(t)
+
+
+@mt5_app.command("spec")
+def mt5_spec(symbol: str = typer.Argument(..., help="Ej. EURUSD")) -> None:
+    """Muestra la especificación real que reporta el bróker."""
+    broker = _mt5(get_settings(), dry_run=True)
+    try:
+        spec = broker.symbol_spec(symbol)
+        inst = broker.instrument(symbol)
+    finally:
+        broker.shutdown()
+    t = Table(title=f"Especificación del bróker · {symbol}")
+    t.add_column("Campo", style="bold")
+    t.add_column("Valor", justify="right")
+    for k, v in spec.items():
+        t.add_row(k, f"{v:,.5f}" if isinstance(v, float) else str(v))
+    t.add_row("pip_size", f"{inst.pip_size():g}" if inst.is_fx else "n/a")
+    console.print(t)
+
+
+@mt5_app.command("price")
+def mt5_price(symbol: str = typer.Argument(..., help="Ej. EURUSD")) -> None:
+    """Bid/ask/spread actuales."""
+    broker = _mt5(get_settings(), dry_run=True)
+    try:
+        tick = broker.tick(symbol)
+        inst = broker.instrument(symbol)
+    finally:
+        broker.shutdown()
+    spread_pips = tick["spread"] / inst.pip_size() if inst.is_fx else tick["spread"]
+    console.print(
+        f"[bold]{symbol}[/bold] bid={tick['bid']:.5f} ask={tick['ask']:.5f} "
+        f"spread={tick['spread']:.5f} ({spread_pips:.2f} pips) · {tick['time']:%Y-%m-%d %H:%M:%S} UTC"
+    )
+
+
+@mt5_app.command("size")
+def mt5_size(
+    symbol: str = typer.Argument(..., help="Ej. EURUSD"),
+    risk_usd: float = typer.Option(500.0, "--risk-usd", help="Riesgo máximo en USD"),
+    stop_pips: float = typer.Option(20.0, "--stop-pips", help="Distancia al stop en pips"),
+    quote_rate: float | None = typer.Option(None, "--quote-rate", help="Divisa cotizada por 1 USD"),
+) -> None:
+    """Calcula lotes a partir del riesgo y del stop (no del notional)."""
+    broker = _mt5(get_settings(), dry_run=True)
+    try:
+        inst = broker.instrument(symbol)
+        qr = quote_rate or _quote_rate(broker, inst)
+        tick = broker.tick(symbol)
+    finally:
+        broker.shutdown()
+
+    stop_distance = stop_pips * inst.pip_size()
+    risk_per_lot = inst.risk_per_lot(stop_distance, quote_rate=qr)
+    lots = inst.lots_for_risk(risk_usd, stop_distance, quote_rate=qr)
+
+    t = Table(title=f"Sizing · {symbol} · stop {stop_pips:g} pips")
+    t.add_column("Campo", style="bold")
+    t.add_column("Valor", justify="right")
+    t.add_row("Precio", f"{tick['bid']:.5f}")
+    t.add_row("Pip", f"{inst.pip_size():g}")
+    t.add_row("Valor del pip por lote", f"{risk_per_lot / stop_pips:,.2f} USD")
+    t.add_row("Riesgo por lote", f"{risk_per_lot:,.2f} USD")
+    t.add_row("Riesgo objetivo", f"{risk_usd:,.2f} USD")
+    t.add_row("Lotes", f"[bold]{lots:g}[/bold]")
+    t.add_row("Riesgo real", f"{lots * risk_per_lot:,.2f} USD")
+    t.add_row("Margen (1:100)", f"{inst.margin_required(lots, tick['bid'], 100):,.2f} USD")
+    console.print(t)
+    if lots == 0:
+        console.print("[yellow]Ni el lote mínimo cabe en ese riesgo: acerca el stop o sube el riesgo.[/yellow]")
+
+
+@mt5_app.command("order")
+def mt5_order(
+    symbol: str = typer.Argument(..., help="Ej. EURUSD"),
+    lots: float = typer.Option(0.10, "--lots", help="Volumen en lotes"),
+    side: str = typer.Option("buy", "--side", help="buy | sell"),
+    sl_pips: float = typer.Option(20.0, "--sl-pips", help="Stop loss en pips (0 = sin SL)"),
+    tp_pips: float = typer.Option(0.0, "--tp-pips", help="Take profit en pips (0 = sin TP)"),
+    execute: bool = typer.Option(False, "--execute", help="Enviar de verdad (por defecto dry-run)"),
+) -> None:
+    """Envía una orden a mercado con SL/TP calculados en pips."""
+    if side not in {"buy", "sell"}:
+        raise typer.BadParameter("side debe ser buy o sell")
+    if lots <= 0:
+        raise typer.BadParameter("lots debe ser > 0")
+
+    broker = _mt5(get_settings(), dry_run=not execute)
+    try:
+        inst = broker.instrument(symbol)
+        qr = _quote_rate(broker, inst)
+        tick = broker.tick(symbol)
+        entry = tick["ask"] if side == "buy" else tick["bid"]
+        pip = inst.pip_size()
+        sign = 1 if side == "buy" else -1
+        sl = entry - sign * sl_pips * pip if sl_pips else None
+        tp = entry + sign * tp_pips * pip if tp_pips else None
+
+        signed = lots if side == "buy" else -lots
+        result = broker.submit_market(symbol, signed, sl=sl, tp=tp, reason="cli mt5 order")
+    finally:
+        broker.shutdown()
+
+    t = Table(title=f"Orden {'ENVIADA' if execute else 'SIMULADA'} · {symbol}")
+    for k, v in result.items():
+        if k == "request":
+            continue
+        t.add_row(k, str(v))
+    t.add_row("riesgo", f"{lots * inst.risk_per_lot(sl_pips * pip, quote_rate=qr):,.2f} USD")
+    console.print(t)
+    if not execute:
+        console.print("[dim]Dry-run. Añade --execute para enviarla al bróker.[/dim]")
+
+
+@mt5_app.command("positions")
+def mt5_positions() -> None:
+    """Posiciones abiertas en la cuenta MT5."""
+    broker = _mt5(get_settings(), dry_run=True)
+    try:
+        positions = broker.positions()
+    finally:
+        broker.shutdown()
+    if not positions:
+        console.print("[dim]Sin posiciones abiertas.[/dim]")
+        return
+    t = Table(title="Posiciones MT5")
+    for col in ("Ticket", "Símbolo", "Lado", "Volumen", "Apertura", "Actual", "SL", "TP", "PnL"):
+        t.add_column(col, justify="right" if col != "Símbolo" else "left")
+    for p in positions:
+        t.add_row(
+            str(p["ticket"]),
+            p["symbol"],
+            p["side"],
+            f"{p['volume']:g}",
+            f"{p['price_open']:.5f}",
+            f"{p['price_current']:.5f}",
+            f"{p['sl']:.5f}",
+            f"{p['tp']:.5f}",
+            f"{p['profit']:,.2f}",
+        )
+    console.print(t)
+
+
+@mt5_app.command("close")
+def mt5_close(
+    ticket: int = typer.Argument(..., help="Ticket de la posición"),
+    execute: bool = typer.Option(False, "--execute", help="Cerrar de verdad"),
+) -> None:
+    """Cierra una posición por ticket."""
+    broker = _mt5(get_settings(), dry_run=not execute)
+    try:
+        positions = [p for p in broker.positions() if p["ticket"] == ticket]
+        if not positions:
+            console.print(f"[red]No existe la posición {ticket}.[/red]")
+            raise typer.Exit(1)
+        p = positions[0]
+        if not execute:
+            console.print(
+                f"[yellow]DRY RUN[/yellow] cerraría {p['symbol']} {p['volume']:g} lotes "
+                f"({p['side']}) · PnL {p['profit']:,.2f}"
+            )
+            return
+        result = broker.close_position(ticket)
+    finally:
+        broker.shutdown()
+    console.print(f"[green]Cerrada[/green] {result}")
+
+
+# ==================================================================== Fondeo
+
+@mt5_app.command("run")
+def mt5_run(
+    symbol: str = typer.Argument("EURUSD", help="Par o instrumento"),
+    timeframe: str = typer.Option("H1", "--timeframe", help="M5, M15, M30, H1, H4, D1"),
+    bars: int = typer.Option(600, "--bars", help="Velas a descargar"),
+    strategy: str = typer.Option("trend-ls", "--strategy", "-s", help=", ".join(STRATEGIES)),
+    risk_pct: float = typer.Option(0.005, "--risk-pct", help="Riesgo por operación (0.005 = 0.5%)"),
+    stop_atr: float = typer.Option(2.0, "--stop-atr", help="Stop en múltiplos de ATR"),
+    tp_rr: float = typer.Option(2.0, "--tp-rr", help="Take profit como múltiplo del riesgo"),
+    execute: bool = typer.Option(False, "--execute", help="Enviar órdenes (por defecto dry-run)"),
+    firm: str = typer.Option(None, "--firm"),
+    phase: str = typer.Option(None, "--phase"),
+    account_size: float = typer.Option(None, "--account-size"),
+) -> None:
+    """Bot de forex: señal -> sizing -> guard de fondeo -> orden con SL/TP."""
+    if strategy not in STRATEGIES:
+        console.print(f"[red]Estrategia desconocida:[/red] {strategy}. Opciones: {', '.join(STRATEGIES)}")
+        raise typer.Exit(2)
+
+    settings = get_settings()
+    rules = _prop_rules(firm, phase, account_size)
+    guard = PropGuard(rules)
+    broker = _mt5(settings, dry_run=not execute)
+
+    try:
+        inst = broker.instrument(symbol)
+        df = broker.rates(inst.symbol, timeframe, bars)
+        if len(df) < 210:
+            console.print(f"[red]Histórico insuficiente:[/red] {len(df)} velas (necesito >= 210)")
+            raise typer.Exit(1)
+
+        df = df.iloc[:-1]  # descarta la vela en formación
+        sig = STRATEGIES[strategy](df)
+        target = float(sig.target.iloc[-1])
+        atr_value = float(atr_indicator(df).iloc[-1])
+        if not (atr_value > 0):
+            console.print("[red]ATR inválido: histórico demasiado corto o datos rotos.[/red]")
+            raise typer.Exit(1)
+
+        tick = broker.tick(inst.symbol)
+        qr = _quote_rate(broker, inst)
+        positions = broker.positions(inst.symbol)
+        signed = sum(p["volume"] if p["side"] == "buy" else -p["volume"] for p in positions)
+        state = _prop_state_from_mt5(broker, rules)
+
+        desired = 1 if target > 0 else (-1 if target < 0 else 0)
+        if desired == 0:
+            action = "close" if signed != 0 else "hold"
+        elif signed == 0:
+            action = "open_long" if desired > 0 else "open_short"
+        elif (signed > 0) == (desired > 0):
+            action = "hold"
+        else:
+            action = "reverse"
+
+        console.print(
+            Panel(
+                f"{inst.symbol} · {timeframe} · {strategy}\n"
+                f"Señal: {target:+.0f} · ATR: {atr_value:.5f} · precio: {tick['bid']:.5f}\n"
+                f"Posición actual: {signed:+g} lotes · acción: [bold]{action}[/bold]",
+                title="Decisión forex",
+            )
+        )
+
+        # 1) Cerrar si toca
+        if action in {"close", "reverse"}:
+            if execute:
+                for p in positions:
+                    broker.close_position(p["ticket"])
+                console.print(f"[green]Cerradas {len(positions)} posiciones[/green]")
+                state = _prop_state_from_mt5(broker, rules)
+            else:
+                console.print(
+                    f"[yellow]DRY RUN[/yellow] cerraría {len(positions)} posiciones "
+                    f"({signed:+g} lotes)"
+                )
+                state.open_lots = max(0.0, state.open_lots - abs(signed))
+                state.open_positions = max(0, state.open_positions - len(positions))
+
+        if action in {"close", "hold"}:
+            _record_signal(
+                inst.symbol, strategy, "sell" if signed > 0 else "buy", target, tick["bid"], action
+            )
+            return
+
+        # 2) Abrir con sizing por riesgo
+        stop_distance = stop_atr * atr_value
+        risk_per_lot = inst.risk_per_lot(stop_distance, quote_rate=qr)
+        base_report = guard.evaluate(state)
+        budget = min(rules.account_size * risk_pct, max(base_report.remaining_usd * 0.5, 0.0))
+        lots = inst.lots_for_risk(budget, stop_distance, quote_rate=qr, cap_lots=rules.max_lots)
+        report = guard.evaluate(state, proposed_lots=lots, risk_per_lot=risk_per_lot)
+
+        console.print(
+            f"Stop: {stop_distance:.5f} · riesgo/lote: {risk_per_lot:,.2f} USD · "
+            f"presupuesto: {budget:,.2f} USD · lotes: [bold]{lots:g}[/bold]"
+        )
+        _print_guard(rules, report)
+
+        if lots <= 0:
+            console.print("[yellow]El lote mínimo no cabe en el presupuesto.[/yellow]")
+            return
+        if not report.allowed:
+            console.print("[red]Orden bloqueada por el guard de fondeo.[/red]")
+            _record_signal(
+                inst.symbol, strategy, "hold", target, tick["bid"], f"blocked: {report.reason}"
+            )
+            return
+
+        sign = 1 if desired > 0 else -1
+        entry = tick["ask"] if sign > 0 else tick["bid"]
+        sl = entry - sign * stop_distance
+        tp = entry + sign * stop_distance * tp_rr
+        side = "buy" if sign > 0 else "sell"
+
+        if not execute:
+            console.print(
+                f"[yellow]DRY RUN[/yellow] {side} {lots:g} {inst.symbol} @ {entry:.5f} "
+                f"SL {sl:.5f} TP {tp:.5f}"
+            )
+            _record_signal(inst.symbol, strategy, side, target, entry, "dry-run")
+            return
+
+        result = broker.submit_market(
+            inst.symbol,
+            sign * lots,
+            sl=sl,
+            tp=tp,
+            bot=f"forex:{strategy}",
+            reason=f"target={target:+.0f}",
+        )
+        console.print(f"[green]Ejecutado[/green] {result}")
+        _record_signal(
+            inst.symbol, strategy, side, target, result["price"], f"filled {lots:g} lots"
+        )
+    finally:
+        broker.shutdown()
+
+
+def _record_signal(
+    symbol: str, strategy: str, side: str, strength: float, price: float, reason: str
+) -> None:
+    try:
+        with connect(DEFAULT_DB) as con:
+            con.execute(
+                "INSERT INTO signals(ts, ticker, bot, side, strength, price, reason) "
+                "VALUES(?,?,?,?,?,?,?)",
+                (utcnow(), symbol, f"forex:{strategy}", side, strength, price, reason),
+            )
+    except Exception:
+        pass
+
+
+@prop_app.command("rules")
+def prop_rules_cmd(
+    firm: str = typer.Option(None, "--firm"),
+    phase: str = typer.Option(None, "--phase", help="challenge | verification | funded"),
+    account_size: float = typer.Option(None, "--account-size"),
+) -> None:
+    """Muestra las reglas activas y los suelos calculados."""
+    rules = _prop_rules(firm, phase, account_size)
+    t = Table(title=f"Reglas · {rules.firm} · {rules.phase}")
+    t.add_column("Regla", style="bold")
+    t.add_column("Valor", justify="right")
+    rows = [
+        ("Cuenta", f"{rules.account_size:,.2f}"),
+        ("Objetivo", f"{rules.profit_target_pct:.2%} ({rules.profit_target_usd:,.2f})"),
+        ("Pérdida diaria máxima", f"{rules.max_daily_loss_pct:.2%} ({rules.daily_limit_usd:,.2f})"),
+        ("Pérdida máxima", f"{rules.max_loss_pct:.2%} ({rules.max_loss_usd:,.2f})"),
+        ("Modo pérdida máxima", rules.max_loss_mode),
+        ("Base del límite diario", rules.daily_loss_mode),
+        ("Colchón", f"{rules.buffer_pct:.0%}"),
+        ("Límite diario efectivo", f"{rules.effective_daily_limit_usd:,.2f}"),
+        ("Límite máximo efectivo", f"{rules.effective_max_loss_usd:,.2f}"),
+        ("Días mínimos", str(rules.min_trading_days)),
+        ("Consistencia", f"{rules.consistency_pct:.0%}" if rules.consistency_pct else "no configurada"),
+        ("Máx. lotes", str(rules.max_lots) if rules.max_lots else "sin límite"),
+        ("Máx. posiciones", str(rules.max_positions) if rules.max_positions else "sin límite"),
+        ("Reset", f"{rules.reset_time} {rules.reset_tz}"),
+    ]
+    for k, v in rows:
+        t.add_row(k, v)
+    console.print(t)
+    if rules.verify_against_contract:
+        console.print(
+            "[yellow]Plantilla: confirma cada valor en el contrato de tu firma antes de operar.[/yellow]"
+        )
+
+
+@prop_app.command("status")
+def prop_status(
+    firm: str = typer.Option(None, "--firm"),
+    phase: str = typer.Option(None, "--phase"),
+    account_size: float = typer.Option(None, "--account-size"),
+    equity: float | None = typer.Option(None, "--equity", help="Equity manual si no usas MT5"),
+    from_mt5: bool = typer.Option(False, "--from-mt5", help="Leer la cuenta real del terminal"),
+) -> None:
+    """Dice cuánto colchón queda antes de romper una regla."""
+    rules = _prop_rules(firm, phase, account_size)
+    guard = PropGuard(rules)
+
+    if from_mt5:
+        broker = _mt5(get_settings(), dry_run=True)
+        try:
+            state = _prop_state_from_mt5(broker, rules)
+        finally:
+            broker.shutdown()
+    else:
+        eq = float(equity if equity is not None else rules.account_size)
+        state = AccountState(
+            balance=eq,
+            equity=eq,
+            initial_balance=rules.account_size,
+            day_start_balance=rules.account_size,
+            day_start_equity=rules.account_size,
+            peak_balance=max(eq, rules.account_size),
+            peak_equity=max(eq, rules.account_size),
+        )
+
+    _print_guard(rules, guard.evaluate(state))
+
+
+@prop_app.command("size")
+def prop_size(
+    symbol: str = typer.Argument(..., help="Ej. EURUSD"),
+    risk_pct: float = typer.Option(0.005, "--risk-pct", help="Riesgo por operación (0.005 = 0.5%)"),
+    stop_pips: float = typer.Option(20.0, "--stop-pips"),
+    firm: str = typer.Option(None, "--firm"),
+    phase: str = typer.Option(None, "--phase"),
+    account_size: float = typer.Option(None, "--account-size"),
+    from_mt5: bool = typer.Option(False, "--from-mt5"),
+    quote_rate: float | None = typer.Option(None, "--quote-rate"),
+) -> None:
+    """Tamaño de la operación aplicando el colchón que exige la firma."""
+    rules = _prop_rules(firm, phase, account_size)
+    guard = PropGuard(rules)
+
+    if from_mt5:
+        broker = _mt5(get_settings(), dry_run=True)
+        try:
+            inst = broker.instrument(symbol)
+            qr = quote_rate or _quote_rate(broker, inst)
+            state = _prop_state_from_mt5(broker, rules)
+            tick = broker.tick(symbol)
+        finally:
+            broker.shutdown()
+    else:
+        inst = get_instrument(symbol)
+        qr = quote_rate or 1.0
+        eq = rules.account_size
+        state = AccountState(
+            balance=eq,
+            equity=eq,
+            initial_balance=rules.account_size,
+            day_start_balance=eq,
+            day_start_equity=eq,
+            peak_balance=eq,
+            peak_equity=eq,
+        )
+        tick = {"bid": None}
+
+    stop_distance = stop_pips * inst.pip_size() if inst.is_fx else stop_pips * inst.tick_size
+    risk_per_lot = inst.risk_per_lot(stop_distance, quote_rate=qr)
+    report = guard.evaluate(state)
+    budget = min(rules.account_size * risk_pct, max(report.remaining_usd * 0.5, 0.0))
+    lots = inst.lots_for_risk(budget, stop_distance, quote_rate=qr)
+
+    t = Table(title=f"Sizing con reglas · {symbol} · {rules.firm} {rules.phase}")
+    t.add_column("Campo", style="bold")
+    t.add_column("Valor", justify="right")
+    t.add_row("Suelo efectivo", f"{report.effective_floor:,.2f}")
+    t.add_row("Colchón restante", f"{report.remaining_usd:,.2f}")
+    t.add_row("Riesgo por operación", f"{rules.account_size * risk_pct:,.2f}")
+    t.add_row("Presupuesto aplicado", f"{budget:,.2f}")
+    t.add_row("Riesgo por lote", f"{risk_per_lot:,.2f}")
+    t.add_row("Lotes", f"[bold]{lots:g}[/bold]")
+    t.add_row("Riesgo real", f"{lots * risk_per_lot:,.2f}")
+    console.print(t)
+    _print_guard(rules, guard.evaluate(state, proposed_lots=lots, risk_per_lot=risk_per_lot))
+
+
+@prop_app.command("check")
+def prop_check(
+    lots: float = typer.Option(0.10, "--lots"),
+    stop_pips: float = typer.Option(20.0, "--stop-pips"),
+    symbol: str = typer.Option("EURUSD", "--symbol"),
+    equity: float | None = typer.Option(None, "--equity"),
+    firm: str = typer.Option(None, "--firm"),
+    phase: str = typer.Option(None, "--phase"),
+    account_size: float = typer.Option(None, "--account-size"),
+) -> None:
+    """Comprueba si una orden concreta sería aceptada o bloqueada."""
+    rules = _prop_rules(firm, phase, account_size)
+    inst = get_instrument(symbol)
+    stop_distance = stop_pips * inst.pip_size() if inst.is_fx else stop_pips * inst.tick_size
+    risk_per_lot = inst.risk_per_lot(stop_distance)
+    eq = float(equity if equity is not None else rules.account_size)
+    state = AccountState(
+        balance=eq,
+        equity=eq,
+        initial_balance=rules.account_size,
+        day_start_balance=eq,
+        day_start_equity=eq,
+        peak_balance=eq,
+        peak_equity=eq,
+    )
+    report = PropGuard(rules).evaluate(state, proposed_lots=lots, risk_per_lot=risk_per_lot)
+    _print_guard(rules, report)
+    console.print(f"Orden: {lots:g} lotes · riesgo {lots * risk_per_lot:,.2f} USD · stop {stop_pips:g} pips")
+
+
+@prop_app.command("simulate")
+def prop_simulate(
+    symbol: str = typer.Argument("SPY", help="Activo para tomar los retornos"),
+    strategy: str = typer.Option("trend", "--strategy", "-s", help=", ".join(STRATEGIES)),
+    firm: str = typer.Option(None, "--firm"),
+    phase: str = typer.Option(None, "--phase"),
+    account_size: float = typer.Option(None, "--account-size"),
+    paths: int = typer.Option(5_000, "--paths"),
+    horizon: int = typer.Option(60, "--horizon", help="Días por simulación"),
+    block_size: int = typer.Option(1, "--block-size", help="Bootstrap por bloques (captura autocorrelación)"),
+    start: str = typer.Option(None, "--start"),
+    end: str = typer.Option(None, "--end"),
+) -> None:
+    """Monte Carlo: probabilidad de pasar el challenge antes de reventar."""
+    if strategy not in STRATEGIES:
+        console.print(f"[red]Estrategia desconocida:[/red] {strategy}")
+        raise typer.Exit(2)
+
+    settings = get_settings()
+    rules = _prop_rules(firm, phase, account_size)
+    df = data_mod.fetch(
+        symbol.upper(), start or _default_start(), end or _today(), settings.data.cache_dir
+    )
+    sig = STRATEGIES[strategy](df)
+    bt = run_backtest(
+        df,
+        sig.target,
+        starting_cash=rules.account_size,
+        commission_bps=settings.execution.commission_bps,
+        slippage_bps=settings.execution.slippage_bps,
+    )
+    result = monte_carlo(
+        rules, bt.returns, n_paths=paths, horizon=horizon, block_size=block_size
+    )
+
+    t = Table(title=f"Monte Carlo · {symbol.upper()} · {strategy} · {rules.firm} {rules.phase}")
+    t.add_column("Métrica", style="bold")
+    t.add_column("Valor", justify="right")
+    t.add_row("Reglas", rules.describe())
+    t.add_row("Días de muestra", str(result["sample_days"]))
+    t.add_row("Retorno medio diario", _fmt_pct(result["mean_daily_return"]))
+    t.add_row("Volatilidad diaria", _fmt_pct(result["daily_volatility"]))
+    t.add_row("Simulaciones", str(result["paths"]))
+    t.add_row("Horizonte", f"{result['horizon_days']} días")
+    t.add_row("Prob. de pasar", f"[bold]{result['pass_rate']:.1%}[/bold]")
+    t.add_row("IC 95%", f"{result['pass_ci95'][0]:.1%} – {result['pass_ci95'][1]:.1%}")
+    t.add_row("Prob. de reventar", _fmt_pct(result["breach_rate"]))
+    t.add_row("Sin resultado", _fmt_pct(result["timeout_rate"]))
+    if result["median_days_to_pass"]:
+        t.add_row("Días hasta pasar (mediana)", f"{result['median_days_to_pass']:.0f}")
+        t.add_row("Días hasta pasar (p90)", f"{result['p90_days_to_pass']:.0f}")
+    t.add_row("Max DD mediana", _fmt_pct(result["median_max_drawdown"]))
+    t.add_row("Peor max DD", _fmt_pct(result["worst_max_drawdown"]))
+    console.print(t)
+    console.print(
+        "[dim]Aproximación con datos diarios: el riesgo intradía real es algo mayor.[/dim]"
+    )
 
 
 def main() -> None:

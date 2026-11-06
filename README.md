@@ -1,7 +1,8 @@
 # TradingLab
 
 Entorno multi-bot de trading sobre **TradingAgents** y **Trading-R1**, con LLM local
-(LM Studio / Qwen3.8-27B) y ejecución en **Alpaca paper**.
+(LM Studio / Qwen3.8-27B), ejecución en **Alpaca paper** (acciones) y **MetaTrader 5**
+(forex), con motor de reglas para **cuentas de fondeo** (FTMO).
 
 > Regla del proyecto: nada de dinero real hasta completar la fase de paper trading
 > (4-8 semanas) con métricas positivas y el kill-switch probado.
@@ -13,15 +14,19 @@ Entorno multi-bot de trading sobre **TradingAgents** y **Trading-R1**, con LLM l
 | Fase | Descripción | Estado |
 |---|---|---|
 | F0 | Infraestructura, venvs, repos, `uv`, `bun` | ✅ |
-| F1 | LM Studio sirviendo el modelo | ⏸ descarga pausada al 33 % |
+| F1 | LM Studio sirviendo el modelo | ✅ descargado, cargado y `llm-test` OK |
 | F2 | Repos instalados y verificados | ✅ TradingAgents · ⚠ Trading-R1 requiere WSL |
 | F3 | Núcleo del lab: config, SQLite, datos, riesgo | ✅ |
 | F4 | Backtester + estrategias deterministas | ✅ |
-| F5 | Alpaca paper + ejecución | 🟡 adaptador escrito · faltan claves |
-| F6 | TradingAgents como fuente de señal | ✅ código · ⏳ falta modelo |
+| F5 | Alpaca paper + ejecución | ✅ validado (cuenta ACTIVE, equity 100k) |
+| F6 | TradingAgents como fuente de señal | 🟡 código listo · validación real en curso |
 | F7 | Trading-R1 (informes/Telegram) | ⏳ requiere WSL |
 | F8 | Dashboard y observabilidad | ✅ `lab dashboard` (HTML) |
-| F9 | Paper trading continuo | ⏳ |
+| F9 | Núcleo multi-activo (forex, futuros, acciones) | ✅ |
+| F10 | MT5: datos, sizing, órdenes, hora de servidor | ✅ demo validada (abrir/cerrar) |
+| F11 | Motor de reglas de fondeo (FTMO) | ✅ guard + Monte Carlo |
+| F12 | Futuros (ProjectX/Tradovate) | ⏳ pendiente de firma y cuenta |
+| F13 | Paper continuo 4-8 semanas | ⏳ |
 
 ---
 
@@ -33,16 +38,19 @@ E:\trading-lab\
 ├─ .venv-ta\         Python 3.13 · TradingAgents 0.7.1 (aislado)
 ├─ .venv-r1\         Python 3.12 · Trading-R1 0.1.0 (aislado; en Windows no arranca)
 ├─ config\
-│   ├─ lab.yaml      modo, riesgo, broker, LLM
-│   └─ bots.yaml     catálogo de bots
+│   ├─ lab.yaml      modo, riesgo, broker, LLM, MT5, fondeo
+│   ├─ bots.yaml     catálogo de bots
+│   └─ prop.yaml     reglas de fondeo por firma y fase (FTMO)
 ├─ src\tradinglab\
 │   ├─ config.py     settings tipados (YAML + .env)
 │   ├─ db.py         SQLite: órdenes, fills, posiciones, equity, señales, LLM calls
+│   ├─ instruments.py specs: tick, tick_value, contrato, lote, sizing por riesgo
 │   ├─ data\         descarga + caché parquet (yfinance)
-│   ├─ strategies\   trend, meanrev
+│   ├─ strategies\   trend, trend-ls, meanrev
 │   ├─ backtest.py   motor con comisión y slippage
 │   ├─ risk.py       sizing por ATR, límites y kill-switch
-│   ├─ execution\    PaperBroker persistente
+│   ├─ execution\    PaperBroker · Alpaca · MT5
+│   ├─ prop\         rules (firmas/fases), guard (bloqueo), simulator (Monte Carlo)
 │   ├─ llm.py        cliente OpenAI-compatible con log de llamadas
 │   ├─ agents\       puente a TradingAgents
 │   └─ cli.py        comandos `lab`
@@ -82,6 +90,21 @@ cd E:\trading-lab
 .\.venv\Scripts\lab.exe dashboard                            # reports/dashboard.html
 .\.venv\Scripts\lab.exe bots
 .\.venv\Scripts\lab.exe llm-test
+
+# Forex con MetaTrader 5
+.\.venv\Scripts\lab.exe mt5 status
+.\.venv\Scripts\lab.exe mt5 price EURUSD
+.\.venv\Scripts\lab.exe mt5 size EURUSD --risk-usd 500 --stop-pips 20
+.\.venv\Scripts\lab.exe mt5 run EURUSD --strategy trend-ls --execute
+.\.venv\Scripts\lab.exe mt5 positions
+.\.venv\Scripts\lab.exe mt5 close <ticket> --execute
+
+# Cuentas de fondeo
+.\.venv\Scripts\lab.exe prop rules
+.\.venv\Scripts\lab.exe prop status --from-mt5
+.\.venv\Scripts\lab.exe prop size EURUSD --risk-pct 0.005 --stop-pips 20
+.\.venv\Scripts\lab.exe prop check --lots 1.5 --stop-pips 20 --equity 98000
+.\.venv\Scripts\lab.exe prop simulate SPY --strategy trend --phase challenge
 ```
 
 Atajo: `.\scripts\lab.ps1 <comando>`.
@@ -116,26 +139,105 @@ Atajo: `.\scripts\lab.ps1 <comando>`.
 
 ---
 
-## 5. Siguiente paso: Alpaca paper
+## 5. Alpaca paper (conectado)
 
-1. Crea cuenta en <https://alpaca.markets> → *Paper Trading*.
-2. Genera API keys (paper) y pégalas en `E:\trading-lab\.env`:
-   ```
-   ALPACA_API_KEY=...
-   ALPACA_SECRET_KEY=...
-   ALPACA_BASE_URL=https://paper-api.alpaca.markets
-   ```
-3. Cambia en `config/lab.yaml`: `execution.broker: alpaca` (y `mode: paper`).
-4. `.\.venv\Scripts\lab.exe doctor` debe mostrar `Alpaca OK` con el equity de la cuenta.
-5. Prueba: `.\.venv\Scripts\lab.exe orchestrate --dry-run` y luego sin `--dry-run`.
+Las claves paper ya están en `.env` y el adaptador está validado:
 
-Salvaguardas del adaptador: `mode: live` exige además `ALLOW_LIVE=YES` en el entorno.
-`PaperBroker` (simulador local) sigue siendo el broker por defecto y el recomendado
-para validar la lógica antes de tocar Alpaca.
+- `lab doctor` → `Alpaca OK · paper=True · equity=100.000 · ACTIVE`.
+- Para usarlo como broker de acciones, cambia en `config/lab.yaml`
+  `execution.broker: alpaca` (y deja `mode: paper`).
+- Alpaca solo opera acciones/ETF de EE.UU.; el forex va por MT5 y los futuros
+  por ProjectX/Tradovate.
+
+Salvaguardas del adaptador: `mode: live` exige además `ALLOW_LIVE=YES`.
+`PaperBroker` (simulador local) sigue siendo el broker por defecto y el
+recomendado para validar lógica antes de tocar Alpaca.
+
+> Las claves son de paper: no mueven dinero. Aun así, no las publiques ni las
+> subas a git. Si alguna vez generas claves live, trátalas como dinero.
 
 ---
 
-## 6. Trading-R1 en Windows
+## 6. Forex, MT5 y cuentas de fondeo (FTMO)
+
+### Conexión
+
+El adaptador se conecta al terminal que ya esté abierto (validado con Darwinex Demo).
+Requisitos: terminal abierto, sesión iniciada y **Algo Trading** activado.
+
+```powershell
+.\.venv\Scripts\lab.exe mt5 status     # cuenta, margen, permisos y desfase del servidor
+.\.venv\Scripts\lab.exe mt5 price EURUSD
+```
+
+Credenciales opcionales en `.env` si quieres que el bot abra el terminal solo:
+
+```
+MT5_LOGIN=...
+MT5_PASSWORD=...
+MT5_SERVER=Darwinex-Demo
+MT5_PATH=C:\Program Files\Darwinex MetaTrader 5\terminal64.exe
+```
+
+### Hora del servidor (crítico)
+
+Los servidores MT5 **no van en UTC**: el de Darwinex iba en GMT+2. El adaptador
+autodetecta el desfase comparando un tick fresco con UTC y convierte velas,
+posiciones y deals a UTC real. Sin esto, el reset del límite diario de FTMO se
+calcula con 1-3 horas de error. Se puede fijar a mano con
+`mt5.server_utc_offset_hours`.
+
+### Motor de reglas (`prop/`)
+
+`config/prop.yaml` define firma, fase y límites. **Es una plantilla**: verifica
+cada valor en el contrato vigente de tu firma.
+
+`PropGuard.evaluate()` devuelve `allowed=False` cuando una orden rompería:
+
+- límite de pérdida diaria (sobre balance o equity, según firma);
+- pérdida máxima (`static`, `trailing_eod` o `trailing_intraday`);
+- objetivo de beneficio alcanzado (deja de abrir riesgo);
+- máximo de lotes, posiciones o riesgo abierto;
+- consistencia (aviso, no bloqueo, porque se aplica al payout).
+
+El `buffer_pct` (10%) hace que el bot pare antes del límite real: de 5.000 USD
+diarios de FTMO solo usa 4.500.
+
+```powershell
+.\.venv\Scripts\lab.exe prop rules
+.\.venv\Scripts\lab.exe prop status --from-mt5
+.\.venv\Scripts\lab.exe prop size EURUSD --risk-pct 0.005 --stop-pips 20
+.\.venv\Scripts\lab.exe prop simulate SPY --strategy trend --phase challenge
+```
+
+El sizing **no** usa porcentaje del nocional: usa
+`lotes = riesgo_$ / (distancia_stop × valor_del_tick)`, redondeando siempre hacia
+abajo al step del bróker.
+
+### Bot de forex
+
+```powershell
+# 1) señales y sizing sin enviar nada
+.\.venv\Scripts\lab.exe mt5 run EURUSD --timeframe H1 --strategy trend-ls
+
+# 2) enviar (demo)
+.\.venv\Scripts\lab.exe mt5 run EURUSD --timeframe H1 --strategy trend-ls --execute
+```
+
+Flujo: velas H1 del terminal → señal long/short → ATR → sizing → **guard de
+fondeo** → orden con SL/TP. Si el guard bloquea, no se envía.
+
+### Advertencias
+
+- Muchas firmas permiten bots pero prohíben HFT, latencia y tick scalping. Verifica.
+- FTMO resetea a las 00:00 de Praga; el servidor MT5 suele ir 1 h por delante.
+- Si el contrato restringe noticias o fin de semana, hay que añadir ese filtro
+  antes de operar de verdad (`news_blackout_min`, `weekend_holding`).
+- `ALLOW_LIVE=YES` sigue siendo obligatorio para cuentas reales.
+
+---
+
+## 7. Trading-R1 en Windows
 
 Trading-R1 usa `fcntl`, `os.O_NOFOLLOW` y `os.getuid()`: **no funciona en Windows**.
 Opciones, en orden recomendado:
@@ -162,7 +264,7 @@ Opciones, en orden recomendado:
 
 ---
 
-## 7. Programación diaria (Windows Task Scheduler)
+## 8. Programación diaria (Windows Task Scheduler)
 
 Ejemplo: señal + orden paper cada día laborable a las 15:45 ET (21:45 CET).
 
@@ -177,7 +279,7 @@ Para TradingAgents, programa `agent-run` de madrugada (tarda mucho) y sin solapa
 
 ---
 
-## 8. Riesgo y realidad
+## 9. Riesgo y realidad
 
 - Un LLM **no predice precios**. TradingAgents produce una tesis; su valor está en
   estructurar información, no en acertar la dirección.
@@ -191,10 +293,11 @@ Para TradingAgents, programa `agent-run` de madrugada (tarda mucho) y sin solapa
 
 ---
 
-## 9. Roadmap restante
+## 10. Roadmap restante
 
-1. **F5** adaptador Alpaca (órdenes, posiciones, account) + reconciliación.
-2. **F6b** validar TradingAgents end-to-end con el 27B y medir latencia real.
-3. **F7** Trading-R1 en WSL: informe pre-market + Telegram.
-4. **F8** dashboard (Streamlit/FastAPI) con equity, posiciones, señales y latencia LLM.
-5. **F9** paper continuo 4-8 semanas → comparar contra SPY y decidir.
+1. **F1** terminar la descarga del 27B y validar `lab llm-test` + un `agent` real.
+2. **F12** futuros: elegir firma (Topstep/Apex) y adaptador ProjectX/Tradovate.
+3. **F9b** backtester con cortos, sesiones y contratos continuos (hoy es long-only).
+4. **F11b** filtros de noticias, viernes y rollover en el guard.
+5. **F13** paper continuo 4-8 semanas → comparar contra SPY y decidir.
+6. **F7** Trading-R1 en WSL para el informe pre-market + Telegram.

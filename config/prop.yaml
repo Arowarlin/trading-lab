@@ -1,0 +1,65 @@
+# Reglas de cuentas de fondeo.
+#
+# ⚠️  ESTO ES UNA PLANTILLA, NO UNA FUENTE DE VERDAD.
+# Las reglas cambian por firma, por programa y por contrato. Antes de operar
+# una cuenta real, verifica cada valor en tu contrato y ajusta este archivo.
+#
+# buffer_pct: fracción del límite que el bot NO usa (colchón de seguridad).
+# max_loss_mode:
+#   static            -> el suelo se calcula sobre el balance inicial (no sube)
+#   trailing_eod      -> el suelo sigue el cierre diario más alto
+#   trailing_intraday -> el suelo sigue el máximo de equity intradía
+# daily_loss_mode: balance | equity  (equity incluye flotante)
+
+firms:
+  ftmo:
+    display_name: FTMO
+    program: 2-step
+    verify_against_contract: true
+    defaults:
+      max_loss_mode: static
+      daily_loss_mode: equity
+      buffer_pct: 0.10
+      reset_time: "00:00"
+      reset_tz: Europe/Prague
+      max_lots: 20
+      max_positions: 5
+      max_open_risk_pct: 0.02
+      weekend_holding: true
+      news_blackout_min: 0
+      consistency_pct: null
+      notes: >
+        Verificar en el contrato: límite diario sobre balance o equity, hora de
+        reset (CE(S)T), política de noticias, fin de semana y automatización.
+    phases:
+      challenge:
+        profit_target_pct: 0.10
+        max_daily_loss_pct: 0.05
+        max_loss_pct: 0.10
+        min_trading_days: 4
+      verification:
+        profit_target_pct: 0.05
+        max_daily_loss_pct: 0.05
+        max_loss_pct: 0.10
+        min_trading_days: 4
+      funded:
+        profit_target_pct: 0.0
+        max_daily_loss_pct: 0.05
+        max_loss_pct: 0.10
+        min_trading_days: 0
+
+  # --- Ejemplos para cuando toque futuros (descomentar y verificar) ----------
+  # topstep:
+  #   display_name: Topstep
+  #   program: trading-combine
+  #   defaults:
+  #     max_loss_mode: trailing_eod
+  #     daily_loss_mode: balance
+  #     buffer_pct: 0.15
+  #     reset_time: "17:00"
+  #     reset_tz: America/Chicago
+  #     max_lots: 5
+  #     max_positions: 3
+  #   phases:
+  #     challenge: {profit_target_pct: 0.06, max_daily_loss_pct: 0.02, max_loss_pct: 0.04, min_trading_days: 5}
+  #     funded:    {profit_target_pct: 0.0,  max_daily_loss_pct: 0.02, max_loss_pct: 0.04, min_trading_days: 0}

@@ -43,6 +43,26 @@ class DataSettings(BaseModel):
     cache_dir: Path = Path("data/cache")
 
 
+class MT5Settings(BaseModel):
+    terminal_path: str | None = None
+    login: int | None = None
+    server: str | None = None
+    magic: int = 20261105
+    deviation: int = 20
+    default_symbol: str = "EURUSD"
+    dry_run: bool = True  # el orquestador NO envía órdenes a MT5 salvo --execute
+    server_utc_offset_hours: float | None = None  # None = autodetectar
+
+
+class PropSettings(BaseModel):
+    enabled: bool = False
+    firm: str = "FTMO"
+    phase: Literal["challenge", "verification", "funded"] = "challenge"
+    account_size: float = 100_000.0
+    buffer_pct: float = 0.10
+    reset_tz: str = "Europe/Prague"
+
+
 class Settings(BaseModel):
     mode: Literal["paper", "live"] = "paper"
     timezone: str = "America/New_York"
@@ -52,6 +72,8 @@ class Settings(BaseModel):
     risk: RiskSettings = Field(default_factory=RiskSettings)
     execution: ExecutionSettings = Field(default_factory=ExecutionSettings)
     data: DataSettings = Field(default_factory=DataSettings)
+    mt5: MT5Settings = Field(default_factory=MT5Settings)
+    prop: PropSettings = Field(default_factory=PropSettings)
 
     @model_validator(mode="after")
     def _resolve_paths(self) -> "Settings":
@@ -76,6 +98,20 @@ class Settings(BaseModel):
             settings.llm.base_url = v
         if v := os.getenv("LAB_LLM_MODEL"):
             settings.llm.model = v
+
+        # MetaTrader 5 y cuentas de fondeo
+        if v := os.getenv("MT5_PATH"):
+            settings.mt5.terminal_path = v
+        if v := os.getenv("MT5_LOGIN"):
+            settings.mt5.login = int(v)
+        if v := os.getenv("MT5_SERVER"):
+            settings.mt5.server = v
+        if v := os.getenv("PROP_FIRM"):
+            settings.prop.firm = v
+        if v := os.getenv("PROP_PHASE"):
+            settings.prop.phase = v  # type: ignore[assignment]
+        if v := os.getenv("PROP_ACCOUNT_SIZE"):
+            settings.prop.account_size = float(v)
         return settings
 
 
