@@ -17,6 +17,10 @@ class MT5Error(RuntimeError):
     pass
 
 
+class MT5IdentityError(MT5Error):
+    """La cuenta conectada no es la esperada. Nunca se envía una orden tras esto."""
+
+
 def _mt5():
     try:
         import MetaTrader5 as mt5  # type: ignore
@@ -46,6 +50,8 @@ class MT5Broker:
 
     Salvaguardas:
       * `dry_run=True` valida y devuelve la orden sin enviarla.
+      * Guard de identidad: exige el `login`/`server` configurados y, por
+        defecto, una cuenta DEMO. Si no coincide, aborta antes de operar.
       * Si la cuenta es REAL exige ALLOW_LIVE=YES (igual que Alpaca).
       * Exige que "Algo Trading" esté activo en el terminal.
     """
@@ -63,6 +69,7 @@ class MT5Broker:
         db_path: str | Path | None = None,
         timeout_ms: int = 60_000,
         server_utc_offset_hours: float | None = None,
+        require_demo: bool = True,
     ) -> None:
         self.path = str(path) if path else None
         self.login = int(login) if login else None
@@ -71,6 +78,7 @@ class MT5Broker:
         self.magic = int(magic)
         self.deviation = int(deviation)
         self.dry_run = bool(dry_run)
+        self.require_demo = bool(require_demo)
         self.db_path = Path(db_path) if db_path else None
         self.timeout_ms = int(timeout_ms)
         self.server_utc_offset_hours = server_utc_offset_hours
@@ -105,12 +113,46 @@ class MT5Broker:
                 "MT5 arrancó pero no hay cuenta conectada. Abre el terminal e inicia sesión."
             )
 
+        problems = self._identity_problems(account)
+        if problems:
+            mt5.shutdown()
+            raise MT5IdentityError(
+                "Guard de identidad MT5: "
+                + "; ".join(problems)
+                + ". No se enviará ninguna orden. Corrige MT5_LOGIN/MT5_SERVER "
+                "o desactiva require_demo solo si es intencional."
+            )
+
         self._connected = True
         if self.server_utc_offset_hours is None:
             detected = self._detect_server_offset(mt5)
             if detected is not None:
                 self._server_offset = detected
         return self.health()
+
+    def _identity_problems(self, account) -> list[str]:
+        """Comprueba login, servidor y tipo de cuenta antes de operar."""
+        mode = {0: "demo", 1: "contest", 2: "real"}.get(int(account.trade_mode), "desconocido")
+        problems: list[str] = []
+        if self.login is not None and int(account.login) != int(self.login):
+            problems.append(f"login esperado {self.login}, conectado {int(account.login)}")
+        if self.server and str(account.server).strip().lower() != str(self.server).strip().lower():
+            problems.append(f"servidor esperado {self.server}, conectado {account.server}")
+        if self.require_demo and mode == "real":
+            problems.append("cuenta REAL detectada con require_demo=True")
+        return problems
+
+    def _require_identity(self) -> None:
+        """Revalidación justo antes de enviar: la cuenta pudo cambiar en caliente."""
+        mt5 = self._require()
+        account = mt5.account_info()
+        if account is None:
+            raise MT5IdentityError("sin cuenta MT5 al revalidar identidad")
+        problems = self._identity_problems(account)
+        if problems:
+            raise MT5IdentityError(
+                "Guard de identidad MT5: " + "; ".join(problems) + ". Orden cancelada."
+            )
 
     def _detect_server_offset(self, mt5) -> float | None:
         """Deduce el desfase del servidor comparando un tick fresco con UTC.
@@ -184,6 +226,10 @@ class MT5Broker:
             "margin_level": float(account.margin_level),
             "profit": float(account.profit),
             "server_utc_offset_hours": self._server_offset,
+            "identity_ok": not self._identity_problems(account),
+            "expected_login": self.login,
+            "expected_server": self.server,
+            "require_demo": self.require_demo,
         }
 
     def account(self) -> dict:
@@ -402,6 +448,9 @@ class MT5Broker:
         dry = self.dry_run if dry_run is None else bool(dry_run)
         mt5 = self._require()
         self._assert_can_trade(mt5)
+        if not dry:
+            # Defensa en profundidad: la cuenta pudo cambiar desde connect().
+            self._require_identity()
 
         side = "buy" if volume > 0 else "sell"
         spec = self.symbol_spec(symbol)

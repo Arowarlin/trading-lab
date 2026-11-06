@@ -10,12 +10,23 @@
 #   trailing_eod      -> el suelo sigue el cierre diario más alto
 #   trailing_intraday -> el suelo sigue el máximo de equity intradía
 # daily_loss_mode: balance | equity  (equity incluye flotante)
+#
+# Contraste 2026-11-05 con el directorio público de LuxAlgo
+# (https://app.luxalgo.com/api/propfirms/list, challenge
+# "ftmo-normal-challenge-2-steps-100k"):
+#   objetivo 10% / 5% · diario 5% · máximo 10% STATIC · 4 días mínimos
+#   noticias permitidas · mantener fin de semana permitido
+#   apalancamiento 100 (Normal) / 30 (Swing)
+# La fuente no publica `lastVerifiedAt`, así que esto sigue siendo plantilla
+# hasta confirmarlo en EL CONTRATO de tu cuenta.
 
 firms:
   ftmo:
     display_name: FTMO
     program: 2-step
     verify_against_contract: true
+    verified_source: "LuxAlgo prop-firm directory · ftmo-normal-challenge-2-steps-100k"
+    verified_at: "2026-11-05"
     defaults:
       max_loss_mode: static
       daily_loss_mode: equity

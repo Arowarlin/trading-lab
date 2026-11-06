@@ -51,6 +51,7 @@ class MT5Settings(BaseModel):
     deviation: int = 20
     default_symbol: str = "EURUSD"
     dry_run: bool = True  # el orquestador NO envía órdenes a MT5 salvo --execute
+    require_demo: bool = True  # el guard de identidad rechaza cuentas reales
     server_utc_offset_hours: float | None = None  # None = autodetectar
 
 
@@ -106,6 +107,8 @@ class Settings(BaseModel):
             settings.mt5.login = int(v)
         if v := os.getenv("MT5_SERVER"):
             settings.mt5.server = v
+        if v := os.getenv("MT5_REQUIRE_DEMO"):
+            settings.mt5.require_demo = v.strip().lower() not in {"0", "false", "no"}
         if v := os.getenv("PROP_FIRM"):
             settings.prop.firm = v
         if v := os.getenv("PROP_PHASE"):

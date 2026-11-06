@@ -208,7 +208,18 @@ def doctor(network: bool = typer.Option(False, "--network", help="Probar descarg
             health = LLMClient(settings.llm, DEFAULT_DB).health()
             models = health.get("models") or []
             detail = f"{health['base_url']} · modelos: {', '.join(models) if models else 'ninguno'}"
+            lm = health.get("lmstudio") or {}
+            ctx = lm.get("context")
+            if ctx:
+                detail += f" · ctx {ctx:,}"
             table.add_row("LM Studio", OK if models else WARN, detail)
+            if ctx and ctx < 16_384:
+                table.add_row(
+                    "Contexto LLM",
+                    WARN,
+                    f"{ctx:,} tokens: los agentes necesitan ≥16k. Recarga el modelo "
+                    "con --context-length 32768.",
+                )
             if models and settings.llm.model not in models:
                 table.add_row(
                     "Modelo configurado",
@@ -677,6 +688,16 @@ def llm_test(
         health = client.health()
         console.print(f"[bold]Servidor:[/bold] {health['base_url']}")
         console.print(f"[bold]Modelos:[/bold] {', '.join(health['models']) or '(ninguno)'}")
+        lm = health.get("lmstudio") or {}
+        if lm.get("context"):
+            ctx = lm["context"]
+            style = "green" if ctx >= 16_384 else "yellow"
+            console.print(f"[bold]Contexto cargado:[/bold] [{style}]{ctx:,} tokens[/{style}]")
+            if ctx < 16_384:
+                console.print(
+                    "[yellow]Aviso:[/yellow] los agentes de TradingAgents necesitan "
+                    "≥16k. Recarga con: lms load qwen3.8-27b --context-length 32768"
+                )
     except Exception as exc:
         console.print(f"[red]No se pudo conectar:[/red] {exc}")
         raise typer.Exit(1)
@@ -799,13 +820,27 @@ def mt5_status() -> None:
         "margin_free",
         "margin_level",
         "server_utc_offset_hours",
+        "identity_ok",
+        "require_demo",
+        "expected_login",
+        "expected_server",
         "path",
     ):
-        t.add_row(key, f"{health[key]:,.2f}" if isinstance(health[key], float) else str(health[key]))
+        value = health[key]
+        t.add_row(key, f"{value:,.2f}" if isinstance(value, float) else str(value))
     console.print(t)
 
     if health["mode"] == "real":
-        console.print(Panel("CUENTA REAL: las órdenes exigen ALLOW_LIVE=YES", style="bold red"))
+        if health.get("require_demo"):
+            console.print(
+                Panel(
+                    "CUENTA REAL con require_demo=true: el guard de identidad "
+                    "bloqueará cualquier orden.",
+                    style="bold red",
+                )
+            )
+        else:
+            console.print(Panel("CUENTA REAL: las órdenes exigen ALLOW_LIVE=YES", style="bold red"))
     if not health["trade_allowed"]:
         console.print("[yellow]Algo Trading está desactivado en el terminal.[/yellow]")
 
@@ -1373,6 +1408,133 @@ def prop_simulate(
     console.print(
         "[dim]Aproximación con datos diarios: el riesgo intradía real es algo mayor.[/dim]"
     )
+
+
+@app.command("research")
+def research_cmd(
+    symbols: str = typer.Option(
+        None, "--symbols", help="Lista separada por comas (ej. SPY,QQQ,EURUSD=X)"
+    ),
+    strategies: str = typer.Option(
+        None, "--strategies", help="Lista separada por comas: trend, trend-ls, meanrev"
+    ),
+    firm: str = typer.Option(None, "--firm"),
+    phase: str = typer.Option(None, "--phase"),
+    account_size: float = typer.Option(None, "--account-size"),
+    paths: int = typer.Option(2_000, "--paths", help="Simulaciones Monte Carlo por candidato"),
+    horizon: int = typer.Option(120, "--horizon", help="Días por simulación (FTMO no tiene límite de tiempo)"),
+    block_size: int = typer.Option(5, "--block-size", help="Bootstrap por bloques"),
+    start: str = typer.Option("2015-01-01", "--start"),
+    end: str = typer.Option(None, "--end"),
+    top: int = typer.Option(20, "--top", help="Filas del ranking a mostrar"),
+    min_pass: float = typer.Option(0.35, "--min-pass", help="Pasa mínimo para proponer"),
+    min_oos_pass: float = typer.Option(0.25, "--min-oos-pass", help="Pasa mínimo out-of-sample"),
+    max_breach: float = typer.Option(0.15, "--max-breach", help="Revienta máximo para proponer"),
+    holdout: float = typer.Option(0.30, "--holdout", help="Fracción final reservada a validación"),
+    min_trades: int = typer.Option(20, "--min-trades"),
+    exposures: str = typer.Option("1.0,0.5", "--exposures", help="Escalas de exposición a probar"),
+    out: str = typer.Option(None, "--out", help="Carpeta de salida"),
+) -> None:
+    """Barrido de activos × estrategias × parámetros, puntuado contra las reglas.
+
+    Genera un ranking y un archivo de propuestas. Nunca activa bots: las
+    propuestas quedan con `enabled: false` para revisión humana.
+    """
+    from rich.progress import Progress, SpinnerColumn, TextColumn
+
+    from .research import DEFAULT_SYMBOLS, GRIDS, ResearchConfig, run_research, write_outputs
+
+    settings = get_settings()
+    rules = _prop_rules(firm, phase, account_size)
+    cfg = ResearchConfig(
+        symbols=[s.strip().upper() for s in (symbols or ",".join(DEFAULT_SYMBOLS)).split(",") if s.strip()],
+        strategies=[s.strip() for s in (strategies or ",".join(GRIDS)).split(",") if s.strip()],
+        start=start,
+        end=end or "",
+        account_size=rules.account_size,
+        paths=paths,
+        horizon=horizon,
+        block_size=block_size,
+        min_trades=min_trades,
+        min_pass=min_pass,
+        min_oos_pass=min_oos_pass,
+        max_breach=max_breach,
+        holdout_fraction=holdout,
+        exposures=[float(x) for x in exposures.split(",") if x.strip()],
+        commission_bps=settings.execution.commission_bps,
+        slippage_bps=settings.execution.slippage_bps,
+    )
+    unknown = [s for s in cfg.strategies if s not in STRATEGIES]
+    if unknown:
+        console.print(f"[red]Estrategias desconocidas:[/red] {', '.join(unknown)}")
+        raise typer.Exit(2)
+
+    console.print(
+        Panel(
+            f"{len(cfg.symbols)} activos × {len(cfg.strategies)} estrategias · "
+            f"{cfg.paths} paths · horizonte {cfg.horizon} d · "
+            f"OOS {cfg.holdout_fraction:.0%}\n"
+            f"Reglas: {rules.describe()}",
+            title="Investigación",
+        )
+    )
+
+    with Progress(
+        SpinnerColumn(), TextColumn("[progress.description]{task.description}"), console=console
+    ) as progress:
+        progress.add_task("Descargando datos, backtest y Monte Carlo...", total=None)
+        report = run_research(cfg, rules, settings.data.cache_dir)
+
+    out_dir = Path(out) if out else ROOT / "reports" / "research"
+    files = write_outputs(report, out_dir)
+
+    if not report["results"]:
+        console.print("[red]Sin candidatos evaluados.[/red] Revisa los errores del reporte.")
+        for e in report["errors"][:5]:
+            console.print(f"  [yellow]{e}[/yellow]")
+        raise typer.Exit(1)
+
+    table = Table(title=f"Ranking · {report['candidates']} candidatos")
+    table.add_column("#", justify="right")
+    table.add_column("Activo", style="bold")
+    table.add_column("Estrategia")
+    table.add_column("Parámetros")
+    table.add_column("Escala", justify="right")
+    table.add_column("Sharpe", justify="right")
+    table.add_column("MaxDD", justify="right")
+    table.add_column("Pasa", justify="right")
+    table.add_column("Revienta", justify="right")
+    table.add_column("Score", justify="right")
+
+    for i, r in enumerate(report["results"][:top], 1):
+        params = " ".join(f"{k}={v}" for k, v in r["params"].items())
+        table.add_row(
+            str(i),
+            r["symbol"],
+            r["strategy"],
+            params,
+            f"{r['exposure']:g}×",
+            f"{r['sharpe']:,.2f}",
+            _fmt_pct(r["max_drawdown"]),
+            f"[green]{r['pass_rate']:.1%}[/green]",
+            f"[red]{r['breach_rate']:.1%}[/red]",
+            f"{r['score']:,.3f}",
+        )
+    console.print(table)
+
+    n = len(report["proposals"])
+    if n:
+        console.print(
+            f"[bold green]{n} propuesta(s)[/bold green] en {files['proposals_md']} "
+            "[dim](enabled: false, requieren aprobación)[/dim]"
+        )
+    else:
+        console.print(
+            "[yellow]Ningún candidato cumple los criterios.[/yellow] "
+            "No pagues un challenge con estas estrategias todavía."
+        )
+    console.print(f"Reporte: {files['latest_md']}")
+    console.print(f"JSON:    {files['latest_json']}")
 
 
 def main() -> None:

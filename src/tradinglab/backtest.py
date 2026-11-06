@@ -23,17 +23,25 @@ def run(
     starting_cash: float = 100_000.0,
     commission_bps: float = 1.0,
     slippage_bps: float = 5.0,
+    max_gross: float = 1.0,
 ) -> BacktestResult:
-    """Backtest long-only, sin apalancamiento, ejecución en la apertura siguiente.
+    """Backtest long/short, sin apalancamiento, ejecución en la apertura siguiente.
 
+    `target` va de -1 (corto a plena exposición) a +1 (largo). `max_gross`
+    limita la exposición bruta para no simular apalancamiento accidental.
     Costes: comisión y slippage en puntos básicos sobre el nocional.
     """
     df = df.copy()
-    tgt = target.reindex(df.index).astype(float).clip(0.0, 1.0).fillna(0.0)
+    tgt = (
+        target.reindex(df.index)
+        .astype(float)
+        .clip(-abs(max_gross), abs(max_gross))
+        .fillna(0.0)
+    )
     pos_target = tgt.shift(1).fillna(0.0)
 
     cash = float(starting_cash)
-    shares = 0.0
+    shares = 0.0  # negativo = corto
     avg_cost = 0.0
     rows: list[dict] = []
     trades: list[dict] = []
@@ -61,17 +69,26 @@ def run(
             notional = abs(delta) * fill_px
             fee = notional * commission_bps / 10_000
 
-            if delta > 0:
-                total_cost = avg_cost * shares + delta * fill_px
-                shares += delta
-                avg_cost = total_cost / shares if shares > 0 else 0.0
-            else:
-                sold = -delta
-                realized.append((fill_px - avg_cost) * sold - fee)
-                shares += delta
-                if shares <= 1e-9:
-                    shares = 0.0
-                    avg_cost = 0.0
+            # PnL realizado al reducir o cerrar la posición existente.
+            if shares != 0 and (shares > 0) != (delta > 0):
+                closing = min(abs(delta), abs(shares))
+                if shares > 0:
+                    pnl = (fill_px - avg_cost) * closing
+                else:
+                    pnl = (avg_cost - fill_px) * closing
+                realized.append(pnl - fee)
+
+            new_shares = shares + delta
+            if abs(new_shares) < 1e-9:
+                new_shares = 0.0
+                avg_cost = 0.0
+            elif shares == 0 or (shares > 0) == (delta > 0):
+                # Aumento en la misma dirección: coste medio ponderado.
+                avg_cost = (abs(shares) * avg_cost + abs(delta) * fill_px) / abs(new_shares)
+            elif (shares > 0) != (new_shares > 0):
+                # Giro: la parte restante abre al precio de ejecución.
+                avg_cost = fill_px
+            shares = new_shares
 
             cash -= delta * fill_px + fee
             trades.append(
@@ -92,14 +109,14 @@ def run(
 
     eq = pd.DataFrame(rows).set_index("ts")["equity"].astype(float)
     rets = eq.pct_change().fillna(0.0)
-    metrics = compute_metrics(eq, rets, realized, float(pos_target.mean()))
+    metrics = compute_metrics(eq, rets, realized, float(pos_target.abs().mean()))
 
     return BacktestResult(
         equity=eq,
         returns=rets,
         trades=pd.DataFrame(trades),
         metrics=metrics,
-        exposure=float(pos_target.mean()),
+        exposure=float(pos_target.abs().mean()),
     )
 
 

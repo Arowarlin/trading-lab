@@ -6,6 +6,8 @@ __pycache__/
 data/cache/
 data/*.db
 data/*.db-*
+data/agent_runs/
+data/tradingagents/
 logs/
 reports/
 .pytest_cache/

@@ -35,6 +35,7 @@ def get_mt5_broker(settings: Settings, db_path=None, dry_run: bool | None = None
         dry_run=settings.mt5.dry_run if dry_run is None else dry_run,
         db_path=db_path or DEFAULT_DB,
         server_utc_offset_hours=settings.mt5.server_utc_offset_hours,
+        require_demo=settings.mt5.require_demo,
     )
 
 

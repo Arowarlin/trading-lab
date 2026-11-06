@@ -39,6 +39,7 @@ mt5:
   deviation: 20               # desviación máxima en puntos
   default_symbol: EURUSD
   dry_run: true               # el orquestador no envía órdenes salvo --execute
+  require_demo: true          # guard de identidad: rechaza cuentas reales
   server_utc_offset_hours: null   # null = autodetectar (Darwinex ahora va en GMT+2)
 
 # Reglas de fondeo. Los valores viven en config/prop.yaml (verifícalos).

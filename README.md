@@ -24,9 +24,10 @@ Entorno multi-bot de trading sobre **TradingAgents** y **Trading-R1**, con LLM l
 | F8 | Dashboard y observabilidad | ✅ `lab dashboard` (HTML) |
 | F9 | Núcleo multi-activo (forex, futuros, acciones) | ✅ |
 | F10 | MT5: datos, sizing, órdenes, hora de servidor | ✅ demo validada (abrir/cerrar) |
-| F11 | Motor de reglas de fondeo (FTMO) | ✅ guard + Monte Carlo |
+| F11 | Motor de reglas de fondeo (FTMO) | ✅ guard + Monte Carlo + fuente contrastada |
 | F12 | Futuros (ProjectX/Tradovate) | ⏳ pendiente de firma y cuenta |
 | F13 | Paper continuo 4-8 semanas | ⏳ |
+| F14 | Investigación automática (`lab research`) | ✅ barrido + OOS + propuestas |
 
 ---
 
@@ -51,11 +52,13 @@ E:\trading-lab\
 │   ├─ risk.py       sizing por ATR, límites y kill-switch
 │   ├─ execution\    PaperBroker · Alpaca · MT5
 │   ├─ prop\         rules (firmas/fases), guard (bloqueo), simulator (Monte Carlo)
+│   ├─ research.py   barrido de parámetros + OOS + propuestas (no auto-activa)
 │   ├─ llm.py        cliente OpenAI-compatible con log de llamadas
 │   ├─ agents\       puente a TradingAgents
 │   └─ cli.py        comandos `lab`
 ├─ scripts\
 │   ├─ run_tradingagents.py
+│   ├─ research_daily.ps1
 │   └─ lab.ps1
 ├─ vendor\           repos clonados (TradingAgents, Trading-R1)
 ├─ data\             caché, lab.db, informes de agentes
@@ -105,6 +108,9 @@ cd E:\trading-lab
 .\.venv\Scripts\lab.exe prop size EURUSD --risk-pct 0.005 --stop-pips 20
 .\.venv\Scripts\lab.exe prop check --lots 1.5 --stop-pips 20 --equity 98000
 .\.venv\Scripts\lab.exe prop simulate SPY --strategy trend --phase challenge
+
+# Investigación automática (ranking + propuestas, sin activar nada)
+.\.venv\Scripts\lab.exe research --start 2015-01-01
 ```
 
 Atajo: `.\scripts\lab.ps1 <comando>`.
@@ -121,7 +127,7 @@ Atajo: `.\scripts\lab.ps1 <comando>`.
 | Ajuste | Valor | Motivo |
 |---|---|---|
 | GPU offload | ~28-32 capas (o "max") | 27B Q4 no cabe entero; el resto va a RAM |
-| Context length | 16384 (subir a 32768 si aguanta) | TradingAgents usa prompts largos |
+| Context length | **32768** (mínimo 16384) | TradingAgents usa prompts largos; con 8k falla con un 400 opaco |
 | KV cache quant | Q8_0 | ahorra VRAM |
 | Flash attention | ON | velocidad |
 | mmproj | no cargar | visión innecesaria, ahorra 0,9 GB |
@@ -131,7 +137,15 @@ Atajo: `.\scripts\lab.ps1 <comando>`.
 5. Verifica: `lms ps` y `curl http://127.0.0.1:1234/v1/models`
 6. Ajusta `LAB_LLM_MODEL` en `.env` al id exacto que devuelva `/v1/models`
    (probablemente `qwen3.8-27b`).
-7. Prueba: `.\.venv\Scripts\lab.exe llm-test`
+7. Prueba: `.\.venv\Scripts\lab.exe llm-test` (muestra el contexto cargado).
+
+Si el contexto es menor de 16k, recarga el modelo:
+
+```powershell
+$lms = "$env:LOCALAPPDATA\Programs\LM Studio\resources\app\.webpack\lms.exe"
+& $lms unload --all
+& $lms load qwen3.8-27b --context-length 32768 --parallel 1 --yes
+```
 
 > Con 16 GB de VRAM y 27B en Q4 espera **8-15 tok/s**. Un run de TradingAgents con
 > 2 analistas y 1 ronda de debate: **20-60 min**. Por eso el diseño usa el LLM
@@ -177,7 +191,23 @@ MT5_LOGIN=...
 MT5_PASSWORD=...
 MT5_SERVER=Darwinex-Demo
 MT5_PATH=C:\Program Files\Darwinex MetaTrader 5\terminal64.exe
+MT5_REQUIRE_DEMO=1
 ```
+
+### Guard de identidad (antes de cada orden)
+
+Idea adoptada de Vibe-Trading. El adaptador **rechaza la cuenta** si no es la
+esperada, en vez de limitarse a avisar:
+
+- si `MT5_LOGIN` está definido, el login real debe coincidir;
+- si `MT5_SERVER` está definido, el servidor debe coincidir;
+- con `require_demo: true` (por defecto) una cuenta **real** se rechaza aunque
+  `ALLOW_LIVE=YES` esté puesto;
+- la comprobación se repite justo antes de `order_send`, por si la cuenta
+  cambió en caliente.
+
+`lab mt5 status` muestra `identity_ok`. Cerrar posiciones no pasa por el guard:
+en una emergencia, bloquear un cierre sería peor que el riesgo de identidad.
 
 ### Hora del servidor (crítico)
 
@@ -279,7 +309,63 @@ Para TradingAgents, programa `agent-run` de madrugada (tarda mucho) y sin solapa
 
 ---
 
-## 9. Riesgo y realidad
+## 9. Investigación automática (`lab research`)
+
+El bucle que "mejora los bots" sin activarlos solo. Barre activos × estrategias ×
+parámetros × escala de exposición, valida out-of-sample y escribe un ranking.
+
+```powershell
+# barrido completo (6 activos, 3 estrategias, ~2-4 min)
+.\.venv\Scripts\lab.exe research --start 2015-01-01
+
+# más rápido, para probar
+.\.venv\Scripts\lab.exe research --symbols SPY,QQQ --strategies trend --paths 500
+```
+
+Qué hace:
+
+1. descarga datos y ejecuta el backtest long/short (con comisión y slippage);
+2. simula cada variante contra las reglas de `config/prop.yaml` (Monte Carlo);
+3. puntúa `pasa − revienta` con el Sharpe como desempate;
+4. reserva el último 30% de la muestra para validación OOS;
+5. escribe `reports/research/latest.md`, `latest.json` y `proposals.{md,json}`.
+
+Criterios de propuesta: pasa ≥ 35%, revienta ≤ 15%, OOS ≥ 25%, Sharpe > 0 y
+≥ 20 trades. **Ninguna propuesta se activa sola**: van con `enabled: false` y
+hay que revisarlas, añadirlas a `config/bots.yaml` y volver a simular con datos
+intradía.
+
+Salida esperada (2026-11-05, FTMO 100k 2-step, horizonte 120 días):
+
+- mejor variante del ranking: QQQ `trend` fast=20 slow=100, exposición 0.35× →
+  pasa 68,8%, revienta 6,2% (no se propone: 17 trades < 20);
+- mejor propuesta: QQQ `trend` fast=50 slow=200, 0.35× → pasa 67,3%,
+  revienta 7,1%, OOS 88,1%;
+- el mismo `trend` a exposición 1.0× revienta ~36%: **el tamaño de posición
+  importa más que la señal**;
+- `trend-ls` y `meanrev` no superan a `trend` en esta muestra.
+
+Advertencias: elegir el mejor de cientos de variantes sesga el resultado al
+alza; OOS es un filtro mínimo, no una garantía. La muestra 2015-2026 (y su
+último 30%) es mayoritariamente alcista, así que un OOS alto mide un régimen
+favorable, no robustez entre regímenes. El Monte Carlo usa retornos diarios, así
+que el riesgo intradía real es mayor.
+
+### Programarlo a diario
+
+```powershell
+$action = New-ScheduledTaskAction -Execute "powershell.exe" `
+  -Argument "-NoProfile -ExecutionPolicy Bypass -File E:\trading-lab\scripts\research_daily.ps1" `
+  -WorkingDirectory "E:\trading-lab"
+$trigger = New-ScheduledTaskTrigger -Daily -At 07:00
+Register-ScheduledTask -TaskName "TradingLab-Research" -Action $action -Trigger $trigger
+```
+
+Los logs quedan en `logs/research/`.
+
+---
+
+## 10. Riesgo y realidad
 
 - Un LLM **no predice precios**. TradingAgents produce una tesis; su valor está en
   estructurar información, no en acertar la dirección.
@@ -293,11 +379,12 @@ Para TradingAgents, programa `agent-run` de madrugada (tarda mucho) y sin solapa
 
 ---
 
-## 10. Roadmap restante
+## 11. Roadmap restante
 
-1. **F1** terminar la descarga del 27B y validar `lab llm-test` + un `agent` real.
+1. **F6** validar un `agent` real con contexto de 32k y medir latencia (en curso).
 2. **F12** futuros: elegir firma (Topstep/Apex) y adaptador ProjectX/Tradovate.
-3. **F9b** backtester con cortos, sesiones y contratos continuos (hoy es long-only).
+3. **F9c** backtester con sesiones, rollover y contratos continuos (los cortos ya están).
 4. **F11b** filtros de noticias, viernes y rollover en el guard.
 5. **F13** paper continuo 4-8 semanas → comparar contra SPY y decidir.
 6. **F7** Trading-R1 en WSL para el informe pre-market + Telegram.
+7. **F14** datos de ticks Dukascopy para modelar spread real en forex.

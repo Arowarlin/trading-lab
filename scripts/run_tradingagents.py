@@ -16,6 +16,35 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
+MIN_CONTEXT = 16_384
+
+
+def _loaded_context(base_url: str, model: str) -> int | None:
+    """Contexto real cargado en LM Studio, o None si no se puede saber.
+
+    Sin esto, un modelo cargado con 8k falla a los 8 minutos con un 400 opaco
+    (`exceed_context_size_error`) en mitad del analista.
+    """
+    from urllib.request import urlopen
+
+    origin = base_url.rstrip("/")
+    if origin.endswith("/v1"):
+        origin = origin[:-3]
+    try:
+        with urlopen(f"{origin}/api/v0/models", timeout=5) as resp:
+            data = json.load(resp)
+    except Exception:
+        return None
+
+    for m in data.get("data", []):
+        if m.get("state") != "loaded":
+            continue
+        mid = str(m.get("id", ""))
+        if mid == model or model in mid or mid.endswith(model):
+            ctx = m.get("loaded_context_length") or m.get("max_context_length")
+            return int(ctx) if ctx else None
+    return None
+
 
 def main() -> int:
     parser = argparse.ArgumentParser()
@@ -43,11 +72,21 @@ def main() -> int:
         from tradingagents.graph.trading_graph import TradingAgentsGraph
 
         model = os.getenv("LAB_LLM_MODEL", "qwen3.8-27b")
+        backend = os.getenv("LAB_LLM_BASE_URL", "http://127.0.0.1:1234/v1")
+        loaded_ctx = _loaded_context(backend, model)
+        if loaded_ctx is not None and loaded_ctx < MIN_CONTEXT:
+            raise RuntimeError(
+                f"El modelo '{model}' está cargado con {loaded_ctx:,} tokens de contexto; "
+                f"TradingAgents necesita al menos {MIN_CONTEXT:,}. "
+                f"Recarga con: lms unload --all && lms load {model} "
+                "--context-length 32768 --parallel 1 --yes"
+            )
+
         cfg = DEFAULT_CONFIG.copy()
         cfg.update(
             {
                 "llm_provider": "openai_compatible",
-                "backend_url": os.getenv("LAB_LLM_BASE_URL", "http://127.0.0.1:1234/v1"),
+                "backend_url": backend,
                 "deep_think_llm": model,
                 "quick_think_llm": model,
                 "temperature": 0.2,

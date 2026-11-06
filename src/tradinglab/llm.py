@@ -32,7 +32,39 @@ class LLMClient:
             r.raise_for_status()
             data = r.json()
         models = [m.get("id") for m in data.get("data", [])]
-        return {"ok": True, "base_url": self.cfg.base_url, "models": models}
+        return {
+            "ok": True,
+            "base_url": self.cfg.base_url,
+            "models": models,
+            "lmstudio": self._lmstudio_info(),
+        }
+
+    def _lmstudio_info(self) -> dict | None:
+        """Contexto cargado, si el servidor es LM Studio (endpoint propio).
+
+        Es opcional: cualquier OpenAI-compatible que no exponga /api/v0/models
+        simplemente devuelve None. Sirve para detectar el fallo clásico de
+        cargar el modelo con 8k de contexto y romper los prompts de agentes.
+        """
+        base = self.cfg.base_url.rstrip("/")
+        origin = base[:-3] if base.endswith("/v1") else base
+        try:
+            with httpx.Client(timeout=5) as client:
+                r = client.get(f"{origin}/api/v0/models")
+                if r.status_code != 200:
+                    return None
+                data = r.json()
+        except Exception:
+            return None
+
+        for m in data.get("data", []):
+            if m.get("state") != "loaded":
+                continue
+            mid = str(m.get("id", ""))
+            if mid == self.cfg.model or self.cfg.model in mid or mid.endswith(self.cfg.model):
+                ctx = m.get("loaded_context_length") or m.get("max_context_length")
+                return {"id": mid, "context": int(ctx) if ctx else None}
+        return None
 
     def chat(
         self,
