@@ -72,6 +72,27 @@ def test_trailing_eod_moves_the_floor():
     assert guard.evaluate(st2).breached
 
 
+def test_daily_usage_uses_the_configured_base():
+    rules = ftmo(100_000, daily_loss_mode="balance")
+    st = state(
+        98_000,
+        day_start_balance=100_000,
+        day_start_equity=99_000,
+        peak_equity=100_000,
+    )
+    report = PropGuard(rules).evaluate(st)
+    # base = balance (100k), límite real 5k -> 2k usados = 40%
+    assert report.daily_used_pct == pytest.approx(2_000 / 5_000)
+
+
+def test_max_usage_uses_the_trailing_peak():
+    rules = ftmo(100_000, max_loss_mode="trailing_eod")
+    st = state(105_000, peak_balance=110_000, day_start_equity=105_000)
+    report = PropGuard(rules).evaluate(st)
+    # base = pico 110k, límite real 10k -> 5k usados = 50% (no negativo)
+    assert report.max_used_pct == pytest.approx(5_000 / 10_000)
+
+
 def test_target_reached_blocks_new_risk():
     rules = ftmo(100_000)
     report = PropGuard(rules).evaluate(state(110_000))

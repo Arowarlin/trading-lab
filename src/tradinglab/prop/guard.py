@@ -89,22 +89,25 @@ class PropGuard:
 
     # ------------------------------------------------------------------ suelos
 
-    def floors(self, state: AccountState) -> tuple[float, float]:
+    def _bases(self, state: AccountState) -> tuple[float, float]:
+        """Base del límite diario y del límite máximo, según el modo."""
         rules = self.rules
-
         daily_base = (
             state.day_start_balance if rules.daily_loss_mode == "balance" else state.day_start_equity
         )
-        daily_floor = daily_base - rules.effective_daily_limit_usd
-
         if rules.max_loss_mode == "static":
             max_base = state.initial_balance
         elif rules.max_loss_mode == "trailing_eod":
             max_base = state.peak_balance or state.initial_balance
         else:
             max_base = state.peak_equity or state.equity
-        max_floor = max_base - rules.effective_max_loss_usd
+        return daily_base, max_base
 
+    def floors(self, state: AccountState) -> tuple[float, float]:
+        rules = self.rules
+        daily_base, max_base = self._bases(state)
+        daily_floor = daily_base - rules.effective_daily_limit_usd
+        max_floor = max_base - rules.effective_max_loss_usd
         return daily_floor, max_floor
 
     # ----------------------------------------------------------------- evaluar
@@ -124,9 +127,10 @@ class PropGuard:
 
         warnings: list[str] = []
         equity = float(state.equity)
+        daily_base, max_base = self._bases(state)
 
-        used_daily = (state.day_start_equity - equity) / max(rules.daily_limit_usd, 1e-9)
-        used_max = (state.initial_balance - equity) / max(rules.max_loss_usd, 1e-9)
+        used_daily = (daily_base - equity) / max(rules.daily_limit_usd, 1e-9)
+        used_max = (max_base - equity) / max(rules.max_loss_usd, 1e-9)
         progress = (
             (equity - state.initial_balance) / rules.profit_target_usd
             if rules.profit_target_usd > 0
