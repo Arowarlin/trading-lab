@@ -54,6 +54,8 @@ def main() -> int:
     parser.add_argument("--debate-rounds", type=int, default=1)
     parser.add_argument("--risk-rounds", type=int, default=1)
     parser.add_argument("--language", default="Spanish")
+    parser.add_argument("--max-tool-rounds", type=int, default=8)
+    parser.add_argument("--max-tokens", type=int, default=2048)
     parser.add_argument("--out", required=True)
     parser.add_argument("--save", action="store_true")
     args = parser.parse_args()
@@ -92,6 +94,8 @@ def main() -> int:
                 "temperature": 0.2,
                 "max_debate_rounds": args.debate_rounds,
                 "max_risk_discuss_rounds": args.risk_rounds,
+                "max_tool_rounds": args.max_tool_rounds,
+                "max_tokens": args.max_tokens,
                 "output_language": args.language,
                 "checkpoint_enabled": True,
                 "results_dir": str(ROOT / "data" / "tradingagents" / "reports"),

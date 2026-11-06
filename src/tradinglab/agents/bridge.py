@@ -34,6 +34,8 @@ def run_tradingagents(
     language: str = "Spanish",
     save: bool = True,
     timeout: int = 7200,
+    max_tool_rounds: int = 8,
+    max_tokens: int = 2048,
 ) -> dict:
     """Lanza un run de TradingAgents en su propio venv y devuelve la decisión."""
     if not TA_PYTHON.exists():
@@ -61,6 +63,10 @@ def run_tradingagents(
         str(risk_rounds),
         "--language",
         language,
+        "--max-tool-rounds",
+        str(max_tool_rounds),
+        "--max-tokens",
+        str(max_tokens),
         "--out",
         str(out_path),
     ]

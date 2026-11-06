@@ -194,6 +194,9 @@ MT5_PATH=C:\Program Files\Darwinex MetaTrader 5\terminal64.exe
 MT5_REQUIRE_DEMO=1
 ```
 
+> Al pasar a la demo de FTMO hay que cambiar `MT5_LOGIN` y `MT5_SERVER` a los
+> de esa cuenta. Si no coinciden, el guard rechazará la orden (es lo deseado).
+
 ### Guard de identidad (antes de cada orden)
 
 Idea adoptada de Vibe-Trading. El adaptador **rechaza la cuenta** si no es la
