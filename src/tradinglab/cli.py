@@ -1085,6 +1085,32 @@ def mt5_run(
         signed = sum(p["volume"] if p["side"] == "buy" else -p["volume"] for p in positions)
         state = _prop_state_from_mt5(broker, rules)
 
+        # Protección del capital: si la cuenta ya está fuera del suelo efectivo,
+        # lo único seguro es aplanar TODA la cuenta. Cerrar siempre está permitido.
+        breach = guard.evaluate(state)
+        if breach.breached and state.open_positions > 0:
+            everything = broker.positions()
+            console.print(
+                Panel(
+                    f"{breach.reason}\nSe cierran {len(everything)} posiciones "
+                    f"({state.open_lots:g} lotes) para no romper el límite real.",
+                    title="Breach de fondeo",
+                    style="bold red",
+                )
+            )
+            if execute:
+                for p in everything:
+                    broker.close_position(p["ticket"])
+                console.print(f"[green]Cerradas {len(everything)} posiciones[/green]")
+            else:
+                console.print(
+                    f"[yellow]DRY RUN[/yellow] cerraría {len(everything)} posiciones"
+                )
+            _record_signal(
+                inst.symbol, strategy, "close", target, tick["bid"], f"breach: {breach.reason}"
+            )
+            return
+
         desired = 1 if target > 0 else (-1 if target < 0 else 0)
         if desired == 0:
             action = "close" if signed != 0 else "hold"
