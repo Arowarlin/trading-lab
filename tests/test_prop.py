@@ -144,6 +144,18 @@ def test_rules_load_from_yaml():
     assert c.reset_tz == "Europe/Prague"
 
 
+def test_topstep_50k_preset_es_plantilla_inactiva():
+    t = from_yaml("topstep", "challenge", 50_000)
+    assert t.profit_target_pct == pytest.approx(0.06)
+    assert t.max_loss_pct == pytest.approx(0.04)
+    assert t.max_loss_mode == "trailing_eod"
+    assert t.reset_tz == "America/Chicago"
+    assert t.weekend_holding is False
+    assert "PLANTILLA" in t.notes
+    # La firma activa sigue siendo FTMO: añadir el preset no la cambia.
+    assert from_yaml("ftmo", "challenge", 100_000).firm == "FTMO"
+
+
 def test_state_from_equity_splits_by_reset_timezone():
     idx = pd.to_datetime(
         ["2026-11-03 23:00", "2026-11-04 01:00", "2026-11-04 12:00", "2026-11-05 01:00"]

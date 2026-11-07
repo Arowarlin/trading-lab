@@ -76,18 +76,44 @@ firms:
         max_loss_pct: 0.10
         min_trading_days: 0
 
-  # --- Ejemplos para cuando toque futuros (descomentar y verificar) ----------
-  # topstep:
-  #   display_name: Topstep
-  #   program: trading-combine
-  #   defaults:
-  #     max_loss_mode: trailing_eod
-  #     daily_loss_mode: balance
-  #     buffer_pct: 0.15
-  #     reset_time: "17:00"
-  #     reset_tz: America/Chicago
-  #     max_lots: 5
-  #     max_positions: 3
-  #   phases:
-  #     challenge: {profit_target_pct: 0.06, max_daily_loss_pct: 0.02, max_loss_pct: 0.04, min_trading_days: 5}
-  #     funded:    {profit_target_pct: 0.0,  max_daily_loss_pct: 0.02, max_loss_pct: 0.04, min_trading_days: 0}
+  # --- PLANTILLA Topstep 50K: INACTIVA. No cambia la firma activa (FTMO). ---
+  # Verifica CADA valor en el contrato vigente de Topstep antes de usarla.
+  # Para activarla: cambia config/lab.yaml -> prop.firm: topstep y revisa fase.
+  topstep:
+    display_name: Topstep
+    program: trading-combine
+    enabled: false          # plantilla: no se usa mientras FTMO sea la firma activa
+    template: true
+    verify_against_contract: true
+    defaults:
+      max_loss_mode: trailing_eod
+      daily_loss_mode: balance
+      buffer_pct: 0.15
+      reset_time: "17:00"
+      reset_tz: America/Chicago
+      max_lots: 5
+      max_positions: 3
+      max_open_risk_pct: 0.02
+      weekend_holding: false
+      news_blackout_min: 0
+      friday_cutoff_hour: 16
+      rollover_utc: "22:00"
+      rollover_blackout_min: 15
+      consistency_pct: 0.55
+      notes: >
+        PLANTILLA Topstep 50K (Trading Combine). Valores orientativos:
+        objetivo 6% ($3.000), pérdida máxima 4% ($2.000) trailing EOD, límite
+        diario 2% ($1.000), reset 17:00 America/Chicago y consistencia 55%.
+        NO usar sin verificar el contrato vigente, el modo exacto de trailing,
+        la política de noticias, el fin de semana y la automatización.
+    phases:
+      challenge:
+        profit_target_pct: 0.06
+        max_daily_loss_pct: 0.02
+        max_loss_pct: 0.04
+        min_trading_days: 5
+      funded:
+        profit_target_pct: 0.0
+        max_daily_loss_pct: 0.02
+        max_loss_pct: 0.04
+        min_trading_days: 0

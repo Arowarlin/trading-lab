@@ -527,8 +527,11 @@ Para enviar de verdad hay que añadir `--execute`. Una cuenta real exige además
 - El guard debe bloquear aperturas cerca del MLL, pero **permitir cerrar**.
 - Consistencia 55%: el mejor día no puede superar ese porcentaje del beneficio
   total al pedir payout.
-- Pendiente: preset Topstep en `config/prop.yaml` y descarga de barras vía
-  `/api/History/retrieveBars` para backtest de futuros.
+- Preset **Topstep 50K** añadido en `config/prop.yaml` como plantilla inactiva
+  (`enabled: false`, `template: true`); no cambia la firma activa FTMO. Verifica
+  cada valor en el contrato vigente antes de usarlo.
+- Pendiente: descarga de barras vía `/api/History/retrieveBars` para backtest
+  de futuros.
 
 ---
 
