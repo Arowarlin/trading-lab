@@ -1198,6 +1198,12 @@
       </div>
 
       <div class="panel" style="margin-bottom:14px">
+        <div class="panel-head"><h2>Agentes por mercado</h2><span class="muted tiny" id="market-agents-meta"></span></div>
+        <div id="market-agents"></div>
+        <div class="note">Routing por clase de activo y presupuesto del coordinador determinista; no activa bots ni envía órdenes.</div>
+      </div>
+
+      <div class="panel" style="margin-bottom:14px">
         <div class="panel-head"><h2>Historial de decisiones</h2><span class="muted tiny" id="agents-count"></span></div>
         <div id="agents-table"></div>
       </div>
@@ -1416,6 +1422,7 @@ const S = {
   learning: null,
   reports: [],
   instruments: null,
+  markets: null,
   market: null,
   calendar: null,
   decisions: null,
@@ -1648,6 +1655,7 @@ function switchView(view, updateHash = true) {
   if (view === "overview") requestAnimationFrame(drawEquity);
   if (view === "market") renderMarket();
   if (view === "market") renderMarketCatalog();
+  if (view === "agents") renderMarketAgents();
   if (view === "fund") renderFund();
   if (view === "journal") loadJournal();
   if (view === "operator") loadOperator();
@@ -1680,7 +1688,7 @@ async function loadAll(manual = false) {
   const button = $("#refresh-btn");
   button.disabled = true;
   $("#refresh-label").textContent = "Actualizando…";
-  const [overviewResult, riskResult, accountsResult, fundResult, operatorResult, driftResult, instrumentsResult] = await Promise.allSettled([
+  const [overviewResult, riskResult, accountsResult, fundResult, operatorResult, driftResult, instrumentsResult, marketsResult] = await Promise.allSettled([
     getJSON("/api/overview"),
     getJSON("/api/risk"),
     getJSON("/api/accounts"),
@@ -1688,6 +1696,7 @@ async function loadAll(manual = false) {
     getJSON("/api/operator"),
     getJSON("/api/drift"),
     getJSON("/api/instruments"),
+    getJSON("/api/markets"),
   ]);
   if (overviewResult.status === "fulfilled") {
     const newBuild = overviewResult.value?.meta?.build;
@@ -1735,6 +1744,10 @@ async function loadAll(manual = false) {
   if (instrumentsResult.status === "fulfilled") {
     S.instruments = instrumentsResult.value;
     renderMarketCatalog();
+  }
+  if (marketsResult.status === "fulfilled") {
+    S.markets = marketsResult.value;
+    renderMarketAgents();
   }
   if (S.view === "journal") loadJournal();
   if (S.view === "learning") loadLearning();
@@ -3627,6 +3640,31 @@ async function proposeBot() {
 }
 
 /* ----------------------------------------------------------------- agents */
+function renderMarketAgents() {
+  const host = $("#market-agents");
+  if (!host) return;
+  const payload = S.markets;
+  if (!payload) {
+    host.innerHTML = `<div class="empty">Sin datos de mercados.</div>`;
+    return;
+  }
+  if ($("#market-agents-meta")) {
+    $("#market-agents-meta").textContent = `${payload.count} mercados · gross ${pct(payload.max_gross, 0)} · símbolo ${pct(payload.max_per_symbol, 0)}`;
+  }
+  const rows = (payload.markets || []).map((row) => [
+    `<b>${esc(row.label)}</b><div class="muted tiny">${esc(row.market)}</div>`,
+    esc(row.profile) + (row.profile_found ? "" : ` <span class="badge warn">sin perfil</span>`),
+    esc((row.analysts || []).join(", ") || "Sin datos"),
+    pct(row.max_weight, 0),
+    `${num(row.count, 0)}<div class="muted tiny">${esc((row.symbols || []).slice(0, 6).join(", ") || "Sin datos")}</div>`,
+  ]);
+  host.innerHTML = grid(
+    [{ label: "Mercado" }, { label: "Perfil" }, { label: "Analistas" }, { label: "Peso máx.", num: true }, { label: "Símbolos" }],
+    rows,
+    { empty: "Sin datos de mercados." }
+  );
+}
+
 function renderAgents() {
   const runs = S.overview?.agents || [];
   $("#agents-count").textContent = `${runs.length} runs`;

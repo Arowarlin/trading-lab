@@ -871,7 +871,7 @@ stdlib y `127.0.0.1`. Se conservan todas las pestañas, rutas, CSRF, Host/Origin
 y la lista blanca `WRITE_ROUTES`.
 
 Evidencia: `pytest tests/test_console_shell.py -q` → **3 passed**; suite completa
-**307 passed**; cubre las seis secciones, las 15 vistas actuales, los
+**312 passed**; cubre las seis secciones, las 15 vistas actuales, los
 componentes del dashboard y la ausencia de URLs externas/CDNs.
 
 ---
@@ -1050,6 +1050,25 @@ datos**, **sesión** y **zona horaria**.
 
 Evidencia: `pytest tests/test_instruments.py -q` → **9 passed**; suite completa
 **307 passed**; `ruff` limpio; `lab doctor` OK con avisos conocidos.
+
+---
+
+## 6o. Agentes por mercado y coordinador determinista (6.5)
+
+`config/market_agents.yaml` define por mercado (equity, forex, futures, cfd)
+etiqueta, perfil, analistas y peso máximo. El routing valida la clase real del
+símbolo con el catálogo antes de llamar al agente existente:
+
+- `run_market_agent("equity", "SPY", mode="lite|deep")`; un símbolo de otra
+  clase se rechaza.
+- `coordinate(signals)` combina ratings/confianza de forma **determinista**:
+  topes por símbolo y mercado, gross máximo y cash residual. No ejecuta órdenes
+  ni activa bots.
+- CLI `lab markets list` y `lab markets coordinate señales.json`.
+- API `/api/markets` y panel **Agentes → Agentes por mercado**.
+
+Evidencia: `pytest tests/test_market_agents.py -q` → **5 passed**; suite completa
+**312 passed**; `ruff` limpio; `lab doctor` OK con avisos conocidos.
 
 ---
 

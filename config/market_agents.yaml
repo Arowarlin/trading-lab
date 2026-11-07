@@ -1,0 +1,26 @@
+# Agentes por mercado y presupuesto del coordinador determinista.
+markets:
+  equity:
+    label: "Acciones / ETF"
+    profile: swing_equity
+    analysts: ["market", "news", "fundamentals"]
+    max_weight: 0.50
+    description: "Swing de acciones/ETF; señal diaria."
+  forex:
+    label: "Forex / metales"
+    profile: intraday_fx
+    analysts: ["market", "news", "macro"]
+    max_weight: 0.40
+    description: "Intradía FX/CFD; sesión europea/americana."
+  futures:
+    label: "Futuros"
+    profile: intraday_futures
+    analysts: ["market", "news", "macro"]
+    max_weight: 0.30
+    description: "Intradía de futuros; RTH de Chicago."
+  cfd:
+    label: "CFD"
+    profile: intraday_fx
+    analysts: ["market", "news", "macro"]
+    max_weight: 0.20
+    description: "Solo con especificación verificada del bróker."

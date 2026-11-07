@@ -84,6 +84,7 @@ operator_app = typer.Typer(
 )
 lessons_app = typer.Typer(no_args_is_help=True, help="Aprendizaje controlado: lecciones y holdout.")
 reports_app = typer.Typer(no_args_is_help=True, help="Reportes CSV/HTML con validación y vista previa.")
+markets_app = typer.Typer(no_args_is_help=True, help="Agentes por mercado y coordinador determinista.")
 intel_app = typer.Typer(no_args_is_help=True, help="Información continua: RSS, saneado y estado.")
 sec_app = typer.Typer(no_args_is_help=True, help="SEC EDGAR: CIK, filings y company facts.")
 app.add_typer(mt5_app, name="mt5")
@@ -98,6 +99,7 @@ app.add_typer(fund_app, name="fund")
 app.add_typer(operator_app, name="operator")
 app.add_typer(lessons_app, name="lessons")
 app.add_typer(reports_app, name="reports")
+app.add_typer(markets_app, name="markets")
 app.add_typer(intel_app, name="intel")
 app.add_typer(sec_app, name="sec")
 console = Console()
@@ -2645,6 +2647,70 @@ def _print_export(result: dict) -> None:
         for row in rows:
             t.add_row(*[str(row.get(col, ""))[:100] for col in rows[0].keys()])
         console.print(t)
+
+
+@markets_app.command("list")
+def markets_list_cmd() -> None:
+    """Muestra agentes/analistas y presupuesto por mercado."""
+    from .market_agents import market_payload
+
+    payload = market_payload()
+    t = Table(title=f"Agentes por mercado ({payload['count']})")
+    for col in ("Mercado", "Etiqueta", "Perfil", "Analistas", "Peso máx.", "Símbolos"):
+        t.add_column(col)
+    for row in payload["markets"]:
+        t.add_row(
+            row["market"],
+            row["label"],
+            row["profile"] if row["profile_found"] else f"{row['profile']} (sin datos)",
+            ", ".join(row["analysts"]),
+            f"{row['max_weight']:.0%}",
+            str(row["count"]),
+        )
+    console.print(t)
+    console.print(
+        f"[dim]gross máximo {payload['max_gross']:.0%} · "
+        f"por símbolo {payload['max_per_symbol']:.0%}[/dim]"
+    )
+
+
+@markets_app.command("coordinate")
+def markets_coordinate_cmd(
+    file: str = typer.Argument(..., help="JSON con lista de señales"),
+    max_gross: float = typer.Option(0.90, "--max-gross"),
+    max_per_symbol: float = typer.Option(0.25, "--max-per-symbol"),
+) -> None:
+    """Coordina señales (rating/confidence) sin ejecutar ni activar nada."""
+    from .market_agents import coordinate
+
+    try:
+        signals = json.loads(Path(file).read_text(encoding="utf-8"))
+        if not isinstance(signals, list):
+            raise ValueError("el JSON debe ser una lista")
+        result = coordinate(
+            signals,
+            max_gross=max_gross,
+            max_per_symbol=max_per_symbol,
+        )
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2) from exc
+    t = Table(title="Coordinador determinista")
+    for col in ("Mercado", "Símbolo", "Rating", "Confianza", "Peso"):
+        t.add_column(col)
+    for row in result["allocations"]:
+        t.add_row(
+            row["market"],
+            row["symbol"],
+            row["rating"],
+            f"{row['confidence']:.0%}",
+            f"{row['weight']:.2%}",
+        )
+    console.print(t)
+    console.print(
+        f"[dim]gross {result['gross_weight']:.2%} · cash {result['cash_weight']:.2%} · "
+        f"omitidas {len(result['skipped'])}[/dim]"
+    )
 
 
 @operator_app.command("pin")

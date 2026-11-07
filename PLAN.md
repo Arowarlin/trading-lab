@@ -169,7 +169,16 @@ Reglas de trabajo:
   - CFD solo con especificación verificada; sin inventar índices/horarios.
   - Evidencia: `pytest tests/test_instruments.py -q` → 9 passed; suite completa
     307 passed.
-- [ ] **6.5 Agentes por mercado** y coordinador determinista.
+- [x] **6.5 Agentes por mercado y coordinador determinista** — 2026-11-07
+  - `config/market_agents.yaml`: etiqueta, perfil, analistas y peso máximo por
+    mercado (equity/forex/futures/cfd).
+  - Routing que valida la clase del símbolo con `instruments.py` antes de usar
+    el agente lite/deep.
+  - `coordinate()` determinista con topes por símbolo/mercado, gross máximo y
+    cash residual; no ejecuta órdenes ni activa bots.
+  - CLI `lab markets list|coordinate`, API `/api/markets` y panel Agentes.
+  - Evidencia: `pytest tests/test_market_agents.py -q` → 5 passed; suite
+    completa 312 passed.
 - [ ] **6.6 Un mercado a la vez**, cada uno con su mini-F13.
 
 ## Fase 7 — Aprendizaje controlado
@@ -411,7 +420,7 @@ sin romper vistas ni añadir dependencias.
 | 2026-11-07 | E6 documentación | README 6d y Fase 9; tabla por perfil en Research; `ruff` + doctor |
 | 2026-11-07 | 10.1 Diario | `pytest tests/test_journal.py -q` → 7 passed; `lab journal` → sin datos; README 6e |
 | 2026-11-07 | 11 Modo operador | `pytest tests/test_operator.py -q` → 11 passed; 2 pasos/PIN/keyring/auditoría; README 6f |
-| 2026-11-07 | 12 Shell consola | `pytest tests/test_console_shell.py -q` → 3 passed; `pytest -q` → 307 passed; 6 secciones, 15 vistas, dashboard; README 6g |
+| 2026-11-07 | 12 Shell consola | `pytest tests/test_console_shell.py -q` → 3 passed; `pytest -q` → 312 passed; 6 secciones, 15 vistas, dashboard; README 6g |
 | 2026-11-07 | 10.2 Multiverse | `pytest tests/test_multiverse.py -q` → 7 passed; `pytest -q` → 279 passed; 1.000 permutaciones, seed 42, Diario + Run Detail |
 | 2026-11-07 | 10.3 Deriva | `pytest tests/test_drift.py -q` → 5 passed; `pytest -q` → 284 passed; IC bootstrap, mínimo 20, slippage, Bots + `lab drift` |
 | 2026-11-07 | 10.4 Salud/TWR | `pytest tests/test_health.py -q` → 5 passed; `pytest -q` → 289 passed; score 0-100, flujos y TWR en Fondo |
@@ -419,4 +428,5 @@ sin romper vistas ni añadir dependencias.
 | 2026-11-07 | 10.6 Aprendizaje | `pytest tests/test_learning.py -q` → 6 passed; `pytest -q` → 301 passed; lecciones, holdout, DSR trials, challenger, panel |
 | 2026-11-07 | 10.7 Reportes | `pytest tests/test_exports.py -q` → 4 passed; `pytest -q` → 305 passed; CSV/HTML, validación, preview CLI/Registros |
 | 2026-11-07 | 6.4 Catálogo | `pytest tests/test_instruments.py -q` → 9 passed; `pytest -q` → 307 passed; fuente/sesión/TZ, CLI/API/Mercado |
+| 2026-11-07 | 6.5 Agentes mercado | `pytest tests/test_market_agents.py -q` → 5 passed; `pytest -q` → 312 passed; routing, coordinador, CLI/API/Agentes |
 |  |  |  |

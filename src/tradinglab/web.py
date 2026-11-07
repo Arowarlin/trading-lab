@@ -77,6 +77,7 @@ from .learning import (
 from .learning import (
     reject as reject_lesson,
 )
+from .market_agents import market_payload
 from .operator import OperatorError, OperatorService
 from .orchestrator import load_bots
 from .profiles import load_profiles
@@ -2326,6 +2327,8 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     "items": catalog(),
                     "validation": validate_catalog(),
                 })
+            elif path == "/api/markets":
+                self._json(market_payload())
             elif path == "/api/calendar":
                 self._json(self.server.data.calendar())
             elif path == "/api/research/detail":
