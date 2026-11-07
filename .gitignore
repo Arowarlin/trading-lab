@@ -16,6 +16,9 @@ reports/
 *.egg-info/
 
 vendor/
-
+.env
+.env.*
+!.env.example
+.env.local.bak
 # Informes de TradingAgents generados en la raiz
 20??-??-??/

@@ -10,6 +10,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from statistics import NormalDist
 
+import numpy as np
+
 from . import data as data_mod
 from .backtest import run as run_backtest
 from .prop.rules import PropRules
@@ -49,6 +51,10 @@ class ResearchConfig:
     min_pass: float = 0.35
     min_oos_pass: float = 0.25
     min_dsr: float = 0.90
+    wf_folds: int = 4
+    min_wf_positive: int = 2
+    pbo_blocks: int = 8
+    max_pbo: float = 0.50
     max_breach: float = 0.15
     holdout_fraction: float = 0.30
     exposures: list[float] = field(default_factory=lambda: [1.0, 0.5])
@@ -70,6 +76,81 @@ def _score(pass_rate: float, breach_rate: float, sharpe: float) -> float:
 
 
 EULER_GAMMA = 0.5772156649015329
+
+
+def _block_metrics(returns, blocks: int) -> list[dict]:
+    r = returns.dropna().astype(float)
+    if blocks < 2 or len(r) < blocks * 5:
+        return []
+    chunks = np.array_split(r.to_numpy(), blocks)
+    out = []
+    for chunk in chunks:
+        if len(chunk) == 0:
+            continue
+        total = float(np.prod(1.0 + chunk) - 1.0)
+        std = float(np.std(chunk, ddof=1)) if len(chunk) > 1 else 0.0
+        sharpe = float(np.mean(chunk) / std * np.sqrt(252)) if std > 0 else 0.0
+        out.append({"return": total, "sharpe": sharpe})
+    return out
+
+
+def _year_returns(returns) -> dict[str, float]:
+    r = returns.dropna()
+    if not hasattr(r.index, "year"):
+        return {}
+    out = {}
+    for year, group in r.groupby(r.index.year):
+        out[str(int(year))] = float((1.0 + group).prod() - 1.0)
+    return out
+
+
+def pbo_cscv(block_returns: dict[str, list[float]], *, max_combinations: int = 5_000) -> dict | None:
+    """Probability of Backtest Overfitting (CSCV simplificado).
+
+    `block_returns[variant]` son retornos por bloque contiguo. Para cada
+    combinación train/test se elige el mejor en train y se mide su rango en
+    test; PBO es la fracción de veces que queda por debajo de la mediana.
+    """
+    if len(block_returns) < 2:
+        return None
+    lengths = {len(v) for v in block_returns.values()}
+    if len(lengths) != 1:
+        return None
+    blocks = next(iter(lengths))
+    if blocks % 2:
+        blocks -= 1
+    if blocks < 4:
+        return None
+
+    names = list(block_returns)
+    values = {name: block_returns[name][:blocks] for name in names}
+    combinations = list(itertools.combinations(range(blocks), blocks // 2))
+    if len(combinations) > max_combinations:
+        combinations = combinations[:max_combinations]
+
+    overfit = 0
+    for train in combinations:
+        test = tuple(i for i in range(blocks) if i not in train)
+        train_scores = {
+            name: statistics.mean(values[name][i] for i in train) for name in names
+        }
+        best = max(names, key=lambda name: train_scores[name])
+        test_scores = {
+            name: statistics.mean(values[name][i] for i in test) for name in names
+        }
+        ordered = sorted(test_scores.values())
+        rank = sum(1 for value in ordered if value < test_scores[best]) / max(
+            1, len(ordered) - 1
+        )
+        if rank < 0.5:
+            overfit += 1
+
+    return {
+        "pbo": overfit / len(combinations),
+        "combinations": len(combinations),
+        "blocks": blocks,
+        "variants": len(names),
+    }
 
 
 def deflated_sharpe(
@@ -145,6 +226,10 @@ def run_research(cfg: ResearchConfig, rules: PropRules, cache_dir: str | Path) -
                 skew = float(returns.skew()) if len(returns) > 2 else 0.0
                 kurtosis = float(returns.kurt()) + 3.0 if len(returns) > 3 else 3.0
                 sample_days = len(returns)
+                blocks = _block_metrics(returns, cfg.pbo_blocks)
+                walk_forward = _block_metrics(returns, cfg.wf_folds)
+                wf_returns = [b["return"] for b in walk_forward]
+                year_returns = _year_returns(returns)
                 split = max(1, int(len(bt.returns) * (1.0 - cfg.holdout_fraction)))
                 oos_returns = bt.returns.iloc[split:]
                 oos_start = (
@@ -209,6 +294,12 @@ def run_research(cfg: ResearchConfig, rules: PropRules, cache_dir: str | Path) -
                             "sample_days": sample_days,
                             "skew": skew,
                             "kurtosis": kurtosis,
+                            "block_returns": [b["return"] for b in blocks],
+                            "walk_forward": walk_forward,
+                            "wf_positive_folds": sum(1 for x in wf_returns if x > 0),
+                            "wf_min_return": min(wf_returns) if wf_returns else None,
+                            "wf_median_return": statistics.median(wf_returns) if wf_returns else None,
+                            "year_returns": year_returns,
                             "score": _score(pass_rate, breach_rate, sharpe),
                         }
                     )
@@ -238,6 +329,16 @@ def run_research(cfg: ResearchConfig, rules: PropRules, cache_dir: str | Path) -
             len(results),
         )
 
+    block_map = {
+        f"{r['symbol']}|{r['strategy']}|{r['exposure']:g}|{json.dumps(r['params'], sort_keys=True)}": r[
+            "block_returns"
+        ]
+        for r in results
+        if r.get("block_returns")
+    }
+    pbo = pbo_cscv(block_map)
+    pbo_ok = pbo is None or pbo["pbo"] <= cfg.max_pbo
+
     def core_eligible(r: dict) -> bool:
         return (
             r["pass_rate"] >= cfg.min_pass
@@ -246,6 +347,8 @@ def run_research(cfg: ResearchConfig, rules: PropRules, cache_dir: str | Path) -
             and r["sharpe"] > 0
             and r["family_median_pass"] >= cfg.min_pass
             and (r.get("dsr") is not None and r["dsr"] >= cfg.min_dsr)
+            and r.get("wf_positive_folds", 0) >= cfg.min_wf_positive
+            and pbo_ok
         )
 
     proposals = [r for r in results if core_eligible(r) and r["num_trades"] >= cfg.min_trades]
@@ -274,6 +377,9 @@ def run_research(cfg: ResearchConfig, rules: PropRules, cache_dir: str | Path) -
             "num_trades": r["num_trades"],
             "family_median_pass": r["family_median_pass"],
             "dsr": r.get("dsr"),
+            "wf_positive_folds": r.get("wf_positive_folds"),
+            "wf_folds": cfg.wf_folds,
+            "year_returns": r.get("year_returns") or {},
             "max_drawdown": r["max_drawdown"],
             "sharpe": r["sharpe"],
             "status": status,
@@ -284,6 +390,8 @@ def run_research(cfg: ResearchConfig, rules: PropRules, cache_dir: str | Path) -
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "rules": rules.describe(),
+        "pbo": pbo,
+        "pbo_ok": pbo_ok,
         "config": {
             "symbols": cfg.symbols,
             "strategies": cfg.strategies,
@@ -297,6 +405,10 @@ def run_research(cfg: ResearchConfig, rules: PropRules, cache_dir: str | Path) -
             "min_pass": cfg.min_pass,
             "min_oos_pass": cfg.min_oos_pass,
             "min_dsr": cfg.min_dsr,
+            "wf_folds": cfg.wf_folds,
+            "min_wf_positive": cfg.min_wf_positive,
+            "pbo_blocks": cfg.pbo_blocks,
+            "max_pbo": cfg.max_pbo,
             "max_breach": cfg.max_breach,
             "holdout_fraction": cfg.holdout_fraction,
             "exposures": cfg.exposures,
@@ -351,13 +463,17 @@ def render_markdown(report: dict, top: int = 25) -> str:
         f"- Validación out-of-sample: último {cfg['holdout_fraction']:.0%} de la muestra",
         f"- Ventana OOS: {oos_range}",
         f"- Variantes evaluadas: {report['candidates']}",
+        f"- Walk-forward: {cfg.get('wf_folds', 4)} bloques · PBO "
+        f"{report.get('pbo', {}).get('pbo', 0):.0%}"
+        if report.get("pbo")
+        else f"- Walk-forward: {cfg.get('wf_folds', 4)} bloques · PBO —",
         "",
         warning,
         "",
         "## Ranking",
         "",
-        "| # | Activo | Estrategia | Parámetros | Escala | Sharpe | CAGR | MaxDD | Trades | Pasa | Revienta | Pasa OOS | Score | DSR |",
-        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
+        "| # | Activo | Estrategia | Parámetros | Escala | Sharpe | CAGR | MaxDD | Trades | Pasa | Revienta | Pasa OOS | Score | DSR | WF |",
+        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
 
     def pct(x: float) -> str:
@@ -372,7 +488,23 @@ def render_markdown(report: dict, top: int = 25) -> str:
             f"| {i} | {r['symbol']} | {r['strategy']} | {params} | "
             f"{r['exposure']:g}× | {r['sharpe']:,.2f} | {pct(r['cagr'])} | "
             f"{pct(r['max_drawdown'])} | {r['num_trades']} | {pct(r['pass_rate'])} | "
-            f"{pct(r['breach_rate'])} | {pct_opt(r.get('oos_pass_rate'))} | {r['score']:,.3f} | {pct_opt(r.get('dsr'))} |"
+            f"{pct(r['breach_rate'])} | {pct_opt(r.get('oos_pass_rate'))} | {r['score']:,.3f} | {pct_opt(r.get('dsr'))} | "
+            f"{r.get('wf_positive_folds', 0)}/{cfg.get('wf_folds', 4)} |"
+        )
+
+    lines += [
+        "",
+        "## Regímenes (top 5)",
+        "",
+        "| # | Activo | Estrategia | 2018 | 2020 | 2022 |",
+        "|---|---|---|---|---|---|",
+    ]
+    for i, r in enumerate(report["results"][:5], 1):
+        years = r.get("year_returns") or {}
+        lines.append(
+            f"| {i} | {r['symbol']} | {r['strategy']} | "
+            f"{pct_opt(years.get('2018'))} | {pct_opt(years.get('2020'))} | "
+            f"{pct_opt(years.get('2022'))} |"
         )
 
     lines += [
@@ -381,7 +513,9 @@ def render_markdown(report: dict, top: int = 25) -> str:
         "",
         f"Criterios: pasa ≥ {cfg['min_pass']:.0%}, revienta ≤ {cfg['max_breach']:.0%}, "
         f"OOS ≥ {cfg['min_oos_pass']:.0%}, Sharpe > 0, trades ≥ {cfg['min_trades']}, "
-        f"DSR ≥ {cfg.get('min_dsr', 0.90):.0%} y mediana de la familia de parámetros ≥ {cfg['min_pass']:.0%}.",
+        f"DSR ≥ {cfg.get('min_dsr', 0.90):.0%}, WF positivos ≥ "
+        f"{cfg.get('min_wf_positive', 2)}/{cfg.get('wf_folds', 4)}, PBO ≤ "
+        f"{cfg.get('max_pbo', 0.50):.0%} y mediana de la familia ≥ {cfg['min_pass']:.0%}.",
         "",
     ]
     if report["proposals"]:

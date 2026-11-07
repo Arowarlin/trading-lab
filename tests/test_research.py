@@ -20,6 +20,35 @@ def test_deflated_sharpe_penaliza_mas_variantes():
     assert 0.0 <= alto <= 1.0
 
 
+def test_walk_forward_y_regimenes():
+    from tradinglab.research import _block_metrics, _year_returns
+
+    idx = pd.date_range("2020-01-01", periods=40, freq="B")
+    returns = pd.Series([0.01, -0.005] * 20, index=idx)
+    blocks = _block_metrics(returns, 4)
+    assert len(blocks) == 4
+    assert all("return" in b and "sharpe" in b for b in blocks)
+
+    years = _year_returns(returns)
+    assert "2020" in years
+    assert years["2020"] > -1.0
+
+
+def test_pbo_cscv_detecta_consistencia():
+    from tradinglab.research import pbo_cscv
+
+    blocks = {
+        "bueno": [0.04, 0.05, 0.04, 0.05, 0.04, 0.05, 0.04, 0.05],
+        "medio": [0.02, 0.01, 0.02, 0.01, 0.02, 0.01, 0.02, 0.01],
+        "malo": [-0.01, -0.02, -0.01, -0.02, -0.01, -0.02, -0.01, -0.02],
+    }
+    result = pbo_cscv(blocks)
+    assert result is not None
+    assert 0.0 <= result["pbo"] <= 1.0
+    assert result["variants"] == 3
+    assert pbo_cscv({"solo": [0.1, 0.2, 0.3, 0.4]}) is None
+
+
 def _frame(n: int = 400, seed: int = 3) -> pd.DataFrame:
     rng = np.random.default_rng(seed)
     rets = rng.normal(0.0004, 0.009, n)
@@ -98,6 +127,9 @@ def test_write_outputs_creates_files(tmp_path, monkeypatch):
         max_breach=1.0,
         min_trades=0,
         min_oos_pass=0.0,
+        min_dsr=0.0,
+        min_wf_positive=0,
+        max_pbo=1.0,
     )
     report = research.run_research(cfg, ftmo(100_000), cache_dir="unused")
     files = research.write_outputs(report, tmp_path)
@@ -125,6 +157,9 @@ def test_near_misses_are_listed_but_not_actionable(monkeypatch):
         min_trades=10_000,
         near_miss_slack=10_000,
         min_oos_pass=0.0,
+        min_dsr=0.0,
+        min_wf_positive=0,
+        max_pbo=1.0,
         exposures=[1.0],
     )
     report = research.run_research(cfg, ftmo(100_000), cache_dir="unused")
