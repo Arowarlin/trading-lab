@@ -107,6 +107,10 @@ def run_research(cfg: ResearchConfig, rules: PropRules, cache_dir: str | Path) -
                 cagr = float(m.get("cagr", 0.0))
                 split = max(1, int(len(bt.returns) * (1.0 - cfg.holdout_fraction)))
                 oos_returns = bt.returns.iloc[split:]
+                oos_start = (
+                    str(bt.equity.index[split].date()) if split < len(bt.equity) else None
+                )
+                oos_end = str(bt.equity.index[-1].date())
                 for exposure in cfg.exposures:
                     try:
                         mc = monte_carlo(
@@ -160,6 +164,8 @@ def run_research(cfg: ResearchConfig, rules: PropRules, cache_dir: str | Path) -
                             "median_days_to_pass": mc["median_days_to_pass"],
                             "oos_pass_rate": float(oos["pass_rate"]) if oos else None,
                             "oos_breach_rate": float(oos["breach_rate"]) if oos else None,
+                            "oos_start": oos_start,
+                            "oos_end": oos_end,
                             "score": _score(pass_rate, breach_rate, sharpe),
                         }
                     )
@@ -227,6 +233,16 @@ def run_research(cfg: ResearchConfig, rules: PropRules, cache_dir: str | Path) -
 
 def render_markdown(report: dict, top: int = 25) -> str:
     cfg = report["config"]
+    top_result = report["results"][0] if report.get("results") else {}
+    oos_start = top_result.get("oos_start")
+    oos_end = top_result.get("oos_end")
+    oos_range = f"{oos_start} → {oos_end}" if oos_start else "último tramo de la muestra"
+    warning = (
+        "> Aviso: al elegir el mejor de cientos de variantes el resultado está sesgado "
+        f"al alza. La columna OOS es el filtro mínimo de estabilidad, no una garantía: "
+        f"el tramo reservado ({oos_range}) puede caer en un régimen favorable y dar "
+        "tasas muy altas que no se repetirán en otro mercado."
+    )
     lines = [
         "# Investigación de estrategias",
         "",
@@ -238,12 +254,10 @@ def render_markdown(report: dict, top: int = 25) -> str:
         f"{cfg['paths']} paths · horizonte {cfg['horizon']} días · bloque {cfg['block_size']}",
         f"- Escalas de exposición: {', '.join(f'{x:g}' for x in cfg['exposures'])}",
         f"- Validación out-of-sample: último {cfg['holdout_fraction']:.0%} de la muestra",
+        f"- Ventana OOS: {oos_range}",
         f"- Variantes evaluadas: {report['candidates']}",
         "",
-        "> Aviso: al elegir el mejor de cientos de variantes el resultado está sesgado "
-        "al alza. La columna OOS es el filtro mínimo de estabilidad, no una garantía: "
-        "el tramo reservado (último 30%) puede caer en un régimen favorable y dar "
-        "tasas muy altas que no se repetirán en otro mercado.",
+        warning,
         "",
         "## Ranking",
         "",

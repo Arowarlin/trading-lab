@@ -13,7 +13,7 @@ from rich.table import Table
 
 from . import __version__
 from . import data as data_mod
-from .agents import AgentError, RATING_TO_TARGET, run_tradingagents
+from .agents import AgentError, RATING_TO_TARGET, run_lite_agent, run_tradingagents
 from .backtest import run as run_backtest
 from .config import DEFAULT_DB, ROOT, get_settings
 from .db import connect, init_db, utcnow
@@ -445,34 +445,57 @@ def run(
     console.print(f"Equity paper: {broker.snapshot({ticker.upper(): price})['equity']:,.2f}")
 
 
+def _agent_decision(
+    ticker: str, day: str, analysts: str, save: bool, mode: str
+) -> dict:
+    """Elige entre el agente lite (1 llamada) y TradingAgents (multi-agente)."""
+    if mode == "lite":
+        return run_lite_agent(ticker, day, get_settings())
+    if mode == "deep":
+        return run_tradingagents(ticker, day, analysts, save=save)
+    raise typer.BadParameter("--mode debe ser 'lite' o 'deep'")
+
+
 @app.command()
 def agent(
     ticker: str = typer.Argument(..., help="Símbolo, p. ej. NVDA"),
     analysis_date: str = typer.Option(None, "--date", help="YYYY-MM-DD (por defecto hoy)"),
     analysts: str = typer.Option("market,news", "--analysts", help="market,news,social,fundamentals"),
     save: bool = typer.Option(True, "--save/--no-save", help="Guardar informe completo"),
+    mode: str = typer.Option(
+        "lite", "--mode", help="lite = 1 llamada (minutos) · deep = TradingAgents (horas)"
+    ),
 ) -> None:
-    """Ejecuta TradingAgents y muestra su rating (lento con modelos locales)."""
+    """Decisión del agente: lite (rápido) o deep (TradingAgents)."""
     init_db(DEFAULT_DB)
     day = analysis_date or _today()
+    detail = (
+        "Una llamada con contexto técnico compacto (~2-10 min)."
+        if mode == "lite"
+        else "Run multi-agente; con un 27B local puede tardar horas."
+    )
     console.print(
         Panel(
             f"Ticker: [bold]{ticker.upper()}[/bold] · fecha: {day}\n"
-            f"Analistas: {analysts} · modelo: {get_settings().llm.model}\n"
-            "[dim]Un run local puede tardar entre 10 y 60 minutos. No cierres la ventana.[/dim]",
-            title="TradingAgents",
+            f"Modo: {mode} · analistas: {analysts} · modelo: {get_settings().llm.model}\n"
+            f"[dim]{detail} No cierres la ventana.[/dim]",
+            title="TradingAgents" if mode == "deep" else "Agente lite",
         )
     )
     try:
-        result = run_tradingagents(ticker, day, analysts, save=save)
+        result = _agent_decision(ticker, day, analysts, save, mode)
     except AgentError as exc:
-        console.print(Panel(str(exc)[-3000:], title="TradingAgents falló", style="bold red"))
+        console.print(Panel(str(exc)[-3000:], title="Agente falló", style="bold red"))
         raise typer.Exit(1)
 
     table = Table(title=f"Decisión · {ticker.upper()} · {day}")
     table.add_column("Campo", style="bold")
     table.add_column("Valor")
     table.add_row("Rating", f"[bold]{result.get('rating')}[/bold]")
+    if result.get("confidence") is not None:
+        table.add_row("Confianza", f"{float(result['confidence']):.0%}")
+    if result.get("horizon_days") is not None:
+        table.add_row("Horizonte", f"{result['horizon_days']} días")
     table.add_row("Modelo", str(result.get("model")))
     table.add_row("Duración", f"{result.get('elapsed_s')} s")
     if result.get("reports_path"):
@@ -481,7 +504,16 @@ def agent(
 
     decision = (result.get("decision") or "").strip()
     if decision:
-        console.print(Panel(decision[:4000], title="Decisión del Portfolio Manager", overflow="fold"))
+        console.print(
+            Panel(decision[:4000], title="Tesis del analista"),
+            overflow="fold",
+        )
+    risks = (result.get("risks") or "").strip()
+    if risks:
+        console.print(
+            Panel(risks[:2000], title="Riesgos señalados", style="yellow"),
+            overflow="fold",
+        )
 
 
 @app.command("agent-run")
@@ -490,28 +522,40 @@ def agent_run(
     analysis_date: str = typer.Option(None, "--date", help="YYYY-MM-DD (por defecto hoy)"),
     analysts: str = typer.Option("market,news", "--analysts"),
     execute: bool = typer.Option(True, "--execute/--dry-run"),
+    mode: str = typer.Option("lite", "--mode", help="lite (rápido) · deep (TradingAgents)"),
 ) -> None:
-    """TradingAgents decide y la orden se aplica a la cuenta paper."""
+    """El agente decide y la orden se aplica a la cuenta paper."""
     settings = get_settings()
     init_db(DEFAULT_DB)
     day = analysis_date or _today()
 
     try:
-        result = run_tradingagents(ticker, day, analysts, save=True)
+        result = _agent_decision(ticker, day, analysts, True, mode)
     except AgentError as exc:
-        console.print(Panel(str(exc)[-3000:], title="TradingAgents falló", style="bold red"))
+        console.print(Panel(str(exc)[-3000:], title="Agente falló", style="bold red"))
         raise typer.Exit(1)
 
     rating = str(result.get("rating", "REVIEW"))
     target_fraction = RATING_TO_TARGET.get(rating, None)
-    console.print(f"[bold]{ticker.upper()}[/bold] · rating=[bold]{rating}[/bold] · target={target_fraction}")
+    console.print(
+        f"[bold]{ticker.upper()}[/bold] · modo={mode} · rating=[bold]{rating}[/bold] "
+        f"· target={target_fraction}"
+    )
 
     if target_fraction is None:
         console.print("[yellow]Hold / REVIEW: no se modifica la posición.[/yellow]")
         with connect(DEFAULT_DB) as con:
             con.execute(
                 "INSERT INTO signals(ts, ticker, bot, side, strength, price, reason) VALUES(?,?,?,?,?,?,?)",
-                (utcnow(), ticker.upper(), "tradingagents", "hold", None, None, f"rating={rating}"),
+                (
+                    utcnow(),
+                    ticker.upper(),
+                    f"agent-{mode}",
+                    "hold",
+                    None,
+                    None,
+                    f"rating={rating}",
+                ),
             )
         return
 
@@ -565,12 +609,20 @@ def agent_run(
         return
 
     fill = broker.submit_market(
-        ticker.upper(), delta, price, bot="tradingagents", reason=f"rating={rating}"
+        ticker.upper(), delta, price, bot=f"agent-{mode}", reason=f"rating={rating}"
     )
     with connect(DEFAULT_DB) as con:
         con.execute(
             "INSERT INTO signals(ts, ticker, bot, side, strength, price, reason) VALUES(?,?,?,?,?,?,?)",
-            (utcnow(), ticker.upper(), "tradingagents", fill["side"], target_fraction, price, f"rating={rating}"),
+            (
+                utcnow(),
+                ticker.upper(),
+                f"agent-{mode}",
+                fill["side"],
+                target_fraction,
+                price,
+                f"rating={rating}",
+            ),
         )
     console.print(f"[green]Ejecutado[/green] {fill}")
     broker.mark_to_market({ticker.upper(): price})

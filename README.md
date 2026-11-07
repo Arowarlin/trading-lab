@@ -19,7 +19,7 @@ Entorno multi-bot de trading sobre **TradingAgents** y **Trading-R1**, con LLM l
 | F3 | Núcleo del lab: config, SQLite, datos, riesgo | ✅ |
 | F4 | Backtester + estrategias deterministas | ✅ |
 | F5 | Alpaca paper + ejecución | ✅ validado (cuenta ACTIVE, equity 100k) |
-| F6 | TradingAgents como fuente de señal | 🟡 código listo · validación real en curso |
+| F6 | TradingAgents como fuente de señal | ✅ `lite` validado (77 s) · `deep` opcional |
 | F7 | Trading-R1 (informes/Telegram) | ⏳ requiere WSL |
 | F8 | Dashboard y observabilidad | ✅ `lab dashboard` (HTML) |
 | F9 | Núcleo multi-activo (forex, futuros, acciones) | ✅ |
@@ -59,6 +59,7 @@ E:\trading-lab\
 ├─ scripts\
 │   ├─ run_tradingagents.py
 │   ├─ research_daily.ps1
+│   ├─ backup.ps1
 │   └─ lab.ps1
 ├─ vendor\           repos clonados (TradingAgents, Trading-R1)
 ├─ data\             caché, lab.db, informes de agentes
@@ -85,7 +86,8 @@ cd E:\trading-lab
 .\.venv\Scripts\lab.exe orchestrate --bot trend-spy         # solo uno
 .\.venv\Scripts\lab.exe orchestrate --include-disabled      # incluye los apagados
 
-.\.venv\Scripts\lab.exe agent NVDA --date 2026-11-05         # solo decisión LLM
+.\.venv\Scripts\lab.exe agent NVDA --date 2026-11-05         # decisión LLM (lite)
+.\.venv\Scripts\lab.exe agent NVDA --mode deep                # TradingAgents completo
 .\.venv\Scripts\lab.exe agent-run NVDA --dry-run             # decisión + orden
 
 .\.venv\Scripts\lab.exe status
@@ -117,39 +119,56 @@ Atajo: `.\scripts\lab.ps1 <comando>`.
 
 ---
 
-## 4. Siguiente paso: terminar LM Studio
+## 4. LM Studio (listo)
 
-1. Abre LM Studio → pestaña **My Models** / descargas.
-2. La descarga de **Qwen3.8-27B Q4_K_M** está **pausada en 5,54 GB de ~16,5 GB**.
-   Pulsa **resume**. El CLI no puede reanudarla (`artifact does not exist`).
-3. Cuando termine, carga el modelo con estos ajustes (RX 6800 = 16 GB VRAM):
+**Qwen3.8-27B Q4_K_M** está descargado y validado. Configuración actual
+(RX 6800 = 16 GB VRAM): contexto **16.384**, parallel **1**, KV cache Q8_0,
+flash attention ON, temperature 0.2, identificador `qwen3.8-27b`, TTL 24 h.
 
 | Ajuste | Valor | Motivo |
 |---|---|---|
 | GPU offload | ~28-32 capas (o "max") | 27B Q4 no cabe entero; el resto va a RAM |
-| Context length | **32768** (mínimo 16384) | TradingAgents usa prompts largos; con 8k falla con un 400 opaco |
+| Context length | **16384** | 32k baja a ~1,25 tok/s; 16k va a ~5 tok/s |
 | KV cache quant | Q8_0 | ahorra VRAM |
 | Flash attention | ON | velocidad |
 | mmproj | no cargar | visión innecesaria, ahorra 0,9 GB |
 | Temperature | 0.2 | reproducibilidad |
 
-4. Arranca el servidor: `lms server start --port 1234`
-5. Verifica: `lms ps` y `curl http://127.0.0.1:1234/v1/models`
-6. Ajusta `LAB_LLM_MODEL` en `.env` al id exacto que devuelva `/v1/models`
-   (probablemente `qwen3.8-27b`).
-7. Prueba: `.\.venv\Scripts\lab.exe llm-test` (muestra el contexto cargado).
-
-Si el contexto es menor de 16k, recarga el modelo:
+Arrancar servidor y cargar el modelo:
 
 ```powershell
 $lms = "$env:LOCALAPPDATA\Programs\LM Studio\resources\app\.webpack\lms.exe"
-& $lms unload --all
-& $lms load qwen3.8-27b --context-length 32768 --parallel 1 --yes
+& $lms server start --port 1234
+& $lms load qwen3.8-27b --context-length 16384 --parallel 1 `
+  --identifier qwen3.8-27b --ttl 86400 --yes
+& $lms ps
+.\.venv\Scripts\lab.exe llm-test
 ```
 
-> Con 16 GB de VRAM y 27B en Q4 espera **8-15 tok/s**. Un run de TradingAgents con
-> 2 analistas y 1 ronda de debate: **20-60 min**. Por eso el diseño usa el LLM
-> 1 vez al día y los bots deterministas para todo lo demás.
+> El servidor no arranca solo al reiniciar Windows. Si `lab agent` falla con
+> error de conexión, ejecuta los dos comandos de arriba.
+>
+> Con 16 GB de VRAM y 27B en Q4 espera **1-5 tok/s** según contexto y offload.
+> Un run de TradingAgents multi-agente puede tardar **horas**; por eso existe el
+> modo `lite` y el diseño usa el LLM 1 vez al día.
+
+> Con 16 GB de VRAM y 27B en Q4 espera **1-5 tok/s** según contexto y offload.
+> Un run de TradingAgents multi-agente puede tardar **horas**; por eso existe el
+> modo `lite` y el diseño usa el LLM 1 vez al día.
+
+### Agente diario: `lite` vs `deep`
+
+- **`lite` (por defecto)**: una sola llamada al LLM con un resumen técnico
+  compacto (precio, retornos 1-120 d, SMA20/50/200, RSI14, ATR, máximo/mínimo
+  de 52 semanas, volumen y volatilidad). Validado con NVDA: **77-95 s**.
+- **`deep`**: TradingAgents multi-agente con herramientas. Tesis más larga,
+  pero horas de cómputo y mucho más contexto; úsalo de noche o con un modelo
+  mayor.
+
+El rating se traduce a fracción de posición (`Buy`=1.0, `Overweight`=0.5,
+`Hold`=no tocar, `Underweight`/`Sell`=0). `agent-run` aplica ese tamaño con el
+risk engine y el broker paper. La decisión y el contexto numérico quedan en
+`data/agent_runs/`.
 
 ---
 
@@ -211,6 +230,8 @@ esperada, en vez de limitarse a avisar:
 
 `lab mt5 status` muestra `identity_ok`. Cerrar posiciones no pasa por el guard:
 en una emergencia, bloquear un cierre sería peor que el riesgo de identidad.
+Además, `lab mt5 run` **aplana toda la cuenta** si detecta que el equity ya
+cruzó el suelo efectivo: bloquear órdenes nuevas no protege una posición abierta.
 
 ### Hora del servidor (crítico)
 
@@ -368,7 +389,43 @@ Los logs quedan en `logs/research/`.
 
 ---
 
-## 10. Riesgo y realidad
+## 10. Copias de seguridad
+
+Script: `scripts/backup.ps1`. Destino: **`F:\TradingLabBackups`**. Guarda un zip
+con código, `config`, `tests`, `scripts`, informes, `data\lab.db`, historial git
+y `.env`, más un `LEEME_BACKUP.txt` con las instrucciones de restauración.
+Retención: los **20** zips más recientes.
+
+```powershell
+# manual
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File E:\trading-lab\scripts\backup.ps1
+
+# ver copias
+Get-ChildItem F:\TradingLabBackups | Sort-Object LastWriteTime -Descending
+```
+
+Tarea programada **`TradingLab-Backup`**: todos los días a las **13:00** y
+**19:00** (se ejecuta aunque el equipo estuviera apagado, en el siguiente
+arranque). Comprobar:
+
+```powershell
+Get-ScheduledTask -TaskName "TradingLab-Backup" | Get-ScheduledTaskInfo
+```
+
+Restaurar en un PC nuevo:
+
+1. Descomprimir el zip en `E:\trading-lab`.
+2. `uv venv --python 3.13 .venv` y `uv pip install -e .`
+3. Revisar `.env` (Alpaca, MT5, LLM) y `lab doctor`.
+4. Reinstalar los venvs de TradingAgents/Trading-R1 si se usan.
+
+> **El zip contiene `.env` con claves.** No lo subas a la nube ni lo compartas.
+> F: es un disco local: si el PC se pierde físicamente, esta copia también.
+> Para protección externa, copia el zip a un disco USB cifrado.
+
+---
+
+## 11. Riesgo y realidad
 
 - Un LLM **no predice precios**. TradingAgents produce una tesis; su valor está en
   estructurar información, no en acertar la dirección.
@@ -382,9 +439,10 @@ Los logs quedan en `logs/research/`.
 
 ---
 
-## 11. Roadmap restante
+## 12. Roadmap restante
 
-1. **F6** validar un `agent` real con contexto de 32k y medir latencia (en curso).
+1. ~~**F6** validar un `agent` real y medir latencia~~ → `lite` validado (77-95 s);
+   `deep` queda como opción nocturna.
 2. **F12** futuros: elegir firma (Topstep/Apex) y adaptador ProjectX/Tradovate.
 3. **F9c** backtester con sesiones, rollover y contratos continuos (los cortos ya están).
 4. **F11b** filtros de noticias, viernes y rollover en el guard.
