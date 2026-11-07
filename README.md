@@ -171,15 +171,12 @@ Ambas se ejecutan en segundo plano; el panel muestra el progreso y enlaza el
 log. Los bots con `enabled: false`, las propuestas de research y el modo live
 siguen requiriendo activación humana explícita desde `config/*.yaml` o la CLI.
 
-Si el puerto está ocupado, usa `--port`. Para dejarlo arrancado al iniciar
-sesión (opcional):
+Si el puerto está ocupado, usa `--port`. La tarea **`TradingLab-Web`** ya está
+registrada y arranca el panel al iniciar sesión (sin abrir el navegador). Para
+quitarla:
 
 ```powershell
-$action = New-ScheduledTaskAction -Execute "powershell.exe" `
-  -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File E:\trading-lab\scripts\web.ps1 -NoOpen" `
-  -WorkingDirectory "E:\trading-lab"
-$trigger = New-ScheduledTaskTrigger -AtLogOn
-Register-ScheduledTask -TaskName "TradingLab-Web" -Action $action -Trigger $trigger
+Unregister-ScheduledTask -TaskName "TradingLab-Web" -Confirm:$false
 ```
 
 > El panel consulta MT5 (solo lectura) y LM Studio. Si el terminal no está
@@ -587,3 +584,14 @@ Restaurar en un PC nuevo:
 5. **F13** paper continuo 4-8 semanas → comparar contra SPY y decidir.
 6. **F7** Trading-R1 en WSL para el informe pre-market + Telegram.
 7. **F14** datos de ticks Dukascopy para modelar spread real en forex.
+
+---
+
+## 13. Repositorio remoto
+
+- GitHub privado: **https://github.com/Arowarlin/trading-lab**
+- Rama `master` conectada a `origin/master`.
+- El panel web es local (`127.0.0.1`); no se despliega en GitHub Pages.
+- `.env` está en `.gitignore` y **nunca** se sube. El zip de backup local sí
+  contiene `.env`: no se comparte ni se sube a la nube.
+
