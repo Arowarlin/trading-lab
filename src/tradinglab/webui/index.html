@@ -754,6 +754,7 @@
       <div class="nav-label">Inteligencia</div>
       <button class="nav-btn" data-view="sala" title="Sala"><span class="ico">▦</span> Sala</button>
       <button class="nav-btn" data-view="decisions" title="Decisiones"><span class="ico">◫</span> Decisiones</button>
+      <button class="nav-btn" data-view="learning" title="Aprendizaje"><span class="ico">✦</span> Aprendizaje</button>
       <div class="nav-label">Sistema</div>
       <button class="nav-btn" data-view="repos" title="Repos"><span class="ico">⌂</span> Repos</button>
       <button class="nav-btn" data-view="logs" title="Registros"><span class="ico">▤</span> Registros</button>
@@ -1277,6 +1278,29 @@
       </div>
     </section>
 
+    <!-- =========================================================== APRENDIZAJE -->
+    <section class="view" id="view-learning">
+      <div class="note" style="margin:0 0 14px">
+        <strong>Aprendizaje controlado.</strong> Qwen solo redacta propuestas; nada se activa ni aplica sin aprobación humana.
+        La auto-aplicación se limita a <b>reducir riesgo</b> y siempre guarda reversión.
+        El tramo sellado no puede usarse en pruebas.
+      </div>
+      <div class="grid-2 equal" style="margin-bottom:14px">
+        <div class="panel">
+          <div class="panel-head"><h2>Holdout sellado</h2><span class="muted tiny">intocable</span></div>
+          <div id="learning-holdout"></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h2>Contador DSR</h2><span class="muted tiny">pruebas globales</span></div>
+          <div id="learning-trials"></div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h2>Lecciones y retadores</h2><span class="muted tiny" id="learning-meta"></span></div>
+        <div id="learning-list"></div>
+      </div>
+    </section>
+
     <!-- =============================================================== RIESGO -->
     <section class="view" id="view-risk">
       <div id="risk-alert"></div>
@@ -1379,6 +1403,7 @@ const S = {
   operator: null,
   operatorPreview: null,
   drift: null,
+  learning: null,
   market: null,
   calendar: null,
   decisions: null,
@@ -1414,6 +1439,7 @@ const TITLES = {
   operator: ["Operador", "Modo armado paper/demo con confirmación en dos pasos"],
   sala: ["Sala", "TradingAgents en su oficina: estados, runs y decisiones"],
   decisions: ["Decisiones", "Retorno forward del LLM por rating"],
+  learning: ["Aprendizaje", "Lecciones, holdout sellado y retadores"],
   repos: ["Repos", "Auditoría de AutoHedge, Vibe-Trading y Fincept"],
   logs: ["Registros", "Dry-runs, agentes, backups y tareas"],
 };
@@ -1612,6 +1638,7 @@ function switchView(view, updateHash = true) {
   if (view === "fund") renderFund();
   if (view === "journal") loadJournal();
   if (view === "operator") loadOperator();
+  if (view === "learning") loadLearning();
   if (view === "decisions") renderDecisions();
   if (view === "repos") renderRepos();
   if (view === "sala") renderSala();
@@ -1691,6 +1718,7 @@ async function loadAll(manual = false) {
     renderBotsDrift();
   }
   if (S.view === "journal") loadJournal();
+  if (S.view === "learning") loadLearning();
   if (overviewResult.status === "rejected" && riskResult.status === "rejected") {
     toast("No se pudo conectar con el panel: " + overviewResult.reason.message, true);
   } else if (manual) {
@@ -3295,6 +3323,121 @@ async function executeOperator() {
     S.operatorPreview = null;
     renderOperatorPreview();
     $("#operator-alert").innerHTML = `<div class="alert red">${esc(error.message)}</div>`;
+  }
+}
+
+/* --------------------------------------------------------------- aprendizaje */
+async function loadLearning() {
+  try {
+    S.learning = await getJSON("/api/learning");
+    renderLearning();
+  } catch (error) {
+    const host = $("#learning-list");
+    if (host) host.innerHTML = `<div class="empty">No se pudo leer aprendizaje: ${esc(error.message)}</div>`;
+  }
+}
+
+async function learningAction(action, lessonId) {
+  const labels = {
+    approve: "¿Aprobar esta lección?",
+    reject: "¿Rechazar esta lección?",
+    apply: "¿Aplicar esta lección aprobada? Solo se permite reducir riesgo.",
+    auto: "¿Auto-aplicar esta reducción de riesgo? Quedará registrada y reversible.",
+    revert: "¿Revertir la lección aplicada?",
+  };
+  if (!window.confirm(labels[action] || "¿Continuar?")) return;
+  const body = { id: lessonId, confirm: true };
+  if (action === "reject") {
+    const reason = window.prompt("Motivo del rechazo (opcional):") || "";
+    body.reason = reason;
+  }
+  if (action === "auto") body.auto = true;
+  const endpoint = action === "auto" ? "apply" : action;
+  try {
+    await getJSON(`/api/learning/${endpoint}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    toast("Lección actualizada.");
+    await loadLearning();
+  } catch (error) {
+    toast(error.message, true);
+  }
+}
+
+function renderLearning() {
+  const data = S.learning;
+  if (!data) return;
+  const holdout = data.holdout || {};
+  const holdoutHost = $("#learning-holdout");
+  if (holdoutHost) {
+    holdoutHost.innerHTML = grid(
+      [{ label: "Campo" }, { label: "Valor" }],
+      [
+        ["Inicio", esc(holdout.start_date || "Sin datos")],
+        ["Fin", esc(holdout.end_date || "Sin datos")],
+        ["Hash", `<span class="mono">${esc(holdout.hash || "Sin datos")}</span>`],
+        ["Sellado", esc(dateTime(holdout.sealed_at))],
+      ],
+      { empty: "Sin datos" }
+    );
+  }
+  const trialsHost = $("#learning-trials");
+  if (trialsHost) {
+    trialsHost.innerHTML = `<div class="account-kpis">
+      <div><span>Pruebas globales</span><b>${num(data.trials, 0)}</b></div>
+      <div><span>Auto reducir riesgo</span><b>${data.auto_apply_reduce_risk ? "on" : "off"}</b></div>
+      <div><span>Lecciones</span><b>${num((data.lessons || []).length, 0)}</b></div>
+    </div><div class="muted tiny">El contador se suma a n_trials del DSR en nuevos barridos.</div>`;
+  }
+  const lessons = data.lessons || [];
+  if ($("#learning-meta")) $("#learning-meta").textContent = `${lessons.length} propuestas · contador DSR ${data.trials}`;
+  const rows = lessons.map((lesson) => {
+    const action = lesson.action || {};
+    const actionText = action.kind === "reduce_risk"
+      ? `reduce_risk · ${action.account_id || "Sin datos"} · ${esc(JSON.stringify(action.changes || {}))}`
+      : lesson.kind === "challenger"
+        ? `${esc(lesson.champion || "Sin datos")} → ${esc(lesson.challenger || "Sin datos")}`
+        : "Sin acción";
+    const status = lesson.status === "approved"
+      ? `<span class="badge ok">approved</span>`
+      : lesson.status === "rejected"
+        ? `<span class="badge bad">rejected</span>`
+        : `<span class="badge warn">proposed</span>`;
+    const buttons = [];
+    if (lesson.status === "proposed") {
+      buttons.push(`<button class="btn small" data-learning-action="approve" data-learning-id="${lesson.id}">Aprobar</button>`);
+      buttons.push(`<button class="btn small ghost" data-learning-action="reject" data-learning-id="${lesson.id}">Rechazar</button>`);
+      if (action.kind === "reduce_risk" && data.auto_apply_reduce_risk) {
+        buttons.push(`<button class="btn small" data-learning-action="auto" data-learning-id="${lesson.id}">Auto-reducir</button>`);
+      }
+    }
+    if (lesson.status === "approved" && action.kind === "reduce_risk" && !lesson.applied_at) {
+      buttons.push(`<button class="btn small primary" data-learning-action="apply" data-learning-id="${lesson.id}">Aplicar</button>`);
+    }
+    if (lesson.applied_at && !lesson.reverted_at) {
+      buttons.push(`<button class="btn small ghost" data-learning-action="revert" data-learning-id="${lesson.id}">Revertir</button>`);
+    }
+    return [
+      `<b>#${lesson.id}</b><div class="muted tiny">${esc(lesson.kind)} · ${esc(lesson.author)}</div>`,
+      status,
+      `<span class="muted tiny">${esc(lesson.hypothesis)}</span><div class="muted tiny">${esc((lesson.evidence || "").slice(0, 180))}</div>`,
+      actionText,
+      `${num(lesson.tests, 0)}${lesson.applied_at ? ` · aplicada ${dateTime(lesson.applied_at)}` : ""}${lesson.reverted_at ? ` · revertida ${dateTime(lesson.reverted_at)}` : ""}`,
+      buttons.join(" ") || `<span class="muted">Sin acciones</span>`,
+    ];
+  });
+  const host = $("#learning-list");
+  if (host) {
+    host.innerHTML = grid(
+      [{ label: "Lección" }, { label: "Estado" }, { label: "Hipótesis / evidencia", wrap: true }, { label: "Acción", wrap: true }, { label: "Tests / aplicación" }, { label: "Decisiones" }],
+      rows,
+      { empty: "Sin datos: no hay lecciones propuestas." }
+    );
+    $$("[data-learning-action]").forEach((button) => {
+      button.addEventListener("click", () => learningAction(button.dataset.learningAction, Number(button.dataset.learningId)));
+    });
   }
 }
 

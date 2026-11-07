@@ -82,6 +82,7 @@ operator_app = typer.Typer(
     no_args_is_help=True,
     help="Modo operador de la consola: PIN, estado y auditoría.",
 )
+lessons_app = typer.Typer(no_args_is_help=True, help="Aprendizaje controlado: lecciones y holdout.")
 intel_app = typer.Typer(no_args_is_help=True, help="Información continua: RSS, saneado y estado.")
 sec_app = typer.Typer(no_args_is_help=True, help="SEC EDGAR: CIK, filings y company facts.")
 app.add_typer(mt5_app, name="mt5")
@@ -94,6 +95,7 @@ app.add_typer(bots_app, name="bots")
 app.add_typer(decisions_app, name="decisions")
 app.add_typer(fund_app, name="fund")
 app.add_typer(operator_app, name="operator")
+app.add_typer(lessons_app, name="lessons")
 app.add_typer(intel_app, name="intel")
 app.add_typer(sec_app, name="sec")
 console = Console()
@@ -2272,6 +2274,223 @@ def fund_pause_resume_cmd(
     )
 
 
+@lessons_app.command("list")
+def lessons_list_cmd(
+    status: str = typer.Option(None, "--status", help="proposed|approved|rejected"),
+) -> None:
+    """Lista lecciones y challengers."""
+    from .learning import list_lessons
+
+    try:
+        rows = list_lessons(DEFAULT_DB, status=status)
+    except ValueError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2) from exc
+    t = Table(title="Lecciones")
+    for col in ("ID", "Tipo", "Autor", "Estado", "Aplicada", "Tests", "Hipótesis"):
+        t.add_column(col, overflow="fold")
+    for row in rows:
+        t.add_row(
+            str(row["id"]),
+            str(row["kind"]),
+            str(row["author"]),
+            str(row["status"]),
+            "sí" if row.get("applied_at") else "no",
+            str(row.get("tests", 0)),
+            str(row["hypothesis"]),
+        )
+    console.print(t)
+
+
+@lessons_app.command("show")
+def lessons_show_cmd(lesson_id: int = typer.Argument(...)) -> None:
+    """Muestra una lección completa."""
+    from .learning import get_lesson
+
+    try:
+        row = get_lesson(DEFAULT_DB, lesson_id)
+    except ValueError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2) from exc
+    t = Table(title=f"Lección #{lesson_id}")
+    t.add_column("Campo", style="bold")
+    t.add_column("Valor", overflow="fold")
+    for key, value in row.items():
+        t.add_row(key, json.dumps(value, ensure_ascii=False) if isinstance(value, (dict, list)) else str(value or ""))
+    console.print(t)
+
+
+@lessons_app.command("add")
+def lessons_add_cmd(
+    hypothesis: str = typer.Option(..., "--hypothesis"),
+    evidence: str = typer.Option("", "--evidence"),
+    author: str = typer.Option("humano", "--author", help="qwen|humano"),
+    action: str = typer.Option(None, "--action", help="JSON reduce_risk"),
+) -> None:
+    """Crea una propuesta; Qwen solo redacta."""
+    from .learning import create_lesson
+
+    try:
+        parsed = json.loads(action) if action else None
+        row = create_lesson(
+            DEFAULT_DB,
+            hypothesis=hypothesis,
+            evidence=evidence,
+            author=author,
+            action=parsed,
+        )
+    except (ValueError, json.JSONDecodeError) as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2) from exc
+    console.print(f"[green]Lección #{row['id']}[/green] · {row['status']} · autor {row['author']}")
+
+
+@lessons_app.command("approve")
+def lessons_approve_cmd(
+    lesson_id: int = typer.Argument(...),
+    by: str = typer.Option("humano", "--by"),
+) -> None:
+    """Aprueba una lección desde CLI."""
+    from .learning import approve
+
+    try:
+        row = approve(DEFAULT_DB, lesson_id, by=by)
+    except ValueError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2) from exc
+    console.print(f"[green]Lección #{lesson_id} aprobada[/green] · {row['status']}")
+
+
+@lessons_app.command("reject")
+def lessons_reject_cmd(
+    lesson_id: int = typer.Argument(...),
+    by: str = typer.Option("humano", "--by"),
+    reason: str = typer.Option("", "--reason"),
+) -> None:
+    """Rechaza una lección."""
+    from .learning import reject
+
+    try:
+        row = reject(DEFAULT_DB, lesson_id, by=by, reason=reason)
+    except ValueError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2) from exc
+    console.print(f"[yellow]Lección #{lesson_id} rechazada[/yellow] · {row['status']}")
+
+
+@lessons_app.command("test")
+def lessons_test_cmd(
+    lesson_id: int = typer.Argument(...),
+    start: str = typer.Option(..., "--start", help="YYYY-MM-DD"),
+    end: str = typer.Option(..., "--end", help="YYYY-MM-DD"),
+    metric: str = typer.Option("", "--metric"),
+    value: float = typer.Option(None, "--value"),
+    passed: bool = typer.Option(None, "--passed/--failed"),
+    notes: str = typer.Option("", "--notes"),
+) -> None:
+    """Registra una prueba; rechaza cualquier ventana sobre el holdout."""
+    from .learning import record_test
+
+    try:
+        result = record_test(
+            DEFAULT_DB,
+            lesson_id,
+            period_start=start,
+            period_end=end,
+            metric=metric,
+            value=value,
+            passed=passed,
+            notes=notes,
+        )
+    except ValueError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2) from exc
+    console.print(
+        f"[green]Prueba registrada[/green] · trials globales {result['global_trials']}"
+    )
+
+
+@lessons_app.command("challenger")
+def lessons_challenger_cmd(
+    champion: str = typer.Option(..., "--champion"),
+    challenger: str = typer.Option(..., "--challenger"),
+    hypothesis: str = typer.Option(..., "--hypothesis"),
+    evidence: str = typer.Option("", "--evidence"),
+    author: str = typer.Option("humano", "--author"),
+) -> None:
+    """Propone un retador paper; nunca lo activa."""
+    from .learning import create_lesson
+
+    try:
+        row = create_lesson(
+            DEFAULT_DB,
+            hypothesis=hypothesis,
+            evidence=evidence,
+            author=author,
+            kind="challenger",
+            champion=champion,
+            challenger=challenger,
+        )
+    except ValueError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2) from exc
+    console.print(
+        f"[green]Retador #{row['id']}[/green] · {champion} → {challenger} · proposed"
+    )
+
+
+@lessons_app.command("apply")
+def lessons_apply_cmd(
+    lesson_id: int = typer.Argument(...),
+    auto: bool = typer.Option(False, "--auto", help="Solo reduce_risk"),
+) -> None:
+    """Aplica una lección aprobada o auto-aplica una reducción de riesgo."""
+    from .learning import apply_lesson
+
+    try:
+        row = apply_lesson(
+            DEFAULT_DB,
+            lesson_id,
+            actor="auto" if auto else "humano",
+            auto=auto,
+        )
+    except ValueError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2) from exc
+    console.print(f"[green]Lección #{lesson_id} aplicada[/green] · {row.get('applied_at')}")
+
+
+@lessons_app.command("revert")
+def lessons_revert_cmd(
+    lesson_id: int = typer.Argument(...),
+    confirm: bool = typer.Option(False, "--confirm"),
+) -> None:
+    """Revierte una lección aplicada; exige confirmación."""
+    from .learning import revert_lesson
+
+    try:
+        row = revert_lesson(DEFAULT_DB, lesson_id, actor="humano", confirm=confirm)
+    except ValueError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2) from exc
+    console.print(f"[green]Lección #{lesson_id} revertida[/green] · {row.get('reverted_at')}")
+
+
+@lessons_app.command("holdout")
+def lessons_holdout_cmd() -> None:
+    """Muestra el tramo sellado y el contador global de pruebas."""
+    from .learning import count_tests, holdout_info
+
+    info = holdout_info(DEFAULT_DB)
+    t = Table(title="Holdout sellado")
+    t.add_column("Campo", style="bold")
+    t.add_column("Valor")
+    for key in ("start_date", "end_date", "hash", "sealed_at"):
+        t.add_row(key, str(info.get(key) or "Sin datos"))
+    t.add_row("trials globales", str(count_tests(DEFAULT_DB)))
+    console.print(t)
+
+
 @operator_app.command("pin")
 def operator_pin_cmd() -> None:
     """Configura el PIN del modo operador en el keyring (nunca en .env)."""
@@ -3413,11 +3632,14 @@ def research_cmd(
         SpinnerColumn(), TextColumn("[progress.description]{task.description}"), console=console
     ) as progress:
         progress.add_task("Descargando datos, backtest y Monte Carlo...", total=None)
+        from .learning import count_tests
+
         report = run_research(
             cfg,
             rules,
             settings.data.cache_dir,
             artifacts_dir=out_dir / "artifacts",
+            extra_trials=count_tests(DEFAULT_DB),
         )
 
     files = write_outputs(report, out_dir)

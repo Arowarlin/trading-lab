@@ -871,7 +871,7 @@ stdlib y `127.0.0.1`. Se conservan todas las pestañas, rutas, CSRF, Host/Origin
 y la lista blanca `WRITE_ROUTES`.
 
 Evidencia: `pytest tests/test_console_shell.py -q` → **3 passed**; suite completa
-**272 passed**; cubre las seis secciones, las 14 vistas actuales, los
+**301 passed**; cubre las seis secciones, las 15 vistas actuales, los
 componentes del dashboard y la ausencia de URLs externas/CDNs.
 
 ---
@@ -987,6 +987,27 @@ lab fund pause-resume paper_main --confirm
 
 Evidencia: `pytest tests/test_riskpause.py -q` → **4 passed**; suite completa
 **295 passed**; `ruff` limpio; `lab doctor` OK con avisos conocidos.
+
+---
+
+## 6l. Aprendizaje controlado (10.6)
+
+- Tabla `lessons`: `proposed/approved/rejected`, hipótesis, evidencia, autor
+  (`qwen|humano`), acción y trazabilidad de aplicación/reversión.
+- **Qwen solo redacta**; el texto de noticias/LLM entra como no confiable.
+  Ninguna lección se aplica sin aprobación humana desde **Aprendizaje**.
+- **Auto-aplicación** solo para acciones `reduce_risk` (apretar límites); guarda
+  el estado anterior y se puede revertir. Cualquier otra acción se rechaza.
+- **Holdout sellado** en `learning_holdout` (config `learning.holdout_start/end`,
+  hash y fecha de sellado). `record_test` rechaza cualquier ventana que lo pise.
+- Cada prueba registrada incrementa el contador global (`lesson_tests`) que se
+  suma a `n_trials` del DSR en los nuevos `lab research`.
+- **Campeón/retador** en paper: se propone con `kind=challenger`, queda en
+  `proposed` y no activa ni cambia `enabled`.
+- `lab lessons list|show|add|approve|reject|test|challenger|apply|revert|holdout`.
+
+Evidencia: `pytest tests/test_learning.py -q` → **6 passed**; suite completa
+**301 passed**; `ruff` limpio; `lab doctor` OK con avisos conocidos.
 
 ---
 

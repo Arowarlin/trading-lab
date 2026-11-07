@@ -291,6 +291,51 @@ CREATE TABLE IF NOT EXISTS account_cash_flows (
     origin TEXT NOT NULL DEFAULT 'manual'
 );
 
+CREATE TABLE IF NOT EXISTS lessons (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts TEXT NOT NULL,
+    kind TEXT NOT NULL DEFAULT 'lesson',
+    hypothesis TEXT NOT NULL,
+    evidence TEXT,
+    author TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'proposed',
+    champion TEXT,
+    challenger TEXT,
+    action TEXT,
+    approved_at TEXT,
+    approved_by TEXT,
+    rejected_at TEXT,
+    rejected_by TEXT,
+    reject_reason TEXT,
+    applied_at TEXT,
+    applied_by TEXT,
+    applied_action TEXT,
+    reversal TEXT,
+    reverted_at TEXT,
+    reverted_by TEXT
+);
+
+CREATE TABLE IF NOT EXISTS lesson_tests (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts TEXT NOT NULL,
+    lesson_id INTEGER NOT NULL,
+    period_start TEXT NOT NULL,
+    period_end TEXT NOT NULL,
+    metric TEXT,
+    value REAL,
+    passed INTEGER,
+    notes TEXT
+);
+
+CREATE TABLE IF NOT EXISTS learning_holdout (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    start_date TEXT NOT NULL,
+    end_date TEXT NOT NULL,
+    hash TEXT NOT NULL,
+    sealed_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_lesson_tests_lesson ON lesson_tests(lesson_id);
 CREATE INDEX IF NOT EXISTS idx_account_cash_flows_account
     ON account_cash_flows(account_id, ts);
 CREATE INDEX IF NOT EXISTS idx_console_actions_ts ON console_actions(ts);

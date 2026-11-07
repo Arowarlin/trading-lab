@@ -27,6 +27,7 @@ def test_barra_lateral_con_secciones_y_todas_las_vistas() -> None:
         "operator",
         "sala",
         "decisions",
+        "learning",
         "repos",
         "logs",
     }
@@ -51,6 +52,8 @@ def test_dashboard_tiene_kpis_balance_performers_y_calendario() -> None:
         'id="fund-flows"',
         'id="fund-twr"',
         "resumeFundPause",
+        'id="view-learning"',
+        'id="learning-list"',
         'id="sidebar-toggle"',
         "sidebar-collapsed",
         "computeDailyPnl",

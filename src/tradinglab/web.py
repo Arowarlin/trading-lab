@@ -62,6 +62,19 @@ from .drift import build_drift
 from .health import score_account, time_weighted_return
 from .journal import build_journal, load_closed_trades
 from .killswitch import load_state as load_killswitch
+from .learning import (
+    apply_lesson,
+    count_tests,
+    holdout_info,
+    list_lessons,
+    revert_lesson,
+)
+from .learning import (
+    approve as approve_lesson,
+)
+from .learning import (
+    reject as reject_lesson,
+)
 from .operator import OperatorError, OperatorService
 from .orchestrator import load_bots
 from .profiles import load_profiles
@@ -88,6 +101,10 @@ WRITE_ROUTES = (
     "/api/fund/limits",
     "/api/fund/killswitch",
     "/api/fund/pause/resume",
+    "/api/learning/approve",
+    "/api/learning/reject",
+    "/api/learning/apply",
+    "/api/learning/revert",
     "/api/operator/arm",
     "/api/operator/disarm",
     "/api/operator/preview",
@@ -681,6 +698,30 @@ class LabData:
                 self.db_path, self.settings, min_trades=int(min_trades)
             ),
         )
+
+    def learning(self) -> dict:
+        """Lecciones, holdout sellado y contador global de pruebas."""
+        def collect() -> dict:
+            lessons = list_lessons(self.db_path)
+            evaluations = latest_evaluations(self.db_path)
+            return {
+                "generated_at": _now(),
+                "lessons": lessons,
+                "holdout": holdout_info(self.db_path),
+                "trials": count_tests(self.db_path),
+                "auto_apply_reduce_risk": self.settings.learning.auto_apply_reduce_risk,
+                "evaluations": {
+                    bot: {
+                        "status": row.get("status"),
+                        "sharpe": row.get("sharpe"),
+                        "expectancy": row.get("expectancy"),
+                        "num_trades": row.get("num_trades"),
+                    }
+                    for bot, row in evaluations.items()
+                },
+            }
+
+        return self.cache.get("learning", 5.0, collect)
 
     # ------------------------------------------------------------- fondo
 
@@ -2240,6 +2281,21 @@ class DashboardHandler(BaseHTTPRequestHandler):
             return "CSRF token inválido"
         return None
 
+    def _audit_learning(self, action: str, lesson_id: int, result: str) -> None:
+        try:
+            from .runtime import record_console_action
+
+            record_console_action(
+                self.server.data.db_path,
+                action=action,
+                params={"lesson_id": lesson_id},
+                result=result,
+                ok=True,
+                actor="console",
+            )
+        except Exception:
+            pass
+
     # ------------------------------------------------------------------ rutas
 
     def do_GET(self) -> None:
@@ -2295,6 +2351,8 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 self._json(self.server.data.fund())
             elif path == "/api/operator":
                 self._json(self.server.data.operator.status())
+            elif path == "/api/learning":
+                self._json(self.server.data.learning())
             elif path == "/api/journal":
                 params = parse_qs(urlparse(self.path).query)
 
@@ -2469,6 +2527,64 @@ class DashboardHandler(BaseHTTPRequestHandler):
                         pass
                     self.server.data.cache.clear()
                     self._json(result)
+            elif path == "/api/learning/approve":
+                lesson_id = int(body.get("id") or 0)
+                try:
+                    row = approve_lesson(
+                        self.server.data.db_path,
+                        lesson_id,
+                        by=str(body.get("by") or "humano"),
+                    )
+                except ValueError as exc:
+                    self._error(403, str(exc))
+                else:
+                    self._audit_learning("lesson_approve", lesson_id, "aprobada")
+                    self.server.data.cache.clear()
+                    self._json({"ok": True, "lesson": row})
+            elif path == "/api/learning/reject":
+                lesson_id = int(body.get("id") or 0)
+                try:
+                    row = reject_lesson(
+                        self.server.data.db_path,
+                        lesson_id,
+                        by=str(body.get("by") or "humano"),
+                        reason=str(body.get("reason") or ""),
+                    )
+                except ValueError as exc:
+                    self._error(403, str(exc))
+                else:
+                    self._audit_learning("lesson_reject", lesson_id, "rechazada")
+                    self.server.data.cache.clear()
+                    self._json({"ok": True, "lesson": row})
+            elif path == "/api/learning/apply":
+                lesson_id = int(body.get("id") or 0)
+                auto = bool(body.get("auto"))
+                try:
+                    row = apply_lesson(
+                        self.server.data.db_path,
+                        lesson_id,
+                        actor="auto" if auto else "humano",
+                        auto=auto,
+                    )
+                except ValueError as exc:
+                    self._error(403, str(exc))
+                else:
+                    self.server.data.cache.clear()
+                    self._json({"ok": True, "lesson": row})
+            elif path == "/api/learning/revert":
+                lesson_id = int(body.get("id") or 0)
+                try:
+                    row = revert_lesson(
+                        self.server.data.db_path,
+                        lesson_id,
+                        actor="humano",
+                        confirm=bool(body.get("confirm")),
+                    )
+                except ValueError as exc:
+                    self._error(403, str(exc))
+                else:
+                    self.server.data.cache.clear()
+                    self._json({"ok": True, "lesson": row})
             elif path == "/api/operator/arm":
                 try:
                     state = self.server.data.operator.arm(

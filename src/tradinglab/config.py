@@ -194,6 +194,12 @@ class FundHealthSettings(BaseModel):
     max_concentration: float = 0.50
 
 
+class LearningSettings(BaseModel):
+    holdout_start: str = "2025-01-01"
+    holdout_end: str = "2026-11-07"
+    auto_apply_reduce_risk: bool = True
+
+
 class Settings(BaseModel):
     mode: Literal["paper", "live"] = "paper"
     timezone: str = "America/New_York"
@@ -208,6 +214,7 @@ class Settings(BaseModel):
     prop: PropSettings = Field(default_factory=PropSettings)
     operator: OperatorSettings = Field(default_factory=OperatorSettings)
     fund_health: FundHealthSettings = Field(default_factory=FundHealthSettings)
+    learning: LearningSettings = Field(default_factory=LearningSettings)
 
     @model_validator(mode="after")
     def _resolve_paths(self) -> "Settings":

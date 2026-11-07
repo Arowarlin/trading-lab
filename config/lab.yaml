@@ -76,3 +76,9 @@ fund_health:
     concentration: 0.10
   max_streak: 5               # racha perdedora que lleva el componente a 0
   max_concentration: 0.50     # top-3/neto que lleva concentración a 0
+
+# Aprendizaje controlado. El tramo sellado no puede usarse en barridos.
+learning:
+  holdout_start: "2025-01-01"
+  holdout_end: "2026-11-07"
+  auto_apply_reduce_risk: true

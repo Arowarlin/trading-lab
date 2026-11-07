@@ -267,6 +267,7 @@ def run_research(
     cache_dir: str | Path,
     *,
     artifacts_dir: str | Path | None = None,
+    extra_trials: int = 0,
 ) -> dict:
     """Escanea activos × estrategias × parámetros y puntúa contra las reglas.
 
@@ -472,7 +473,7 @@ def run_research(
 
     sr_values = [r["sharpe"] for r in results if r.get("sample_days", 0) >= 3]
     sr_std = statistics.pstdev(sr_values) if len(sr_values) > 1 else 0.0
-    n_trials = len(results)
+    n_trials = len(results) + max(0, int(extra_trials))
     for r in results:
         r["dsr"] = deflated_sharpe(
             r["sharpe"],
@@ -616,6 +617,7 @@ def run_research(
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "rules": rules.describe(),
         "rules_meta": asdict(rules),
+        "learning_trials": max(0, int(extra_trials)),
         "pbo": pbo,
         "pbo_ok": pbo_ok,
         "pbo_by_symbol": pbo_by_symbol,
