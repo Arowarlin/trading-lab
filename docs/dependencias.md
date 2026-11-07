@@ -41,6 +41,7 @@ Extra `mt5`: `MetaTrader5==5.0.6231`, `tzdata==2026.6`.
 | pyqlib | 0.9.7 | MIT | Fase 7; venv aparte, no romper `.venv` |
 | quantstats | 0.0.86 | Apache-2.0 | Fase 3; pendiente de evaluar |
 | optuna | 5.0.0 | MIT | Fase 3; pendiente de evaluar |
+| ProsusAI/finbert | — | **CC-BY-NC-SA 4.0** | **No usar**: restricción no comercial; usar Qwen inicialmente |
 
 ## Notas
 

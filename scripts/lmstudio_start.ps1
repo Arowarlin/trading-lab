@@ -1,0 +1,61 @@
+# Arranque de LM Studio al iniciar sesión.
+# No descarga modelos: solo arranca el servidor y carga el modelo ya instalado.
+$ErrorActionPreference = "Continue"
+$env:PYTHONUTF8 = "1"
+
+$lms = Join-Path $env:LOCALAPPDATA "Programs\LM Studio\resources\app\.webpack\lms.exe"
+$root = "E:\trading-lab"
+$logDir = Join-Path $root "logs\lmstudio"
+New-Item -ItemType Directory -Force -Path $logDir | Out-Null
+$log = Join-Path $logDir "startup.log"
+
+function Write-Log([string]$Message) {
+    Add-Content -Path $log -Value ("{0} {1}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), $Message) -Encoding utf8
+}
+
+Write-Log "Inicio de tarea LM Studio"
+Start-Sleep -Seconds 20
+
+if (-not (Test-Path $lms)) {
+    Write-Log "ERROR: no existe $lms"
+    exit 1
+}
+
+# Si el modelo ya está cargado, no recargar.
+$ps = (& $lms ps 2>&1 | Out-String)
+if ($ps -match "qwen3\.8-27b") {
+    Write-Log "qwen3.8-27b ya está cargado; no se recarga"
+    exit 0
+}
+
+Write-Log "Arrancando servidor LM Studio en 1234"
+& $lms server start --port 1234 *>> $log
+
+$healthy = $false
+for ($i = 0; $i -lt 30; $i++) {
+    try {
+        $response = Invoke-WebRequest -UseBasicParsing -TimeoutSec 3 "http://127.0.0.1:1234/v1/models"
+        if ($response.StatusCode -eq 200) {
+            $healthy = $true
+            break
+        }
+    } catch {
+        Start-Sleep -Seconds 2
+    }
+}
+if (-not $healthy) {
+    Write-Log "ERROR: el servidor no respondió en 60 s"
+    exit 1
+}
+
+Write-Log "Cargando qwen3.8-27b con contexto 16384"
+& $lms load qwen3.8-27b --context-length 16384 --parallel 1 --identifier qwen3.8-27b --ttl 86400 --yes *>> $log
+
+$ps = (& $lms ps 2>&1 | Out-String)
+if ($ps -match "qwen3\.8-27b") {
+    Write-Log "Modelo cargado correctamente"
+    exit 0
+}
+
+Write-Log "ERROR: el modelo no aparece en lms ps"
+exit 1

@@ -143,6 +143,14 @@ cd E:\trading-lab
 # Información continua (solo lectura, sin ejecución)
 .\.venv\Scripts\lab.exe intel fetch
 .\.venv\Scripts\lab.exe intel status
+.\.venv\Scripts\lab.exe intel calendar
+.\.venv\Scripts\lab.exe intel event FOMC --at 2026-12-09T19:00:00+00:00
+
+# SEC EDGAR (User-Agent obligatorio; caché y rate limit)
+.\.venv\Scripts\lab.exe sec status
+.\.venv\Scripts\lab.exe sec cik NVDA
+.\.venv\Scripts\lab.exe sec filings NVDA --limit 10
+.\.venv\Scripts\lab.exe sec facts NVDA
 
 # Reproducibilidad y secretos
 uv sync --frozen --extra dev --extra mt5
@@ -298,11 +306,42 @@ herramientas de ejecución en esta capa** y todo el texto entra como
 - `news_items`: URL, fuente, hora UTC, hash, título/resumen recortados.
 - `news_scores` y `macro_events`: esquema creado; scoring FinBERT, FRED y
   calendario macro quedan pendientes.
+- **Decisión FinBERT:** no se incorpora por ahora. `ProsusAI/finbert` tiene
+  licencia **CC-BY-NC-SA 4.0** (no comercial); el análisis inicial de noticias
+  se hará con Qwen. No se descarga ningún modelo nuevo.
 - `wrap_untrusted()` delimita el texto y ordena al LLM no seguir instrucciones
   contenidas; hay test de prompt injection.
 - Tarea **`TradingLab-Intel`** a las 07:10; logs en `logs/intel/`.
 - Pendiente Fase 4: scoring barato, OpenBB/SEC/FRED, reintentos por fuente y
   `news_blackout_min` en el guard.
+
+---
+
+## 4c. SEC EDGAR (`lab sec`)
+
+Cliente de solo lectura para `data.sec.gov`:
+
+- **User-Agent obligatorio** con contacto (`SEC_USER_AGENT`); sin él no se hace
+  ninguna petición.
+- **Rate limit** de 4 req/s (0,25 s entre peticiones), por debajo del máximo.
+- **Caché local** en `data/cache/sec/`; si SEC falla y hay caché se devuelve
+  `stale`, nunca datos inventados.
+- **Estados explícitos**: `ok`, `empty` (respuesta válida sin filings/facts),
+  `unconfigured`, `error`, `stale`, `not_found`.
+- Resuelve **CIK/ticker** con `company_tickers.json`.
+- Extrae **10-K, 10-Q y 8-K** de `submissions` y facts XBRL de `companyfacts`
+  (Revenues, NetIncomeLoss, Assets, Liabilities, Equity, Cash, EPS).
+- Cada consulta queda en `sec_fetches` con fecha, endpoint, estado, HTTP y caché.
+
+```powershell
+lab sec status
+lab sec cik NVDA
+lab sec filings NVDA --limit 10
+lab sec facts NVDA
+```
+
+> Si SEC no responde, el comando termina con error o `stale`; no interpreta la
+> falta de datos como “sin noticias” ni inventa cifras.
 
 ---
 
@@ -624,8 +663,10 @@ Get-ScheduledTask -TaskName "TradingLab-Backup" | Get-ScheduledTaskInfo
 ```
 
 Otras tareas activas: **`TradingLab-DryRun`** (L-V 22:15), **`TradingLab-Web`**
-(al iniciar sesión), **`TradingLab-Intel`** (diaria 07:10) y
-**`TradingLab-Agents`** (L-V 22:45, lite sobre SPY/QQQ/NVDA, sin órdenes).
+(al iniciar sesión), **`TradingLab-Intel`** (diaria 07:10),
+**`TradingLab-Agents`** (L-V 22:45, lite sobre SPY/QQQ/NVDA, sin órdenes) y
+**`TradingLab-LMStudio`** (al iniciar sesión; arranca LM Studio y carga
+`qwen3.8-27b` con 16k de contexto).
 
 Restaurar en un PC nuevo:
 

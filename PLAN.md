@@ -111,9 +111,11 @@ Reglas de trabajo:
 
 ## Fase 4 — Capa de información continua
 
-- [ ] **4.1 Fuentes**: RSS Yahoo operativo; SEC EDGAR, FRED, calendario y OpenBB
-  pendientes de verificar licencias/límites.
+- [ ] **4.1 Fuentes**: RSS Yahoo y SEC EDGAR operativos; FRED, calendario
+  Finnhub y OpenBB pendientes de conectar/verificar.
 - [ ] **4.2 Triaje barato**: FinBERT o modelo local pequeño; medir latencia/RAM.
+  - Decisión 2026-11-07: **no usar FinBERT** (CC-BY-NC-SA 4.0, no comercial);
+    usar Qwen inicialmente. No se descarga modelo nuevo.
 - [x] **4.3 Esquema** — 2026-11-07
   - `news_items`, `news_scores`, `macro_events`; dedupe por hash, trusted=false.
 - [x] **4.4 Seguridad** — 2026-11-07
@@ -176,4 +178,7 @@ Reglas de trabajo:
 | 2026-11-07 | 5.1–5.3/5.5 | `pytest tests/test_decisions.py -q` → 2 passed |
 | 2026-11-07 | 4.3/4.4 | `lab intel fetch` → 5 noticias; `pytest tests/test_intel.py -q` → 5 passed |
 | 2026-11-07 | 0.3 / final | `pytest -q` → 129 passed; CI 66f2e8f verde |
+| 2026-11-07 | 3.1/3.1b/3.2 | `pytest tests/test_research.py -q`; PBO 16%, WF 4 bloques |
+| 2026-11-07 | 4.4/4.6/11b | `pytest tests/test_calendar.py tests/test_session.py -q` |
+| 2026-11-07 | SEC/CSV/decisions | `pytest tests/test_sec.py tests/test_decisions.py -q` |
 |  |  |  |

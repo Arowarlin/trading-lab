@@ -45,6 +45,9 @@ try {
     if (Test-Path "data\agent_runs") {
         Copy-Item "data\agent_runs" (Join-Path $dataStage "agent_runs") -Recurse -Force
     }
+    if (Test-Path "data\calendar") {
+        Copy-Item "data\calendar" (Join-Path $dataStage "calendar") -Recurse -Force
+    }
     if (Test-Path "data\tradingagents\memory.md") {
         New-Item -ItemType Directory -Force -Path (Join-Path $dataStage "tradingagents") | Out-Null
         Copy-Item "data\tradingagents\memory.md" (Join-Path $dataStage "tradingagents\memory.md") -Force
