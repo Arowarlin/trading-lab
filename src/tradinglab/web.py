@@ -952,6 +952,7 @@ class LabData:
             "dsr_trial_sr_std": latest.get("dsr_trial_sr_std"),
             "horizons": _read_json(self.research_dir / "horizons.json", {}) or {},
             "intraday": _read_json(self.research_dir / "intraday.json", {}) or {},
+            "clusters": _read_json(self.research_dir / "clusters.json", {}) or {},
             "errors": latest.get("errors") or [],
         }
 
@@ -1525,6 +1526,8 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 self._json(self.server.data.research().get("horizons") or {})
             elif path == "/api/research/intraday":
                 self._json(self.server.data.research().get("intraday") or {})
+            elif path == "/api/research/clusters":
+                self._json(self.server.data.research().get("clusters") or {})
             elif path == "/api/decisions":
                 self._json(self.server.data.decisions())
             elif path == "/api/decisions/compare":

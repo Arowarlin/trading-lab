@@ -68,6 +68,7 @@ class BotProfile:
     schedule: Schedule
     max_risk_pct: float
     max_trades_per_day: int
+    max_cluster_risk_pct: float
     validation: ValidationCriteria
 
 
@@ -93,6 +94,7 @@ def _parse_profile(profile_id: str, data: dict) -> BotProfile:
         ),
         max_risk_pct=float(data.get("max_risk_pct") or 0.0),
         max_trades_per_day=int(data.get("max_trades_per_day") or 0),
+        max_cluster_risk_pct=float(data.get("max_cluster_risk_pct") or 0.01),
         validation=ValidationCriteria(
             min_trades=int(validation.get("min_trades") or 0),
             min_dsr=float(validation.get("min_dsr") or 0.0),

@@ -760,6 +760,10 @@
         <div id="research-intraday"></div>
       </div>
       <div class="panel" style="margin-bottom:14px">
+        <div class="panel-head"><h2>Riesgo por clúster</h2><span class="muted tiny" id="clusters-meta"></span></div>
+        <div id="research-clusters"></div>
+      </div>
+      <div class="panel" style="margin-bottom:14px">
         <div class="panel-head"><h2>Ranking de estrategias</h2><span class="muted tiny" id="research-meta"></span></div>
         <div id="research-top"></div>
       </div>
@@ -2383,6 +2387,7 @@ function renderResearch() {
   ], near, { empty: "Sin casi propuestas." });
 
   renderHorizons(r.horizons);
+  renderClusters(r.clusters);
   renderIntraday(r.intraday);
 
   [
@@ -2472,6 +2477,29 @@ function renderHorizons(h) {
     html += `<div class="note">${esc(required.assumption || "")}</div></details>`;
   }
   box.innerHTML = html;
+}
+
+function renderClusters(c) {
+  const box = $("#research-clusters");
+  const meta = $("#clusters-meta");
+  if (!box) return;
+  if (!c || !c.clusters) {
+    box.innerHTML = `<div class="empty">sin datos. Ejecuta <code>lab research-clusters</code>.</div>`;
+    if (meta) meta.textContent = "sin datos";
+    return;
+  }
+  if (meta) meta.textContent = `umbral |corr| > ${pct(c.threshold, 0)} · ${c.clusters.length} clústeres`;
+  const rows = (c.clusters || []).map((cluster, i) => [
+    String(i + 1),
+    cluster.members.map((m) => `<div>${esc(m)}</div>`).join(""),
+    String(cluster.size),
+    pct(cluster.max_risk_pct, 1),
+    `<span class="muted tiny">${esc(cluster.note)}</span>`,
+  ]);
+  box.innerHTML = grid([
+    { label: "#", num: true }, { label: "Bots" }, { label: "N", num: true },
+    { label: "Riesgo máx. por clúster", num: true }, { label: "Nota" },
+  ], rows, { empty: "sin datos" });
 }
 
 function renderIntraday(i) {

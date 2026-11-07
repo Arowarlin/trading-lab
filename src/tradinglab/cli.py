@@ -3017,6 +3017,35 @@ def research_intraday_cmd(
     )
 
 
+@app.command("research-clusters")
+def research_clusters_cmd(
+    threshold: float = typer.Option(0.70, "--threshold", help="Umbral de |correlación|"),
+    out: str = typer.Option(None, "--out"),
+) -> None:
+    """Agrupa bots correlacionados y aplica presupuesto por clúster."""
+    from .portfolio import load_clusters, write
+
+    report_dir = Path(out) if out else ROOT / "reports" / "research"
+    report = load_clusters(report_dir, threshold=threshold)
+    files = write(report, report_dir)
+    t = Table(title=f"Clústeres de correlación · umbral {threshold:.2f}")
+    t.add_column("#", justify="right")
+    t.add_column("Bots", overflow="fold")
+    t.add_column("N", justify="right")
+    t.add_column("Riesgo máx.", justify="right")
+    for i, cluster in enumerate(report.get("clusters") or [], 1):
+        t.add_row(
+            str(i),
+            "; ".join(cluster["members"]),
+            str(cluster["size"]),
+            f"{cluster['max_risk_pct']:.1%}",
+        )
+    console.print(t)
+    if report.get("error"):
+        console.print(f"[yellow]{report['error']}[/yellow]")
+    console.print(f"[green]Tabla generada[/green] · {files['md']} · {files['json']}")
+
+
 # ==================================================================== Futuros
 
 @futures_app.command("status")

@@ -50,6 +50,7 @@ def test_bot_sin_perfil_no_se_ejecuta(monkeypatch):
         object(),
         include_disabled=True,
         now=datetime(2026, 11, 9, 15, 0, tzinfo=timezone.utc),
+        cluster_report={"clusters": []},
     )
     assert executed == ["con-perfil"]
 

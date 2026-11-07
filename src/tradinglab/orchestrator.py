@@ -16,6 +16,7 @@ from .indicators import atr
 from .intel.calendar import calendar_block_for_settings, rules_from_settings
 from .killswitch import allows_order
 from .killswitch import ensure as ensure_killswitch
+from .portfolio import load_clusters
 from .profiles import BotProfile, load_profiles
 from .prop.guard import AccountSnapshot, PropGuard, evaluate_account
 from .risk import check_order, size_position
@@ -110,6 +111,18 @@ def _open_risk_usd(positions: list[dict]) -> float:
     return sum(abs(float(p.get("value") or 0.0)) * 0.02 for p in positions)
 
 
+def _cluster_for(spec: BotSpec, clusters: list[dict]) -> int | None:
+    symbol = (spec.universe[0] if spec.universe else "").upper()
+    if not symbol:
+        return None
+    for index, cluster in enumerate(clusters):
+        for label in cluster.get("members") or []:
+            text = str(label).upper()
+            if symbol in text and spec.strategy.upper() in text:
+                return index
+    return None
+
+
 def run_bot(
     spec: BotSpec,
     settings: Settings,
@@ -118,6 +131,8 @@ def run_bot(
     dry_run: bool = False,
     start: str | None = None,
     profile: BotProfile | None = None,
+    cluster_open_risk_usd: float = 0.0,
+    max_cluster_risk_pct: float | None = None,
 ) -> list[BotAction]:
     """Evalúa un bot sobre su universo y ejecuta (o simula) los cambios."""
     if spec.strategy not in STRATEGIES:
@@ -291,6 +306,8 @@ def run_bot(
                 max_risk_pct=profile.max_risk_pct if profile else None,
                 max_trades_per_day=profile.max_trades_per_day if profile else None,
                 proposed_risk_usd=proposed_risk,
+                cluster_open_risk_usd=cluster_open_risk_usd,
+                max_cluster_risk_pct=max_cluster_risk_pct,
             )
             if not account_guard.allowed:
                 action.status = "bloqueado"
@@ -360,10 +377,16 @@ def run_all(
     include_disabled: bool = False,
     now: datetime | None = None,
     profiles: dict[str, BotProfile] | None = None,
+    cluster_report: dict | None = None,
 ) -> list[BotAction]:
     actions: list[BotAction] = []
     current = now or datetime.now(timezone.utc)
     profile_map = profiles if profiles is not None else load_profiles()
+    clusters = (cluster_report if cluster_report is not None else load_clusters()).get(
+        "clusters", []
+    )
+    equity = float(broker.snapshot({}).get("equity") or 0.0) if clusters else 0.0
+    cluster_used: dict[int, float] = {}
     for spec in load_bots():
         if only and spec.id != only:
             continue
@@ -379,9 +402,34 @@ def run_all(
             continue
         if not profile.schedule.allows(current):
             continue
+        cluster = _cluster_for(spec, clusters)
+        reserved = equity * profile.max_risk_pct if equity > 0 else 0.0
+        if (
+            cluster is not None
+            and equity > 0
+            and cluster_used.get(cluster, 0.0) + reserved
+            > equity * profile.max_cluster_risk_pct + 1e-9
+        ):
+            continue
         actions.extend(
-            run_bot(spec, settings, broker, dry_run=dry_run, profile=profile)
+            run_bot(
+                spec,
+                settings,
+                broker,
+                dry_run=dry_run,
+                profile=profile,
+                cluster_open_risk_usd=cluster_used.get(cluster, 0.0)
+                if cluster is not None
+                else 0.0,
+                max_cluster_risk_pct=profile.max_cluster_risk_pct,
+            )
         )
+        if cluster is not None and any(
+            action.delta > 0 and action.status in {"dry_run", "ejecutado"}
+            for action in actions
+            if action.bot == spec.id
+        ):
+            cluster_used[cluster] = cluster_used.get(cluster, 0.0) + reserved
     return actions
 
 

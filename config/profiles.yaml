@@ -11,6 +11,7 @@ profiles:
       days: ["Mon", "Tue", "Wed", "Thu", "Fri"]
     max_risk_pct: 0.005
     max_trades_per_day: 1
+    max_cluster_risk_pct: 0.01
     validation:
       min_trades: 20
       min_dsr: 0.90
@@ -28,6 +29,7 @@ profiles:
       days: ["Mon", "Tue", "Wed", "Thu", "Fri"]
     max_risk_pct: 0.0025
     max_trades_per_day: 4
+    max_cluster_risk_pct: 0.01
     validation:
       min_trades: 100
       min_dsr: 0.90
@@ -45,6 +47,7 @@ profiles:
       days: ["Mon", "Tue", "Wed", "Thu", "Fri"]
     max_risk_pct: 0.0025
     max_trades_per_day: 3
+    max_cluster_risk_pct: 0.01
     validation:
       min_trades: 80
       min_dsr: 0.90

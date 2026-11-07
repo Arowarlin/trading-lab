@@ -335,6 +335,8 @@ class AccountGuardReport:
     open_risk_usd: float
     proposed_risk_usd: float
     remaining_usd: float
+    cluster_risk_usd: float = 0.0
+    cluster_cap_usd: float | None = None
 
 
 def evaluate_account(
@@ -345,6 +347,8 @@ def evaluate_account(
     max_trades_per_day: int | None = None,
     proposed_risk_usd: float = 0.0,
     closing: bool = False,
+    cluster_open_risk_usd: float = 0.0,
+    max_cluster_risk_pct: float | None = None,
 ) -> AccountGuardReport:
     """Guard agregado para una cuenta compartida.
 
@@ -426,6 +430,25 @@ def evaluate_account(
             base.remaining_usd,
         )
 
+    cluster_risk = max(0.0, float(cluster_open_risk_usd)) + proposed
+    cluster_cap = (
+        snapshot.equity * max_cluster_risk_pct
+        if max_cluster_risk_pct is not None
+        else None
+    )
+    if cluster_cap is not None and cluster_risk > cluster_cap + 1e-9:
+        return AccountGuardReport(
+            False,
+            f"riesgo de clúster {cluster_risk:,.2f} > límite {cluster_cap:,.2f}",
+            "block",
+            total_risk,
+            open_risk,
+            proposed,
+            base.remaining_usd,
+            cluster_risk,
+            cluster_cap,
+        )
+
     return AccountGuardReport(
         True,
         "riesgo agregado dentro del límite",
@@ -434,6 +457,8 @@ def evaluate_account(
         open_risk,
         proposed,
         base.remaining_usd,
+        cluster_risk,
+        cluster_cap,
     )
 
 

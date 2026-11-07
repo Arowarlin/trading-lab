@@ -503,6 +503,12 @@ agregadas del día. Cerrar o reducir siempre está permitido. El informe
 `horizons.json` incluye la matriz de correlación diaria entre bots y avisa de
 los pares con |correlación| > 0,7.
 
+`lab research-clusters` agrupa esos pares y aplica un presupuesto por clúster
+(`max_cluster_risk_pct`, 1% por defecto). En el top 10 actual, **9 de 10
+variantes caen en un mismo clúster**; el panel Research muestra los clústeres y
+el guard rechaza aperturas que superen el presupuesto agregado. Es informativo
+para seleccionar bots, no activa nada.
+
 `friday_cutoff_hour` se interpreta en la zona local de la firma
 (`reset_tz`, por defecto `Europe/Prague`) y cubre los cambios de hora. Cerrar o
 reducir posiciones **nunca** se bloquea, ni por calendario ni por sesión.
