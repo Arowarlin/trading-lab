@@ -2330,7 +2330,9 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 })
             elif path == "/api/markets":
                 payload = market_payload()
-                payload["pilots"] = pilot_status(self.db_path, self.settings)
+                payload["pilots"] = pilot_status(
+                    self.server.data.db_path, self.server.data.settings
+                )
                 self._json(payload)
             elif path == "/api/calendar":
                 self._json(self.server.data.calendar())
