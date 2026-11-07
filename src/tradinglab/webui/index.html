@@ -1359,6 +1359,11 @@
         <div class="panel-head"><h2>Auditoría de consola</h2><span class="muted tiny">acciones del modo operador</span></div>
         <div id="console-audit"></div>
       </div>
+      <div class="panel" style="margin-top:14px">
+        <div class="panel-head"><h2>Reportes CSV/HTML</h2><span class="muted tiny" id="reports-meta"></span></div>
+        <div id="reports-list"></div>
+        <pre class="log-viewer" id="report-preview" style="margin-top:10px;height:auto;min-height:120px">Selecciona un reporte para previsualizar.</pre>
+      </div>
     </section>
     <footer class="statusbar">
       <span>modo <b id="status-mode">paper</b></span>
@@ -1404,6 +1409,7 @@ const S = {
   operatorPreview: null,
   drift: null,
   learning: null,
+  reports: [],
   market: null,
   calendar: null,
   decisions: null,
@@ -1639,6 +1645,7 @@ function switchView(view, updateHash = true) {
   if (view === "journal") loadJournal();
   if (view === "operator") loadOperator();
   if (view === "learning") loadLearning();
+  if (view === "logs") loadReports();
   if (view === "decisions") renderDecisions();
   if (view === "repos") renderRepos();
   if (view === "sala") renderSala();
@@ -1719,6 +1726,7 @@ async function loadAll(manual = false) {
   }
   if (S.view === "journal") loadJournal();
   if (S.view === "learning") loadLearning();
+  if (S.view === "logs") loadReports();
   if (overviewResult.status === "rejected" && riskResult.status === "rejected") {
     toast("No se pudo conectar con el panel: " + overviewResult.reason.message, true);
   } else if (manual) {
@@ -4677,6 +4685,46 @@ async function selectLog(name) {
   } catch (err) {
     $("#log-viewer").textContent = "No se pudo cargar el log: " + err.message;
     $("#log-meta").textContent = "";
+  }
+}
+
+async function loadReports() {
+  try {
+    const data = await getJSON("/api/reports");
+    S.reports = data.files || [];
+    renderReports();
+  } catch (error) {
+    if ($("#reports-meta")) $("#reports-meta").textContent = "Sin datos";
+  }
+}
+
+function renderReports() {
+  const files = S.reports || [];
+  if ($("#reports-meta")) $("#reports-meta").textContent = `${files.length} archivos · reports/exports`;
+  const host = $("#reports-list");
+  if (!host) return;
+  if (!files.length) {
+    host.innerHTML = `<div class="empty">Sin datos. Genera con lab reports journal|drift|learning --format csv|html.</div>`;
+    return;
+  }
+  host.innerHTML = `<div class="chips">${files.map((file) => `<button class="chip" data-report="${esc(file.path)}">${esc(file.name)} · ${esc(file.format)} · ${bytes(file.size)}</button>`).join("")}</div>`;
+  $$("[data-report]").forEach((button) => button.addEventListener("click", () => previewReport(button.dataset.report)));
+}
+
+async function previewReport(path) {
+  try {
+    const data = await getJSON(`/api/reports/preview?file=${encodeURIComponent(path)}`);
+    const box = $("#report-preview");
+    if (!box) return;
+    if (data.format === "html") {
+      box.textContent = data.html + (data.truncated ? "\n[... truncado ...]" : "");
+    } else {
+      box.textContent = (data.rows || []).length
+        ? JSON.stringify(data.rows, null, 2)
+        : "Sin datos";
+    }
+  } catch (error) {
+    toast("No se pudo previsualizar: " + error.message, true);
   }
 }
 

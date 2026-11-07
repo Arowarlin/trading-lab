@@ -302,6 +302,13 @@ controladas, sin activar bots, sin órdenes, sin dinero real y sin tocar `.env`.
   - Evidencia: `pytest tests/test_learning.py -q` → 6 passed; suite completa
     301 passed.
 
+- [x] **10.7 Reportes CSV/HTML** — 2026-11-07
+  - Exportes de Diario, deriva y aprendizaje a `reports/exports` con validación
+    de formato/ruta, límite de filas y sin secretos.
+  - Vista previa en CLI (`lab reports preview`) y en Registros.
+  - Evidencia: `pytest tests/test_exports.py -q` → 4 passed; suite completa
+    305 passed.
+
 ## Fase 11 — Modo operador (etapa 7)
 
 Objetivo: permitir acciones paper/demo desde la consola con armado por PIN,
@@ -397,10 +404,11 @@ sin romper vistas ni añadir dependencias.
 | 2026-11-07 | E6 documentación | README 6d y Fase 9; tabla por perfil en Research; `ruff` + doctor |
 | 2026-11-07 | 10.1 Diario | `pytest tests/test_journal.py -q` → 7 passed; `lab journal` → sin datos; README 6e |
 | 2026-11-07 | 11 Modo operador | `pytest tests/test_operator.py -q` → 11 passed; 2 pasos/PIN/keyring/auditoría; README 6f |
-| 2026-11-07 | 12 Shell consola | `pytest tests/test_console_shell.py -q` → 3 passed; `pytest -q` → 301 passed; 6 secciones, 15 vistas, dashboard; README 6g |
+| 2026-11-07 | 12 Shell consola | `pytest tests/test_console_shell.py -q` → 3 passed; `pytest -q` → 305 passed; 6 secciones, 15 vistas, dashboard; README 6g |
 | 2026-11-07 | 10.2 Multiverse | `pytest tests/test_multiverse.py -q` → 7 passed; `pytest -q` → 279 passed; 1.000 permutaciones, seed 42, Diario + Run Detail |
 | 2026-11-07 | 10.3 Deriva | `pytest tests/test_drift.py -q` → 5 passed; `pytest -q` → 284 passed; IC bootstrap, mínimo 20, slippage, Bots + `lab drift` |
 | 2026-11-07 | 10.4 Salud/TWR | `pytest tests/test_health.py -q` → 5 passed; `pytest -q` → 289 passed; score 0-100, flujos y TWR en Fondo |
 | 2026-11-07 | 10.5 Pausa | `pytest tests/test_riskpause.py -q` → 4 passed; `pytest -q` → 295 passed; racha/día, F13 solo aprieta, Fondo + CLI |
 | 2026-11-07 | 10.6 Aprendizaje | `pytest tests/test_learning.py -q` → 6 passed; `pytest -q` → 301 passed; lecciones, holdout, DSR trials, challenger, panel |
+| 2026-11-07 | 10.7 Reportes | `pytest tests/test_exports.py -q` → 4 passed; `pytest -q` → 305 passed; CSV/HTML, validación, preview CLI/Registros |
 |  |  |  |

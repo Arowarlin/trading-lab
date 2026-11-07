@@ -871,7 +871,7 @@ stdlib y `127.0.0.1`. Se conservan todas las pestañas, rutas, CSRF, Host/Origin
 y la lista blanca `WRITE_ROUTES`.
 
 Evidencia: `pytest tests/test_console_shell.py -q` → **3 passed**; suite completa
-**301 passed**; cubre las seis secciones, las 15 vistas actuales, los
+**305 passed**; cubre las seis secciones, las 15 vistas actuales, los
 componentes del dashboard y la ausencia de URLs externas/CDNs.
 
 ---
@@ -1008,6 +1008,29 @@ Evidencia: `pytest tests/test_riskpause.py -q` → **4 passed**; suite completa
 
 Evidencia: `pytest tests/test_learning.py -q` → **6 passed**; suite completa
 **301 passed**; `ruff` limpio; `lab doctor` OK con avisos conocidos.
+
+---
+
+## 6m. Reportes CSV/HTML (10.7)
+
+Historiales **solo por archivo**, generados desde datos reales del laboratorio:
+
+- `reports/exports/journal_*.csv|html`, `drift_*`, `learning_*`.
+- Validación de formato (`csv|html`), salida confinada a `reports/`, límite de
+  filas y **nunca** secretos, PIN, tokens ni `.env`.
+- Vista previa en CLI y en **Registros → Reportes CSV/HTML** (lectura, sin
+  inyección de HTML).
+
+```powershell
+lab reports journal --format html
+lab reports drift --format csv --min-trades 20
+lab reports learning --format csv
+lab reports list
+lab reports preview reports/exports/archivo.csv
+```
+
+Evidencia: `pytest tests/test_exports.py -q` → **4 passed**; suite completa
+**305 passed**; `ruff` limpio; `lab doctor` OK con avisos conocidos.
 
 ---
 

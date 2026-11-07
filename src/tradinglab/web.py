@@ -59,6 +59,7 @@ from .botlab import (
 )
 from .config import DEFAULT_DB, ROOT, Settings, get_settings
 from .drift import build_drift
+from .exports import list_exports, preview_file
 from .health import score_account, time_weighted_return
 from .journal import build_journal, load_closed_trades
 from .killswitch import load_state as load_killswitch
@@ -2353,6 +2354,14 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 self._json(self.server.data.operator.status())
             elif path == "/api/learning":
                 self._json(self.server.data.learning())
+            elif path == "/api/reports":
+                self._json({"files": list_exports()})
+            elif path == "/api/reports/preview":
+                file_name = (parse_qs(urlparse(self.path).query).get("file") or [""])[0]
+                try:
+                    self._json(preview_file(file_name))
+                except ValueError as exc:
+                    self._error(400, str(exc))
             elif path == "/api/journal":
                 params = parse_qs(urlparse(self.path).query)
 

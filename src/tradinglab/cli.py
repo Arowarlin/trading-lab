@@ -83,6 +83,7 @@ operator_app = typer.Typer(
     help="Modo operador de la consola: PIN, estado y auditoría.",
 )
 lessons_app = typer.Typer(no_args_is_help=True, help="Aprendizaje controlado: lecciones y holdout.")
+reports_app = typer.Typer(no_args_is_help=True, help="Reportes CSV/HTML con validación y vista previa.")
 intel_app = typer.Typer(no_args_is_help=True, help="Información continua: RSS, saneado y estado.")
 sec_app = typer.Typer(no_args_is_help=True, help="SEC EDGAR: CIK, filings y company facts.")
 app.add_typer(mt5_app, name="mt5")
@@ -96,6 +97,7 @@ app.add_typer(decisions_app, name="decisions")
 app.add_typer(fund_app, name="fund")
 app.add_typer(operator_app, name="operator")
 app.add_typer(lessons_app, name="lessons")
+app.add_typer(reports_app, name="reports")
 app.add_typer(intel_app, name="intel")
 app.add_typer(sec_app, name="sec")
 console = Console()
@@ -2489,6 +2491,122 @@ def lessons_holdout_cmd() -> None:
         t.add_row(key, str(info.get(key) or "Sin datos"))
     t.add_row("trials globales", str(count_tests(DEFAULT_DB)))
     console.print(t)
+
+
+@reports_app.command("journal")
+def reports_journal_cmd(
+    fmt: str = typer.Option("csv", "--format", help="csv|html"),
+    out: str = typer.Option(None, "--out", help="Subcarpeta dentro de reports/"),
+    limit: int = typer.Option(500, "--limit"),
+) -> None:
+    """Exporta el Diario a CSV/HTML con vista previa."""
+    from .exports import export_journal
+
+    try:
+        result = export_journal(DEFAULT_DB, get_settings(), fmt=fmt, out_dir=out, limit=limit)
+    except ValueError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2) from exc
+    _print_export(result)
+
+
+@reports_app.command("drift")
+def reports_drift_cmd(
+    fmt: str = typer.Option("csv", "--format", help="csv|html"),
+    out: str = typer.Option(None, "--out"),
+    min_trades: int = typer.Option(20, "--min-trades"),
+) -> None:
+    """Exporta la deriva live vs backtest."""
+    from .exports import export_drift
+
+    try:
+        result = export_drift(
+            DEFAULT_DB,
+            get_settings(),
+            fmt=fmt,
+            out_dir=out,
+            min_trades=min_trades,
+        )
+    except ValueError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2) from exc
+    _print_export(result)
+
+
+@reports_app.command("learning")
+def reports_learning_cmd(
+    fmt: str = typer.Option("csv", "--format", help="csv|html"),
+    out: str = typer.Option(None, "--out"),
+) -> None:
+    """Exporta lecciones y evidencia."""
+    from .exports import export_learning
+
+    try:
+        result = export_learning(DEFAULT_DB, get_settings(), fmt=fmt, out_dir=out)
+    except ValueError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2) from exc
+    _print_export(result)
+
+
+@reports_app.command("list")
+def reports_list_cmd() -> None:
+    """Lista reportes generados."""
+    from .exports import list_exports
+
+    rows = list_exports()
+    t = Table(title="Reportes generados")
+    for col in ("Archivo", "Formato", "Bytes", "Fecha"):
+        t.add_column(col)
+    for row in rows:
+        t.add_row(row["name"], row["format"], str(row["size"]), row["mtime"])
+    console.print(t)
+
+
+@reports_app.command("preview")
+def reports_preview_cmd(
+    file: str = typer.Argument(...),
+    rows: int = typer.Option(10, "--rows"),
+) -> None:
+    """Vista previa de un CSV/HTML de reports/."""
+    from .exports import preview_file
+
+    try:
+        result = preview_file(file, rows=rows)
+    except ValueError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2) from exc
+    if result["format"] == "html":
+        console.print(
+            f"[green]{result['path']}[/green] · HTML · "
+            f"{'truncado' if result['truncated'] else 'completo'}"
+        )
+        return
+    data = result["rows"]
+    if not data:
+        console.print("[yellow]Sin datos[/yellow]")
+        return
+    t = Table(title=f"Vista previa · {result['path']}")
+    for col in data[0].keys():
+        t.add_column(col, overflow="fold")
+    for row in data:
+        t.add_row(*[str(row.get(col, ""))[:120] for col in data[0].keys()])
+    console.print(t)
+
+
+def _print_export(result: dict) -> None:
+    console.print(
+        f"[green]Reporte generado[/green] · {result['path']} · "
+        f"{result['rows']} filas · {result['preview_note']}"
+    )
+    rows = result.get("preview") or []
+    if rows:
+        t = Table(title="Vista previa")
+        for col in rows[0].keys():
+            t.add_column(col, overflow="fold")
+        for row in rows:
+            t.add_row(*[str(row.get(col, ""))[:100] for col in rows[0].keys()])
+        console.print(t)
 
 
 @operator_app.command("pin")
