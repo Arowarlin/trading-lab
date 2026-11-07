@@ -6,7 +6,7 @@ import json
 import math
 import statistics
 from collections import defaultdict
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from statistics import NormalDist
@@ -409,6 +409,17 @@ def run_research(
                             frame.index.name = "ts"
                             frame.to_parquet(artifact_root / f"{digest}.parquet")
                             artifact_rows = len(frame)
+                        if bt.trade_pnls:
+                            trades_frame = pd.DataFrame(
+                                {
+                                    "pnl": bt.trade_pnls,
+                                    "day": bt.trade_days
+                                    or [""] * len(bt.trade_pnls),
+                                }
+                            )
+                            trades_frame.to_parquet(
+                                artifact_root / f"{digest}.trades.parquet"
+                            )
                     results.append(
                         {
                             "symbol": symbol,
@@ -604,6 +615,7 @@ def run_research(
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "rules": rules.describe(),
+        "rules_meta": asdict(rules),
         "pbo": pbo,
         "pbo_ok": pbo_ok,
         "pbo_by_symbol": pbo_by_symbol,

@@ -14,8 +14,14 @@ from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from .accounts import AccountDefinition, load_accounts, rules_for_account
+from .accounts import (
+    AccountDefinition,
+    effective_limits,
+    load_accounts,
+    rules_for_account,
+)
 from .orchestrator import load_bots
+from .prop.simulator import multiverse_by_trade
 
 MIN_SAMPLE = 30
 GROUPS = ("bot", "account", "profile", "ticker", "day", "hour")
@@ -574,6 +580,59 @@ def group_summaries(
     return rows
 
 
+def multiverse_by_account(
+    db_path: str | Path,
+    trades: list[ClosedTrade],
+    accounts: dict[str, AccountDefinition],
+) -> list[dict]:
+    """Multiverse por operación; una simulación por cuenta."""
+    groups: dict[str, list[ClosedTrade]] = {}
+    for trade in trades:
+        groups.setdefault(trade.account or SIN_DATOS, []).append(trade)
+    rows = []
+    for account_id, group in groups.items():
+        account = accounts.get(account_id)
+        if account is None:
+            rows.append(
+                {
+                    "account": account_id,
+                    "error": "Sin datos: cuenta desconocida en config/accounts.yaml",
+                }
+            )
+            continue
+        if len(group) < 2:
+            rows.append(
+                {
+                    "account": account_id,
+                    "trades": len(group),
+                    "error": "Sin datos: se necesitan al menos 2 operaciones",
+                }
+            )
+            continue
+        rules = rules_for_account(account)
+        day_order = sorted({trade.day for trade in group})
+        day_sizes = [
+            sum(1 for trade in group if trade.day == day) for day in day_order
+        ]
+        try:
+            result = multiverse_by_trade(
+                rules,
+                [trade.pnl for trade in group],
+                n_paths=1_000,
+                seed=42,
+                day_sizes=day_sizes,
+            )
+        except ValueError as exc:
+            rows.append({"account": account_id, "error": str(exc)})
+            continue
+        result["account"] = account_id
+        result["profile"] = group[0].profile
+        result["effective_limits"] = asdict(effective_limits(db_path, account))
+        rows.append(result)
+    rows.sort(key=lambda row: str(row.get("account", "")))
+    return rows
+
+
 def build_journal(
     db_path: str | Path,
     *,
@@ -639,6 +698,7 @@ def build_journal(
         "groups": group_summaries(filtered, group_by, accounts),
         "by_account": group_summaries(filtered, "account", accounts),
         "by_bot": group_summaries(filtered, "bot", accounts),
+        "multiverse": multiverse_by_account(db_path, filtered, accounts),
         "trades": [asdict(trade) for trade in reversed(filtered[-limit:])],
         "total_trades": len(filtered),
     }

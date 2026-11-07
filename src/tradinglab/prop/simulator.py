@@ -125,4 +125,112 @@ def monte_carlo(
     }
 
 
-__all__ = ["monte_carlo"]
+def multiverse_by_trade(
+    rules: PropRules,
+    trade_pnls,
+    *,
+    n_paths: int = 1_000,
+    seed: int = 42,
+    day_sizes: list[int] | None = None,
+    max_points: int = 240,
+) -> dict:
+    """Reordena operaciones (no días) y evalúa límites de cuenta.
+
+    Cada path es una permutación de los mismos PnL. El límite diario se evalúa
+    por operación; si se pasan `day_sizes` (número de operaciones por día
+    original), se conserva ese tamaño de día y se evalúa el PnL acumulado del
+    bloque. No crea datos: si hay menos de 2 operaciones, falla.
+    """
+    pnls = np.asarray(list(trade_pnls), dtype=float)
+    pnls = pnls[np.isfinite(pnls)]
+    if pnls.size < 2:
+        raise ValueError("se necesitan al menos 2 operaciones para el multiverse")
+    if n_paths <= 0:
+        raise ValueError("n_paths debe ser > 0")
+
+    initial = float(rules.account_size)
+    daily_limit = float(rules.effective_daily_limit_usd)
+    max_limit = float(rules.effective_max_loss_usd)
+    sizes = [int(size) for size in (day_sizes or []) if int(size) > 0]
+    use_days = bool(sizes) and sum(sizes) == int(pnls.size)
+    rng = np.random.default_rng(seed)
+    count = int(pnls.size)
+    paths = np.empty((n_paths, count + 1), dtype=float)
+    paths[:, 0] = initial
+    daily_breach = np.zeros(n_paths, dtype=bool)
+
+    for index in range(n_paths):
+        shuffled = rng.permutation(pnls)
+        paths[index, 1:] = initial + np.cumsum(shuffled)
+        if use_days:
+            start = 0
+            breach = False
+            for size in sizes:
+                chunk = shuffled[start : start + size]
+                start += size
+                if float(chunk.sum()) <= -daily_limit:
+                    breach = True
+                    break
+            daily_breach[index] = breach
+        else:
+            daily_breach[index] = bool((shuffled <= -daily_limit).any())
+
+    peaks = np.maximum.accumulate(paths, axis=1)
+    drawdowns = paths / peaks - 1.0
+    max_dd = drawdowns.min(axis=1)
+    max_dd_usd = (paths - peaks).min(axis=1)
+    if rules.max_loss_mode == "static":
+        floors = np.full_like(paths, initial - max_limit)
+    else:
+        floors = peaks - max_limit
+    max_breach = (paths <= floors).any(axis=1)
+    any_breach = daily_breach | max_breach
+
+    steps = list(range(count + 1))
+    if len(steps) > max_points:
+        indexes = sorted(
+            set(np.linspace(0, count, max_points, dtype=int).tolist())
+        )
+    else:
+        indexes = steps
+    curve_pct = paths / initial - 1.0
+    curves = {}
+    for label, percentile in (("p5", 5), ("p50", 50), ("p95", 95)):
+        values = np.percentile(curve_pct[:, indexes], percentile, axis=0)
+        curves[label] = [round(float(value), 8) for value in values]
+
+    final = paths[:, -1]
+    return {
+        "firm": rules.firm,
+        "phase": rules.phase,
+        "rules": rules.describe(),
+        "capital": round(initial, 2),
+        "trades": count,
+        "paths": int(n_paths),
+        "seed": int(seed),
+        "daily_limit_usd": round(daily_limit, 2),
+        "max_loss_usd": round(max_limit, 2),
+        "max_loss_mode": rules.max_loss_mode,
+        "daily_basis": "bloques_por_dia" if use_days else "por_operacion",
+        "day_sizes": sizes if use_days else [],
+        "steps": indexes,
+        "curves": curves,
+        "prob_breach_daily": float(daily_breach.mean()),
+        "prob_breach_max": float(max_breach.mean()),
+        "prob_breach_any": float(any_breach.mean()),
+        "expected_max_drawdown": float(max_dd.mean()),
+        "median_max_drawdown": float(np.median(max_dd)),
+        "p5_max_drawdown": float(np.percentile(max_dd, 5)),
+        "worst_max_drawdown": float(max_dd.min()),
+        "expected_max_drawdown_usd": float(max_dd_usd.mean()),
+        "final_equity_p5": float(np.percentile(final, 5)),
+        "final_equity_median": float(np.median(final)),
+        "final_equity_p95": float(np.percentile(final, 95)),
+        "sample_ok": count >= 30,
+        "sample_warning": (
+            None if count >= 30 else f"muestra insuficiente: N={count} < 30"
+        ),
+    }
+
+
+__all__ = ["monte_carlo", "multiverse_by_trade"]

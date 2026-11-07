@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 import pandas as pd
@@ -15,6 +15,8 @@ class BacktestResult:
     trades: pd.DataFrame
     metrics: dict
     exposure: float
+    trade_pnls: list[float] = field(default_factory=list)
+    trade_days: list[str] = field(default_factory=list)
 
 
 def run(
@@ -46,6 +48,7 @@ def run(
     rows: list[dict] = []
     trades: list[dict] = []
     realized: list[float] = []
+    realized_days: list[str] = []
 
     for dt, bar in df.iterrows():
         px_open = float(bar["open"])
@@ -77,6 +80,7 @@ def run(
                 else:
                     pnl = (avg_cost - fill_px) * closing
                 realized.append(pnl - fee)
+                realized_days.append(dt.date().isoformat())
 
             new_shares = shares + delta
             if abs(new_shares) < 1e-9:
@@ -117,6 +121,8 @@ def run(
         trades=pd.DataFrame(trades),
         metrics=metrics,
         exposure=float(pos_target.abs().mean()),
+        trade_pnls=realized,
+        trade_days=realized_days,
     )
 
 

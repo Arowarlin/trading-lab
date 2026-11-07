@@ -1064,6 +1064,10 @@
         </div>
       </div>
       <div class="panel" style="margin-bottom:14px">
+        <div class="panel-head"><h2>Multiverse por operación</h2><span class="muted tiny">1.000 permutaciones · semilla 42 · no reordena días</span></div>
+        <div id="journal-multiverse"></div>
+      </div>
+      <div class="panel" style="margin-bottom:14px">
         <div class="panel-head"><h2>Agrupado</h2><span class="muted tiny" id="journal-group-meta"></span></div>
         <div id="journal-groups"></div>
       </div>
@@ -2763,6 +2767,48 @@ function populateJournalSelect(id, values, labelSin = "sin datos") {
   if ((values || []).includes(current)) select.value = current;
 }
 
+function multiverseCard(mv, label = "") {
+  if (!mv || mv.error) {
+    return `<div class="empty">${esc(mv?.error || "Sin datos")}</div>`;
+  }
+  const curves = mv.curves || {};
+  const series = [
+    { name: "p5", values: curves.p5 || [], color: "#f85149" },
+    { name: "p50", values: curves.p50 || [], color: "#58a6ff" },
+    { name: "p95", values: curves.p95 || [], color: "#3fb950" },
+  ];
+  const steps = (mv.steps || []).map((step) => `op ${step}`);
+  const metrics = [
+    ["Operaciones", num(mv.trades, 0)],
+    ["Paths / semilla", `${num(mv.paths, 0)} · ${num(mv.seed, 0)}`],
+    ["MaxDD esperado", pct(mv.expected_max_drawdown, 1)],
+    ["MaxDD mediano", pct(mv.median_max_drawdown, 1)],
+    ["Peor 5% MaxDD", pct(mv.p5_max_drawdown, 1)],
+    ["P(breach diario)", pct(mv.prob_breach_daily, 1)],
+    ["P(breach máximo)", pct(mv.prob_breach_max, 1)],
+    ["P(breach cualquiera)", pct(mv.prob_breach_any, 1)],
+    ["Final p5 / p50 / p95", `${money(mv.final_equity_p5)} · ${money(mv.final_equity_median)} · ${money(mv.final_equity_p95)}`],
+    ["Base diaria", esc(mv.daily_basis || "Sin datos")],
+  ];
+  return `<div class="multiverse-block" style="margin-bottom:14px">
+    ${label ? `<div class="muted tiny" style="margin-bottom:4px"><b>${esc(label)}</b> · ${esc(mv.rules || "")}</div>` : ""}
+    ${lineChart(series, { labels: steps, percent: true, zero: true, title: `Multiverse ${label}`, caption: `reordenamiento de operaciones · límite diario ${money(mv.daily_limit_usd)} · límite máximo ${money(mv.max_loss_usd)} (${esc(mv.max_loss_mode || "Sin datos")})` })}
+    <div class="metric-grid" style="margin-top:8px">${metrics.map(([key, value]) => `<div class="metric"><div class="l">${esc(key)}</div><div class="v" style="font-size:14px">${value}</div></div>`).join("")}</div>
+    ${mv.sample_warning ? `<div class="alert" style="margin-top:8px">${esc(mv.sample_warning)}</div>` : ""}
+  </div>`;
+}
+
+function renderJournalMultiverse(rows) {
+  const host = $("#journal-multiverse");
+  if (!host) return;
+  if (!rows || !rows.length) {
+    host.innerHTML = `<div class="empty">Sin datos: no hay cuentas con al menos 2 operaciones cerradas.</div>`;
+    return;
+  }
+  host.innerHTML = rows.map((mv) => multiverseCard(mv, mv.account || "Sin datos")).join("");
+}
+
+
 function renderJournal() {
   const payload = S.journal;
   if (!payload) return;
@@ -2884,6 +2930,7 @@ function renderJournal() {
     ]),
     { empty: "sin datos" }
   );
+  renderJournalMultiverse(payload.multiverse || []);
 }
 
 function resetJournalFilters() {
@@ -4113,6 +4160,7 @@ function showResearchDetail(row) {
       <div id="run-detail-equity"><div class="empty">Cargando artefacto…</div></div>
       <div id="run-detail-drawdown"></div>
       <div id="run-detail-stats"></div>
+      <div id="run-detail-multiverse" style="margin-top:12px"></div>
     </div>
     <h3 style="font-size:13px;margin:0 0 6px">Regímenes</h3>
     <div class="table-wrap"><table><thead><tr><th>Año</th><th class="num">n</th><th class="num">Retorno</th><th class="num">Sharpe</th><th class="num">MaxDD</th><th class="num">B&amp;H DD</th></tr></thead><tbody>${years}</tbody></table></div>
@@ -4126,11 +4174,13 @@ async function loadRunDetail(row) {
   const equityBox = $("#run-detail-equity");
   const drawdownBox = $("#run-detail-drawdown");
   const statsBox = $("#run-detail-stats");
+  const multiverseBox = $("#run-detail-multiverse");
   const status = $("#run-detail-status");
   if (!row.artifact) {
     if (equityBox) equityBox.innerHTML = `<div class="empty">sin datos</div>`;
     if (drawdownBox) drawdownBox.innerHTML = "";
     if (statsBox) statsBox.innerHTML = "";
+    if (multiverseBox) multiverseBox.innerHTML = `<div class="empty">Sin datos: sin artefacto.</div>`;
     if (status) status.textContent = "sin datos";
     return;
   }
@@ -4163,10 +4213,16 @@ async function loadRunDetail(row) {
       </div>`;
     }
     if (status) status.textContent = `artefacto · ${data.rows} barras`;
+    if (multiverseBox) {
+      multiverseBox.innerHTML = data.multiverse
+        ? multiverseCard(data.multiverse, "Multiverse por operación")
+        : `<div class="empty">${esc(data.multiverse_reason || "Sin datos: artefacto sin operaciones.")}</div>`;
+    }
   } catch (error) {
     if (equityBox) equityBox.innerHTML = `<div class="empty">sin datos</div>`;
     if (drawdownBox) drawdownBox.innerHTML = "";
     if (statsBox) statsBox.innerHTML = "";
+    if (multiverseBox) multiverseBox.innerHTML = `<div class="empty">Sin datos</div>`;
     if (status) status.textContent = "sin datos";
   }
 }

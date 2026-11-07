@@ -876,6 +876,29 @@ componentes del dashboard y la ausencia de URLs externas/CDNs.
 
 ---
 
+## 6h. Multiverse por operación (10.2)
+
+Monte Carlo que **reordena las operaciones, no los días**: 1.000 permutaciones
+con semilla fija `42`. Para cada path se calcula la curva de equity desde el
+capital de la cuenta y se comparan los límites efectivos.
+
+- Curvas **p5/p50/p95** y MaxDD esperado, mediano, peor 5% y peor observado.
+- Probabilidad de romper **límite diario**, **límite máximo** y **cualquiera**.
+  El límite diario conserva el número de operaciones por día original
+  (`bloques_por_dia`); si no hay días, evalúa la peor operación
+  (`por_operacion`). La base se muestra en la UI.
+- Visible en **Diario**, una simulación por cuenta, y en **Run Detail**.
+- Run Detail lee el sidecar `artifacts/<hash>.trades.parquet` que genera
+  `lab research` (PnL y día por operación). Los artefactos antiguos sin sidecar
+  muestran **Sin datos**; no se derivan operaciones de la curva de equity.
+- Sin datos si hay menos de 2 operaciones. N<30 se marca como muestra
+  insuficiente.
+
+Evidencia: `pytest tests/test_multiverse.py -q` → **7 passed**; suite completa
+**279 passed**; `ruff` limpio; `lab doctor` OK con avisos conocidos.
+
+---
+
 ## 7. Trading-R1 en Windows
 
 Trading-R1 usa `fcntl`, `os.O_NOFOLLOW` y `os.getuid()`: **no funciona en Windows**.

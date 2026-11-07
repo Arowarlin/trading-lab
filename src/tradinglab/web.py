@@ -63,6 +63,7 @@ from .operator import OperatorError, OperatorService
 from .orchestrator import load_bots
 from .profiles import load_profiles
 from .prop import AccountState, PropGuard, PropRules, from_yaml, ftmo
+from .prop.simulator import multiverse_by_trade
 from .reconciliation import last_reconciliation
 
 INDEX_FILE = Path(__file__).with_name("webui") / "index.html"
@@ -1504,6 +1505,87 @@ class LabData:
                 "buy_hold_total_return": float(buy_hold.iloc[-1] / buy_hold.iloc[0] - 1.0),
                 "buy_hold_max_drawdown": float(bh_dd.min()),
             },
+            **self._artifact_multiverse(path),
+        }
+
+    def _artifact_multiverse(self, path: Path) -> dict:
+        """Multiverse por operación si el artefacto tiene sidecar de trades."""
+        sidecar = path.with_suffix(".trades.parquet")
+        if not sidecar.is_file():
+            return {
+                "multiverse": None,
+                "multiverse_reason": (
+                    "Sin datos: artefacto sin operaciones "
+                    "(no existe .trades.parquet)"
+                ),
+                "artifact_trades": 0,
+            }
+        try:
+            frame = pd.read_parquet(sidecar)
+            if "pnl" not in frame.columns:
+                raise ValueError("sidecar sin columna pnl")
+            pnls = pd.to_numeric(frame["pnl"], errors="coerce").dropna().tolist()
+            days = (
+                frame["day"].astype(str).tolist()
+                if "day" in frame.columns
+                else []
+            )
+        except Exception as exc:
+            return {
+                "multiverse": None,
+                "multiverse_reason": f"Sin datos: sidecar inválido ({exc})",
+                "artifact_trades": 0,
+            }
+        if len(pnls) < 2:
+            return {
+                "multiverse": None,
+                "multiverse_reason": "Sin datos: menos de 2 operaciones",
+                "artifact_trades": len(pnls),
+            }
+        latest = _read_json(self.research_dir / "latest.json", {}) or {}
+        meta = latest.get("rules_meta") or {}
+        try:
+            if meta:
+                allowed = set(PropRules.__dataclass_fields__)
+                rules = PropRules(
+                    **{key: value for key, value in meta.items() if key in allowed}
+                )
+            else:
+                rules = from_yaml(
+                    self.settings.prop.firm,
+                    self.settings.prop.phase,
+                    self.settings.prop.account_size,
+                    buffer_pct=self.settings.prop.buffer_pct,
+                )
+        except Exception:
+            rules = ftmo(self.settings.prop.account_size, self.settings.prop.phase)
+        day_sizes: list[int] = []
+        if len(days) == len(pnls):
+            last = None
+            for day in days:
+                if day != last:
+                    day_sizes.append(0)
+                    last = day
+                day_sizes[-1] += 1
+        try:
+            multiverse = multiverse_by_trade(
+                rules,
+                pnls,
+                n_paths=1_000,
+                seed=42,
+                day_sizes=day_sizes or None,
+            )
+        except ValueError as exc:
+            return {
+                "multiverse": None,
+                "multiverse_reason": f"Sin datos: {exc}",
+                "artifact_trades": len(pnls),
+            }
+        return {
+            "multiverse": multiverse,
+            "multiverse_reason": None,
+            "artifact_trades": len(pnls),
+            "rules": rules.describe(),
         }
 
     # --------------------------------------------------------------- mercado

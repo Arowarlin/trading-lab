@@ -244,8 +244,17 @@ controladas, sin activar bots, sin órdenes, sin dinero real y sin tocar `.env`.
     por bot/cuenta/perfil/activo/día/hora; pestaña **Diario** en la consola.
   - Evidencia: `pytest tests/test_journal.py -q` → 7 passed; sobre el `lab.db`
     actual `lab journal` muestra “sin datos” (1 fill abierto, 0 cerradas).
-- [ ] **10.2 Multiverse por operación** — 1.000 reordenamientos, p5/p50/p95,
-  MaxDD esperado y probabilidad de límite; semilla fija y Run Detail.
+- [x] **10.2 Multiverse por operación** — 2026-11-07
+  - `multiverse_by_trade`: 1.000 permutaciones de las operaciones (no de los
+    días), semilla fija 42, curvas p5/p50/p95, MaxDD esperado/mediano/peor 5% y
+    probabilidad de breach diario, máximo y cualquiera.
+  - El límite diario conserva el número de operaciones por día original
+    (`bloques_por_dia`); sin días usa `por_operacion`. Se documenta la base.
+  - Visible en **Diario** (por cuenta) y **Run Detail**. Run Detail lee el
+    sidecar `.trades.parquet`; los artefactos antiguos sin sidecar muestran
+    **Sin datos**.
+  - Evidencia: `pytest tests/test_multiverse.py -q` → 7 passed; `lab research`
+    nuevo guarda sidecar de operaciones por artefacto.
 - [ ] **10.3 Deriva live vs backtest** — Sharpe/expectancy/slippage con IC y
   mínimo de operaciones; ok/vigilar/deriva.
 - [ ] **10.4 Salud de cuenta y libro de capital** — score 0–100 con desglose,
@@ -352,4 +361,5 @@ sin romper vistas ni añadir dependencias.
 | 2026-11-07 | 10.1 Diario | `pytest tests/test_journal.py -q` → 7 passed; `lab journal` → sin datos; README 6e |
 | 2026-11-07 | 11 Modo operador | `pytest tests/test_operator.py -q` → 11 passed; 2 pasos/PIN/keyring/auditoría; README 6f |
 | 2026-11-07 | 12 Shell consola | `pytest tests/test_console_shell.py -q` → 3 passed; `pytest -q` → 272 passed; 6 secciones, 14 vistas, dashboard; README 6g |
+| 2026-11-07 | 10.2 Multiverse | `pytest tests/test_multiverse.py -q` → 7 passed; `pytest -q` → 279 passed; 1.000 permutaciones, seed 42, Diario + Run Detail |
 |  |  |  |
