@@ -1261,9 +1261,28 @@ function grid(headers, rows, opts = {}) {
   return `<div class="table-wrap"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
 }
 
+let CSRF_TOKEN = "";
+
+async function ensureCsrf() {
+  if (CSRF_TOKEN) return CSRF_TOKEN;
+  const session = await getJSON("/api/session");
+  CSRF_TOKEN = session.csrf || "";
+  return CSRF_TOKEN;
+}
+
 async function getJSON(url, options) {
-  const response = await fetch(url, Object.assign({ cache: "no-store" }, options || {}));
+  const opts = Object.assign({ cache: "no-store" }, options || {});
+  const method = (opts.method || "GET").toUpperCase();
+  if (method !== "GET" && method !== "HEAD") {
+    const token = await ensureCsrf();
+    opts.headers = Object.assign({}, opts.headers || {}, { "X-CSRF-Token": token });
+  }
+  const response = await fetch(url, opts);
   const body = await response.json().catch(() => ({}));
+  if (response.status === 403 && method !== "GET" && method !== "HEAD" && !opts._csrfRetry) {
+    CSRF_TOKEN = "";
+    return getJSON(url, Object.assign({}, options || {}, { _csrfRetry: true }));
+  }
   if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`);
   return body;
 }
@@ -3284,6 +3303,7 @@ function init() {
   if (bar) bar.appendChild(dryBtn);
 
   loadAll();
+  ensureCsrf().catch(() => {});
   pollAction(true);
   S.refreshTimer = setInterval(() => { if (!document.hidden) loadAll(); }, 8000);
 }

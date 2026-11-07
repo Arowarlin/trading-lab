@@ -18,6 +18,7 @@ import json
 import math
 import os
 import re
+import secrets
 import sqlite3
 import subprocess
 import sys
@@ -54,6 +55,18 @@ from .reconciliation import last_reconciliation
 INDEX_FILE = Path(__file__).with_name("webui") / "index.html"
 TICKER_RE = re.compile(r"^[A-Z0-9][A-Z0-9.\-=^]{0,11}$")
 MAX_LOG_BYTES = 96 * 1024
+LOCAL_HOST = "127.0.0.1"
+# Única superficie de escritura de la consola. Cualquier ruta nueva debe
+# añadirse aquí y al test de auditoría; no hay endpoints de órdenes, de
+# activación de bots ni de edición de prop.yaml.
+WRITE_ROUTES = (
+    "/api/actions/dryrun",
+    "/api/actions/agent",
+    "/api/bots/evaluate",
+    "/api/bots/archive",
+    "/api/bots/restore",
+    "/api/bots/propose",
+)
 
 
 def compute_build_id(root: Path | None = None) -> str:
@@ -1482,6 +1495,8 @@ class DashboardServer(ThreadingHTTPServer):
     def __init__(self, address: tuple[str, int], data: LabData) -> None:
         super().__init__(address, DashboardHandler)
         self.data = data
+        # Token por proceso: sin él, cualquier POST se rechaza con 403.
+        self.csrf_token = secrets.token_urlsafe(32)
 
 
 class DashboardHandler(BaseHTTPRequestHandler):
@@ -1522,16 +1537,60 @@ class DashboardHandler(BaseHTTPRequestHandler):
         except ValueError:
             return {}
 
+    # ------------------------------------------------------------- seguridad
+
+    def _host_ok(self) -> bool:
+        """Solo se acepta Host=127.0.0.1 (con puerto opcional)."""
+        raw = (self.headers.get("Host") or "").strip()
+        if not raw:
+            return False
+        try:
+            return (urlparse(f"//{raw}").hostname or "") == LOCAL_HOST
+        except ValueError:
+            return False
+
+    def _origin_ok(self) -> bool:
+        """Si el navegador envía Origin, debe ser local; si no, manda el token."""
+        raw = self.headers.get("Origin")
+        if not raw:
+            return True
+        if raw == "null":
+            return False
+        try:
+            parsed = urlparse(raw)
+        except ValueError:
+            return False
+        return parsed.scheme in ("http", "https") and parsed.hostname == LOCAL_HOST
+
+    def _csrf_ok(self) -> bool:
+        supplied = self.headers.get("X-CSRF-Token") or ""
+        token = getattr(self.server, "csrf_token", "")
+        return bool(token) and secrets.compare_digest(supplied, token)
+
+    def _write_gate(self) -> str | None:
+        if not self._host_ok():
+            return "Host no permitido: usa 127.0.0.1"
+        if not self._origin_ok():
+            return "Origin no permitido"
+        if not self._csrf_ok():
+            return "CSRF token inválido"
+        return None
+
     # ------------------------------------------------------------------ rutas
 
     def do_GET(self) -> None:
         path = urlparse(self.path).path
+        if not self._host_ok():
+            self._error(403, "Host no permitido: usa 127.0.0.1")
+            return
         try:
             if path in ("/", "/index.html"):
                 if not INDEX_FILE.exists():
                     self._error(500, "Falta webui/index.html")
                     return
                 self._send(200, INDEX_FILE.read_bytes(), "text/html; charset=utf-8")
+            elif path == "/api/session":
+                self._json({"csrf": self.server.csrf_token})
             elif path == "/api/health":
                 self._json({"ok": True, "version": __version__, "build": BUILD_ID, "time": _now()})
             elif path == "/api/overview":
@@ -1597,8 +1656,14 @@ class DashboardHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         path = urlparse(self.path).path
         body = self._body()  # consumir siempre el cuerpo (keep-alive)
+        problem = self._write_gate()
+        if problem is not None:
+            self._error(403, problem)
+            return
         try:
-            if path == "/api/actions/dryrun":
+            if path not in WRITE_ROUTES:
+                self._error(404, "Ruta no encontrada")
+            elif path == "/api/actions/dryrun":
                 action, error = self.server.data.start_action("dryrun")
                 if error:
                     self._error(409, error)
