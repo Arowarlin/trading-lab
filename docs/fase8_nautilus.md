@@ -25,3 +25,13 @@ Mantener el backtester propio para F13 y research diario. Reevaluar Nautilus
 solo si se pasa a intradía, futuros con rollover o se necesita un motor de
 órdenes serio. Antes de tocar código, escribir una comparación de coste y una
 prueba de concepto aislada en venv aparte.
+
+## Cierre 2026-11-07
+
+- **No se adopta NautilusTrader ni se añade dependencia alguna.**
+- Se mantiene el backtester propio y el motor de órdenes actual.
+- Gate para reabrir: F13 en marcha + datos intradía reales + necesidad
+  demostrada de eventos/rollover; la PoC iría en un venv separado.
+- Evidencia: `pytest tests/test_engine_decision.py -q` → decisión y ausencia de
+  `nautilus`/`databento` en `pyproject.toml`.
+
