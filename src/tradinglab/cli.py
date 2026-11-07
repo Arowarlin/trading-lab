@@ -220,6 +220,44 @@ def version() -> None:
     console.print(f"TradingLab [bold]{__version__}[/bold] · Python {sys.version.split()[0]}")
 
 
+@app.command("instruments")
+def instruments_cmd(
+    asset_class: str = typer.Option(None, "--class", help="equity|forex|futures|cfd"),
+    validate: bool = typer.Option(False, "--validate", help="Validar el catálogo completo"),
+) -> None:
+    """Catálogo único de instrumentos por clase."""
+    from .instruments import catalog, validate_catalog
+
+    rows = catalog(asset_class)
+    t = Table(title=f"Catálogo de instrumentos ({len(rows)})")
+    for col in ("Símbolo", "Clase", "Fuente", "Sesión", "TZ", "Tick", "Contrato", "Tick $", "Lote"):
+        t.add_column(col, justify="right" if col in {"Tick", "Contrato", "Tick $", "Lote"} else "left")
+    for item in rows:
+        t.add_row(
+            item["symbol"],
+            item["asset_class"],
+            item["data_source"],
+            item["session"],
+            item["session_tz"],
+            f"{item['tick_size']:g}",
+            f"{item['contract_size']:g}",
+            f"{item['tick_value']:,.2f}" if item["tick_value"] is not None else "variable",
+            f"{item['min_lot']:g}/{item['lot_step']:g}/{item['max_lot']:g}",
+        )
+    console.print(t)
+    if validate:
+        result = validate_catalog()
+        if result["ok"]:
+            console.print(
+                f"[green]Catálogo OK[/green] · {result['count']} instrumentos · "
+                f"clases {', '.join(result['classes'])}"
+            )
+        else:
+            for error in result["errors"]:
+                console.print(f"[red]{error}[/red]")
+            raise typer.Exit(1)
+
+
 @app.command()
 def doctor(network: bool = typer.Option(False, "--network", help="Probar descarga de datos real")) -> None:
     """Comprueba que todo el entorno está listo."""

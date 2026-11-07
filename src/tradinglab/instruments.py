@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import asdict, dataclass, replace
 from math import floor
 from typing import Literal
 
-AssetClass = Literal["equity", "forex", "futures"]
+AssetClass = Literal["equity", "forex", "futures", "cfd"]
 
 
 class InstrumentError(ValueError):
@@ -30,6 +30,8 @@ class Instrument:
     lot_step: float = 0.01
     max_lot: float = 100.0
     session: str = "24/5"
+    session_tz: str = "UTC"
+    data_source: str = ""
     notes: str = ""
 
     # ------------------------------------------------------------------ básicos
@@ -151,7 +153,14 @@ class Instrument:
         if self.tick_value is not None:
             base += f" tick_value=${self.tick_value:,.2f}"
         base += f" lote={self.min_lot:g}/{self.lot_step:g}/{self.max_lot:g}"
+        base += f" fuente={self.data_source or 'sin datos'}"
+        base += f" sesión={self.session} {self.session_tz}"
         return base
+
+    def catalog_row(self) -> dict:
+        row = asdict(self)
+        row["pip_size"] = self.pip_size() if self.is_fx else None
+        return row
 
 
 # --------------------------------------------------------------------- registro
@@ -184,6 +193,49 @@ def list_instruments(asset_class: str | None = None) -> list[Instrument]:
     return items
 
 
+def catalog(asset_class: str | None = None) -> list[dict]:
+    """Catálogo serializable por clase, con fuente y horario."""
+    return [item.catalog_row() for item in list_instruments(asset_class)]
+
+
+def validate_catalog() -> dict:
+    """Valida que no haya huecos ni especificaciones imposibles."""
+    errors: list[str] = []
+    seen: set[str] = set()
+    for item in INSTRUMENTS.values():
+        if item.symbol in seen:
+            errors.append(f"{item.symbol}: símbolo duplicado")
+        seen.add(item.symbol)
+        if item.asset_class not in {"equity", "forex", "futures", "cfd"}:
+            errors.append(f"{item.symbol}: clase inválida {item.asset_class}")
+        if not item.data_source:
+            errors.append(f"{item.symbol}: falta data_source")
+        if not item.session:
+            errors.append(f"{item.symbol}: falta session")
+        if not item.session_tz:
+            errors.append(f"{item.symbol}: falta session_tz")
+        if item.tick_size <= 0:
+            errors.append(f"{item.symbol}: tick_size <= 0")
+        if item.contract_size <= 0:
+            errors.append(f"{item.symbol}: contract_size <= 0")
+        if item.min_lot <= 0 or item.lot_step <= 0:
+            errors.append(f"{item.symbol}: lote mínimo/step <= 0")
+        if item.max_lot < item.min_lot:
+            errors.append(f"{item.symbol}: max_lot < min_lot")
+        if item.asset_class == "futures" and item.tick_value is None:
+            errors.append(f"{item.symbol}: futuros sin tick_value")
+        if item.asset_class == "cfd" and item.tick_value is None:
+            # CFD puede usar tick_value del bróker; si falta, se marca.
+            errors.append(f"{item.symbol}: CFD sin tick_value verificado")
+    classes = sorted({item.asset_class for item in INSTRUMENTS.values()})
+    return {
+        "ok": not errors,
+        "count": len(INSTRUMENTS),
+        "classes": classes,
+        "errors": errors,
+    }
+
+
 # --- Forex -------------------------------------------------------------------
 # 1 lote = 100.000 unidades de la divisa base.
 for _sym, _quote, _tick in [
@@ -211,15 +263,35 @@ for _sym, _quote, _tick in [
             lot_step=0.01,
             max_lot=100.0,
             session="24/5",
+            session_tz="UTC",
+            data_source="mt5",
         )
     )
 
 # Metales spot (tratados como forex/CFD)
 register(
-    Instrument("XAUUSD", "forex", quote_ccy="USD", tick_size=0.01, contract_size=100, max_lot=50)
+    Instrument(
+        "XAUUSD",
+        "forex",
+        quote_ccy="USD",
+        tick_size=0.01,
+        contract_size=100,
+        max_lot=50,
+        session_tz="UTC",
+        data_source="mt5",
+    )
 )
 register(
-    Instrument("XAGUSD", "forex", quote_ccy="USD", tick_size=0.001, contract_size=5_000, max_lot=50)
+    Instrument(
+        "XAGUSD",
+        "forex",
+        quote_ccy="USD",
+        tick_size=0.001,
+        contract_size=5_000,
+        max_lot=50,
+        session_tz="UTC",
+        data_source="mt5",
+    )
 )
 
 # --- Futuros CME (Micro y completos) -----------------------------------------
@@ -254,6 +326,8 @@ for _sym, _tick, _tv, _mult, _max in _FUTURES:
             lot_step=1,
             max_lot=_max,
             session="24/5 (pausa diaria 17:00-18:00 ET)",
+            session_tz="America/New_York",
+            data_source="projectx",
         )
     )
 
@@ -270,6 +344,8 @@ for _sym in ["SPY", "QQQ", "IWM", "DIA", "NVDA", "AAPL", "MSFT", "TSLA", "AMZN",
             lot_step=1,
             max_lot=1_000_000,
             session="09:30-16:00 America/New_York",
+            session_tz="America/New_York",
+            data_source="yahoo",
         )
     )
 
@@ -279,7 +355,9 @@ __all__ = [
     "Instrument",
     "InstrumentError",
     "INSTRUMENTS",
+    "catalog",
     "register",
     "get_instrument",
     "list_instruments",
+    "validate_catalog",
 ]

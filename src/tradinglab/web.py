@@ -61,6 +61,7 @@ from .config import DEFAULT_DB, ROOT, Settings, get_settings
 from .drift import build_drift
 from .exports import list_exports, preview_file
 from .health import score_account, time_weighted_return
+from .instruments import catalog, validate_catalog
 from .journal import build_journal, load_closed_trades
 from .killswitch import load_state as load_killswitch
 from .learning import (
@@ -2320,6 +2321,11 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 self._json(self.server.data.risk())
             elif path == "/api/market":
                 self._json(self.server.data.market())
+            elif path == "/api/instruments":
+                self._json({
+                    "items": catalog(),
+                    "validation": validate_catalog(),
+                })
             elif path == "/api/calendar":
                 self._json(self.server.data.calendar())
             elif path == "/api/research/detail":

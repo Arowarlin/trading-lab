@@ -871,7 +871,7 @@ stdlib y `127.0.0.1`. Se conservan todas las pestañas, rutas, CSRF, Host/Origin
 y la lista blanca `WRITE_ROUTES`.
 
 Evidencia: `pytest tests/test_console_shell.py -q` → **3 passed**; suite completa
-**305 passed**; cubre las seis secciones, las 15 vistas actuales, los
+**307 passed**; cubre las seis secciones, las 15 vistas actuales, los
 componentes del dashboard y la ausencia de URLs externas/CDNs.
 
 ---
@@ -1031,6 +1031,25 @@ lab reports preview reports/exports/archivo.csv
 
 Evidencia: `pytest tests/test_exports.py -q` → **4 passed**; suite completa
 **305 passed**; `ruff` limpio; `lab doctor` OK con avisos conocidos.
+
+---
+
+## 6n. Catálogo único de instrumentos (6.4)
+
+`instruments.py` es el catálogo único por clase (`equity`, `forex`, `futures`,
+`cfd`). Cada instrumento declara tick, contrato, moneda, lote, **fuente de
+datos**, **sesión** y **zona horaria**.
+
+- `lab instruments [--class ...] [--validate]`.
+- `GET /api/instruments` y panel **Mercado → Catálogo único**.
+- `validate_catalog()` detecta duplicados, fuentes/sesiones vacías y
+  especificaciones imposibles; los futuros exigen `tick_value`.
+- CFD solo se registra con especificación verificada del bróker; no se inventan
+  índices, horarios ni tick values.
+- `get_instrument` conserva fuente/sesión al resolver sufijos de bróker.
+
+Evidencia: `pytest tests/test_instruments.py -q` → **9 passed**; suite completa
+**307 passed**; `ruff` limpio; `lab doctor` OK con avisos conocidos.
 
 ---
 

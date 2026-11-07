@@ -891,6 +891,11 @@
         <div id="market-table"></div>
         <div class="note"><strong>Solo caché local.</strong> Este módulo lee los parquet de <code>data/cache</code>; no descarga precios ni envía órdenes. Haz clic en una fila para ver el detalle.</div>
       </div>
+      <div class="panel" style="margin-bottom:14px">
+        <div class="panel-head"><h2>Catálogo único de instrumentos</h2><span class="muted tiny" id="market-catalog-meta"></span></div>
+        <div id="market-catalog"></div>
+        <div class="note">Fuente, sesión/zona, tick, contrato y lote por clase. CFD solo aparece con especificación verificada; no se inventan.</div>
+      </div>
       <div class="grid-2 equal">
         <div class="panel">
           <div class="panel-head"><h2>Calendario macro</h2><span class="muted tiny" id="market-calendar-meta"></span></div>
@@ -1410,6 +1415,7 @@ const S = {
   drift: null,
   learning: null,
   reports: [],
+  instruments: null,
   market: null,
   calendar: null,
   decisions: null,
@@ -1641,6 +1647,7 @@ function switchView(view, updateHash = true) {
   if (updateHash) history.replaceState(null, "", "#" + view);
   if (view === "overview") requestAnimationFrame(drawEquity);
   if (view === "market") renderMarket();
+  if (view === "market") renderMarketCatalog();
   if (view === "fund") renderFund();
   if (view === "journal") loadJournal();
   if (view === "operator") loadOperator();
@@ -1673,13 +1680,14 @@ async function loadAll(manual = false) {
   const button = $("#refresh-btn");
   button.disabled = true;
   $("#refresh-label").textContent = "Actualizando…";
-  const [overviewResult, riskResult, accountsResult, fundResult, operatorResult, driftResult] = await Promise.allSettled([
+  const [overviewResult, riskResult, accountsResult, fundResult, operatorResult, driftResult, instrumentsResult] = await Promise.allSettled([
     getJSON("/api/overview"),
     getJSON("/api/risk"),
     getJSON("/api/accounts"),
     getJSON("/api/fund"),
     getJSON("/api/operator"),
     getJSON("/api/drift"),
+    getJSON("/api/instruments"),
   ]);
   if (overviewResult.status === "fulfilled") {
     const newBuild = overviewResult.value?.meta?.build;
@@ -1723,6 +1731,10 @@ async function loadAll(manual = false) {
   if (driftResult.status === "fulfilled") {
     S.drift = driftResult.value;
     renderBotsDrift();
+  }
+  if (instrumentsResult.status === "fulfilled") {
+    S.instruments = instrumentsResult.value;
+    renderMarketCatalog();
   }
   if (S.view === "journal") loadJournal();
   if (S.view === "learning") loadLearning();
@@ -3936,6 +3948,38 @@ function showCast(id) {
 }
 
 /* ---------------------------------------------------------------- mercado */
+function renderMarketCatalog() {
+  const host = $("#market-catalog");
+  if (!host) return;
+  const payload = S.instruments;
+  if (!payload) {
+    host.innerHTML = `<div class="empty">Sin datos de catálogo.</div>`;
+    return;
+  }
+  const validation = payload.validation || {};
+  if ($("#market-catalog-meta")) {
+    $("#market-catalog-meta").textContent = validation.ok
+      ? `${validation.count} instrumentos · clases ${(validation.classes || []).join(", ")}`
+      : `${validation.count || 0} instrumentos · ${ (validation.errors || []).length} errores`;
+  }
+  const rows = (payload.items || []).map((item) => [
+    `<b>${esc(item.symbol)}</b>`,
+    esc(item.asset_class),
+    esc(item.data_source || "Sin datos"),
+    esc(item.session || "Sin datos"),
+    esc(item.session_tz || "Sin datos"),
+    num(item.tick_size, 5),
+    num(item.contract_size, 2),
+    item.tick_value == null ? "variable" : money(item.tick_value),
+    `${num(item.min_lot, 2)}/${num(item.lot_step, 2)}/${num(item.max_lot, 0)}`,
+  ]);
+  host.innerHTML = (validation.ok ? "" : `<div class="alert red">${esc((validation.errors || []).join(" · "))}</div>`) + grid(
+    [{ label: "Símbolo" }, { label: "Clase" }, { label: "Fuente" }, { label: "Sesión" }, { label: "TZ" }, { label: "Tick", num: true }, { label: "Contrato", num: true }, { label: "Tick $", num: true }, { label: "Lote mín/step/máx", num: true }],
+    rows,
+    { empty: "Sin datos de catálogo." }
+  );
+}
+
 function renderMarket() {
   const m = S.market;
   if (!m) return;
