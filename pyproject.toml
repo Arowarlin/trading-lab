@@ -45,3 +45,10 @@ select = ["E4", "E7", "E9", "F", "I"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 norecursedirs = ["vendor", ".venv*", "data", "reports", "logs"]
+markers = [
+    "network: usa red real o loopback; se salta en CI",
+    "mt5: requiere MetaTrader5 o un terminal MT5",
+    "lmstudio: requiere LM Studio local",
+    "alpaca: requiere credenciales o red de Alpaca",
+    "credentials: requiere Windows Credential Manager real",
+]

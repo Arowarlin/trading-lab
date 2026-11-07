@@ -30,10 +30,11 @@ jobs:
         run: uv python install 3.13
 
       - name: Instalar dependencias
-        run: uv sync --frozen --extra dev
+        # tzdata viene en la extra mt5; Windows no trae la base IANA.
+        run: uv sync --frozen --extra dev --extra mt5
 
       - name: Lint
         run: uv run ruff check src tests scripts
 
       - name: Ejecutar tests
-        run: uv run pytest -q
+        run: uv run pytest -q -m "not network and not mt5 and not lmstudio and not alpaca and not credentials"

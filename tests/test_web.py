@@ -196,6 +196,7 @@ def test_accion_valida_ticker(tmp_path: Path) -> None:
     assert "inválido" in (error or "")
 
 
+@pytest.mark.network
 def test_servidor_http_responde(tmp_path: Path) -> None:
     data = _data(tmp_path)
     server = web.DashboardServer(("127.0.0.1", 0), data)
