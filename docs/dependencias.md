@@ -36,6 +36,11 @@ Extra `mt5`: `MetaTrader5==5.0.6231`, `tzdata==2026.6`.
 |---|---|---|---|
 | restic | 0.19.1 | BSD-2-Clause | propuesta para backup cifrado externo |
 | Kopia | 0.23.1 | Apache-2.0 | alternativa con GUI |
+| ib_async | 2.1.0 | BSD-2-Clause | Fase 6; requiere IB Gateway/TWS y cuenta paper |
+| nautilus_trader | 1.231.0 | LGPL-3.0 | Fase 8; no hay v2 estable en PyPI; esperar |
+| pyqlib | 0.9.7 | MIT | Fase 7; venv aparte, no romper `.venv` |
+| quantstats | 0.0.86 | Apache-2.0 | Fase 3; pendiente de evaluar |
+| optuna | 5.0.0 | MIT | Fase 3; pendiente de evaluar |
 
 ## Notas
 

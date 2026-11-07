@@ -140,6 +140,7 @@ Reglas de trabajo:
 
 - [ ] **6.1 IBKR paper** con `ib_async` verificado, guard de identidad, stop
   obligatorio y cierre permitido; CFD solo si se confirma disponibilidad.
+  - Evaluación hecha en `docs/fase6_multimercado.md`; sin cuenta/confirmación.
 - [ ] **6.2 CFD vía MT5** con especificaciones y horarios.
 - [ ] **6.3 Futuros**: preset Topstep, MLL y barras continuas con rollover.
 - [ ] **6.4 Catálogo único** de instrumentos por clase.
@@ -153,11 +154,13 @@ Reglas de trabajo:
 - [ ] **7.2 Reentrenamiento walk-forward** (LightGBM u otro), `model_registry`,
   campeón/retador y evaluación de Qlib en venv aparte.
 - [ ] **7.3 Límites**: versionado, capital máximo por agente y rollback.
+  - Evaluación en `docs/fase7_aprendizaje.md`.
 
 ## Fase 8 — Motor de eventos (opcional)
 
-- [ ] **8.1 Comparación escrita** NautilusTrader v2/IBKR/Databento, coste de
-  migración; no tocar código hasta aprobación.
+- [x] **8.1 Comparación escrita** — 2026-11-07
+  - `docs/fase8_nautilus.md`: NautilusTrader 1.231.0, LGPL-3.0, sin v2 estable;
+    se mantiene el backtester propio hasta que F13/intradía lo justifiquen.
 
 ## Registro de evidencias
 
