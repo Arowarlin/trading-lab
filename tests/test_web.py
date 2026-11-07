@@ -3,13 +3,16 @@ from __future__ import annotations
 import json
 import threading
 import urllib.request
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import pandas as pd
 import pytest
 
 from tradinglab import web
 from tradinglab.config import Settings
 from tradinglab.db import connect, init_db, utcnow
+from tradinglab.intel.calendar import add_calendar_event
 
 
 def _data(tmp_path: Path, db: Path | None = None) -> web.LabData:
@@ -27,6 +30,9 @@ def test_index_disponible() -> None:
     assert "TradingLab Console" in text
     assert "/api/overview" in text
     assert "equity-canvas" in text
+    assert "view-market" in text
+    assert "view-repos" in text
+    assert "command-palette" in text
 
 
 def test_account_lee_sqlite(tmp_path: Path) -> None:
@@ -196,6 +202,67 @@ def test_accion_valida_ticker(tmp_path: Path) -> None:
     assert "inválido" in (error or "")
 
 
+def test_market_lee_cache_local(tmp_path: Path) -> None:
+    cache = tmp_path / "data" / "cache"
+    cache.mkdir(parents=True)
+    close = [100 + i for i in range(40)]
+    idx = pd.bdate_range("2026-01-01", periods=40)
+    frame = pd.DataFrame({"close": close}, index=idx)
+    frame.to_parquet(cache / "SPY__2015-01-01__2026-11-07.parquet")
+
+    market = _data(tmp_path).market()
+    assert market["count"] == 1
+    assert market["error"] is None
+    row = market["rows"][0]
+    assert row["symbol"] == "SPY"
+    assert row["close"] == pytest.approx(139.0)
+    assert row["return_1d"] == pytest.approx(1 / 138)
+    assert len(row["spark"]) == 40
+    assert market["breadth"]["up"] == 1
+
+
+def test_calendar_lee_macro_events(tmp_path: Path) -> None:
+    db = tmp_path / "lab.db"
+    init_db(db)
+    future = datetime.now(UTC) + timedelta(days=5)
+    add_calendar_event(db, event="FOMC", ts_utc=future, importance="high")
+    calendar = _data(tmp_path, db=db).calendar()
+    assert calendar["status"] == "ok"
+    assert calendar["count"] == 1
+    assert calendar["events"][0]["event"] == "FOMC"
+
+
+def test_decisions_resume_rating(tmp_path: Path, monkeypatch) -> None:
+    db = tmp_path / "lab.db"
+    init_db(db)
+    with connect(db) as con:
+        con.execute(
+            "INSERT INTO decision_outcomes"
+            "(ts, ticker, decision_date, mode, rating, return_20d) VALUES(?,?,?,?,?,?)",
+            (utcnow(), "SPY", "2026-01-05", "lite", "Buy", 0.10),
+        )
+    monkeypatch.setattr("tradinglab.decisions.trend_target_at", lambda *a, **k: 1.0)
+    data = _data(tmp_path, db=db)
+    decision = data.decisions()
+    assert decision["total"] == 1
+    assert decision["rows"][0]["rating"] == "Buy"
+    assert decision["rows"][0]["hit_rate_20d"] == pytest.approx(1.0)
+    comparison = data.decisions_compare()
+    assert comparison["matched_n"] == 1
+    assert comparison["matched_llm_mean_20d"] == pytest.approx(0.10)
+    assert comparison["matched_buy_hold_mean_20d"] == pytest.approx(0.10)
+    assert comparison["matched_trend_mean_20d"] == pytest.approx(0.10)
+
+
+def test_repo_audit_licencias(tmp_path: Path) -> None:
+    audit = _data(tmp_path).repo_audit()
+    assert len(audit["repos"]) == 3
+    licenses = {repo["id"]: repo["license"] for repo in audit["repos"]}
+    assert licenses["autohedge"] == "MIT"
+    assert licenses["vibe-trading"] == "MIT"
+    assert licenses["fincept-terminal"] == "AGPL-3.0"
+
+
 @pytest.mark.network
 def test_servidor_http_responde(tmp_path: Path) -> None:
     data = _data(tmp_path)
@@ -212,6 +279,12 @@ def test_servidor_http_responde(tmp_path: Path) -> None:
             overview = json.load(response)
         assert overview["meta"]["mode"] == "paper"
         assert overview["account"]["equity"] == pytest.approx(100_000.0)
+        assert "market" in overview and "calendar" in overview and "repos" in overview
+
+        for path in ("/api/market", "/api/calendar", "/api/decisions", "/api/decisions/compare", "/api/repos"):
+            with urllib.request.urlopen(f"{base}{path}", timeout=5) as response:
+                payload = json.load(response)
+            assert isinstance(payload, dict)
 
         with urllib.request.urlopen(f"{base}/", timeout=5) as response:
             html = response.read().decode("utf-8")

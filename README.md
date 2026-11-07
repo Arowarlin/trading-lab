@@ -21,7 +21,7 @@ Entorno multi-bot de trading sobre **TradingAgents** y **Trading-R1**, con LLM l
 | F5 | Alpaca paper + ejecución | ✅ validado (cuenta ACTIVE, equity 100k) |
 | F6 | TradingAgents como fuente de señal | ✅ `lite` validado (77 s) · `deep` opcional |
 | F7 | Trading-R1 (informes/Telegram) | ⏳ requiere WSL |
-| F8 | Dashboard y observabilidad | ✅ `lab dashboard` (HTML) + `lab web` (panel en vivo con Sala de agentes) |
+| F8 | Dashboard y observabilidad | ✅ `lab dashboard` (HTML) + `lab web` (consola v2: mercado, research, decisiones, repos) |
 | F9 | Núcleo multi-activo (forex, futuros, acciones) | ✅ |
 | F10 | MT5: datos, sizing, órdenes, hora de servidor | ✅ demo validada (abrir/cerrar) |
 | F11 | Motor de reglas de fondeo (FTMO) | ✅ guard + Monte Carlo + fuente contrastada |
@@ -185,18 +185,25 @@ Qué muestra:
 
 | Pestaña | Contenido |
 |---|---|
-| **Resumen** | equity, cash, retorno, drawdown, curva de equity, estado de LM Studio/MT5/FTMO, tareas programadas, últimas decisiones y órdenes. |
+| **Resumen** | equity, cash, retorno, drawdown, curva de equity, pipeline datos→señal→riesgo→ejecución, calendario macro, estado de LM Studio/MT5/FTMO, tareas programadas, últimas decisiones y órdenes. |
+| **Mercado** | watchlist desde caché local, sparklines, breadth, retorno 1/5/20d y detalle por activo. **No descarga datos.** |
 | **Sala** | oficina pixel con los 10 roles de TradingAgents, estados en vivo, burbujas, tablero y acceso al detalle de cada rol. |
 | **Cuentas** | paper interno, Alpaca paper, FTMO demo y TopstepX/ProjectX, con equity, cash, posiciones y estado. |
 | **Bots** | catálogo, enabled/disabled, propuestas, evaluación con backtest, archivo reversible y última señal. |
 | **Agentes** | historial lite/deep con rating, confianza, duración y tesis; detalle en modal; runs deep en curso o terminados. |
-| **Research** | ranking, propuestas (`enabled: false`), casi propuestas y métricas OOS/DSR/PBO, walk-forward global y gate de regímenes. |
+| **Research** | ranking, PBO global y por activo, walk-forward, gate de regímenes, propuestas (`enabled: false`) y casi propuestas. Clic en una fila para el detalle. |
+| **Decisiones** | retorno forward por rating, hit rate y aviso de muestra insuficiente. |
 | **Riesgo** | guard de FTMO (colchón restante, suelos, límites usados), reglas activas, cuenta MT5 y estado de TopstepX/ProjectX. |
+| **Repos** | auditoría de AutoHedge, Vibe-Trading y FinceptTerminal: licencia, qué se adoptó y qué no. |
 | **Registros** | logs de dry-run, agentes, backups y tareas, con visor integrado. |
 
-La página se refresca sola cada **8 s**. El servidor escucha solo en
-**127.0.0.1** por defecto (no se publica en la red) y usa la biblioteca estándar
-de Python: no añade FastAPI/Flask ni CDNs externos.
+La página se refresca sola cada **8 s** (pausada si la pestaña está oculta). El
+servidor escucha solo en **127.0.0.1** por defecto (no se publica en la red) y
+usa la biblioteca estándar de Python: no añade FastAPI/Flask ni CDNs externos.
+
+La consola incluye una **paleta de comandos** con `Ctrl+K` para navegar, buscar
+activos de la watchlist y abrir el detalle de research. La barra de estado
+muestra modo, hora de Praga, datos, PBO/WF, commit git y última actualización.
 
 La gráfica de equity tiene rangos **1M/3M/6M/1A/Todo**, tooltip al pasar el
 ratón, eje de fechas, línea base y área. La pestaña **Cuentas** reúne las cuatro
@@ -233,6 +240,9 @@ Unregister-ScheduledTask -TaskName "TradingLab-Web" -Confirm:$false
   auditoría de `pixel-hedge-fund` (sin licencia; solo inspiración),
   `company-pixel-office` (MIT; idea de roster) y `FinRobot` (Apache-2.0;
   principio de cálculo determinista + narración LLM).
+- [`docs/auditoria-repos-2026-11-07.md`](docs/auditoria-repos-2026-11-07.md):
+  auditoría de AutoHedge (MIT), Vibe-Trading (MIT) y FinceptTerminal (AGPL-3.0);
+  qué se adoptó en la consola y qué se descartó por licencia o riesgo.
 - [`docs/backups.md`](docs/backups.md): keyring, restauración verificada,
   restic vs Kopia y copia externa cifrada.
 - [`docs/dependencias.md`](docs/dependencias.md): versiones verificadas y

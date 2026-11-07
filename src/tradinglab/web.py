@@ -24,13 +24,14 @@ import time
 import webbrowser
 from collections import Counter
 from dataclasses import asdict
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, unquote, urlparse
 
 import httpx
+import pandas as pd
 
 from . import __version__
 from .alerts import AlertConfig, last_alerts, last_heartbeat
@@ -59,8 +60,65 @@ SEVERITY_LABEL = {
     "breach": "BREACH",
 }
 
-
-# --------------------------------------------------------------------- utiles
+REPO_AUDIT = [
+    {
+        "id": "autohedge",
+        "name": "AutoHedge",
+        "url": "https://github.com/The-Swarm-Corporation/AutoHedge",
+        "license": "MIT",
+        "license_class": "permisiva",
+        "focus": "Pipeline de agentes Director → Quant → Risk → Execution y riesgo primero.",
+        "adopted": [
+            "Pipeline visual de decisión en el Resumen",
+            "Checklist de riesgo antes de cualquier apertura",
+            "Salida estructurada y logs auditables",
+        ],
+        "not_adopted": [
+            "Ejecución autónoma en Solana",
+            "Dependencias swarms/solders",
+            "Claves de wallet o exchanges",
+        ],
+        "decision": "Tomar el diseño de pipeline y la separación de responsabilidades; no ejecutar.",
+    },
+    {
+        "id": "vibe-trading",
+        "name": "Vibe-Trading",
+        "url": "https://github.com/HKUDS/Vibe-Trading",
+        "license": "MIT",
+        "license_class": "permisiva",
+        "focus": "Research Lab, Run Detail, Pixel Office, Alpha Zoo y paper/shadow trading.",
+        "adopted": [
+            "Detalle de research con PBO, walk-forward y regímenes",
+            "Mercado local con sparklines y detalle por activo",
+            "Paleta de comandos y navegación de terminal",
+        ],
+        "not_adopted": [
+            "Stack React/FastAPI (la consola actual usa stdlib)",
+            "Conectores de bróker y ejecución live",
+            "Dependencias externas nuevas",
+        ],
+        "decision": "Replicar la UX de investigación y terminal, no importar el stack.",
+    },
+    {
+        "id": "fincept-terminal",
+        "name": "Fincept Terminal",
+        "url": "https://github.com/Fincept-Corporation/FinceptTerminal",
+        "license": "AGPL-3.0",
+        "license_class": "copyleft fuerte",
+        "focus": "Terminal financiera nativa, módulos densos, editor de nodos y command center.",
+        "adopted": [
+            "Densidad visual de terminal profesional",
+            "Barra de estado y atajos de teclado",
+            "Módulos de mercado, research y sistema",
+        ],
+        "not_adopted": [
+            "Código C++/Qt (licencia AGPL)",
+            "Activos, iconos o marca Fincept",
+            "Cualquier dependencia o binario externo",
+        ],
+        "decision": "Tomar solo ideas de UX; no copiar código ni assets por la AGPL-3.0.",
+    },
+]
 
 
 def _now() -> str:
@@ -231,6 +289,10 @@ class LabData:
             "dryruns": self.dryruns(limit=10),
             "bots": self.bots(),
             "research": self.research(limit=15),
+            "market": self.market(),
+            "calendar": self.calendar(),
+            "decisions": self.decisions(),
+            "repos": self.repo_audit(),
             "logs": self.logs(limit=40),
             "action": self.action_status(),
         }
@@ -888,6 +950,214 @@ class LabData:
             "errors": latest.get("errors") or [],
         }
 
+    # --------------------------------------------------------------- mercado
+
+    def market(self, limit: int = 30) -> dict:
+        """Watchlist desde la caché local de parquet; nunca descarga datos."""
+
+        def collect() -> dict:
+            cache_dir = self.root / "data" / "cache"
+            out = {
+                "as_of": _now(),
+                "source": str(cache_dir),
+                "rows": [],
+                "count": 0,
+                "breadth": {"up": 0, "down": 0, "flat": 0, "avg_1d": None},
+                "error": None,
+            }
+            if not cache_dir.exists():
+                out["error"] = "sin caché local"
+                return out
+            newest: dict[str, Path] = {}
+            try:
+                files = list(cache_dir.glob("*.parquet"))
+            except OSError as exc:
+                out["error"] = str(exc)[:200]
+                return out
+            for path in files:
+                safe = path.name.split("__", 1)[0]
+                current = newest.get(safe)
+                if current is None or path.stat().st_mtime > current.stat().st_mtime:
+                    newest[safe] = path
+            rows = []
+            for safe, path in sorted(newest.items()):
+                try:
+                    frame = pd.read_parquet(path, columns=["close"])
+                    close = frame["close"].dropna().astype(float)
+                    if len(close) < 25:
+                        continue
+                    last = float(close.iloc[-1])
+
+                    def ret(days: int) -> float | None:
+                        if len(close) <= days:
+                            return None
+                        return last / float(close.iloc[-1 - days]) - 1.0
+
+                    def sma(days: int) -> float | None:
+                        if len(close) < days:
+                            return None
+                        return float(close.iloc[-days:].mean())
+
+                    sma20, sma50, sma200 = sma(20), sma(50), sma(200)
+                    trend = "mixed"
+                    if sma20 and sma50 and sma200:
+                        if last > sma20 > sma50 > sma200:
+                            trend = "up"
+                        elif last < sma20 < sma50 < sma200:
+                            trend = "down"
+                    last_ts = close.index[-1]
+                    as_of = (
+                        str(last_ts.date())
+                        if hasattr(last_ts, "date")
+                        else str(last_ts)
+                    )
+                    stale_days = None
+                    if hasattr(last_ts, "date"):
+                        stale_days = (datetime.now(UTC).date() - last_ts.date()).days
+                    symbol = safe[:-2] + "=X" if safe.endswith("_X") else safe
+                    rows.append(
+                        {
+                            "symbol": symbol,
+                            "safe": safe,
+                            "close": last,
+                            "return_1d": ret(1),
+                            "return_5d": ret(5),
+                            "return_20d": ret(20),
+                            "sma20": sma20,
+                            "sma50": sma50,
+                            "sma200": sma200,
+                            "trend": trend,
+                            "as_of": as_of,
+                            "stale_days": stale_days,
+                            "spark": [round(float(x), 6) for x in close.iloc[-60:].tolist()],
+                            "source_file": path.name,
+                        }
+                    )
+                except Exception:
+                    continue
+            rows = rows[:limit]
+            up = sum(1 for r in rows if (r["return_1d"] or 0) > 0)
+            down = sum(1 for r in rows if (r["return_1d"] or 0) < 0)
+            flat = len(rows) - up - down
+            avg = (
+                sum(float(r["return_1d"]) for r in rows if r["return_1d"] is not None)
+                / max(1, sum(1 for r in rows if r["return_1d"] is not None))
+                if rows
+                else None
+            )
+            out.update(
+                {
+                    "rows": rows,
+                    "count": len(rows),
+                    "breadth": {
+                        "up": up,
+                        "down": down,
+                        "flat": flat,
+                        "avg_1d": avg,
+                    },
+                }
+            )
+            return out
+
+        return self.cache.get("market", 60.0, collect)
+
+    # -------------------------------------------------------------- calendario
+
+    def calendar(self, days: int = 60) -> dict:
+        """Próximos eventos macro desde SQLite; no consulta Finnhub todavía."""
+        out = {
+            "status": "missing",
+            "events": [],
+            "count": 0,
+            "fetched_at": None,
+            "message": "",
+            "error": None,
+        }
+        if not self.db_path.exists():
+            out["error"] = "sin base de datos"
+            return out
+        try:
+            with contextlib.closing(_connect_ro(self.db_path)) as con:
+                cutoff = (datetime.now(UTC) + timedelta(days=days)).isoformat()
+                rows = con.execute(
+                    "SELECT event, ts_utc, importance, source FROM macro_events "
+                    "WHERE ts_utc >= ? AND ts_utc <= ? ORDER BY ts_utc LIMIT 30",
+                    (_now(), cutoff),
+                ).fetchall()
+                fetch = con.execute(
+                    "SELECT status, fetched_at, message FROM calendar_fetches "
+                    "ORDER BY id DESC LIMIT 1"
+                ).fetchone()
+            out["events"] = [
+                {
+                    "event": row["event"],
+                    "ts_utc": row["ts_utc"],
+                    "importance": row["importance"] or "medium",
+                    "source": row["source"] or "manual",
+                }
+                for row in rows
+            ]
+            out["count"] = len(out["events"])
+            if fetch:
+                out["status"] = str(fetch["status"])
+                out["fetched_at"] = fetch["fetched_at"]
+                out["message"] = str(fetch["message"] or "")
+            elif out["events"]:
+                out["status"] = "manual"
+            else:
+                out["status"] = "empty"
+        except sqlite3.Error as exc:
+            out["status"] = "unavailable"
+            out["error"] = str(exc)[:240]
+        return self.cache.get(f"calendar:{days}", 30.0, lambda: out)
+
+    # --------------------------------------------------------------- decisiones
+
+    def decisions(self) -> dict:
+        from .decisions import report
+
+        def collect() -> dict:
+            out = {"rows": [], "total": 0, "min_sample": 30, "error": None}
+            if not self.db_path.exists():
+                out["error"] = "sin base de datos"
+                return out
+            try:
+                rows = report(self.db_path)
+            except Exception as exc:
+                out["error"] = str(exc)[:240]
+                return out
+            out["rows"] = rows
+            out["total"] = sum(int(row.get("n") or 0) for row in rows)
+            return out
+
+        return self.cache.get("decisions", 60.0, collect)
+
+    def decisions_compare(self) -> dict:
+        """Comparación LLM/buy&hold/trend bajo demanda; cachea 5 minutos."""
+        from .decisions import compare
+
+        def collect() -> dict:
+            if not self.db_path.exists():
+                return {"error": "sin base de datos"}
+            try:
+                return compare(self.db_path, self.root / "data" / "cache")
+            except Exception as exc:
+                return {"error": str(exc)[:240]}
+
+        return self.cache.get("decisions_compare", 300.0, collect)
+
+    # ------------------------------------------------------------------- repos
+
+    def repo_audit(self) -> dict:
+        return {
+            "audited_at": "2026-11-07",
+            "policy": (
+                "Solo se reutiliza código MIT. De AGPL-3.0 se copian ideas de UX, "
+                "no código ni assets. Sin dependencias nuevas."
+            ),
+            "repos": REPO_AUDIT,
+        }
+
     # ------------------------------------------------------------------ bots
 
     def bots(self) -> list[dict]:
@@ -1175,6 +1445,16 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 self._json(self.server.data.overview())
             elif path == "/api/risk":
                 self._json(self.server.data.risk())
+            elif path == "/api/market":
+                self._json(self.server.data.market())
+            elif path == "/api/calendar":
+                self._json(self.server.data.calendar())
+            elif path == "/api/decisions":
+                self._json(self.server.data.decisions())
+            elif path == "/api/decisions/compare":
+                self._json(self.server.data.decisions_compare())
+            elif path == "/api/repos":
+                self._json(self.server.data.repo_audit())
             elif path == "/api/accounts":
                 self._json({"accounts": self.server.data.accounts()})
             elif path == "/api/bots":

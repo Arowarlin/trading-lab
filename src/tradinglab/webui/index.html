@@ -20,8 +20,10 @@
     --yellow: #d29922;
     --purple: #bc8cff;
     --cyan: #39c5cf;
+    --mono: "Cascadia Code", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
     --radius: 12px;
     --shadow: 0 10px 30px rgba(0,0,0,.25);
+    --grid: rgba(88,166,255,.045);
   }
   * { box-sizing: border-box; }
   html, body { height: 100%; }
@@ -59,6 +61,8 @@
   .nav-btn:hover { background: #151d27; color: var(--text); }
   .nav-btn.active { background: #172231; color: var(--text); box-shadow: inset 2px 0 0 var(--accent); }
   .nav-btn .ico { width: 18px; text-align: center; opacity: .9; }
+  .nav-label { color: #5f6c7b; font-size: 9.5px; letter-spacing: .16em; text-transform: uppercase; padding: 10px 11px 3px; }
+  .nav-label:first-child { padding-top: 0; }
   .side-status {
     margin-top: auto; border: 1px solid var(--border); background: var(--panel-2);
     border-radius: var(--radius); padding: 12px; display: flex; flex-direction: column; gap: 9px;
@@ -68,7 +72,7 @@
   .sidebar-footer { color: #63707f; font-size: 10.5px; line-height: 1.45; padding: 0 6px; }
 
   /* --------------------------------------------------------------- main */
-  main { flex: 1; min-width: 0; padding: 24px 28px 48px; max-width: 1500px; }
+  main { flex: 1; min-width: 0; padding: 24px 28px 30px; max-width: 1600px; }
   .topbar { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
   .topbar h1 { margin: 0; font-size: 22px; letter-spacing: -.2px; }
   .topbar .sub { margin: 3px 0 0; color: var(--muted); font-size: 12.5px; }
@@ -341,6 +345,77 @@
   .toast.show { opacity: 1; transform: none; }
   .toast.bad { border-color: #6b2a28; color: #ffb3ad; }
 
+  /* --------------------------------------------------------------- v2 pro */
+  .mono, .value, .num, .kpi .value, td.num, th.num { font-variant-numeric: tabular-nums; }
+  .mono { font-family: var(--mono); }
+  .view { animation: viewIn .18s ease; }
+  @keyframes viewIn { from { opacity: .55; transform: translateY(2px); } to { opacity: 1; transform: none; } }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-bottom: 14px; }
+  .statusbar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-top: 20px; padding: 9px 12px; border-top: 1px solid var(--border); color: #6f7d8d; font-size: 10.5px; }
+  .statusbar .ok { color: #7ee787; } .statusbar .bad { color: #ffb3ad; } .statusbar .warn { color: #e3b341; }
+  .statusbar b { color: #b8c4d1; font-weight: 600; }
+  .cmd-btn { display: inline-flex; align-items: center; gap: 8px; }
+  .kbd { font-family: var(--mono); font-size: 10px; color: #93a2b3; border: 1px solid var(--border); background: #0c1219; border-radius: 5px; padding: 1px 5px; }
+  .pipeline { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; padding: 4px 0 2px; }
+  .pipe-step { border: 1px solid var(--border-soft); background: var(--panel-2); border-radius: 9px; padding: 11px 12px; position: relative; overflow: hidden; }
+  .pipe-step::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 2px; background: #2a3644; }
+  .pipe-step.ok::before { background: var(--green); } .pipe-step.warn::before { background: var(--yellow); } .pipe-step.bad::before { background: var(--red); }
+  .pipe-step .n { color: #5f6c7b; font-size: 9px; letter-spacing: .14em; text-transform: uppercase; }
+  .pipe-step .t { font-weight: 600; font-size: 12.5px; margin-top: 2px; }
+  .pipe-step .d { color: var(--muted); font-size: 10.5px; margin-top: 3px; min-height: 15px; }
+  .calendar-list { display: flex; flex-direction: column; gap: 7px; }
+  .cal-item { display: grid; grid-template-columns: 88px 1fr auto; gap: 10px; align-items: center; border: 1px solid var(--border-soft); border-radius: 8px; padding: 9px 10px; background: var(--panel-2); }
+  .cal-item .when { color: #9ecbff; font-family: var(--mono); font-size: 10.5px; }
+  .cal-item .what { font-size: 12.5px; font-weight: 550; }
+  .cal-item .src { color: #64717f; font-size: 9.5px; margin-top: 1px; }
+  .imp-high { color: #ffb3ad; } .imp-medium { color: #e3b341; } .imp-low { color: #7ee787; }
+  .spark { width: 104px; height: 28px; display: block; overflow: visible; }
+  .spark.detail-spark { width: 100%; height: 120px; }
+  .spark polyline { vector-effect: non-scaling-stroke; }
+  .quote { font-family: var(--mono); font-size: 12.5px; }
+  .trend-up { color: #7ee787; } .trend-down { color: #ffb3ad; } .trend-mixed { color: #e3b341; }
+  .mover { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border-soft); font-size: 12px; }
+  .mover:last-child { border-bottom: 0; }
+  .breadth-bar { height: 8px; border-radius: 999px; overflow: hidden; display: flex; background: #1a222c; margin: 7px 0 5px; }
+  .breadth-bar i { display: block; height: 100%; }
+  .pbo-row { display: grid; grid-template-columns: 82px 1fr 48px; gap: 9px; align-items: center; margin: 4px 0; font-size: 11.5px; }
+  .pbo-track { height: 7px; border-radius: 999px; background: #1a222c; overflow: hidden; }
+  .pbo-fill { height: 100%; border-radius: 999px; background: var(--green); }
+  .pbo-fill.warn { background: var(--yellow); } .pbo-fill.bad { background: var(--red); }
+  .metric-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .metric { border: 1px solid var(--border-soft); background: var(--panel-2); border-radius: 8px; padding: 9px 10px; }
+  .metric .l { color: #6f7d8d; font-size: 9.5px; text-transform: uppercase; letter-spacing: .1em; }
+  .metric .v { font-size: 15px; font-weight: 650; margin-top: 2px; font-variant-numeric: tabular-nums; }
+  .heat { display: inline-block; min-width: 62px; text-align: right; padding: 2px 7px; border-radius: 6px; font-family: var(--mono); font-size: 11px; }
+  .heat.pos { background: rgba(63,185,80,.13); color: #7ee787; } .heat.neg { background: rgba(248,81,73,.13); color: #ffb3ad; } .heat.flat { background: #1a222c; color: #8b98a8; }
+  .repo-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; margin-bottom: 14px; }
+  .repo-card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 17px 18px; display: flex; flex-direction: column; gap: 9px; }
+  .repo-card .top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+  .repo-card h3 { margin: 0; font-size: 15px; }
+  .repo-card p { margin: 0; color: var(--muted); font-size: 11.5px; line-height: 1.5; }
+  .repo-card ul { margin: 0; padding-left: 16px; color: #b8c4d1; font-size: 11.5px; line-height: 1.55; }
+  .repo-card li { margin: 2px 0; } .repo-card .no { color: #8b98a8; }
+  .repo-card .decision { border-top: 1px solid var(--border-soft); padding-top: 9px; color: #9ecbff; font-size: 11px; }
+  .command { position: fixed; inset: 0; background: rgba(3,6,10,.68); backdrop-filter: blur(5px); display: none; place-items: start center; z-index: 90; padding: 12vh 18px 18px; }
+  .command.open { display: grid; }
+  .command-box { width: min(680px, 100%); background: #0e141b; border: 1px solid #2a3644; border-radius: 13px; box-shadow: 0 30px 90px rgba(0,0,0,.6); overflow: hidden; }
+  .command-head { display: flex; align-items: center; gap: 10px; padding: 13px 15px; border-bottom: 1px solid var(--border); }
+  .command-head input { flex: 1; appearance: none; border: 0; background: transparent; color: var(--text); font: inherit; font-size: 15px; outline: none; }
+  .command-list { max-height: 52vh; overflow: auto; padding: 7px; }
+  .command-item { display: flex; align-items: center; gap: 11px; width: 100%; border: 0; background: transparent; color: #c6d2de; text-align: left; padding: 10px 11px; border-radius: 8px; cursor: pointer; font: inherit; font-size: 12.5px; }
+  .command-item:hover, .command-item.active { background: #172231; color: var(--text); }
+  .command-item .kind { color: #64717f; font-size: 9.5px; text-transform: uppercase; letter-spacing: .1em; margin-left: auto; }
+  .command-empty { color: var(--muted); font-size: 12px; padding: 18px 12px; }
+  .detail-hero { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; border-bottom: 1px solid var(--border); padding-bottom: 12px; margin-bottom: 12px; }
+  .detail-hero .big { font-size: 26px; font-weight: 700; letter-spacing: -.5px; }
+  .detail-hero .sub { color: var(--muted); font-size: 11.5px; }
+  .list-tight { margin: 0; padding-left: 17px; color: #c6d2de; font-size: 12px; line-height: 1.6; }
+  .list-tight li { margin: 2px 0; }
+  @media (max-width: 1050px) {
+    .pipeline { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .grid-3 { grid-template-columns: 1fr; }
+  }
+
   /* --------------------------------------------------------------- responsive */
   @media (max-width: 1050px) {
     .grid-2, .grid-2.equal { grid-template-columns: 1fr; }
@@ -354,12 +429,18 @@
     .app { flex-direction: column; }
     .sidebar { width: 100%; flex: none; height: auto; position: static; padding: 14px; gap: 12px; }
     nav { flex-direction: row; overflow-x: auto; padding-bottom: 2px; }
+    .nav-label { display: none; }
     .nav-btn { width: auto; white-space: nowrap; }
     .side-status { flex-direction: row; flex-wrap: wrap; gap: 10px; margin-top: 0; }
     .sidebar-footer { display: none; }
     main { padding: 18px 14px 36px; }
     .topbar { flex-direction: column; }
     .top-actions { justify-content: flex-start; }
+    .pipeline { grid-template-columns: 1fr 1fr; }
+    .metric-grid { grid-template-columns: 1fr 1fr; }
+    .repo-grid { grid-template-columns: 1fr; }
+    .statusbar { gap: 8px; }
+    .command { padding-top: 8vh; }
     .bars { grid-template-columns: 1fr; }
     .office-wall { height: 170px; }
     .office-window { left: 4%; width: 52%; }
@@ -380,13 +461,19 @@
     </div>
 
     <nav id="nav">
+      <div class="nav-label">Operar</div>
       <button class="nav-btn active" data-view="overview"><span class="ico">◈</span> Resumen</button>
-      <button class="nav-btn" data-view="sala"><span class="ico">▦</span> Sala</button>
+      <button class="nav-btn" data-view="market"><span class="ico">▥</span> Mercado</button>
       <button class="nav-btn" data-view="accounts"><span class="ico">▤</span> Cuentas</button>
       <button class="nav-btn" data-view="bots"><span class="ico">⚙</span> Bots</button>
-      <button class="nav-btn" data-view="agents"><span class="ico">✦</span> Agentes</button>
+      <div class="nav-label">Investigar</div>
       <button class="nav-btn" data-view="research"><span class="ico">⌁</span> Research</button>
+      <button class="nav-btn" data-view="agents"><span class="ico">✦</span> Agentes</button>
+      <button class="nav-btn" data-view="sala"><span class="ico">▦</span> Sala</button>
+      <button class="nav-btn" data-view="decisions"><span class="ico">◫</span> Decisiones</button>
+      <div class="nav-label">Sistema</div>
       <button class="nav-btn" data-view="risk"><span class="ico">⛨</span> Riesgo</button>
+      <button class="nav-btn" data-view="repos"><span class="ico">⌘</span> Repos</button>
       <button class="nav-btn" data-view="logs"><span class="ico">▤</span> Registros</button>
     </nav>
 
@@ -405,7 +492,9 @@
         <p class="sub" id="page-sub">Estado general del laboratorio</p>
       </div>
       <div class="top-actions">
+        <button class="btn cmd-btn" id="cmd-open" title="Buscar o navegar (Ctrl+K)"><span class="kbd">Ctrl K</span> Buscar</button>
         <span class="clock" id="clock">—</span>
+        <span class="badge paper" id="session-badge">Praga —</span>
         <span class="badge paper" id="mode-badge">paper</span>
         <span class="badge" id="broker-badge">broker</span>
         <span class="action-pill" id="action-pill">Sin acciones</span>
@@ -417,6 +506,17 @@
     <section class="view active" id="view-overview">
       <div id="global-alert"></div>
       <div class="kpis" id="kpis"></div>
+
+      <div class="grid-2 equal">
+        <div class="panel">
+          <div class="panel-head"><h2>Pipeline de decisión</h2><span class="muted tiny">datos → señal → riesgo → ejecución</span></div>
+          <div class="pipeline" id="pipeline"></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h2>Calendario macro</h2><span class="muted tiny" id="calendar-meta"></span></div>
+          <div id="overview-calendar"></div>
+        </div>
+      </div>
 
       <div class="grid-2">
         <div class="panel">
@@ -464,6 +564,27 @@
       <div class="panel" style="margin-top:14px">
         <div class="panel-head"><h2>Actividad en vivo</h2><span class="muted tiny">señales · alertas · agentes</span></div>
         <div id="live-feed"></div>
+      </div>
+    </section>
+
+    <!-- ============================================================= MERCADO -->
+    <section class="view" id="view-market">
+      <div id="market-alert"></div>
+      <div class="stats" id="market-stats"></div>
+      <div class="panel" style="margin-bottom:14px">
+        <div class="panel-head"><h2>Watchlist local</h2><span class="muted tiny" id="market-meta"></span></div>
+        <div id="market-table"></div>
+        <div class="note"><strong>Solo caché local.</strong> Este módulo lee los parquet de <code>data/cache</code>; no descarga precios ni envía órdenes. Haz clic en una fila para ver el detalle.</div>
+      </div>
+      <div class="grid-2 equal">
+        <div class="panel">
+          <div class="panel-head"><h2>Calendario macro</h2><span class="muted tiny" id="market-calendar-meta"></span></div>
+          <div id="market-calendar"></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h2>Breadth de la watchlist</h2><span class="muted tiny">1 día</span></div>
+          <div id="market-breadth"></div>
+        </div>
       </div>
     </section>
 
@@ -582,9 +703,41 @@
       </div>
     </section>
 
+    <!-- =========================================================== DECISIONES -->
+    <section class="view" id="view-decisions">
+      <div class="note" style="margin:0 0 14px">
+        <strong>Resultados forward.</strong> Compara el rating del LLM con buy&hold y la señal trend en el CLI.
+        Aquí se muestra el retorno a 1/5/20 días por rating. Con menos de 30 decisiones se marca
+        <strong>muestra insuficiente</strong> y no se sacan conclusiones.
+      </div>
+      <div class="stats" id="decisions-stats"></div>
+      <div class="panel" style="margin-bottom:14px">
+        <div class="panel-head"><h2>Por rating</h2><span class="muted tiny" id="decisions-meta"></span></div>
+        <div id="decisions-table"></div>
+      </div>
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Comparación matched</h2>
+          <div style="display:flex;align-items:center;gap:9px"><span class="muted tiny">mismas fechas · 20d</span><button class="btn small" id="decisions-compare">Calcular</button></div>
+        </div>
+        <div id="decisions-baselines"></div>
+        <div class="note">El comando <code>lab decisions report</code> y este botón calculan LLM lite, buy&hold y señal trend sobre las mismas fechas, con hit rate y N comparable.</div>
+      </div>
+    </section>
+
     <!-- =========================================================== RESEARCH -->
     <section class="view" id="view-research">
       <div class="stats" id="research-stats"></div>
+      <div class="grid-2 equal" style="margin-bottom:14px">
+        <div class="panel">
+          <div class="panel-head"><h2>PBO por activo</h2><span class="muted tiny">CSCV · 16 bloques</span></div>
+          <div id="research-pbo"></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h2>Walk-forward global</h2><span class="muted tiny" id="research-wf-meta"></span></div>
+          <div id="research-wf"></div>
+        </div>
+      </div>
       <div class="panel" style="margin-bottom:14px">
         <div class="panel-head"><h2>Ranking de estrategias</h2><span class="muted tiny" id="research-meta"></span></div>
         <div id="research-top"></div>
@@ -629,6 +782,20 @@
       </div>
     </section>
 
+    <!-- ============================================================== REPOS -->
+    <section class="view" id="view-repos">
+      <div class="note" style="margin:0 0 14px">
+        <strong>Auditoría de referencia.</strong> AutoHedge y Vibe-Trading son MIT; FinceptTerminal es
+        <strong>AGPL-3.0</strong>. De Fincept se toman solo ideas de UX, no código ni assets.
+        Ninguna integración añade dependencias ni ejecuta órdenes.
+      </div>
+      <div class="repo-grid" id="repos-grid"></div>
+      <div class="panel">
+        <div class="panel-head"><h2>Mejoras aplicadas a la consola</h2><span class="muted tiny">TradingLab Console v2</span></div>
+        <div id="console-changelog"></div>
+      </div>
+    </section>
+
     <!-- ============================================================ REGISTROS -->
     <section class="view" id="view-logs">
       <div class="logs-layout">
@@ -642,7 +809,26 @@
         </div>
       </div>
     </section>
+    <footer class="statusbar">
+      <span>modo <b id="status-mode">paper</b></span>
+      <span>Praga <b id="status-prague">—</b></span>
+      <span>datos <b id="status-market">—</b></span>
+      <span>research <b id="status-research">—</b></span>
+      <span>git <b id="status-git">—</b></span>
+      <span style="margin-left:auto">actualizado <b id="status-generated">—</b></span>
+    </footer>
   </main>
+</div>
+
+<div class="command" id="command-palette">
+  <div class="command-box">
+    <div class="command-head">
+      <span class="mono" style="color:#64717f">⌘</span>
+      <input id="command-input" placeholder="Ir a… buscar activo, vista o acción" autocomplete="off" spellcheck="false">
+      <span class="kbd">Esc</span>
+    </div>
+    <div class="command-list" id="command-list"></div>
+  </div>
 </div>
 
 <div class="modal" id="modal">
@@ -660,6 +846,10 @@ const S = {
   overview: null,
   risk: null,
   accounts: [],
+  market: null,
+  calendar: null,
+  decisions: null,
+  repos: null,
   view: "overview",
   action: null,
   selectedLog: null,
@@ -669,16 +859,22 @@ const S = {
   chartHover: null,
   chartPoints: [],
   chartGeom: null,
+  commandItems: [],
+  commandFiltered: [],
+  commandIndex: 0,
 };
 
 const TITLES = {
   overview: ["Resumen", "Estado general del laboratorio"],
+  market: ["Mercado", "Watchlist desde caché local, breadth y calendario macro"],
   sala: ["Sala", "TradingAgents en su oficina: estados, runs y decisiones"],
   accounts: ["Cuentas", "Paper, Alpaca, MT5 y futuros"],
   bots: ["Bots", "Catálogo, estado y últimas señales"],
   agents: ["Agentes", "TradingAgents lite/deep y sus decisiones"],
-  research: ["Research", "Ranking, propuestas y casi propuestas"],
+  research: ["Research", "PBO, walk-forward, regímenes y propuestas"],
+  decisions: ["Decisiones", "Retorno forward del LLM por rating"],
   risk: ["Riesgo", "Guard de FTMO, cuenta MT5 y futuros"],
+  repos: ["Repos", "Auditoría de AutoHedge, Vibe-Trading y Fincept"],
   logs: ["Registros", "Dry-runs, agentes, backups y tareas"],
 };
 
@@ -733,6 +929,45 @@ function paramsText(params) {
   return Object.entries(params).map(([k, v]) => `${k}=${v}`).join(" ");
 }
 function ratioText(v) { return v === null || v === undefined ? "—" : (Number(v) * 100).toFixed(1) + "%"; }
+function sparkline(values, w = 104, h = 28) {
+  if (!Array.isArray(values) || values.length < 2) return `<span class="muted tiny">—</span>`;
+  const min = Math.min(...values), max = Math.max(...values);
+  const span = (max - min) || 1;
+  const pts = values.map((v, i) => {
+    const x = (i / (values.length - 1)) * w;
+    const y = h - ((v - min) / span) * h;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(" ");
+  const up = values[values.length - 1] >= values[0];
+  const color = up ? "#3fb950" : "#f85149";
+  return `<svg class="spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true"><polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.6"/></svg>`;
+}
+function heat(value) {
+  if (value === null || value === undefined || !isFinite(value)) return `<span class="heat flat">—</span>`;
+  const cls = value > 0 ? "pos" : value < 0 ? "neg" : "flat";
+  return `<span class="heat ${cls}">${pct(value, 1)}</span>`;
+}
+function importanceTag(value) {
+  const v = String(value || "medium").toLowerCase();
+  return `<span class="tag ${v === "high" ? "red" : v === "low" ? "green" : "yellow"}">${esc(v)}</span>`;
+}
+function pragueParts() {
+  try {
+    const now = new Date();
+    const text = now.toLocaleString("es-ES", { timeZone: "Europe/Prague", weekday: "short", hour: "2-digit", minute: "2-digit", hour12: false });
+    return { text, weekend: ["sáb", "dom", "sat", "sun"].includes(text.slice(0, 3).toLowerCase()) };
+  } catch (_) { return { text: "—", weekend: null }; }
+}
+function fmtDay(iso) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return esc(iso);
+  return d.toLocaleString("es-ES", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+}
+function listItems(items, empty = "Sin datos.") {
+  if (!items || !items.length) return `<div class="empty">${esc(empty)}</div>`;
+  return `<ul class="list-tight">${items.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>`;
+}
 function grid(headers, rows, opts = {}) {
   if (!rows.length) return `<div class="empty">${esc(opts.empty || "Sin datos.")}</div>`;
   const head = headers.map((h) => `<th class="${h.num ? "num" : ""} ${h.wrap ? "wrap" : ""}">${esc(h.label)}</th>`).join("");
@@ -765,6 +1000,9 @@ function switchView(view, updateHash = true) {
   $("#page-sub").textContent = sub;
   if (updateHash) history.replaceState(null, "", "#" + view);
   if (view === "overview") requestAnimationFrame(drawEquity);
+  if (view === "market") renderMarket();
+  if (view === "decisions") renderDecisions();
+  if (view === "repos") renderRepos();
   if (view === "sala") renderSala();
   if (view === "logs" && !S.selectedLog) selectLog();
 }
@@ -775,6 +1013,14 @@ function updateClock() {
   $("#clock").textContent = now.toLocaleString("es-ES", { dateStyle: "medium", timeStyle: "medium" });
   const office = $("#office-clock");
   if (office) office.textContent = now.toLocaleTimeString("es-ES", { hour12: false });
+  const pp = pragueParts();
+  const session = $("#session-badge");
+  if (session) {
+    session.textContent = `Praga ${pp.text.split(", ").pop()}${pp.weekend ? " · cerrado" : ""}`;
+    session.className = "badge " + (pp.weekend ? "warn" : "paper");
+  }
+  const statusPrague = $("#status-prague");
+  if (statusPrague) statusPrague.textContent = pp.text;
 }
 
 /* ------------------------------------------------------------------ load */
@@ -789,7 +1035,14 @@ async function loadAll(manual = false) {
   ]);
   if (overviewResult.status === "fulfilled") {
     S.overview = overviewResult.value;
+    S.market = S.overview.market || null;
+    S.calendar = S.overview.calendar || null;
+    S.decisions = S.overview.decisions || null;
+    S.repos = S.overview.repos || null;
     renderOverview();
+    renderMarket();
+    renderDecisions();
+    renderRepos();
     renderBots();
     renderAgents();
     renderSala();
@@ -822,7 +1075,39 @@ function updatePills() {
     mode.textContent = meta.mode;
     mode.className = "badge " + (meta.mode === "live" ? "live" : "paper");
     $("#broker-badge").textContent = "broker: " + meta.broker;
+    const pp = pragueParts();
+    const session = $("#session-badge");
+    if (session) {
+      session.textContent = `Praga ${pp.text.split(", ").pop()}${pp.weekend ? " · cerrado" : ""}`;
+      session.className = "badge " + (pp.weekend ? "warn" : "paper");
+    }
+    const statusMode = $("#status-mode");
+    if (statusMode) statusMode.textContent = meta.mode;
+    const statusPrague = $("#status-prague");
+    if (statusPrague) statusPrague.textContent = pp.text;
   }
+
+  const market = S.overview?.market;
+  const statusMarket = $("#status-market");
+  if (statusMarket) {
+    statusMarket.textContent = market ? `${market.count} activos` : "—";
+    statusMarket.className = market?.error ? "bad" : market ? "ok" : "";
+  }
+  const research = S.overview?.research;
+  const statusResearch = $("#status-research");
+  if (statusResearch) {
+    const verdict = research?.walk_forward?.verdict || "—";
+    statusResearch.textContent = research?.pbo ? `PBO ${pct(research.pbo.pbo, 1)} · WF ${verdict}` : "—";
+    statusResearch.className = verdict === "ok" ? "ok" : verdict === "debil" || verdict === "insuficiente" ? "warn" : "";
+  }
+  const git = S.overview?.git;
+  const statusGit = $("#status-git");
+  if (statusGit) {
+    statusGit.textContent = git?.commit ? `${git.branch}@${git.commit}${git.dirty ? " · dirty" : ""}` : "—";
+    statusGit.className = git?.dirty ? "warn" : git?.commit ? "ok" : "";
+  }
+  const statusGenerated = $("#status-generated");
+  if (statusGenerated) statusGenerated.textContent = S.overview?.generated_at ? dateTime(S.overview.generated_at) : "—";
 
   const llm = S.overview?.llm;
   if (llm) {
@@ -991,8 +1276,74 @@ function renderOverview() {
     { empty: "Sin órdenes todavía." }
   );
 
+  renderPipeline(o);
+  renderCalendarInto("#overview-calendar", o.calendar, 4);
+  const calMeta = $("#calendar-meta");
+  if (calMeta) {
+    const cal = o.calendar || {};
+    calMeta.textContent = cal.count ? `${cal.count} eventos · ${cal.status}` : (cal.error || cal.status || "sin eventos");
+  }
+
   renderLiveFeed(o);
   requestAnimationFrame(drawEquity);
+}
+
+function renderPipeline(o) {
+  const box = $("#pipeline");
+  if (!box) return;
+  const market = o.market || {};
+  const signals = o.account?.signals || [];
+  const prop = S.risk?.prop || {};
+  const orders = o.account?.orders || [];
+  const steps = [
+    {
+      n: "01 · datos",
+      t: `${market.count || 0} activos`,
+      d: market.error || (market.as_of ? `cache ${dateTime(market.as_of)}` : "sin caché"),
+      cls: market.error ? "bad" : market.count ? "ok" : "warn",
+    },
+    {
+      n: "02 · señal",
+      t: `${signals.length} señales`,
+      d: signals[0] ? `${signals[0].ticker} · ${signals[0].side}` : "sin señales recientes",
+      cls: signals.length ? "ok" : "warn",
+    },
+    {
+      n: "03 · riesgo",
+      t: prop.label || "guard",
+      d: prop.summary ? String(prop.summary).split("\n")[0].slice(0, 60) : "sin evaluación",
+      cls: prop.severity === "ok" ? "ok" : prop.severity ? "bad" : "warn",
+    },
+    {
+      n: "04 · ejecución",
+      t: `${orders.length} órdenes`,
+      d: o.meta?.mode === "paper" ? "paper · sin órdenes live" : "modo live bloqueado",
+      cls: o.meta?.mode === "paper" ? "ok" : "bad",
+    },
+  ];
+  box.innerHTML = steps.map((s) => `
+    <div class="pipe-step ${s.cls}">
+      <div class="n">${esc(s.n)}</div>
+      <div class="t">${esc(s.t)}</div>
+      <div class="d">${esc(s.d)}</div>
+    </div>`).join("");
+}
+
+function renderCalendarInto(selector, calendar, limit = 8) {
+  const box = $(selector);
+  if (!box) return;
+  const events = (calendar?.events || []).slice(0, limit);
+  if (!events.length) {
+    const msg = calendar?.error || (calendar?.status === "missing" ? "sin base de datos" : "sin eventos próximos");
+    box.innerHTML = `<div class="empty">${esc(msg)}</div>`;
+    return;
+  }
+  box.innerHTML = `<div class="calendar-list">${events.map((e) => `
+    <div class="cal-item">
+      <span class="when">${esc(fmtDay(e.ts_utc))}</span>
+      <div><div class="what">${esc(e.event)}</div><div class="src">${esc(e.source || "manual")}</div></div>
+      ${importanceTag(e.importance)}
+    </div>`).join("")}</div>`;
 }
 
 function renderLiveFeed(o) {
@@ -1724,6 +2075,185 @@ function showCast(id) {
   if (btn) btn.addEventListener("click", () => loadAgentReport(btn.dataset.file));
 }
 
+/* ---------------------------------------------------------------- mercado */
+function renderMarket() {
+  const m = S.market;
+  if (!m) return;
+  const rows = m.rows || [];
+  const breadth = m.breadth || {};
+  const stale = rows.filter((r) => (r.stale_days || 0) > 3).length;
+  $("#market-stats").innerHTML = [
+    { label: "Activos", value: fmtInt.format(m.count || 0) },
+    { label: "Suben / bajan", value: `${breadth.up || 0} / ${breadth.down || 0}`, cls: (breadth.up || 0) >= (breadth.down || 0) ? "pos" : "neg" },
+    { label: "Media 1d", value: pct(breadth.avg_1d, 2), cls: (breadth.avg_1d || 0) >= 0 ? "pos" : "neg" },
+    { label: "Datos > 3d", value: fmtInt.format(stale), cls: stale ? "neg" : "" },
+    { label: "Fuente", value: "cache local", cls: "" },
+  ].map((s) => `<div class="stat"><div class="label">${esc(s.label)}</div><div class="value ${s.cls || ""}" style="font-size:${s.label === "Fuente" ? "13px" : "20px"}">${esc(s.value)}</div></div>`).join("");
+
+  $("#market-meta").textContent = `${m.count || 0} activos · ${m.source || ""} · ${dateTime(m.as_of)}`;
+  const alert = $("#market-alert");
+  if (alert) {
+    alert.innerHTML = m.error
+      ? `<div class="alert red" style="margin-bottom:14px"><b>Mercado sin datos:</b> ${esc(m.error)}. Ejecuta <code>lab fetch</code> para poblar la caché.</div>`
+      : "";
+  }
+
+  const tableRows = rows.map((r) => [
+    `<b>${esc(r.symbol)}</b>`,
+    `<span class="quote">${money(r.close)}</span>`,
+    heat(r.return_1d), heat(r.return_5d), heat(r.return_20d),
+    `<span class="trend-${esc(r.trend || "mixed")}">${esc(r.trend || "mixed")}</span>`,
+    sparkline(r.spark),
+    `<span class="muted tiny">${esc(r.as_of || "—")}${r.stale_days ? ` · ${r.stale_days}d` : ""}</span>`,
+  ]);
+  $("#market-table").innerHTML = grid([
+    { label: "Activo" }, { label: "Precio", num: true }, { label: "1d", num: true },
+    { label: "5d", num: true }, { label: "20d", num: true }, { label: "Tendencia" },
+    { label: "60 sesiones" }, { label: "Datos" },
+  ], tableRows, { empty: "Sin parquet en data/cache. Ejecuta lab fetch." });
+  $$("#market-table tbody tr").forEach((tr, i) => {
+    if (!rows[i]) return;
+    tr.style.cursor = "pointer";
+    tr.addEventListener("click", () => showMarketDetail(rows[i]));
+  });
+
+  renderCalendarInto("#market-calendar", S.calendar, 12);
+  const calMeta = $("#market-calendar-meta");
+  if (calMeta) {
+    const cal = S.calendar || {};
+    calMeta.textContent = cal.count ? `${cal.count} eventos · ${cal.status}` : (cal.error || cal.status || "sin eventos");
+  }
+
+  const up = breadth.up || 0, down = breadth.down || 0, flat = breadth.flat || 0;
+  const total = Math.max(1, up + down + flat);
+  const movers = rows
+    .filter((r) => r.return_1d !== null && r.return_1d !== undefined)
+    .sort((a, b) => Math.abs(b.return_1d) - Math.abs(a.return_1d))
+    .slice(0, 6);
+  $("#market-breadth").innerHTML = `
+    <div class="breadth-bar" title="suben / planos / bajan">
+      <i style="width:${(up / total) * 100}%;background:var(--green)"></i>
+      <i style="width:${(flat / total) * 100}%;background:#3a4654"></i>
+      <i style="width:${(down / total) * 100}%;background:var(--red)"></i>
+    </div>
+    <div class="muted tiny" style="display:flex;justify-content:space-between"><span>${up} up</span><span>${flat} flat</span><span>${down} down</span></div>
+    <div style="margin-top:10px">${movers.map((r) => `
+      <div class="mover"><span><b>${esc(r.symbol)}</b> <span class="muted tiny">${money(r.close)}</span></span><span class="trend-${r.return_1d >= 0 ? "up" : "down"}">${pct(r.return_1d, 2)}</span></div>`).join("") || `<div class="empty">Sin movimientos.</div>`}</div>`;
+}
+
+function showMarketDetail(row) {
+  const years = row.sma200 ? (row.close > row.sma200 ? "sobre SMA200" : "bajo SMA200") : "SMA200 no disponible";
+  openModal(`${row.symbol} · detalle`, `
+    <div class="detail-hero">
+      <div><div class="big">${money(row.close)}</div><div class="sub">${esc(row.as_of || "—")} · ${esc(row.source_file || "")}</div></div>
+      <div><div class="sub">1d</div><div class="big ${row.return_1d >= 0 ? "trend-up" : "trend-down"}">${pct(row.return_1d, 2)}</div></div>
+      <div><div class="sub">20d</div><div class="big ${row.return_20d >= 0 ? "trend-up" : "trend-down"}">${pct(row.return_20d, 2)}</div></div>
+    </div>
+    <div style="margin:10px 0 14px">${sparkline(row.spark, 620, 120).replace('class="spark"', 'class="spark detail-spark"')}</div>
+    <div class="detail-grid">
+      <span class="k">SMA20</span><span>${money(row.sma20)}</span>
+      <span class="k">SMA50</span><span>${money(row.sma50)}</span>
+      <span class="k">SMA200</span><span>${money(row.sma200)}</span>
+      <span class="k">Tendencia</span><span class="trend-${esc(row.trend)}">${esc(row.trend)} · ${esc(years)}</span>
+      <span class="k">5d</span><span>${pct(row.return_5d, 2)}</span>
+      <span class="k">Antigüedad</span><span>${row.stale_days === null || row.stale_days === undefined ? "—" : row.stale_days + " días"}</span>
+      <span class="k">Archivo</span><span class="mono tiny">${esc(row.source_file)}</span>
+    </div>
+    <div class="note">Datos de la caché local; no se ha llamado a ningún proveedor ni se ha enviado una orden.</div>`);
+}
+
+/* -------------------------------------------------------------- decisiones */
+function renderDecisions() {
+  const d = S.decisions;
+  if (!d) return;
+  const rows = d.rows || [];
+  const insufficient = rows.filter((r) => r.insufficient).length;
+  const best = rows.slice().sort((a, b) => (b.hit_rate_20d || 0) - (a.hit_rate_20d || 0))[0];
+  $("#decisions-stats").innerHTML = [
+    { label: "Decisiones", value: fmtInt.format(d.total || 0) },
+    { label: "Ratings", value: fmtInt.format(rows.length) },
+    { label: "Grupos insuficientes", value: fmtInt.format(insufficient), cls: insufficient ? "warn" : "" },
+    { label: "Mejor hit 20d", value: best ? `${best.rating} · ${pct(best.hit_rate_20d, 1)}` : "—", cls: best && best.hit_rate_20d >= 0.5 ? "pos" : "" },
+  ].map((s) => `<div class="stat"><div class="label">${esc(s.label)}</div><div class="value ${s.cls || ""}" style="font-size:${s.label === "Mejor hit 20d" ? "14px" : "20px"}">${esc(s.value)}</div></div>`).join("");
+
+  $("#decisions-meta").textContent = d.error || `mínimo ${d.min_sample || 30} por grupo`;
+  const tableRows = rows.map((r) => [
+    ratingTag(r.rating), num(r.n, 0), pct(r.mean_1d, 2), pct(r.mean_5d, 2), pct(r.mean_20d, 2),
+    pct(r.hit_rate_20d, 1), r.insufficient ? `<span class="tag yellow">insuficiente</span>` : `<span class="tag green">ok</span>`,
+  ]);
+  $("#decisions-table").innerHTML = grid([
+    { label: "Rating" }, { label: "N", num: true }, { label: "1d", num: true }, { label: "5d", num: true },
+    { label: "20d", num: true }, { label: "Hit 20d", num: true }, { label: "Muestra" },
+  ], tableRows, { empty: d.error || "Sin decisiones con retorno a 20 días. Ejecuta lab decisions update." });
+
+  const total = Math.max(1, d.total || 0);
+  $("#decisions-baselines").innerHTML = rows.length ? rows.map((r) => `
+    <div class="pbo-row"><span>${esc(r.rating)}</span><div class="pbo-track"><div class="pbo-fill" style="width:${(r.n / total) * 100}%"></div></div><span class="num">${r.n}</span></div>`).join("") : `<div class="empty">Sin datos.</div>`;
+}
+
+async function loadDecisionCompare() {
+  const button = $("#decisions-compare");
+  if (button) { button.disabled = true; button.textContent = "Calculando…"; }
+  try {
+    const data = await getJSON("/api/decisions/compare");
+    renderDecisionCompare(data);
+  } catch (error) {
+    toast("No se pudo calcular la comparación: " + error.message, true);
+  } finally {
+    if (button) { button.disabled = false; button.textContent = "Calcular"; }
+  }
+}
+
+function renderDecisionCompare(d) {
+  const box = $("#decisions-baselines");
+  if (!box) return;
+  if (d.error) {
+    box.innerHTML = `<div class="alert red">${esc(d.error)}</div>`;
+    return;
+  }
+  if (!d.matched_n) {
+    box.innerHTML = `<div class="empty">Sin decisiones comparables todavía. Ejecuta <code>lab decisions update</code>.</div>`;
+    return;
+  }
+  const rows = [
+    ["LLM lite", d.matched_llm_mean_20d, d.matched_llm_hit_rate],
+    ["Buy & hold", d.matched_buy_hold_mean_20d, d.matched_buy_hold_hit_rate],
+    ["Señal trend", d.matched_trend_mean_20d, d.matched_trend_hit_rate],
+  ].map(([label, mean, hit]) => [
+    `<b>${esc(label)}</b>`, num(d.matched_n, 0), pct(mean, 2), pct(hit, 1),
+  ]);
+  box.innerHTML = grid(
+    [{ label: "Estrategia" }, { label: "N", num: true }, { label: "Retorno medio", num: true }, { label: "Hit rate", num: true }],
+    rows,
+    { empty: "Sin datos." }
+  ) + `<div class="note">${d.insufficient ? `<b>Muestra insuficiente:</b> ${esc(d.sample_warning || "")}.` : "Muestra comparable suficiente."} Cobertura trend: ${pct(d.trend_coverage, 0)} (${d.matched_n}/${d.n}).</div>`;
+}
+
+/* ------------------------------------------------------------------ repos */
+function renderRepos() {
+  const repos = S.repos?.repos || [];
+  if (!repos.length) return;
+  $("#repos-grid").innerHTML = repos.map((repo) => {
+    const licenseCls = repo.license === "MIT" ? "green" : "yellow";
+    return `<article class="repo-card">
+      <div class="top"><h3>${esc(repo.name)}</h3><span class="tag ${licenseCls}">${esc(repo.license)}</span></div>
+      <p>${esc(repo.focus)}</p>
+      <div><div class="muted tiny" style="text-transform:uppercase;letter-spacing:.1em">Adoptado</div>${listItems(repo.adopted)}</div>
+      <div><div class="muted tiny" style="text-transform:uppercase;letter-spacing:.1em">No adoptado</div>${listItems(repo.not_adopted)}</div>
+      <div class="decision">${esc(repo.decision)}</div>
+      <a href="${esc(repo.url)}" target="_blank" rel="noopener noreferrer">Ver repositorio ↗</a>
+    </article>`;
+  }).join("");
+  $("#console-changelog").innerHTML = listItems([
+    "Mercado local con sparklines, breadth y detalle por activo.",
+    "Calendario macro desde SQLite, sin llamadas a Finnhub todavía.",
+    "Research con PBO por activo, walk-forward y gate de regímenes.",
+    "Decisiones forward por rating con aviso de muestra insuficiente.",
+    "Paleta de comandos (Ctrl+K), navegación agrupada y barra de estado.",
+    "Auditoría de repositorios con licencias y política de reutilización.",
+  ]);
+}
+
 /* --------------------------------------------------------------- research */
 function renderResearch() {
   const r = S.overview?.research;
@@ -1746,6 +2276,27 @@ function renderResearch() {
   $("#research-meta").textContent = cfg.symbols
     ? `${cfg.symbols.join(", ")} · ${cfg.paths || 0} paths · OOS ${pct(cfg.holdout_fraction || 0, 0)} · DSR ≥ ${pct(cfg.min_dsr || 0.9, 0)} · PBO ≤ ${pct(cfg.max_pbo || 0.3, 0)} · WF ${wf.verdict || "—"}`
     : "";
+
+  const pboRows = [];
+  if (pbo.pbo !== undefined && pbo.pbo !== null) pboRows.push(["Global", pbo]);
+  Object.entries(r.pbo_by_symbol || {}).sort(([a], [b]) => a.localeCompare(b)).forEach(([symbol, payload]) => pboRows.push([symbol, payload]));
+  const maxPbo = cfg.max_pbo || 0.3;
+  $("#research-pbo").innerHTML = pboRows.length ? pboRows.map(([scope, payload]) => {
+    const value = Number(payload.pbo || 0);
+    const cls = value <= maxPbo ? "" : value <= 0.5 ? "warn" : "bad";
+    return `<div class="pbo-row"><span>${esc(scope)}</span><div class="pbo-track"><div class="pbo-fill ${cls}" style="width:${Math.min(100, value * 100)}%"></div></div><span class="num">${pct(value, 1)}</span></div>`;
+  }).join("") : `<div class="empty">PBO no disponible.</div>`;
+  $("#research-wf-meta").textContent = wf.verdict ? `veredicto ${wf.verdict}` : "no disponible";
+  $("#research-wf").innerHTML = wf.verdict ? `
+    <div class="metric-grid">
+      <div class="metric"><div class="l">Stitched Sharpe</div><div class="v">${num(wf.stitched_sharpe, 2)}</div></div>
+      <div class="metric"><div class="l">Folds positivos</div><div class="v">${pct(wf.frac_positive, 0)}</div></div>
+      <div class="metric"><div class="l">Eficiencia</div><div class="v">${num(wf.efficiency, 2)}</div></div>
+      <div class="metric"><div class="l">Rank mediano</div><div class="v">${pct(wf.median_rank_pct, 0)}</div></div>
+      <div class="metric"><div class="l">Estabilidad</div><div class="v">${pct(wf.stability, 0)}</div></div>
+      <div class="metric"><div class="l">Folds · variantes</div><div class="v">${num(wf.n_folds, 0)} · ${num(wf.n_variants, 0)}</div></div>
+    </div>
+    <div class="note">Eficiencia = mediana Sharpe(OOS)/Sharpe(IS) por fold. Estabilidad = misma variante elegida entre folds. El veredicto global condiciona todas las propuestas.</div>` : `<div class="empty">Walk-forward no disponible: muestra insuficiente.</div>`;
 
   const top = (r.results || []).map((row, i) => [
     String(i + 1), `<b>${esc(row.symbol)}</b>`, esc(row.strategy), `<span class="muted tiny">${esc(paramsText(row.params))}</span>`,
@@ -1781,6 +2332,58 @@ function renderResearch() {
     { label: "Trades", num: true }, { label: "Pasa", num: true }, { label: "Revienta", num: true }, { label: "OOS", num: true }, { label: "DSR", num: true }, { label: "Score", num: true },
     { label: "Regímenes" }, { label: "Motivo" },
   ], near, { empty: "Sin casi propuestas." });
+
+  [
+    ["#research-top", r.results || []],
+    ["#research-proposals", r.proposals || []],
+    ["#research-near", r.near_misses || []],
+  ].forEach(([selector, rows]) => {
+    $$(`${selector} tbody tr`).forEach((tr, i) => {
+      if (!rows[i]) return;
+      tr.style.cursor = "pointer";
+      tr.addEventListener("click", () => showResearchDetail(rows[i]));
+    });
+  });
+}
+
+function showResearchDetail(row) {
+  const wf = S.overview?.research?.walk_forward || {};
+  const pbo = S.overview?.research?.pbo || {};
+  const regimes = row.regime_report?.years || {};
+  const gate = row.regime_gate || {};
+  const failures = row.validation_failures || [];
+  const years = ["2018", "2020", "2022"].map((year) => {
+    const st = regimes[year] || {};
+    return `<tr><td>${year}</td><td>${num(st.n, 0)}</td><td>${heat(st.total_return)}</td><td>${num(st.sharpe, 2)}</td><td>${pct(st.max_drawdown, 1)}</td></tr>`;
+  }).join("");
+  openModal(`${row.symbol} · ${row.strategy}`, `
+    <div class="detail-hero">
+      <div><div class="big">${num(row.score, 3)}</div><div class="sub">score · ${row.exposure}× · ${row.num_trades} trades</div></div>
+      <div><div class="sub">DSR</div><div class="big">${pct(row.dsr, 1)}</div></div>
+      <div><div class="sub">PBO activo</div><div class="big">${pct(row.pbo_symbol, 1)}</div></div>
+      <div><div class="sub">Gate regímenes</div><div class="big ${gate.passed ? "trend-up" : "trend-down"}">${gate.passed ? "ok" : "no"}</div></div>
+    </div>
+    <div class="metric-grid" style="margin-bottom:12px">
+      <div class="metric"><div class="l">Pasa</div><div class="v">${pct(row.pass_rate, 1)}</div></div>
+      <div class="metric"><div class="l">Revienta</div><div class="v">${pct(row.breach_rate, 1)}</div></div>
+      <div class="metric"><div class="l">Pasa OOS</div><div class="v">${pct(row.oos_pass_rate, 1)}</div></div>
+      <div class="metric"><div class="l">Sharpe</div><div class="v">${num(row.sharpe, 2)}</div></div>
+      <div class="metric"><div class="l">MaxDD</div><div class="v">${pct(row.max_drawdown, 1)}</div></div>
+      <div class="metric"><div class="l">Familia</div><div class="v">${pct(row.family_median_pass, 1)}</div></div>
+      <div class="metric"><div class="l">PBO global</div><div class="v">${pct(pbo.pbo, 1)}</div></div>
+      <div class="metric"><div class="l">WF global</div><div class="v">${esc(wf.verdict || "—")}</div></div>
+      <div class="metric"><div class="l">WF estabilidad</div><div class="v">${pct(wf.stability, 0)}</div></div>
+    </div>
+    <div class="detail-grid" style="margin-bottom:12px">
+      <span class="k">Parámetros</span><span class="mono">${esc(JSON.stringify(row.params || {}))}</span>
+      <span class="k">Estado</span><span><span class="tag yellow">${esc(row.status || "—")}</span> · enabled: false</span>
+      <span class="k">Nota</span><span>${esc(row.note || "—")}</span>
+    </div>
+    <h3 style="font-size:13px;margin:0 0 6px">Regímenes</h3>
+    <div class="table-wrap"><table><thead><tr><th>Año</th><th class="num">n</th><th class="num">Retorno</th><th class="num">Sharpe</th><th class="num">MaxDD</th></tr></thead><tbody>${years}</tbody></table></div>
+    <div class="note">${gate.passed ? "Gate de regímenes aprobado." : `Gate bloqueado: ${esc((gate.reasons || []).join("; ") || "sin datos suficientes")}.`}</div>
+    ${failures.length ? `<h3 style="font-size:13px;margin:14px 0 6px">Motivos de bloqueo</h3>${listItems(failures)}` : ""}
+  `);
 }
 
 /* ------------------------------------------------------------------- risk */
@@ -2000,6 +2603,73 @@ function openModal(title, html) {
 }
 function closeModal() { $("#modal").classList.remove("open"); }
 
+/* --------------------------------------------------------- command palette */
+function commandItems() {
+  const items = [];
+  Object.entries(TITLES).forEach(([view, [title, sub]]) => {
+    items.push({ label: title, hint: sub, kind: "vista", run: () => switchView(view) });
+  });
+  items.push({ label: "Actualizar panel", hint: "recargar datos y estado", kind: "acción", run: () => loadAll(true) });
+  items.push({ label: "Ir a Research", hint: "PBO, walk-forward y propuestas", kind: "acción", run: () => switchView("research") });
+  (S.market?.rows || []).forEach((row) => {
+    items.push({ label: `${row.symbol} · ${money(row.close)}`, hint: `mercado · ${row.trend || "—"}`, kind: "activo", run: () => showMarketDetail(row) });
+  });
+  (S.overview?.research?.results || []).slice(0, 12).forEach((row) => {
+    items.push({ label: `${row.symbol} · ${row.strategy}`, hint: `research · score ${num(row.score, 3)}`, kind: "research", run: () => showResearchDetail(row) });
+  });
+  return items;
+}
+
+function openCommand() {
+  S.commandItems = commandItems();
+  S.commandIndex = 0;
+  $("#command-palette").classList.add("open");
+  $("#command-input").value = "";
+  renderCommand("");
+  setTimeout(() => $("#command-input").focus(), 30);
+}
+
+function closeCommand() {
+  $("#command-palette").classList.remove("open");
+}
+
+function renderCommand(query) {
+  const q = String(query || "").toLowerCase().trim();
+  const filtered = S.commandItems.filter((item) => `${item.label} ${item.hint}`.toLowerCase().includes(q)).slice(0, 24);
+  S.commandFiltered = filtered;
+  S.commandIndex = Math.min(S.commandIndex, Math.max(0, filtered.length - 1));
+  const box = $("#command-list");
+  if (!filtered.length) {
+    box.innerHTML = `<div class="command-empty">Sin resultados. Prueba “research”, “SPY” o “riesgo”.</div>`;
+    return;
+  }
+  box.innerHTML = filtered.map((item, i) => `
+    <button class="command-item ${i === S.commandIndex ? "active" : ""}" data-command="${i}">
+      <span>${esc(item.label)}</span><span class="kind">${esc(item.kind)}</span>
+    </button>`).join("");
+  $$("#command-list [data-command]").forEach((node) => {
+    node.addEventListener("click", () => runCommand(Number(node.dataset.command)));
+  });
+}
+
+function runCommand(index) {
+  const item = S.commandFiltered?.[index];
+  if (!item) return;
+  closeCommand();
+  item.run();
+}
+
+function bindCommand() {
+  $("#cmd-open").addEventListener("click", openCommand);
+  $("#command-input").addEventListener("input", (event) => { S.commandIndex = 0; renderCommand(event.target.value); });
+  $("#command-input").addEventListener("keydown", (event) => {
+    if (event.key === "ArrowDown") { event.preventDefault(); S.commandIndex = Math.min(S.commandIndex + 1, (S.commandFiltered?.length || 1) - 1); renderCommand($("#command-input").value); }
+    if (event.key === "ArrowUp") { event.preventDefault(); S.commandIndex = Math.max(0, S.commandIndex - 1); renderCommand($("#command-input").value); }
+    if (event.key === "Enter") { event.preventDefault(); runCommand(S.commandIndex); }
+  });
+  $("#command-palette").addEventListener("click", (event) => { if (event.target.id === "command-palette") closeCommand(); });
+}
+
 /* ----------------------------------------------------------------- toast */
 let toastTimer = null;
 function toast(message, bad = false) {
@@ -2014,6 +2684,7 @@ function toast(message, bad = false) {
 function init() {
   bindNav();
   bindChart();
+  bindCommand();
   renderSala();
   const initial = location.hash.replace("#", "");
   if (TITLES[initial]) switchView(initial, false);
@@ -2024,10 +2695,19 @@ function init() {
   $("#agent-ticker").addEventListener("keydown", (event) => { if (event.key === "Enter") startAction("agent"); });
   $("#evaluate-bots").addEventListener("click", evaluateBots);
   $("#propose-bot").addEventListener("click", proposeBot);
+  $("#decisions-compare").addEventListener("click", loadDecisionCompare);
   $("#reload-logs").addEventListener("click", () => { S.selectedLog = null; loadAll(true); });
   $("#modal-close").addEventListener("click", closeModal);
   $("#modal").addEventListener("click", (event) => { if (event.target.id === "modal") closeModal(); });
-  document.addEventListener("keydown", (event) => { if (event.key === "Escape") closeModal(); });
+  document.addEventListener("keydown", (event) => {
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+      event.preventDefault();
+      openCommand();
+    } else if (event.key === "Escape") {
+      closeModal();
+      closeCommand();
+    }
+  });
   window.addEventListener("resize", () => { if (S.view === "overview") drawEquity(); });
 
   // Botón de dry-run en la vista de agentes (creado dinámicamente en el DOM si no existe)
@@ -2041,7 +2721,7 @@ function init() {
 
   loadAll();
   pollAction(true);
-  S.refreshTimer = setInterval(() => loadAll(), 8000);
+  S.refreshTimer = setInterval(() => { if (!document.hidden) loadAll(); }, 8000);
 }
 
 document.addEventListener("DOMContentLoaded", init);
