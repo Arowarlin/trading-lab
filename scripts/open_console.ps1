@@ -43,16 +43,26 @@ function Test-Current([string]$Build) {
 }
 
 function Stop-OldServer {
-    $pattern = "web --no-open --port $Port"
+    # 1) Procesos del panel por línea de comandos (lab.exe y su hijo python.exe).
     Get-CimInstance Win32_Process |
         Where-Object {
             $_.ProcessId -ne $PID -and
             $_.CommandLine -and
             ($_.Name -eq "lab.exe" -or $_.Name -eq "python.exe") -and
-            $_.CommandLine -match [regex]::Escape($pattern)
+            $_.CommandLine -match 'lab\.exe"?\s+web(\s|"|$)' -and
+            $_.CommandLine -match '--no-open'
         } |
         ForEach-Object {
             Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
+        }
+    # 2) Cualquier python/lab que siga escuchando en el puerto (split-brain).
+    Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue |
+        Select-Object -ExpandProperty OwningProcess -Unique |
+        ForEach-Object {
+            $proc = Get-Process -Id $_ -ErrorAction SilentlyContinue
+            if ($proc -and $proc.ProcessName -in @("python", "lab")) {
+                Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+            }
         }
 }
 
@@ -88,10 +98,17 @@ if (-not (Test-Current $build)) {
         Show-Error "No existe $lab. Revisa la instalacion de TradingLab."
         exit 1
     }
+    $logDir = Join-Path $root "logs\web"
+    New-Item -ItemType Directory -Force -Path $logDir | Out-Null
+    $stdoutLog = Join-Path $logDir "server.log"
+    $stderrLog = Join-Path $logDir "server.err.log"
+    $env:PYTHONUNBUFFERED = "1"
     Start-Process -FilePath $lab `
         -ArgumentList @("web", "--no-open", "--port", "$Port") `
         -WorkingDirectory $root `
-        -WindowStyle Hidden | Out-Null
+        -WindowStyle Hidden `
+        -RedirectStandardOutput $stdoutLog `
+        -RedirectStandardError $stderrLog | Out-Null
 
     for ($i = 0; $i -lt 50; $i++) {
         Start-Sleep -Milliseconds 500

@@ -1919,7 +1919,20 @@ $rows = foreach ($n in $names) {
 
 class DashboardServer(ThreadingHTTPServer):
     daemon_threads = True
-    allow_reuse_address = True
+    # En Windows, allow_reuse_address=True permite que dos procesos escuchen el
+    # mismo puerto y el navegador acabe hablando con el servidor viejo.
+    # El panel es local y de un solo proceso: prohibimos el bind duplicado.
+    allow_reuse_address = False
+    allow_reuse_port = False
+
+    def handle_error(self, request, client_address) -> None:
+        """Silencia cortes normales del navegador; el resto sí se registra."""
+        exc = sys.exc_info()[1]
+        if isinstance(
+            exc, (ConnectionResetError, ConnectionAbortedError, BrokenPipeError)
+        ):
+            return
+        super().handle_error(request, client_address)
 
     def __init__(self, address: tuple[str, int], data: LabData) -> None:
         super().__init__(address, DashboardHandler)

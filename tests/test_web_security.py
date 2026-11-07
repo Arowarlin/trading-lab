@@ -74,6 +74,11 @@ def test_session_entrega_token_y_host_local(server) -> None:
     assert token == _token(server)  # estable dentro del proceso
 
 
+def test_no_permite_dos_servidores_en_el_mismo_puerto(server, tmp_path) -> None:
+    with pytest.raises(OSError):
+        web.DashboardServer(("127.0.0.1", server.server_address[1]), _data(tmp_path))
+
+
 def test_host_no_local_se_rechaza(server) -> None:
     status, payload = _request(
         server, "GET", "/api/health", headers={"Host": "evil.example"}

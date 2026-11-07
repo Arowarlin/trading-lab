@@ -2,6 +2,7 @@
 # No abre el navegador: la consola queda disponible en http://127.0.0.1:8420
 $ErrorActionPreference = "Continue"
 $env:PYTHONUTF8 = "1"
+$env:PYTHONUNBUFFERED = "1"
 
 $root = "E:\trading-lab"
 Set-Location $root
