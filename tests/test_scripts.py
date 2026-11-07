@@ -22,3 +22,24 @@ def test_calendar_csv_estructura():
         "event_id,currency,event,scheduled_at_utc,impact,"
         "blackout_before_min,blackout_after_min,source_url"
     )
+
+
+def test_open_console_y_acceso_directo():
+    script = (ROOT / "scripts" / "open_console.ps1").read_text(encoding="utf-8")
+    assert 'web", "--no-open"' in script
+    assert "api/health" in script
+    assert "8420" in script
+    assert "f13 status" not in script.lower()
+    assert "f13 freeze" not in script.lower()
+    assert "order" not in script.lower()
+
+    creator = (ROOT / "scripts" / "create_console_shortcut.ps1").read_text(encoding="utf-8")
+    assert "open_console.ps1" in creator
+    assert "TradingLab Console.lnk" in creator
+
+    shortcut = ROOT / "TradingLab Console.lnk"
+    assert shortcut.exists() and shortcut.stat().st_size > 0
+    blob = shortcut.read_bytes()
+    marker = "open_console.ps1"
+    assert marker.encode("utf-8") in blob or marker.encode("utf-16-le") in blob
+
