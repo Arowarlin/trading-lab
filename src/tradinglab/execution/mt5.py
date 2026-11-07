@@ -31,6 +31,21 @@ def _mt5():
     return mt5
 
 
+def server_offset_from_tick(tick_time: float, now: float) -> float | None:
+    """Deduce el offset del servidor MT5 a partir de un tick.
+
+    Un tick fresco cumple ``tick_time ≈ now + offset``. Se redondea a medias
+    horas y se exige un residuo pequeño. Los ticks viejos (raw negativo) se
+    rechazan: antes producían offsets negativos falsos al cerrar el mercado.
+    """
+    raw = float(tick_time) - float(now)
+    offset = round(raw / 1_800.0) * 0.5
+    residual = raw - offset * 3_600.0
+    if 0 <= offset <= 14 and abs(residual) < 300:
+        return offset
+    return None
+
+
 def normalize_volume(volume: float, min_lot: float, max_lot: float, step: float) -> float:
     """Ajusta el volumen al step del bróker, siempre hacia abajo y dentro de límites."""
     if volume <= 0:
@@ -166,12 +181,8 @@ class MT5Broker:
             t = mt5.symbol_info_tick(sym)
             if t is None or not t.time:
                 continue
-            raw = float(t.time) - now
-            offset = round(raw / 1_800.0) * 0.5
-            residual = raw - offset * 3_600.0
-            # Un tick fresco deja un residuo de segundos; si el mercado está
-            # cerrado el tick es viejo y no se puede deducir el desfase.
-            if abs(offset) <= 14 and abs(residual) < 300:
+            offset = server_offset_from_tick(t.time, now)
+            if offset is not None:
                 return offset
         return None
 
