@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  tests:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.13.7"
+          enable-cache: true
+
+      - name: Preparar Python 3.13
+        run: uv python install 3.13
+
+      - name: Instalar dependencias
+        run: uv sync --extra dev
+
+      - name: Ejecutar tests
+        run: uv run pytest -q
