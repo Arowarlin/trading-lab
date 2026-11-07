@@ -38,6 +38,7 @@ from .intel.calendar import (
     DbCalendarProvider,
     add_calendar_event,
     calendar_block_for_settings,
+    rules_from_settings,
 )
 from .intel.news import fetch_rss, news_count, recent_news, store_news
 from .killswitch import allows_order
@@ -52,6 +53,7 @@ from .reconciliation import last_reconciliation
 from .reconciliation import reconcile as reconcile_broker
 from .reporting import build_dashboard
 from .risk import check_order, size_position
+from .session import session_block
 from .strategies import STRATEGIES
 
 app = typer.Typer(
@@ -98,6 +100,13 @@ def _default_start() -> str:
 
 def _fmt_pct(value: float) -> str:
     return f"{value * 100:,.2f}%"
+
+
+def _session_reason(settings, delta: int, asset_class: str = "equity") -> str | None:
+    if delta <= 0:
+        return None
+    block = session_block(rules_from_settings(settings), asset_class=asset_class)
+    return block.reason if block.blocked else None
 
 
 # --------------------------------------------------------------------- helpers
@@ -476,6 +485,16 @@ def run(
             )
         )
         raise typer.Exit(1)
+    session_reason = _session_reason(settings, delta)
+    if session_reason:
+        console.print(
+            Panel(
+                f"FILTRO DE SESIÓN: {session_reason}\n"
+                "Solo se permiten cierres o reducciones de posición.",
+                style="bold red",
+            )
+        )
+        raise typer.Exit(1)
 
     console.print(
         Panel(
@@ -707,6 +726,16 @@ def agent_run(
         console.print(
             Panel(
                 f"BLACKOUT DE CALENDARIO: {blackout.reason}\n"
+                "Solo se permiten cierres o reducciones de posición.",
+                style="bold red",
+            )
+        )
+        raise typer.Exit(1)
+    session_reason = _session_reason(settings, delta)
+    if session_reason:
+        console.print(
+            Panel(
+                f"FILTRO DE SESIÓN: {session_reason}\n"
                 "Solo se permiten cierres o reducciones de posición.",
                 style="bold red",
             )
@@ -2109,6 +2138,21 @@ def mt5_run(
         if action in {"close", "hold"}:
             _record_signal(
                 inst.symbol, strategy, "sell" if signed > 0 else "buy", target, tick["bid"], action
+            )
+            return
+
+        session = session_block(rules, asset_class="forex")
+        if session.blocked:
+            console.print(f"[red]Filtro de sesión:[/red] {session.reason}")
+            _record_signal(
+                inst.symbol, strategy, "hold", target, tick["bid"], f"session: {session.reason}"
+            )
+            return
+        blackout = calendar_block_for_settings(DEFAULT_DB, settings)
+        if blackout.blocked:
+            console.print(f"[red]Blackout de calendario:[/red] {blackout.reason}")
+            _record_signal(
+                inst.symbol, strategy, "hold", target, tick["bid"], f"calendar: {blackout.reason}"
             )
             return
 

@@ -13,10 +13,11 @@ from .config import DEFAULT_DB, ROOT, Settings
 from .data import fetch
 from .db import connect, utcnow
 from .indicators import atr
-from .intel.calendar import calendar_block_for_settings
+from .intel.calendar import calendar_block_for_settings, rules_from_settings
 from .killswitch import allows_order
 from .killswitch import ensure as ensure_killswitch
 from .risk import check_order, size_position
+from .session import session_block
 from .strategies import STRATEGIES
 
 BOTS_FILE = ROOT / "config" / "bots.yaml"
@@ -116,6 +117,10 @@ def run_bot(
         tz=settings.timezone,
     )
     blackout = calendar_block_for_settings(DEFAULT_DB, settings)
+    session = session_block(
+        rules_from_settings(settings),
+        asset_class="equity",
+    )
 
     for ticker in spec.universe:
         try:
@@ -189,6 +194,17 @@ def run_bot(
             send_alert(
                 "calendar_block",
                 f"{spec.id}/{ticker}: {blackout.reason}",
+                severity="warning",
+            )
+            continue
+
+        if delta > 0 and session.blocked:
+            action.status = "bloqueado"
+            action.detail = f"sesión: {session.reason}"
+            actions.append(action)
+            send_alert(
+                "session_block",
+                f"{spec.id}/{ticker}: {session.reason}",
                 severity="warning",
             )
             continue

@@ -42,6 +42,9 @@ class PropRules:
 
     weekend_holding: bool = True
     news_blackout_min: int = 0
+    friday_close_utc: str = "20:00"
+    rollover_utc: str = "21:00"
+    rollover_blackout_min: int = 0
 
     buffer_pct: float = 0.10
     reset_time: str = "00:00"

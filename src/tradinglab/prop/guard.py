@@ -122,6 +122,8 @@ class PropGuard:
         new_position: bool = True,
         blocked_by_calendar: bool = False,
         calendar_reason: str = "",
+        blocked_by_session: bool = False,
+        session_reason: str = "",
     ) -> GuardReport:
         rules = self.rules
         daily_floor, max_floor = self.floors(state)
@@ -194,6 +196,13 @@ class PropGuard:
                 False,
                 "block",
                 f"blackout de calendario: {calendar_reason or 'evento macro pendiente'}",
+            )
+
+        if blocked_by_session:
+            return report(
+                False,
+                "block",
+                f"filtro de sesión: {session_reason or 'fuera de ventana'}",
             )
 
         if remaining <= 0.25 * rules.effective_daily_limit_usd:
