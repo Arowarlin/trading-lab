@@ -624,7 +624,8 @@ Get-ScheduledTask -TaskName "TradingLab-Backup" | Get-ScheduledTaskInfo
 ```
 
 Otras tareas activas: **`TradingLab-DryRun`** (L-V 22:15), **`TradingLab-Web`**
-(al iniciar sesión) y **`TradingLab-Intel`** (diaria 07:10).
+(al iniciar sesión), **`TradingLab-Intel`** (diaria 07:10) y
+**`TradingLab-Agents`** (L-V 22:45, lite sobre SPY/QQQ/NVDA, sin órdenes).
 
 Restaurar en un PC nuevo:
 

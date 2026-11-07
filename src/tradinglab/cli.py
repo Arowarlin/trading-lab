@@ -307,12 +307,14 @@ def doctor(network: bool = typer.Option(False, "--network", help="Probar descarg
             )
             health = mt5.connect()
             mt5.shutdown()
+            offset = health.get("server_utc_offset_hours")
+            offset_text = f"GMT{offset:+g}" if offset is not None else "GMT desconocido"
             table.add_row(
                 "MetaTrader 5",
                 OK if health["connected"] else WARN,
                 f"{health['server']} · {health['mode']} · equity={health['equity']:,.2f} "
                 f"· algo={'on' if health['trade_allowed'] else 'OFF'} "
-                f"· server GMT{health['server_utc_offset_hours']:+g}",
+                f"· {offset_text}",
             )
         except Exception as exc:
             table.add_row("MetaTrader 5", WARN, str(exc)[:160])
