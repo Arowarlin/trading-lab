@@ -155,6 +155,56 @@ def record_snapshot(
     return {"equity": equity, "daily_return": daily, "drawdown": drawdown, "spy_return": spy_return}
 
 
+def _percentile(values: list[float], q: float) -> float | None:
+    if not values:
+        return None
+    ordered = sorted(values)
+    index = min(len(ordered) - 1, max(0, int(round(q * (len(ordered) - 1)))))
+    return ordered[index]
+
+
+def execution_metrics(
+    db_path: str | Path,
+    *,
+    bot: str,
+    start_date: str,
+) -> dict:
+    """Slippage real vs señal y error de tamaño vs orden."""
+    init_db(db_path)
+    with connect(db_path) as con:
+        rows = con.execute(
+            "SELECT o.id, o.ts, o.ticker, o.side, o.qty, o.bot, f.price AS fill_price, f.qty AS fill_qty "
+            "FROM orders o JOIN fills f ON f.order_id = o.id "
+            "WHERE o.bot = ? AND o.ts >= ? ORDER BY o.id",
+            (bot, start_date),
+        ).fetchall()
+        metrics = []
+        for row in rows:
+            signal = con.execute(
+                "SELECT price FROM signals WHERE ticker = ? AND bot = ? AND ts <= ? "
+                "ORDER BY id DESC LIMIT 1",
+                (row["ticker"], bot, row["ts"]),
+            ).fetchone()
+            if not signal or not signal["price"] or not row["fill_price"]:
+                continue
+            sign = 1.0 if row["side"].lower() == "buy" else -1.0
+            slippage = (float(row["fill_price"]) / float(signal["price"]) - 1.0) * 10_000 * sign
+            metrics.append(
+                {
+                    "ticker": row["ticker"],
+                    "slippage_bps": slippage,
+                    "size_error": abs(float(row["fill_qty"]) - float(row["qty"])),
+                }
+            )
+    values = [m["slippage_bps"] for m in metrics]
+    return {
+        "fills": len(metrics),
+        "slippage_p50_bps": _percentile(values, 0.50),
+        "slippage_p95_bps": _percentile(values, 0.95),
+        "size_error_max": max((m["size_error"] for m in metrics), default=0.0),
+    }
+
+
 def signal_check(
     settings: Settings,
     spec,
@@ -209,6 +259,7 @@ __all__ = [
     "DEFAULT_CRITERIA",
     "config_check",
     "config_hash",
+    "execution_metrics",
     "freeze",
     "load_criteria",
     "record_snapshot",

@@ -25,6 +25,7 @@ from .decisions import record_decision, update_outcomes
 from .decisions import report as decisions_report
 from .execution import get_broker, get_mt5_broker, get_projectx_broker
 from .f13 import config_check as f13_config_check
+from .f13 import execution_metrics as f13_execution
 from .f13 import freeze as f13_freeze
 from .f13 import load_criteria as f13_criteria
 from .f13 import record_snapshot as f13_record
@@ -41,6 +42,7 @@ from .killswitch import reset as reset_killswitch
 from .llm import LLMClient
 from .orchestrator import load_bots, run_all, write_dry_run_log
 from .prop import AccountState, PropGuard, PropRules, from_yaml, ftmo, monte_carlo
+from .reconciliation import last_reconciliation
 from .reconciliation import reconcile as reconcile_broker
 from .reporting import build_dashboard
 from .risk import check_order, size_position
@@ -1313,8 +1315,65 @@ def f13_report_cmd() -> None:
         t.add_row("Trades backtest", str(backtest_metrics["num_trades"]))
     t.add_row("Snapshots", str(count))
     t.add_row("Órdenes del bot", str(orders))
+    exec_metrics = f13_execution(DEFAULT_DB, bot=row["bot"], start_date=row["start_date"])
+    t.add_row(
+        "Slippage p50 / p95",
+        f"{_fmt_pct((exec_metrics['slippage_p50_bps'] or 0) / 10_000)} / "
+        f"{_fmt_pct((exec_metrics['slippage_p95_bps'] or 0) / 10_000)}",
+    )
+    t.add_row("Error tamaño máx.", f"{exec_metrics['size_error_max']:g}")
     console.print(t)
     console.print("[dim]F13 no cambia enabled; el pilot solo se activa con aprobación humana.[/dim]")
+
+
+@f13_app.command("check")
+def f13_check_cmd() -> None:
+    """Comprueba las paradas duras de F13 y alerta si alguna falla."""
+    init_db(DEFAULT_DB)
+    row = f13_status(DEFAULT_DB)
+    if not row:
+        console.print("[yellow]F13 no iniciado; no hay paradas que comprobar.[/yellow]")
+        return
+
+    criteria = f13_criteria()
+    checks: list[tuple[str, bool, str]] = []
+    config = f13_config_check(DEFAULT_DB)
+    checks.append(("Hash de config", config["ok"], config["status"]))
+    ks = load_killswitch(DEFAULT_DB)
+    checks.append(("Kill-switch", not ks.active, ks.reason if ks.active else "inactivo"))
+    rec = last_reconciliation(DEFAULT_DB)
+    checks.append(
+        ("Reconciliación", bool(rec and rec.get("status") == "ok"), (rec or {}).get("status", "sin ejecutar"))
+    )
+    dryruns = sorted((ROOT / "data" / "dryrun").glob("dryrun_*.json"), reverse=True)
+    age_h = round((datetime.now().timestamp() - dryruns[0].stat().st_mtime) / 3600) if dryruns else 999
+    checks.append(("Ciclo diario", age_h <= 72, f"último hace {age_h} h"))
+
+    exec_metrics = f13_execution(DEFAULT_DB, bot=row["bot"], start_date=row["start_date"])
+    if exec_metrics["fills"]:
+        p50 = exec_metrics["slippage_p50_bps"] or 0.0
+        p95 = exec_metrics["slippage_p95_bps"] or 0.0
+        checks.append(
+            ("Slippage", p50 <= criteria["max_slippage_bps_p50"] and p95 <= criteria["max_slippage_bps_p95"],
+             f"p50={p50:.1f} bps · p95={p95:.1f} bps")
+        )
+        checks.append(
+            ("Tamaño", exec_metrics["size_error_max"] <= criteria["max_size_error_shares"],
+             f"error máx={exec_metrics['size_error_max']:g}")
+        )
+
+    t = Table(title="F13 · paradas duras")
+    t.add_column("Chequeo", style="bold")
+    t.add_column("Estado")
+    t.add_column("Detalle", overflow="fold")
+    for name, ok, detail in checks:
+        t.add_row(name, "[green]OK[/green]" if ok else "[red]FALLO[/red]", detail)
+    console.print(t)
+
+    failed = [name for name, ok, _ in checks if not ok]
+    if failed:
+        send_alert("f13_stop", f"Paradas duras F13: {', '.join(failed)}", severity="critical")
+        raise typer.Exit(1)
 
 
 @f13_app.command("signal-check")

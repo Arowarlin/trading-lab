@@ -746,9 +746,10 @@ se revisa. F13 nunca pasa a dinero real.
 ```powershell
 lab f13 status          # no iniciado + criterios
 lab f13 freeze          # congela hash/criterios; NO activa el bot
-lab f13 report          # snapshot + F13 vs SPY vs backtest
+lab f13 report          # snapshot + F13 vs SPY vs backtest + slippage
 lab f13 signal-check    # señal viva vs recalculada
 lab f13 config-check    # hash congelado vs actual
+lab f13 check           # paradas duras + alerta
 ```
 
 La activación del bot requiere aprobación humana explícita; `freeze` no cambia

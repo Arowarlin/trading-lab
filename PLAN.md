@@ -86,13 +86,14 @@ Reglas de trabajo:
   - `qqq-trend-f13` (QQQ, trend 50/200/200, exposición 0.35), `enabled: false`.
   - Justificación: mejor propuesta de research (21 trades, 65.5% pasa, 7.2%
     breach, 83.5% OOS). No se activa.
-- [ ] **2.3 Implementar medición automática de F13**
-  - Hecho: tablas `f13_config`/`f13_metrics`, `lab f13 status|freeze|report|
-    signal-check|config-check`, comparación con SPY y backtest.
-  - Pendiente: slippage real y tamaño real frente a lo calculado; paradas
-    automáticas conectadas a alertas.
-- [ ] **2.4 Presentar y esperar aprobación**
-  - No arrancar el paper sin confirmación explícita del usuario.
+- [x] **2.3 Implementar medición automática de F13** — 2026-11-07
+  - Tablas `f13_config`/`f13_metrics`, `lab f13 status|freeze|report|
+    signal-check|config-check|check`, comparación con SPY y backtest.
+  - Slippage real vs señal y error de tamaño; paradas duras con alerta.
+  - Evidencia: `pytest tests/test_f13.py -q` → 5 passed; `lab f13 check` no-op
+    porque F13 no ha iniciado.
+- [x] **2.4 Presentar y esperar aprobación** — pendiente de respuesta del usuario
+  - No se ha activado el paper. `qqq-trend-f13` sigue `enabled: false`.
 
 ## Fase 3 — Mejoras de lab research
 

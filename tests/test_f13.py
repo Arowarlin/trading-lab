@@ -8,6 +8,7 @@ from tradinglab.db import connect, init_db
 from tradinglab.f13 import (
     config_check,
     config_hash,
+    execution_metrics,
     freeze,
     load_criteria,
     record_snapshot,
@@ -53,6 +54,30 @@ def test_record_snapshot(tmp_path):
         row = con.execute("SELECT * FROM f13_metrics").fetchone()
     assert row["open_positions"] == 1
     assert row["notes"] == "qqq-trend-f13"
+
+
+def test_execution_metrics_slippage(tmp_path):
+    db = tmp_path / "lab.db"
+    init_db(db)
+    with connect(db) as con:
+        con.execute(
+            "INSERT INTO signals(ts, ticker, bot, side, strength, price, reason) "
+            "VALUES(?,?,?,?,?,?,?)",
+            ("2026-11-07T14:00:00+00:00", "QQQ", "qqq-trend-f13", "long", 1.0, 100.0, "test"),
+        )
+        con.execute(
+            "INSERT INTO orders(ts, ticker, side, qty, status, bot) VALUES(?,?,?,?,?,?)",
+            ("2026-11-07T14:30:00+00:00", "QQQ", "buy", 10, "filled", "qqq-trend-f13"),
+        )
+        order_id = con.execute("SELECT last_insert_rowid() AS id").fetchone()["id"]
+        con.execute(
+            "INSERT INTO fills(order_id, ts, qty, price, commission) VALUES(?,?,?,?,?)",
+            (order_id, "2026-11-07T14:30:00+00:00", 10, 101.0, 0.0),
+        )
+    metrics = execution_metrics(db, bot="qqq-trend-f13", start_date="2026-11-01")
+    assert metrics["fills"] == 1
+    assert metrics["slippage_p50_bps"] == pytest.approx(100.0)
+    assert metrics["size_error_max"] == pytest.approx(0.0)
 
 
 def test_signal_check_recalcula(monkeypatch, tmp_path):
