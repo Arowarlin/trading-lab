@@ -19,6 +19,7 @@ from .prop.rules import PropRules
 from .prop.simulator import monte_carlo
 from .strategies import STRATEGIES
 from .validation import cscv_pbo, returns_matrix
+from .walkforward import regime_gate, regime_report, walk_forward
 
 # Rejillas deliberadamente pequeñas: el objetivo es encontrar candidatos
 # robustos, no hacer fuerza bruta sobre miles de combinaciones (sobreajuste).
@@ -55,11 +56,16 @@ class ResearchConfig:
     min_dsr: float = 0.90
     wf_folds: int = 4
     min_wf_positive: int = 2
+    wf_train_len: int = 504
+    wf_test_len: int = 126
     # CSCV: 16 bloques -> 12.870 combinaciones. Se puede muestrear para tests.
     pbo_slices: int = 16
     pbo_max_combinations: int | None = None
     pbo_seed: int = 0
     max_pbo: float = 0.30
+    regime_years: tuple[int, ...] = (2018, 2020, 2022)
+    regime_min_obs: int = 20
+    regime_min_return: float = 0.0
     max_breach: float = 0.15
     holdout_fraction: float = 0.30
     exposures: list[float] = field(default_factory=lambda: [1.0, 0.5])
@@ -112,10 +118,16 @@ def _year_returns(returns) -> dict[str, float]:
 def _aligned_returns(
     series_by_variant: dict[str, pd.Series],
 ) -> tuple[np.ndarray, list[str]] | None:
-    """Alinea series diarias por fecha y devuelve una matriz (T, N).
+    """Construye la matriz común (T, N) de retornos diarios netos.
 
-    La intersección de fechas evita rellenar huecos con ceros: un día sin dato
-    no es un día de retorno cero. Si no quedan al menos dos filas, no hay PBO.
+    Alineación explícita y documentada:
+    - se usa la **intersección** de fechas de todas las variantes;
+    - se eliminan NaN/inf y cualquier fila incompleta (`dropna`);
+    - no se rellena con ceros ni se inventan retornos: una fecha sin dato
+      simplemente se recorta del tramo común.
+
+    Si quedan menos de dos filas o menos de dos variantes, no hay matriz
+    válida y la validación devuelve `None`.
     """
     if len(series_by_variant) < 2:
         return None
@@ -154,6 +166,29 @@ def _pbo_payload(
     payload["verdict"] = result.verdict(cfg.max_pbo)
     payload["scope"] = scope
     payload["max_pbo"] = cfg.max_pbo
+    return payload
+
+
+def _walk_forward_payload(
+    series_by_variant: dict[str, pd.Series],
+    cfg: ResearchConfig,
+) -> dict | None:
+    """Walk-forward global sobre la misma matriz alineada que usa el PBO."""
+    aligned = _aligned_returns(series_by_variant)
+    if aligned is None:
+        return None
+    matrix, _names = aligned
+    try:
+        result = walk_forward(
+            matrix,
+            train_len=cfg.wf_train_len,
+            test_len=cfg.wf_test_len,
+        )
+    except ValueError:
+        return None
+    payload = result.to_dict()
+    payload["verdict"] = result.verdict()
+    payload["scope"] = "global"
     return payload
 
 
@@ -234,9 +269,15 @@ def run_research(cfg: ResearchConfig, rules: PropRules, cache_dir: str | Path) -
                 skew = float(returns.skew()) if len(returns) > 2 else 0.0
                 kurtosis = float(returns.kurt()) + 3.0 if len(returns) > 3 else 3.0
                 sample_days = len(returns)
-                walk_forward = _block_metrics(returns, cfg.wf_folds)
-                wf_returns = [b["return"] for b in walk_forward]
+                wf_blocks = _block_metrics(returns, cfg.wf_folds)
+                wf_returns = [b["return"] for b in wf_blocks]
                 year_returns = _year_returns(returns)
+                regime = regime_report(
+                    returns,
+                    years=cfg.regime_years,
+                    min_obs=cfg.regime_min_obs,
+                )
+                regime_check = regime_gate(regime, min_return=cfg.regime_min_return)
                 variant_key = f"{strategy}|{json.dumps(params, sort_keys=True)}"
                 daily_returns[f"{symbol}|{variant_key}"] = bt.returns
                 daily_returns_by_symbol[symbol][variant_key] = bt.returns
@@ -304,10 +345,12 @@ def run_research(cfg: ResearchConfig, rules: PropRules, cache_dir: str | Path) -
                             "sample_days": sample_days,
                             "skew": skew,
                             "kurtosis": kurtosis,
-                            "walk_forward": walk_forward,
+                            "wf_blocks": wf_blocks,
                             "wf_positive_folds": sum(1 for x in wf_returns if x > 0),
                             "wf_min_return": min(wf_returns) if wf_returns else None,
                             "wf_median_return": statistics.median(wf_returns) if wf_returns else None,
+                            "regime_report": regime.to_dict(),
+                            "regime_gate": regime_check.to_dict(),
                             "year_returns": year_returns,
                             "score": _score(pass_rate, breach_rate, sharpe),
                         }
@@ -349,8 +392,11 @@ def run_research(cfg: ResearchConfig, rules: PropRules, cache_dir: str | Path) -
     pbo_symbol_ok = {
         symbol: payload["pbo"] <= cfg.max_pbo for symbol, payload in pbo_by_symbol.items()
     }
+    wf_payload = _walk_forward_payload(daily_returns, cfg)
+    wf_ok = wf_payload is not None and wf_payload["verdict"] == "ok"
 
-    def core_eligible(r: dict) -> bool:
+    def base_eligible(r: dict) -> bool:
+        """Filtros que ya existían antes de PBO/WF/regímenes."""
         return (
             r["pass_rate"] >= cfg.min_pass
             and r["breach_rate"] <= cfg.max_breach
@@ -359,17 +405,67 @@ def run_research(cfg: ResearchConfig, rules: PropRules, cache_dir: str | Path) -
             and r["family_median_pass"] >= cfg.min_pass
             and (r.get("dsr") is not None and r["dsr"] >= cfg.min_dsr)
             and r.get("wf_positive_folds", 0) >= cfg.min_wf_positive
-            and pbo_ok
-            and pbo_symbol_ok.get(r["symbol"], pbo_ok)
         )
 
+    def validation_failures(r: dict) -> list[str]:
+        """Motivos nuevos: PBO global/activo, walk-forward y regímenes."""
+        failures: list[str] = []
+        if not pbo_ok:
+            failures.append(
+                f"PBO global no disponible o > {cfg.max_pbo:.0%}"
+            )
+        elif not pbo_symbol_ok.get(r["symbol"], True):
+            failures.append(
+                f"PBO de {r['symbol']} > {cfg.max_pbo:.0%}"
+            )
+        if not wf_ok:
+            failures.append("walk-forward global no aprobado")
+        gate = r.get("regime_gate") or {}
+        if not gate.get("passed"):
+            reasons = gate.get("reasons") or ["régimen no aprobado"]
+            failures.append("regímenes: " + "; ".join(reasons))
+        return failures
+
+    def core_eligible(r: dict) -> bool:
+        return base_eligible(r) and not validation_failures(r)
+
     proposals = [r for r in results if core_eligible(r) and r["num_trades"] >= cfg.min_trades]
-    near_misses = [
+
+    min_watch_trades = max(0, cfg.min_trades - cfg.near_miss_slack)
+    validation_misses = [
         r
         for r in results
-        if core_eligible(r)
-        and max(0, cfg.min_trades - cfg.near_miss_slack) <= r["num_trades"] < cfg.min_trades
-    ][:5]
+        if base_eligible(r)
+        and r["num_trades"] >= min_watch_trades
+        and validation_failures(r)
+    ]
+    few_trades = [
+        r
+        for r in results
+        if base_eligible(r)
+        and not validation_failures(r)
+        and min_watch_trades <= r["num_trades"] < cfg.min_trades
+    ]
+    near_miss_rows: list[tuple[dict, str, str]] = []
+    for r in validation_misses[:8]:
+        note = "No accionable: falla validación nueva: " + "; ".join(validation_failures(r))
+        near_miss_rows.append((r, "watchlist_validation", note))
+    for r in few_trades[:5]:
+        note = f"No accionable: {r['num_trades']} operaciones < mínimo {cfg.min_trades}."
+        near_miss_rows.append((r, "watchlist_few_trades", note))
+    seen: set[str] = set()
+    near_misses: list[tuple[dict, str, str]] = []
+    for row in sorted(near_miss_rows, key=lambda item: item[0]["score"], reverse=True):
+        r, status, note = row
+        rid = (
+            f"{r['symbol']}:{r['strategy']}:x{r['exposure']:g}:"
+            f"{json.dumps(r['params'], sort_keys=True)}"
+        )
+        if rid in seen:
+            continue
+        seen.add(rid)
+        near_misses.append(row)
+    near_misses = near_misses[:10]
 
     def _public(r: dict, status: str, note: str) -> dict:
         return {
@@ -392,6 +488,14 @@ def run_research(cfg: ResearchConfig, rules: PropRules, cache_dir: str | Path) -
             "wf_positive_folds": r.get("wf_positive_folds"),
             "wf_folds": cfg.wf_folds,
             "pbo_symbol": pbo_by_symbol.get(r["symbol"], {}).get("pbo"),
+            "pbo_global": pbo["pbo"] if pbo else None,
+            "walk_forward_verdict": wf_payload["verdict"] if wf_payload else None,
+            "walk_forward_stitched_sharpe": (
+                wf_payload["stitched_sharpe"] if wf_payload else None
+            ),
+            "regime_report": r.get("regime_report") or {},
+            "regime_gate": r.get("regime_gate") or {},
+            "validation_failures": validation_failures(r),
             "year_returns": r.get("year_returns") or {},
             "max_drawdown": r["max_drawdown"],
             "sharpe": r["sharpe"],
@@ -406,6 +510,8 @@ def run_research(cfg: ResearchConfig, rules: PropRules, cache_dir: str | Path) -
         "pbo": pbo,
         "pbo_ok": pbo_ok,
         "pbo_by_symbol": pbo_by_symbol,
+        "walk_forward": wf_payload,
+        "walk_forward_ok": wf_ok,
         "config": {
             "symbols": cfg.symbols,
             "strategies": cfg.strategies,
@@ -421,10 +527,15 @@ def run_research(cfg: ResearchConfig, rules: PropRules, cache_dir: str | Path) -
             "min_dsr": cfg.min_dsr,
             "wf_folds": cfg.wf_folds,
             "min_wf_positive": cfg.min_wf_positive,
+            "wf_train_len": cfg.wf_train_len,
+            "wf_test_len": cfg.wf_test_len,
             "pbo_slices": cfg.pbo_slices,
             "pbo_max_combinations": cfg.pbo_max_combinations,
             "pbo_seed": cfg.pbo_seed,
             "max_pbo": cfg.max_pbo,
+            "regime_years": list(cfg.regime_years),
+            "regime_min_obs": cfg.regime_min_obs,
+            "regime_min_return": cfg.regime_min_return,
             "max_breach": cfg.max_breach,
             "holdout_fraction": cfg.holdout_fraction,
             "exposures": cfg.exposures,
@@ -442,12 +553,7 @@ def run_research(cfg: ResearchConfig, rules: PropRules, cache_dir: str | Path) -
             for p in proposals
         ],
         "near_misses": [
-            _public(
-                p,
-                "watchlist_few_trades",
-                f"No accionable: {p['num_trades']} operaciones < mínimo {cfg.min_trades}.",
-            )
-            for p in near_misses
+            _public(p, status, note) for p, status, note in near_misses
         ],
         "errors": errors,
         "candidates": len(results),
@@ -474,6 +580,17 @@ def render_markdown(report: dict, top: int = 25) -> str:
         if pbo
         else "- PBO (CSCV): no disponible (muestra insuficiente o <2 variantes)"
     )
+    wf = report.get("walk_forward")
+    wf_line = (
+        f"- Walk-forward global: veredicto {wf.get('verdict', '—')} · "
+        f"Sharpe stitched {wf['stitched_sharpe']:,.2f} · "
+        f"folds positivos {wf['frac_positive']:.0%} · "
+        f"eficiencia {wf['efficiency']:,.2f} · "
+        f"rank mediano {wf['median_rank_pct']:.0%} · "
+        f"estabilidad {wf['stability']:.0%} · {wf['n_folds']} folds"
+        if wf
+        else "- Walk-forward global: no disponible (muestra insuficiente)"
+    )
     lines = [
         "# Investigación de estrategias",
         "",
@@ -487,15 +604,16 @@ def render_markdown(report: dict, top: int = 25) -> str:
         f"- Validación out-of-sample: último {cfg['holdout_fraction']:.0%} de la muestra",
         f"- Ventana OOS: {oos_range}",
         f"- Variantes evaluadas: {report['candidates']}",
-        f"- Walk-forward: {cfg.get('wf_folds', 4)} bloques",
+        f"- Walk-forward clásico: {cfg.get('wf_folds', 4)} bloques",
         pbo_line,
+        wf_line,
         "",
         warning,
         "",
         "## Ranking",
         "",
-        "| # | Activo | Estrategia | Parámetros | Escala | Sharpe | CAGR | MaxDD | Trades | Pasa | Revienta | Pasa OOS | Score | DSR | WF |",
-        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
+        "| # | Activo | Estrategia | Parámetros | Escala | Sharpe | CAGR | MaxDD | Trades | Pasa | Revienta | Pasa OOS | Score | DSR | WF | Gate |",
+        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
 
     def pct(x: float) -> str:
@@ -504,6 +622,9 @@ def render_markdown(report: dict, top: int = 25) -> str:
     def pct_opt(x) -> str:
         return "—" if x is None else pct(x)
 
+    def gate_text(r: dict) -> str:
+        return "sí" if (r.get("regime_gate") or {}).get("passed") else "no"
+
     for i, r in enumerate(report["results"][:top], 1):
         params = " ".join(f"{k}={v}" for k, v in r["params"].items())
         lines.append(
@@ -511,23 +632,47 @@ def render_markdown(report: dict, top: int = 25) -> str:
             f"{r['exposure']:g}× | {r['sharpe']:,.2f} | {pct(r['cagr'])} | "
             f"{pct(r['max_drawdown'])} | {r['num_trades']} | {pct(r['pass_rate'])} | "
             f"{pct(r['breach_rate'])} | {pct_opt(r.get('oos_pass_rate'))} | {r['score']:,.3f} | {pct_opt(r.get('dsr'))} | "
-            f"{r.get('wf_positive_folds', 0)}/{cfg.get('wf_folds', 4)} |"
+            f"{r.get('wf_positive_folds', 0)}/{cfg.get('wf_folds', 4)} | {gate_text(r)} |"
         )
 
     lines += [
         "",
         "## Regímenes (top 5)",
         "",
-        "| # | Activo | Estrategia | 2018 | 2020 | 2022 |",
-        "|---|---|---|---|---|---|",
+        "| # | Activo | Estrategia | 2018 | 2020 | 2022 | Gate | Motivo |",
+        "|---|---|---|---|---|---|---|---|",
     ]
     for i, r in enumerate(report["results"][:5], 1):
-        years = r.get("year_returns") or {}
+        stats = (r.get("regime_report") or {}).get("years") or {}
+        fallback = r.get("year_returns") or {}
+        returns = {
+            year: (stats.get(year) or {}).get("total_return", fallback.get(year))
+            for year in ("2018", "2020", "2022")
+        }
+        gate = r.get("regime_gate") or {}
+        reasons = "; ".join(gate.get("reasons") or []) or "—"
         lines.append(
             f"| {i} | {r['symbol']} | {r['strategy']} | "
-            f"{pct_opt(years.get('2018'))} | {pct_opt(years.get('2020'))} | "
-            f"{pct_opt(years.get('2022'))} |"
+            f"{pct_opt(returns['2018'])} | {pct_opt(returns['2020'])} | "
+            f"{pct_opt(returns['2022'])} | {gate_text(r)} | {reasons} |"
         )
+
+    if wf:
+        lines += [
+            "",
+            "## Walk-forward global",
+            "",
+            "| Veredicto | Sharpe stitched | Folds positivos | Eficiencia | Rank mediano | Estabilidad | Folds | Variantes | Train | Test |",
+            "|---|---|---|---|---|---|---|---|---|---|",
+            f"| {wf.get('verdict', '—')} | {wf['stitched_sharpe']:,.2f} | "
+            f"{wf['frac_positive']:.0%} | {wf['efficiency']:,.2f} | "
+            f"{wf['median_rank_pct']:.0%} | {wf['stability']:.0%} | "
+            f"{wf['n_folds']} | {wf['n_variants']} | {wf['train_len']} | {wf['test_len']} |",
+            "",
+            "> La eficiencia es la mediana de Sharpe(OOS)/Sharpe(IS) por fold; "
+            "la estabilidad mide si se repite la misma variante elegida. Una "
+            "variante con edge persistente debería superar 0 en las tres métricas.",
+        ]
 
     pbo_rows = []
     if pbo:
@@ -554,6 +699,11 @@ def render_markdown(report: dict, top: int = 25) -> str:
             f"{cfg.get('max_pbo', 0.30):.0%} se considera aceptable; cerca del 50% "
             "elegir la mejor variante es esencialmente azar. Sin PBO calculable no "
             "se proponen bots.",
+            "",
+            "> **Nota metodológica:** con ~11 años de datos diarios el PBO de una "
+            "sola muestra es ruidoso (en ruido puro puede variar aproximadamente "
+            "entre 0.12 y 0.73). Se interpreta como **alarma**, no como prueba. "
+            "Un régimen sin datos **no aprueba**.",
         ]
 
     lines += [
@@ -564,8 +714,10 @@ def render_markdown(report: dict, top: int = 25) -> str:
         f"OOS ≥ {cfg['min_oos_pass']:.0%}, Sharpe > 0, trades ≥ {cfg['min_trades']}, "
         f"DSR ≥ {cfg.get('min_dsr', 0.90):.0%}, WF positivos ≥ "
         f"{cfg.get('min_wf_positive', 2)}/{cfg.get('wf_folds', 4)}, PBO ≤ "
-        f"{cfg.get('max_pbo', 0.30):.0%} (global y por activo) y mediana de la "
-        f"familia ≥ {cfg['min_pass']:.0%}.",
+        f"{cfg.get('max_pbo', 0.30):.0%} (global y por activo), walk-forward "
+        f"global con veredicto ok, régimen aprobado en "
+        f"{'/'.join(str(y) for y in cfg.get('regime_years', [2018, 2020, 2022]))} "
+        f"y mediana de la familia ≥ {cfg['min_pass']:.0%}.",
         "",
     ]
     if report["proposals"]:
@@ -600,13 +752,14 @@ def render_markdown(report: dict, top: int = 25) -> str:
             "",
             "## Casi propuestas (no accionables)",
             "",
-            f"Cumplen todo salvo el mínimo de operaciones "
+            "Incluye dos casos: variantes que fallan **solo** los controles nuevos "
+            "(PBO, walk-forward global o régimen) y variantes que pasan la "
+            f"validación pero tienen pocas operaciones "
             f"({max(0, cfg['min_trades'] - slack)}-{cfg['min_trades'] - 1} trades). "
-            "Se listan para vigilancia; **no se proponen** porque la muestra es "
-            "demasiado pequeña para distinguir habilidad de suerte.",
+            "Se listan para vigilancia; **no se proponen**.",
             "",
-            "| Activo | Estrategia | Parámetros | Escala | Trades | Pasa | Revienta | OOS | DSR | Familia | Score |",
-            "|---|---|---|---|---|---|---|---|---|---|---|",
+            "| Activo | Estrategia | Parámetros | Escala | Trades | Pasa | Revienta | OOS | DSR | Familia | Score | Estado | Motivo |",
+            "|---|---|---|---|---|---|---|---|---|---|---|---|---|",
         ]
         for p in near_misses:
             params = " ".join(f"{k}={v}" for k, v in p["params"].items())
@@ -614,13 +767,14 @@ def render_markdown(report: dict, top: int = 25) -> str:
                 f"| {p['symbol']} | {p['strategy']} | {params} | {p['exposure']:g}× | "
                 f"{p['num_trades']} | {pct(p['pass_rate'])} | {pct(p['breach_rate'])} | "
                 f"{pct_opt(p.get('oos_pass_rate'))} | {pct_opt(p.get('dsr'))} | "
-                f"{pct_opt(p.get('family_median_pass'))} | {p['score']:,.3f} |"
+                f"{pct_opt(p.get('family_median_pass'))} | {p['score']:,.3f} | "
+                f"`{p.get('status', '—')}` | {p.get('note', '—')} |"
             )
         lines += [
             "",
-            "> El umbral de operaciones se mantiene: un resultado alto con pocos "
-            "trades puede desaparecer al añadir dos años de datos. La familia de "
-            "parámetros ayuda, pero no sustituye una muestra amplia.",
+            "> Un resultado alto con pocos trades puede desaparecer al añadir dos "
+            "años de datos. La familia de parámetros ayuda, pero no sustituye una "
+            "muestra amplia.",
         ]
 
     if report["errors"]:
@@ -662,6 +816,8 @@ def write_outputs(report: dict, out_dir: str | Path) -> dict[str, str]:
         "generated_at": report["generated_at"],
         "rules": report["rules"],
         "auto_enable": False,
+        "pbo": report.get("pbo"),
+        "walk_forward": report.get("walk_forward"),
         "proposals": report["proposals"],
         "near_misses": report.get("near_misses", []),
     }
@@ -703,8 +859,8 @@ def write_outputs(report: dict, out_dir: str | Path) -> dict[str, str]:
             "",
             "## Casi propuestas (no accionables)",
             "",
-            "Cumplen los criterios de riesgo/OOS pero tienen menos operaciones que el "
-            "mínimo. No se activan ni se proponen: solo se vigilan.",
+            "Fallan solo los controles nuevos (PBO/walk-forward/régimen) o tienen "
+            "menos operaciones que el mínimo. No se activan ni se proponen.",
             "",
         ]
         for p in near_misses:
@@ -712,7 +868,7 @@ def write_outputs(report: dict, out_dir: str | Path) -> dict[str, str]:
                 f"- **{p['symbol']} · {p['strategy']}** "
                 f"({json.dumps(p['params'], ensure_ascii=False)}, escala {p['exposure']:g}×) — "
                 f"{p['num_trades']} trades, pasa {p['pass_rate']:.1%}, "
-                f"revienta {p['breach_rate']:.1%} · `{p['status']}`"
+                f"revienta {p['breach_rate']:.1%} · `{p['status']}` — {p.get('note', '')}"
             )
     files["proposals_md"].write_text("\n".join(proposals_md) + "\n", encoding="utf-8")
 

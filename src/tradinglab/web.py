@@ -875,6 +875,11 @@ class LabData:
             "results": (latest.get("results") or [])[:limit],
             "proposals": proposal_rows,
             "near_misses": latest.get("near_misses") or [],
+            "pbo": latest.get("pbo"),
+            "pbo_ok": latest.get("pbo_ok"),
+            "pbo_by_symbol": latest.get("pbo_by_symbol") or {},
+            "walk_forward": latest.get("walk_forward"),
+            "walk_forward_ok": latest.get("walk_forward_ok"),
             "errors": latest.get("errors") or [],
         }
 

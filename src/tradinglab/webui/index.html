@@ -1728,44 +1728,58 @@ function showCast(id) {
 function renderResearch() {
   const r = S.overview?.research;
   if (!r) return;
+  const wf = r.walk_forward || {};
+  const pbo = r.pbo || {};
+  const gateTag = (g) => g?.passed
+    ? `<span class="tag green">ok</span>`
+    : `<span class="tag red">no</span>`;
   $("#research-stats").innerHTML = [
     { label: "Candidatos", value: fmtInt.format(r.candidates || 0) },
     { label: "Propuestas", value: fmtInt.format((r.proposals || []).length), cls: (r.proposals || []).length ? "warn" : "" },
     { label: "Casi propuestas", value: fmtInt.format((r.near_misses || []).length) },
+    { label: "PBO global", value: pbo.pbo === undefined || pbo.pbo === null ? "—" : pct(pbo.pbo, 1), cls: pbo.verdict === "ok" ? "" : "warn" },
+    { label: "Walk-forward", value: wf.verdict || "—", cls: wf.verdict === "ok" ? "" : "warn" },
     { label: "Generado", value: r.generated_at ? dateTime(r.generated_at) : "—" },
   ].map((s) => `<div class="stat"><div class="label">${esc(s.label)}</div><div class="value ${s.cls || ""}" style="font-size:${s.label === "Generado" ? "13px" : "20px"}">${esc(s.value)}</div></div>`).join("");
 
   const cfg = r.config || {};
-  $("#research-meta").textContent = cfg.symbols ? `${cfg.symbols.join(", ")} · ${cfg.paths || 0} paths · OOS ${pct(cfg.holdout_fraction || 0, 0)} · DSR ≥ ${pct(cfg.min_dsr || 0.9, 0)}` : "";
+  $("#research-meta").textContent = cfg.symbols
+    ? `${cfg.symbols.join(", ")} · ${cfg.paths || 0} paths · OOS ${pct(cfg.holdout_fraction || 0, 0)} · DSR ≥ ${pct(cfg.min_dsr || 0.9, 0)} · PBO ≤ ${pct(cfg.max_pbo || 0.3, 0)} · WF ${wf.verdict || "—"}`
+    : "";
 
   const top = (r.results || []).map((row, i) => [
     String(i + 1), `<b>${esc(row.symbol)}</b>`, esc(row.strategy), `<span class="muted tiny">${esc(paramsText(row.params))}</span>`,
     `${num(row.exposure, 2)}×`, num(row.sharpe, 2), pct(row.max_drawdown, 1), num(row.num_trades, 0),
     pct(row.pass_rate, 1), pct(row.breach_rate, 1), pct(row.oos_pass_rate, 1), num(row.score, 3), pct(row.dsr, 1),
+    gateTag(row.regime_gate),
   ]);
   $("#research-top").innerHTML = grid([
     { label: "#", num: true }, { label: "Activo" }, { label: "Estrategia" }, { label: "Parámetros" }, { label: "Escala", num: true },
     { label: "Sharpe", num: true }, { label: "MaxDD", num: true }, { label: "Trades", num: true },
     { label: "Pasa", num: true }, { label: "Revienta", num: true }, { label: "OOS", num: true }, { label: "Score", num: true }, { label: "DSR", num: true },
+    { label: "Regímenes" },
   ], top, { empty: "Sin informe de research." });
 
   const proposals = (r.proposals || []).map((p) => [
     `<b>${esc(p.symbol)}</b>`, esc(p.strategy), `<span class="muted tiny">${esc(paramsText(p.params))}</span>`, `${num(p.exposure, 2)}×`,
     num(p.num_trades, 0), pct(p.pass_rate, 1), pct(p.breach_rate, 1), pct(p.oos_pass_rate, 1), pct(p.dsr, 1), num(p.score, 3),
-    `<span class="tag yellow">enabled: false</span>`,
+    gateTag(p.regime_gate), `<span class="tag yellow">enabled: false</span>`,
   ]);
   $("#research-proposals").innerHTML = grid([
     { label: "Activo" }, { label: "Estrategia" }, { label: "Parámetros" }, { label: "Escala", num: true },
-    { label: "Trades", num: true }, { label: "Pasa", num: true }, { label: "Revienta", num: true }, { label: "OOS", num: true }, { label: "DSR", num: true }, { label: "Score", num: true }, { label: "Estado" },
-  ], proposals, { empty: "Sin propuestas: ninguna variante supera DSR ≥90% con muestra suficiente." });
+    { label: "Trades", num: true }, { label: "Pasa", num: true }, { label: "Revienta", num: true }, { label: "OOS", num: true }, { label: "DSR", num: true }, { label: "Score", num: true },
+    { label: "Regímenes" }, { label: "Estado" },
+  ], proposals, { empty: "Sin propuestas: PBO, walk-forward o regímenes no aprobados." });
 
   const near = (r.near_misses || []).map((p) => [
     `<b>${esc(p.symbol)}</b>`, esc(p.strategy), `<span class="muted tiny">${esc(paramsText(p.params))}</span>`, `${num(p.exposure, 2)}×`,
     num(p.num_trades, 0), pct(p.pass_rate, 1), pct(p.breach_rate, 1), pct(p.oos_pass_rate, 1), pct(p.dsr, 1), num(p.score, 3),
+    gateTag(p.regime_gate), `<span class="muted tiny">${esc(p.note || p.status || "—")}</span>`,
   ]);
   $("#research-near").innerHTML = grid([
     { label: "Activo" }, { label: "Estrategia" }, { label: "Parámetros" }, { label: "Escala", num: true },
     { label: "Trades", num: true }, { label: "Pasa", num: true }, { label: "Revienta", num: true }, { label: "OOS", num: true }, { label: "DSR", num: true }, { label: "Score", num: true },
+    { label: "Regímenes" }, { label: "Motivo" },
   ], near, { empty: "Sin casi propuestas." });
 }
 

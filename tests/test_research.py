@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
 
 import tradinglab.research as research
+from tradinglab.backtest import BacktestResult
 from tradinglab.prop.rules import ftmo
 
 
@@ -63,6 +65,116 @@ def _frame(n: int = 400, seed: int = 3) -> pd.DataFrame:
     )
 
 
+def _fake_research_world(monkeypatch, *, with_edge: bool) -> dict:
+    """Datos sintéticos controlados para probar los tres controles nuevos.
+
+    Usa un backtest falso: una variante recibe un edge persistente y las demás
+    ruido con 2022 negativo. Así el test no depende de que una estrategia real
+    encuentre una tendencia en datos aleatorios.
+    """
+    idx = pd.bdate_range("2017-01-01", "2024-12-31")
+    rng = np.random.default_rng(7)
+    noise = rng.normal(0.0001, 0.006, len(idx))
+    noise[idx.year == 2022] -= 0.002
+    edge = rng.normal(0.0006, 0.004, len(idx)) + 0.0004
+    edge_params = {"fast": 20, "slow": 100, "regime": 200}
+
+    def fake_strategy(df, **params):
+        target = pd.Series(0.0, index=df.index)
+        target.attrs["variant"] = json.dumps(params, sort_keys=True)
+        return SimpleNamespace(target=target)
+
+    def fake_backtest(df, target, **kwargs):
+        params = json.loads(target.attrs.get("variant") or "{}")
+        is_edge = with_edge and params == edge_params
+        returns = pd.Series(edge if is_edge else noise, index=idx)
+        equity = 100_000.0 * (1.0 + returns).cumprod()
+        std = float(returns.std(ddof=1))
+        metrics = {
+            "sharpe": float(returns.mean() / std * np.sqrt(252)) if std > 0 else 0.0,
+            "cagr": float(equity.iloc[-1] / equity.iloc[0] - 1.0),
+            "max_drawdown": float((equity / equity.cummax() - 1.0).min()),
+            "num_trades": 30,
+            "win_rate": 0.55,
+            "exposure": 1.0,
+        }
+        return BacktestResult(
+            equity=equity,
+            returns=returns,
+            trades=pd.DataFrame(),
+            metrics=metrics,
+            exposure=1.0,
+        )
+
+    def fake_mc(rules, returns, **kwargs):
+        return {
+            "pass_rate": 0.75,
+            "breach_rate": 0.03,
+            "pass_ci95": [0.65, 0.85],
+            "timeout_rate": 0.0,
+            "median_days_to_pass": 20.0,
+        }
+
+    monkeypatch.setattr(research.data_mod, "fetch", lambda *a, **k: _frame(n=400))
+    monkeypatch.setitem(research.STRATEGIES, "trend", fake_strategy)
+    monkeypatch.setattr(research, "run_backtest", fake_backtest)
+    monkeypatch.setattr(research, "monte_carlo", fake_mc)
+    return edge_params
+
+
+def test_run_research_noise_has_no_proposals(monkeypatch):
+    _fake_research_world(monkeypatch, with_edge=False)
+    cfg = research.ResearchConfig(
+        symbols=["TEST"],
+        strategies=["trend"],
+        paths=10,
+        horizon=20,
+        block_size=1,
+        min_pass=0.5,
+        max_breach=0.1,
+        min_trades=20,
+        pbo_max_combinations=1_000,
+        wf_train_len=504,
+        wf_test_len=126,
+        exposures=[1.0],
+    )
+    report = research.run_research(cfg, ftmo(100_000), cache_dir="unused")
+
+    assert report["candidates"] == 4
+    assert report["proposals"] == []
+    assert report["pbo"] is not None
+    assert all(not (r.get("regime_gate") or {}).get("passed") for r in report["results"])
+
+
+def test_run_research_edge_passes_pbo_walkforward_and_regime(monkeypatch):
+    edge_params = _fake_research_world(monkeypatch, with_edge=True)
+    cfg = research.ResearchConfig(
+        symbols=["TEST"],
+        strategies=["trend"],
+        paths=10,
+        horizon=20,
+        block_size=1,
+        min_pass=0.5,
+        max_breach=0.1,
+        min_trades=20,
+        pbo_max_combinations=1_000,
+        wf_train_len=504,
+        wf_test_len=126,
+        exposures=[1.0],
+    )
+    report = research.run_research(cfg, ftmo(100_000), cache_dir="unused")
+
+    assert report["pbo"] is not None and report["pbo"]["pbo"] <= 0.30
+    assert report["walk_forward"] is not None
+    assert report["walk_forward"]["verdict"] == "ok"
+    assert len(report["proposals"]) == 1
+    proposal = report["proposals"][0]
+    assert proposal["params"] == edge_params
+    assert proposal["regime_gate"]["passed"] is True
+    assert proposal["enabled"] is False
+    assert proposal["validation_failures"] == []
+
+
 def test_run_research_ranks_and_never_enables(monkeypatch):
     monkeypatch.setattr(research.data_mod, "fetch", lambda *a, **k: _frame())
 
@@ -91,6 +203,9 @@ def test_run_research_ranks_and_never_enables(monkeypatch):
     assert report["pbo"]["n_variants"] == 4
     assert report["pbo"]["verdict"] in {"ok", "sobreajustado"}
     assert report["pbo_by_symbol"]["TEST"]["n_slices"] == cfg.pbo_slices
+    assert report["walk_forward"] is None  # 400 filas < 504+126
+    assert all("regime_gate" in r for r in report["results"])
+    assert all("regime_report" in r for r in report["results"])
     assert all(p["enabled"] is False for p in report["proposals"])
     assert all(p["status"] == "proposed" for p in report["proposals"])
     assert all("oos_pass_rate" in p for p in report["proposals"])
@@ -172,9 +287,11 @@ def test_write_outputs_creates_files(tmp_path, monkeypatch):
 
     proposals = json.loads((tmp_path / "proposals.json").read_text(encoding="utf-8"))
     assert proposals["auto_enable"] is False
+    assert "pbo" in proposals and "walk_forward" in proposals
     md = (tmp_path / "latest.md").read_text(encoding="utf-8")
     assert "Ranking" in md
-    assert "enabled: false" in md
+    assert "## Propuestas" in md
+    assert "PBO (CSCV)" in md
 
 
 def test_near_misses_are_listed_but_not_actionable(monkeypatch):
@@ -201,7 +318,11 @@ def test_near_misses_are_listed_but_not_actionable(monkeypatch):
     assert report["proposals"] == []
     assert report["near_misses"]
     assert all(p["enabled"] is False for p in report["near_misses"])
-    assert all(p["status"] == "watchlist_few_trades" for p in report["near_misses"])
+    assert all(
+        p["status"] in {"watchlist_few_trades", "watchlist_validation"}
+        for p in report["near_misses"]
+    )
+    assert any(p.get("note") for p in report["near_misses"])
     md = research.render_markdown(report)
     assert "Casi propuestas" in md
     assert "no se proponen" in md
@@ -234,3 +355,4 @@ def test_render_markdown_handles_no_results():
     md = research.render_markdown(report)
     assert "Ningún candidato" in md
     assert "PBO (CSCV): no disponible" in md
+    assert "Walk-forward global: no disponible" in md
