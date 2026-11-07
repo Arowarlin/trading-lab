@@ -1,6 +1,7 @@
-﻿# Abre TradingLab Console en el navegador.
-# Si el panel ya esta vivo y actualizado, lo reutiliza; si es un servidor
-# viejo o no responde, lo reinicia en segundo plano.
+﻿# Abre TradingLab Console y la mantiene actualizada automaticamente.
+# - Calcula el build actual de codigo/UI/config.
+# - Si el panel esta viejo, lo reinicia.
+# - Recrea el acceso directo en cada apertura.
 # No activa bots, no arranca F13 y no envia ordenes.
 param(
     [int]$Port = 8420,
@@ -10,25 +11,35 @@ param(
 $ErrorActionPreference = "Continue"
 $root = Split-Path -Parent $PSScriptRoot
 $lab = Join-Path $root ".venv\Scripts\lab.exe"
+$python = Join-Path $root ".venv\Scripts\python.exe"
 $url = "http://127.0.0.1:$Port"
+$creator = Join-Path $root "scripts\create_console_shortcut.ps1"
+$shortcut = Join-Path $root "TradingLab Console.lnk"
 
-function Test-Health {
+function Get-CurrentBuild {
+    if (-not (Test-Path $python)) { return $null }
     try {
-        $health = Invoke-RestMethod -Uri "$url/api/health" -TimeoutSec 2
-        return [bool]$health.ok
+        $output = & $python -c "from tradinglab.web import BUILD_ID; print(BUILD_ID)" 2>$null
+        $line = @($output | Where-Object { $_ -and $_.Trim() } | Select-Object -Last 1)
+        if (-not $line) { return $null }
+        return $line.Trim()
     } catch {
-        return $false
+        return $null
     }
 }
 
-function Test-Current {
+function Get-Health {
     try {
-        $overview = Invoke-RestMethod -Uri "$url/api/overview" -TimeoutSec 8
-        $names = @($overview.research.PSObject.Properties.Name)
-        return ($names -contains "portfolio") -and ($names -contains "costs")
+        return Invoke-RestMethod -Uri "$url/api/health" -TimeoutSec 3
     } catch {
-        return $false
+        return $null
     }
+}
+
+function Test-Current([string]$Build) {
+    if (-not $Build) { return $false }
+    $health = Get-Health
+    return [bool]($health -and $health.ok -and $health.build -eq $Build)
 }
 
 function Stop-OldServer {
@@ -59,7 +70,18 @@ function Show-Error([string]$Message) {
     }
 }
 
-if (-not (Test-Health) -or -not (Test-Current)) {
+# Actualiza el acceso directo (target, working dir, icon, description).
+if (Test-Path $creator) {
+    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $creator *> $null
+}
+
+$build = Get-CurrentBuild
+if (-not $build) {
+    Show-Error "No se pudo calcular el build de TradingLab. Revisa la instalacion."
+    exit 1
+}
+
+if (-not (Test-Current $build)) {
     Stop-OldServer
     Start-Sleep -Seconds 1
     if (-not (Test-Path $lab)) {
@@ -71,19 +93,18 @@ if (-not (Test-Health) -or -not (Test-Current)) {
         -WorkingDirectory $root `
         -WindowStyle Hidden | Out-Null
 
-    for ($i = 0; $i -lt 40; $i++) {
+    for ($i = 0; $i -lt 50; $i++) {
         Start-Sleep -Milliseconds 500
-        if ((Test-Health) -and (Test-Current)) { break }
+        if (Test-Current $build) { break }
     }
 }
 
-if (-not (Test-Health) -or -not (Test-Current)) {
-    Show-Error "El panel no respondio o sigue desactualizado en $url. Revisa logs o ejecuta: lab web --port $Port"
+if (-not (Test-Current $build)) {
+    Show-Error "El panel no respondio o sigue desactualizado en $url. Revisa logs/web/server.log"
     exit 1
 }
 
-$cacheBuster = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
-$openUrl = "$url/?v=$cacheBuster"
+$openUrl = "$url/?v=$build"
 if (-not $NoBrowser) {
     Start-Process $openUrl
 } else {

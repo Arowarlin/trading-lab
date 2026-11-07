@@ -13,6 +13,7 @@ El servidor escucha en 127.0.0.1 por defecto: no se publica en la red.
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import json
 import math
 import os
@@ -53,6 +54,30 @@ from .reconciliation import last_reconciliation
 INDEX_FILE = Path(__file__).with_name("webui") / "index.html"
 TICKER_RE = re.compile(r"^[A-Z0-9][A-Z0-9.\-=^]{0,11}$")
 MAX_LOG_BYTES = 96 * 1024
+
+
+def compute_build_id(root: Path | None = None) -> str:
+    """Huella de código/UI/config para detectar un panel desactualizado."""
+    base = Path(root) if root else ROOT
+    files: list[Path] = []
+    files.extend((base / "src" / "tradinglab").rglob("*.py"))
+    files.extend((base / "src" / "tradinglab" / "webui").rglob("*"))
+    files.extend((base / "config").glob("*.yaml"))
+    files.extend([base / "pyproject.toml"])
+    digest = hashlib.sha256()
+    for path in sorted({p for p in files if p.is_file()}):
+        try:
+            rel = path.relative_to(base).as_posix()
+        except ValueError:
+            rel = path.name
+        digest.update(rel.encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(path.read_bytes())
+        digest.update(b"\0")
+    return digest.hexdigest()[:20]
+
+
+BUILD_ID = compute_build_id()
 
 SEVERITY_LABEL = {
     "ok": "OK",
@@ -277,6 +302,7 @@ class LabData:
                 "prop_enabled": self.settings.prop.enabled,
                 "data_provider": self.settings.data.provider,
                 "starting_cash": self.settings.starting_cash,
+                "build": BUILD_ID,
             },
             "account": self.account(),
             "killswitch": self.killswitch_status(),
@@ -1507,7 +1533,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     return
                 self._send(200, INDEX_FILE.read_bytes(), "text/html; charset=utf-8")
             elif path == "/api/health":
-                self._json({"ok": True, "version": __version__, "time": _now()})
+                self._json({"ok": True, "version": __version__, "build": BUILD_ID, "time": _now()})
             elif path == "/api/overview":
                 self._json(self.server.data.overview())
             elif path == "/api/risk":

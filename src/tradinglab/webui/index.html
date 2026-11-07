@@ -1107,6 +1107,7 @@ const S = {
   commandItems: [],
   commandFiltered: [],
   commandIndex: 0,
+  build: null,
 };
 
 const TITLES = {
@@ -1306,6 +1307,12 @@ async function loadAll(manual = false) {
     getJSON("/api/accounts"),
   ]);
   if (overviewResult.status === "fulfilled") {
+    const newBuild = overviewResult.value?.meta?.build;
+    if (S.build && newBuild && S.build !== newBuild) {
+      location.reload();
+      return;
+    }
+    S.build = newBuild || S.build;
     S.overview = overviewResult.value;
     S.market = S.overview.market || null;
     S.calendar = S.overview.calendar || null;

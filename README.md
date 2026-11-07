@@ -237,10 +237,12 @@ Unregister-ScheduledTask -TaskName "TradingLab-Web" -Confirm:$false
 `TradingLab Console.lnk` (raíz del repo) abre el panel con doble clic. El
 lanzador `scripts/open_console.ps1`:
 
-- reutiliza el panel si está actualizado;
-- detecta un servidor viejo (sin `portfolio/costs`) y lo reinicia;
-- abre con un `?v=` para evitar caché del navegador;
-- no activa bots ni envía órdenes.
+- calcula un **build hash** de código, UI y `config/*.yaml`;
+- reutiliza el panel solo si `/api/health` tiene ese mismo build;
+- si el servidor está viejo o no responde, lo reinicia automáticamente;
+- regenera el `.lnk` en cada apertura;
+- abre con `?v=<build>` para evitar caché;
+- si cambia el build con el panel abierto, el frontend se recarga solo.
 
 Si algo falla, muestra un cuadro de error. También puedes recrear el acceso
 directo con `scripts/create_console_shortcut.ps1`.

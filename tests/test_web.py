@@ -273,6 +273,19 @@ def test_repo_audit_licencias(tmp_path: Path) -> None:
     assert licenses["fincept-terminal"] == "AGPL-3.0"
 
 
+def test_build_id_cambia_con_ui(tmp_path: Path) -> None:
+    from tradinglab.web import compute_build_id
+
+    (tmp_path / "src" / "tradinglab" / "webui").mkdir(parents=True)
+    (tmp_path / "config").mkdir()
+    (tmp_path / "pyproject.toml").write_text("[project]\n", encoding="utf-8")
+    index = tmp_path / "src" / "tradinglab" / "webui" / "index.html"
+    index.write_text("<html>uno</html>", encoding="utf-8")
+    first = compute_build_id(tmp_path)
+    index.write_text("<html>dos</html>", encoding="utf-8")
+    assert compute_build_id(tmp_path) != first
+
+
 def test_research_detail_lee_artefacto(tmp_path: Path) -> None:
     artifacts = tmp_path / "reports" / "research" / "artifacts"
     artifacts.mkdir(parents=True)
@@ -317,10 +330,12 @@ def test_servidor_http_responde(tmp_path: Path) -> None:
         with urllib.request.urlopen(f"{base}/api/health", timeout=5) as response:
             health = json.load(response)
         assert health["ok"] is True
+        assert health["build"]
 
         with urllib.request.urlopen(f"{base}/api/overview", timeout=5) as response:
             overview = json.load(response)
         assert overview["meta"]["mode"] == "paper"
+        assert overview["meta"]["build"] == health["build"]
         assert overview["account"]["equity"] == pytest.approx(100_000.0)
         assert "market" in overview and "calendar" in overview and "repos" in overview
 

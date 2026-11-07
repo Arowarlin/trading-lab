@@ -29,6 +29,10 @@ def test_open_console_y_acceso_directo():
     assert 'web", "--no-open"' in script
     assert "api/health" in script
     assert "8420" in script
+    assert "Get-CurrentBuild" in script
+    assert "Test-Current" in script
+    assert "BUILD_ID" in script
+    assert "create_console_shortcut.ps1" in script
     assert "f13 status" not in script.lower()
     assert "f13 freeze" not in script.lower()
     assert "order" not in script.lower()
