@@ -1765,7 +1765,7 @@ def decisions_report_cmd() -> None:
         console.print("[yellow]Sin decisiones con retorno a 20 días todavía.[/yellow]")
         return
     t = Table(title="Decisiones LLM · retorno forward")
-    for col in ("Rating", "N", "1d", "5d", "20d", "t", "p"):
+    for col in ("Rating", "N", "1d", "5d", "20d", "Hit 20d", "t", "p", "Muestra"):
         t.add_column(col, justify="right" if col != "Rating" else "left")
     for row in rows:
         t.add_row(
@@ -1774,19 +1774,45 @@ def decisions_report_cmd() -> None:
             _fmt_pct(row["mean_1d"]) if row["mean_1d"] is not None else "—",
             _fmt_pct(row["mean_5d"]) if row["mean_5d"] is not None else "—",
             _fmt_pct(row["mean_20d"]),
+            _fmt_pct(row["hit_rate_20d"]) if row["hit_rate_20d"] is not None else "—",
             f"{row['t_stat']:.2f}" if row["t_stat"] is not None else "—",
             f"{row['p_value']:.3f}" if row["p_value"] is not None else "—",
+            "insuficiente" if row["insufficient"] else "ok",
         )
     console.print(t)
 
     baseline = decisions_compare(DEFAULT_DB, settings.data.cache_dir)
-    b = Table(title="Línea base · retorno forward 20d")
+    b = Table(title="Comparación sobre las mismas fechas · forward 20d")
     b.add_column("Estrategia", style="bold")
     b.add_column("N", justify="right")
     b.add_column("Retorno medio", justify="right")
-    b.add_row("LLM lite (posición por rating)", str(baseline["llm_n"]), _fmt_pct(baseline["llm_mean_20d"]) if baseline["llm_mean_20d"] is not None else "—")
-    b.add_row("Buy & hold (siempre largo)", str(baseline["buy_hold_n"]), _fmt_pct(baseline["buy_hold_mean_20d"]) if baseline["buy_hold_mean_20d"] is not None else "—")
-    b.add_row("Señal trend", str(baseline["trend_n"]), _fmt_pct(baseline["trend_mean_20d"]) if baseline["trend_mean_20d"] is not None else "—")
+    b.add_column("Hit rate", justify="right")
+    b.add_column("Muestra", justify="right")
+    comparison_rows = [
+        (
+            "LLM lite (posición por rating)",
+            baseline["matched_llm_mean_20d"],
+            baseline["matched_llm_hit_rate"],
+        ),
+        (
+            "Buy & hold (siempre largo)",
+            baseline["matched_buy_hold_mean_20d"],
+            baseline["matched_buy_hold_hit_rate"],
+        ),
+        (
+            "Señal trend",
+            baseline["matched_trend_mean_20d"],
+            baseline["matched_trend_hit_rate"],
+        ),
+    ]
+    for label, mean_value, hit_rate in comparison_rows:
+        b.add_row(
+            label,
+            str(baseline["matched_n"]),
+            _fmt_pct(mean_value) if mean_value is not None else "—",
+            _fmt_pct(hit_rate) if hit_rate is not None else "—",
+            "insuficiente" if baseline["insufficient"] else "ok",
+        )
     console.print(b)
 
     total = sum(row["n"] for row in rows)
@@ -1794,9 +1820,12 @@ def decisions_report_cmd() -> None:
         console.print(
             f"[yellow]Muestra total {total} < 30: no saques conclusiones de edge todavía.[/yellow]"
         )
+    if baseline["insufficient"]:
+        console.print(f"[yellow]{baseline['sample_warning']}.[/yellow]")
     console.print(
-        f"[dim]Cobertura trend: {baseline['trend_coverage']:.0%}. "
-        "0% = no hacer nada; buy&hold siempre largo; trend usa la señal en la fecha.</dim>"
+        f"[dim]Cobertura trend: {baseline['trend_coverage']:.0%} "
+        f"({baseline['matched_n']}/{baseline['n']} decisiones comparables). "
+        "Hold/REVIEW = posición 0 en esta comparación; buy&hold siempre largo.</dim>"
     )
 
 

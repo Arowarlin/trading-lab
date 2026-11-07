@@ -67,6 +67,9 @@ def test_record_y_update_outcomes(tmp_path, monkeypatch):
     assert rows[0]["rating"] == "Buy"
     assert rows[0]["n"] == 1
     assert rows[0]["mean_20d"] == pytest.approx(0.20)
+    assert rows[0]["hit_rate_20d"] == pytest.approx(1.0)
+    assert rows[0]["insufficient"] is True
+    assert "muestra insuficiente" in rows[0]["sample_warning"]
 
 
 def test_compare_llm_buy_hold_y_trend(tmp_path, monkeypatch):
@@ -101,7 +104,45 @@ def test_compare_llm_buy_hold_y_trend(tmp_path, monkeypatch):
 
     result = compare_decisions(db, tmp_path)
     assert result["n"] == 3
+    assert result["matched_n"] == 3
     assert result["llm_mean_20d"] == pytest.approx((0.10 + 0.0 + 0.0) / 3)
     assert result["buy_hold_mean_20d"] == pytest.approx((0.10 + 0.02 - 0.05) / 3)
     assert result["trend_n"] == 3
     assert result["trend_coverage"] == pytest.approx(1.0)
+    assert result["matched_llm_mean_20d"] == pytest.approx((0.10 + 0.0 + 0.0) / 3)
+    assert result["matched_buy_hold_mean_20d"] == pytest.approx((0.10 + 0.02 - 0.05) / 3)
+    assert result["matched_trend_mean_20d"] == pytest.approx((0.10 + 0.02 - 0.05) / 3)
+    assert result["matched_llm_hit_rate"] == pytest.approx(1 / 3)
+    assert result["matched_buy_hold_hit_rate"] == pytest.approx(2 / 3)
+    assert result["insufficient"] is True
+    assert "muestra insuficiente" in result["sample_warning"]
+
+
+def test_compare_solo_compara_fechas_con_trend(tmp_path, monkeypatch):
+    db = tmp_path / "lab.db"
+    init_db(db)
+    rows = [
+        ("SPY", "2026-01-05", "Buy", 0.10),
+        ("QQQ", "2026-01-05", "Hold", 0.02),
+        ("IWM", "2026-01-05", "Sell", -0.05),
+    ]
+    with connect(db) as con:
+        for ticker, day, rating, ret in rows:
+            con.execute(
+                "INSERT INTO decision_outcomes"
+                "(ts, ticker, decision_date, mode, rating, return_20d) VALUES(?,?,?,?,?,?)",
+                ("2026-01-05T00:00:00+00:00", ticker, day, "lite", rating, ret),
+            )
+
+    def fake_trend(ticker, day, cache_dir):
+        return None if ticker == "IWM" else 1.0
+
+    monkeypatch.setattr("tradinglab.decisions.trend_target_at", fake_trend)
+    result = compare_decisions(db, tmp_path)
+    assert result["n"] == 3
+    assert result["trend_n"] == 2
+    assert result["matched_n"] == 2
+    assert result["trend_coverage"] == pytest.approx(2 / 3)
+    assert result["matched_llm_mean_20d"] == pytest.approx((0.10 + 0.0) / 2)
+    assert result["matched_buy_hold_mean_20d"] == pytest.approx((0.10 + 0.02) / 2)
+    assert result["matched_trend_mean_20d"] == pytest.approx((0.10 + 0.02) / 2)
