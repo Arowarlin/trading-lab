@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pandas as pd
 import typer
+import yaml
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
@@ -31,6 +32,7 @@ from .f13 import signal_check as f13_signal_check
 from .f13 import status as f13_status
 from .indicators import atr as atr_indicator
 from .instruments import get_instrument, list_instruments
+from .intel.news import fetch_rss, news_count, recent_news, store_news
 from .killswitch import allows_order
 from .killswitch import ensure as ensure_killswitch
 from .killswitch import evaluate as evaluate_killswitch
@@ -61,6 +63,7 @@ alerts_app = typer.Typer(
 f13_app = typer.Typer(no_args_is_help=True, help="F13: pilot operativo de paper y criterios.")
 bots_app = typer.Typer(no_args_is_help=True, help="Bots: listar, evaluar, proponer, archivar.")
 decisions_app = typer.Typer(no_args_is_help=True, help="Decisiones LLM: resultados y líneas base.")
+intel_app = typer.Typer(no_args_is_help=True, help="Información continua: RSS, saneado y estado.")
 app.add_typer(mt5_app, name="mt5")
 app.add_typer(prop_app, name="prop")
 app.add_typer(futures_app, name="futures")
@@ -69,6 +72,7 @@ app.add_typer(alerts_app, name="alerts")
 app.add_typer(f13_app, name="f13")
 app.add_typer(bots_app, name="bots")
 app.add_typer(decisions_app, name="decisions")
+app.add_typer(intel_app, name="intel")
 console = Console()
 
 OK = "[green]OK[/green]"
@@ -1346,6 +1350,54 @@ def f13_config_check_cmd() -> None:
     console.print(check)
     if not check["ok"]:
         raise typer.Exit(1)
+
+
+@intel_app.command("fetch")
+def intel_fetch_cmd(
+    source: str = typer.Option(None, "--source", help="Feed concreto de config/intel.yaml"),
+    limit: int = typer.Option(30, "--limit"),
+) -> None:
+    """Descarga RSS, lo sanea y lo guarda con deduplicación. No ejecuta nada."""
+    path = ROOT / "config" / "intel.yaml"
+    raw = yaml.safe_load(path.read_text(encoding="utf-8")) if path.exists() else {}
+    feeds = (raw or {}).get("feeds", {})
+    if source:
+        if source not in feeds:
+            console.print(f"[red]Feed desconocido:[/red] {source}")
+            raise typer.Exit(2)
+        feeds = {source: feeds[source]}
+
+    total = 0
+    for name, cfg in feeds.items():
+        if not cfg.get("enabled", True):
+            continue
+        try:
+            items = fetch_rss(cfg["url"], name, limit=limit)
+            inserted = store_news(DEFAULT_DB, items)
+            total += inserted
+            console.print(f"[green]{name}[/green] · {len(items)} vistos · {inserted} nuevos")
+        except Exception as exc:
+            console.print(f"[red]{name}[/red] · {exc}")
+    console.print(f"Total nuevos: {total} · texto externo saneado y trusted=false")
+
+
+@intel_app.command("status")
+def intel_status_cmd() -> None:
+    """Resumen de noticias almacenadas (sin puntuar todavía)."""
+    n = news_count(DEFAULT_DB)
+    console.print(f"Noticias almacenadas: [bold]{n}[/bold] · trusted=false")
+    rows = recent_news(DEFAULT_DB, 8)
+    if rows:
+        t = Table(title="Últimas noticias saneadas")
+        t.add_column("Fuente")
+        t.add_column("Publicada", justify="right")
+        t.add_column("Titular", overflow="fold")
+        for row in rows:
+            t.add_row(str(row["source"]), str(row["published_at"] or "")[:19], str(row["title"]))
+        console.print(t)
+    console.print(
+        "[dim]Pendiente Fase 4: scoring FinBERT, calendario macro y blackout en el guard.[/dim]"
+    )
 
 
 @decisions_app.command("update")

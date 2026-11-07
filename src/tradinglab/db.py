@@ -194,6 +194,40 @@ CREATE TABLE IF NOT EXISTS decision_outcomes (
     UNIQUE(ticker, decision_date, mode)
 );
 
+CREATE TABLE IF NOT EXISTS news_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts TEXT NOT NULL,
+    source TEXT NOT NULL,
+    url TEXT NOT NULL,
+    title TEXT NOT NULL,
+    summary TEXT NOT NULL,
+    published_at TEXT,
+    hash TEXT NOT NULL UNIQUE,
+    trusted INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS news_scores (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    news_id INTEGER NOT NULL,
+    ticker TEXT,
+    sentiment REAL,
+    relevance REAL,
+    model TEXT,
+    version TEXT,
+    scored_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS macro_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    event TEXT NOT NULL,
+    ts_utc TEXT NOT NULL,
+    importance TEXT,
+    forecast TEXT,
+    actual TEXT,
+    source TEXT,
+    fetched_at TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_alerts_ts ON alerts(ts);
 CREATE INDEX IF NOT EXISTS idx_reconciliation_ts ON reconciliation(ts);
 CREATE INDEX IF NOT EXISTS idx_signals_ts ON signals(ts);

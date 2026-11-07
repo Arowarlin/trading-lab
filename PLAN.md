@@ -111,15 +111,17 @@ Reglas de trabajo:
 
 ## Fase 4 — Capa de información continua
 
-- [ ] **4.1 Fuentes**: RSS/APIs, SEC EDGAR, FRED, calendario, OpenBB y contraste
-  de datos; verificar licencias/límites.
+- [ ] **4.1 Fuentes**: RSS Yahoo operativo; SEC EDGAR, FRED, calendario y OpenBB
+  pendientes de verificar licencias/límites.
 - [ ] **4.2 Triaje barato**: FinBERT o modelo local pequeño; medir latencia/RAM.
-- [ ] **4.3 Esquema**: `news_items`, `news_scores`, `macro_events`, dedupe/hash.
-- [ ] **4.4 Seguridad**: texto externo no confiable, saneado y delimitado;
-  test de prompt injection.
-- [ ] **4.5 Planificador**: tareas con logs, reintentos y alertas por fuente.
-- [ ] **4.6 Calendario → guard**: `news_blackout_min`, viernes, fin de semana y
-  rollover; bloquear aperturas, permitir cierres.
+- [x] **4.3 Esquema** — 2026-11-07
+  - `news_items`, `news_scores`, `macro_events`; dedupe por hash, trusted=false.
+- [x] **4.4 Seguridad** — 2026-11-07
+  - `sanitize_untrusted` + `wrap_untrusted`; test de noticia con instrucciones.
+- [ ] **4.5 Planificador**: `TradingLab-Intel` 07:10 + logs/alerta; faltan
+  reintentos por fuente.
+- [ ] **4.6 Calendario → guard**: `news_blackout_min`, viernes/fin de semana y
+  rollover; bloquear aperturas y permitir cierres.
 
 ## Fase 5 — Medir si el LLM aporta algo + memoria
 
@@ -169,4 +171,5 @@ Reglas de trabajo:
 | 2026-11-07 | 2.1–2.2 | `lab f13 status` → no iniciado; bot `qqq-trend-f13` |
 | 2026-11-07 | 3.1/3.3 | `lab research` → 0 propuestas, DSR aplicado |
 | 2026-11-07 | 5.1–5.3/5.5 | `pytest tests/test_decisions.py -q` → 2 passed |
+| 2026-11-07 | 4.3/4.4 | `lab intel fetch` → 5 noticias; `pytest tests/test_intel.py -q` → 5 passed |
 |  |  |  |

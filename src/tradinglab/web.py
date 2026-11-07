@@ -985,7 +985,7 @@ class LabData:
     @staticmethod
     def _scheduler_check() -> dict:
         script = r"""
-$names = @('TradingLab-DryRun','TradingLab-Backup','TradingLab-Web')
+$names = @('TradingLab-DryRun','TradingLab-Backup','TradingLab-Web','TradingLab-Intel')
 $rows = foreach ($n in $names) {
   $t = Get-ScheduledTask -TaskName $n -ErrorAction SilentlyContinue
   if ($t) {

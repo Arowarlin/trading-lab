@@ -1,0 +1,9 @@
+# Fuentes de información continua (solo lectura).
+# No se usa ninguna API con clave en esta fase.
+feeds:
+  yahoo-spy:
+    url: "https://feeds.finance.yahoo.com/rss/2.0/headline?s=SPY&region=US&lang=en-US"
+    enabled: true
+  yahoo-qqq:
+    url: "https://feeds.finance.yahoo.com/rss/2.0/headline?s=QQQ&region=US&lang=en-US"
+    enabled: true

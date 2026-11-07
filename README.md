@@ -140,6 +140,10 @@ cd E:\trading-lab
 .\.venv\Scripts\lab.exe decisions update
 .\.venv\Scripts\lab.exe decisions report
 
+# Información continua (solo lectura, sin ejecución)
+.\.venv\Scripts\lab.exe intel fetch
+.\.venv\Scripts\lab.exe intel status
+
 # Reproducibilidad y secretos
 uv sync --frozen --extra dev --extra mt5
 .\.venv\Scripts\python.exe scripts\migrate_secrets.py --status
@@ -277,6 +281,28 @@ El rating se traduce a fracción de posición (`Buy`=1.0, `Overweight`=0.5,
 `Hold`=no tocar, `Underweight`/`Sell`=0). `agent-run` aplica ese tamaño con el
 risk engine y el broker paper. La decisión y el contexto numérico quedan en
 `data/agent_runs/`.
+
+---
+
+## 4b. Información continua (`intel`)
+
+Fase 4 inicial: RSS de Yahoo Finance, saneado y almacenado en SQLite. **No hay
+herramientas de ejecución en esta capa** y todo el texto entra como
+`trusted=false`.
+
+```powershell
+.\.venv\Scripts\lab.exe intel fetch
+.\.venv\Scripts\lab.exe intel status
+```
+
+- `news_items`: URL, fuente, hora UTC, hash, título/resumen recortados.
+- `news_scores` y `macro_events`: esquema creado; scoring FinBERT, FRED y
+  calendario macro quedan pendientes.
+- `wrap_untrusted()` delimita el texto y ordena al LLM no seguir instrucciones
+  contenidas; hay test de prompt injection.
+- Tarea **`TradingLab-Intel`** a las 07:10; logs en `logs/intel/`.
+- Pendiente Fase 4: scoring barato, OpenBB/SEC/FRED, reintentos por fuente y
+  `news_blackout_min` en el guard.
 
 ---
 
@@ -596,6 +622,9 @@ Tarea programada **`TradingLab-Backup`**: todos los días a las **13:00** y
 ```powershell
 Get-ScheduledTask -TaskName "TradingLab-Backup" | Get-ScheduledTaskInfo
 ```
+
+Otras tareas activas: **`TradingLab-DryRun`** (L-V 22:15), **`TradingLab-Web`**
+(al iniciar sesión) y **`TradingLab-Intel`** (diaria 07:10).
 
 Restaurar en un PC nuevo:
 
