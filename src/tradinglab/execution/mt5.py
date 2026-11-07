@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import time
 from dataclasses import replace
@@ -98,6 +99,10 @@ class MT5Broker:
         self.timeout_ms = int(timeout_ms)
         self.server_utc_offset_hours = server_utc_offset_hours
         self._server_offset = float(server_utc_offset_hours or 0.0)
+        self._offset_source = "config" if server_utc_offset_hours is not None else "unknown"
+        self._offset_cache = (
+            Path(db_path).parent / "cache" / "mt5_offset.json" if db_path else None
+        )
         self._connected = False
 
     # ------------------------------------------------------------- conexión
@@ -140,9 +145,7 @@ class MT5Broker:
 
         self._connected = True
         if self.server_utc_offset_hours is None:
-            detected = self._detect_server_offset(mt5)
-            if detected is not None:
-                self._server_offset = detected
+            self._resolve_offset(self._detect_server_offset(mt5))
         return self.health()
 
     def _identity_problems(self, account) -> list[str]:
@@ -185,6 +188,56 @@ class MT5Broker:
             if offset is not None:
                 return offset
         return None
+
+    def _load_cached_offset(self) -> float | None:
+        """Último offset detectado, útil con el mercado cerrado."""
+        if not self._offset_cache or not self._offset_cache.exists():
+            return None
+        try:
+            data = json.loads(self._offset_cache.read_text(encoding="utf-8"))
+            offset = float(data["offset"])
+        except (OSError, ValueError, KeyError, TypeError):
+            return None
+        stored_server = str(data.get("server") or "")
+        if self.server and stored_server and stored_server.lower() != self.server.lower():
+            return None
+        stored_login = data.get("login")
+        if self.login is not None and stored_login is not None and int(stored_login) != self.login:
+            return None
+        return offset
+
+    def _save_cached_offset(self, offset: float) -> None:
+        if not self._offset_cache:
+            return
+        try:
+            self._offset_cache.parent.mkdir(parents=True, exist_ok=True)
+            payload = {
+                "offset": float(offset),
+                "server": self.server,
+                "login": self.login,
+                "detected_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            }
+            self._offset_cache.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        except OSError:
+            pass
+
+    def _resolve_offset(self, detected: float | None) -> None:
+        """Decide el offset: config > detección fresca > caché > desconocido."""
+        if self.server_utc_offset_hours is not None:
+            self._server_offset = float(self.server_utc_offset_hours)
+            self._offset_source = "config"
+            return
+        if detected is not None:
+            self._server_offset = float(detected)
+            self._offset_source = "detectado"
+            self._save_cached_offset(float(detected))
+            return
+        cached = self._load_cached_offset()
+        if cached is not None:
+            self._server_offset = cached
+            self._offset_source = "cache"
+            return
+        self._offset_source = "unknown"
 
     def _to_utc(self, ts: int | float) -> datetime:
         """Convierte una hora del servidor MT5 a UTC real."""
@@ -236,7 +289,9 @@ class MT5Broker:
             "margin_free": float(account.margin_free),
             "margin_level": float(account.margin_level),
             "profit": float(account.profit),
-            "server_utc_offset_hours": self._server_offset,
+            "server_utc_offset_hours": self._server_offset if self._offset_source != "unknown" else None,
+            "offset_source": self._offset_source,
+            "offset_known": self._offset_source != "unknown",
             "identity_ok": not self._identity_problems(account),
             "expected_login": self.login,
             "expected_server": self.server,
@@ -334,6 +389,12 @@ class MT5Broker:
 
     def rates(self, symbol: str, timeframe: str = "H1", count: int = 500) -> pd.DataFrame:
         """Velas del terminal, indexadas en UTC real (corrige el desfase del servidor)."""
+        if self._offset_source == "unknown":
+            raise MT5Error(
+                "No se pudo determinar el offset del servidor MT5 (mercado cerrado y "
+                "sin caché). Configura mt5.server_utc_offset_hours o reintenta con el "
+                "mercado abierto."
+            )
         mt5 = self._require()
         tf_map = {
             "M1": mt5.TIMEFRAME_M1,

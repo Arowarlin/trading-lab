@@ -42,6 +42,31 @@ def test_to_utc_aplica_offset_del_servidor():
     assert verano._to_utc(ts) == datetime(2026, 1, 15, 9, 0, tzinfo=timezone.utc)
 
 
+def test_offset_cache_por_servidor_y_login(tmp_path):
+    db = tmp_path / "lab.db"
+    broker = MT5Broker(server="FTMO-Demo", login=123, db_path=db, dry_run=True)
+    broker._resolve_offset(3.0)
+    assert broker._offset_source == "detectado"
+    assert (tmp_path / "cache" / "mt5_offset.json").exists()
+
+    reabierto = MT5Broker(server="FTMO-Demo", login=123, db_path=db, dry_run=True)
+    reabierto._resolve_offset(None)
+    assert reabierto._offset_source == "cache"
+    assert reabierto._server_offset == pytest.approx(3.0)
+
+    otra_cuenta = MT5Broker(server="Otro-Server", login=123, db_path=db, dry_run=True)
+    otra_cuenta._resolve_offset(None)
+    assert otra_cuenta._offset_source == "unknown"
+
+
+def test_config_tiene_prioridad_sobre_deteccion(tmp_path):
+    broker = MT5Broker(server_utc_offset_hours=2, db_path=tmp_path / "lab.db", dry_run=True)
+    broker._resolve_offset(3.0)
+    assert broker._offset_source == "config"
+    assert broker._server_offset == pytest.approx(2.0)
+
+
+
 def test_reset_diario_praga_cambio_primavera():
     # 2026-03-29: CET (UTC+1) -> CEST (UTC+2) a las 01:00 UTC.
     values = [100_000 + 100 * i for i in range(26)]

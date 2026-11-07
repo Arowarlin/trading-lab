@@ -929,6 +929,8 @@ def mt5_status() -> None:
         "margin_free",
         "margin_level",
         "server_utc_offset_hours",
+        "offset_source",
+        "offset_known",
         "identity_ok",
         "require_demo",
         "expected_login",

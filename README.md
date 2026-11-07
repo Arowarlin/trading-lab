@@ -324,10 +324,14 @@ convierte velas, posiciones y deals a UTC real. Un **tick viejo ahora se
 rechaza** (antes podía producir un offset negativo falso con el mercado
 cerrado). Se puede fijar a mano con `mt5.server_utc_offset_hours`.
 
-El offset se detecta al conectar: un proceso de larga duración debe reconectar
-después de un cambio de hora. El reset diario de FTMO no usa ese offset: se
-calcula con `Europe/Prague` y `tzdata`, y está cubierto por tests a ambos lados
-de los cambios de hora de EE. UU. y Europa (`tests/test_timezone.py`).
+El offset se detecta al conectar y se guarda en `data/cache/mt5_offset.json`
+(por servidor y login). Con el mercado cerrado, si no hay tick fresco, se usa
+el último offset conocido; si tampoco existe, `mt5 status` lo marca como
+`unknown` y los históricos piden configurarlo a mano. Un proceso de larga
+duración debe reconectar después de un cambio de hora. El reset diario de FTMO
+no usa ese offset: se calcula con `Europe/Prague` y `tzdata`, y está cubierto
+por tests a ambos lados de los cambios de hora de EE. UU. y Europa
+(`tests/test_timezone.py`).
 
 ### Motor de reglas (`prop/`)
 
