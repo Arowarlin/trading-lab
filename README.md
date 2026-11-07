@@ -232,6 +232,19 @@ Unregister-ScheduledTask -TaskName "TradingLab-Web" -Confirm:$false
 > El panel consulta MT5 (solo lectura) y LM Studio. Si el terminal no está
 > abierto, la tarjeta de riesgo muestra el error y sigue funcionando el resto.
 
+### Acceso directo
+
+`TradingLab Console.lnk` (raíz del repo) abre el panel con doble clic. El
+lanzador `scripts/open_console.ps1`:
+
+- reutiliza el panel si está actualizado;
+- detecta un servidor viejo (sin `portfolio/costs`) y lo reinicia;
+- abre con un `?v=` para evitar caché del navegador;
+- no activa bots ni envía órdenes.
+
+Si algo falla, muestra un cuadro de error. También puedes recrear el acceso
+directo con `scripts/create_console_shortcut.ps1`.
+
 ### Repos de referencia y arquitectura
 
 - [`docs/arquitectura.md`](docs/arquitectura.md): cómo encaja el árbol propuesto
