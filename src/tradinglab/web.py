@@ -697,6 +697,11 @@ class LabData:
             "max_lots": rules.max_lots,
             "max_positions": rules.max_positions,
             "reset": f"{rules.reset_time} {rules.reset_tz}",
+            "weekend_holding": rules.weekend_holding,
+            "news_blackout_min": rules.news_blackout_min,
+            "friday_cutoff_hour": rules.friday_cutoff_hour,
+            "rollover_utc": rules.rollover_utc,
+            "rollover_blackout_min": rules.rollover_blackout_min,
             "verify_against_contract": rules.verify_against_contract,
         }
 

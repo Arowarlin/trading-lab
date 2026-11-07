@@ -117,9 +117,13 @@ def run_bot(
         tz=settings.timezone,
     )
     blackout = calendar_block_for_settings(DEFAULT_DB, settings)
+    prop_rules = rules_from_settings(settings)
     session = session_block(
-        rules_from_settings(settings),
+        prop_rules,
         asset_class="equity",
+    )
+    flatten_session = (
+        not prop_rules.weekend_holding and session.kind in {"friday", "weekend"}
     )
 
     for ticker in spec.universe:
@@ -167,6 +171,8 @@ def run_bot(
                 max_pct=max_pct,
             )
         else:
+            desired = 0
+        if flatten_session:
             desired = 0
 
         delta = int(desired - held)

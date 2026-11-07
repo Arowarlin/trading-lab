@@ -312,8 +312,8 @@ herramientas de ejecución en esta capa** y todo el texto entra como
 - `wrap_untrusted()` delimita el texto y ordena al LLM no seguir instrucciones
   contenidas; hay test de prompt injection.
 - Tarea **`TradingLab-Intel`** a las 07:10; logs en `logs/intel/`.
-- Pendiente Fase 4: scoring barato, OpenBB/SEC/FRED, reintentos por fuente y
-  `news_blackout_min` en el guard.
+- Pendiente Fase 4: scoring barato, OpenBB/FRED, reintentos por fuente. El
+  blackout de noticias ya está integrado en el guard (`news_blackout_min`).
 
 ---
 
@@ -434,7 +434,17 @@ cada valor en el contrato vigente de tu firma.
 - pérdida máxima (`static`, `trailing_eod` o `trailing_intraday`);
 - objetivo de beneficio alcanzado (deja de abrir riesgo);
 - máximo de lotes, posiciones o riesgo abierto;
-- consistencia (aviso, no bloqueo, porque se aplica al payout).
+- consistencia (aviso, no bloqueo, porque se aplica al payout);
+- **blackout de noticias** (`news_blackout_min`): bloquea aperturas dentro de
+  la ventana antes/después de un evento de alto impacto en `macro_events`;
+- **fin de semana** (`weekend_holding=false`): bloquea aperturas desde el corte
+  del viernes y exige aplanar antes del cierre;
+- **rollover** (`rollover_blackout_min`): bloquea aperturas alrededor del cierre
+  diario del servidor en futuros/CFD.
+
+`friday_cutoff_hour` se interpreta en la zona local de la firma
+(`reset_tz`, por defecto `Europe/Prague`) y cubre los cambios de hora. Cerrar o
+reducir posiciones **nunca** se bloquea, ni por calendario ni por sesión.
 
 El `buffer_pct` (10%) hace que el bot pare antes del límite real: de 5.000 USD
 diarios de FTMO solo usa 4.500.
@@ -467,8 +477,11 @@ fondeo** → orden con SL/TP. Si el guard bloquea, no se envía.
 
 - Muchas firmas permiten bots pero prohíben HFT, latencia y tick scalping. Verifica.
 - FTMO resetea a las 00:00 de Praga; el servidor MT5 suele ir 1 h por delante.
-- Si el contrato restringe noticias o fin de semana, hay que añadir ese filtro
-  antes de operar de verdad (`news_blackout_min`, `weekend_holding`).
+- **F11b implementado:** `news_blackout_min` (eventos altos de `macro_events`),
+  `weekend_holding` + `friday_cutoff_hour` (hora de Praga) y
+  `rollover_blackout_min` (cierre diario de futuros/CFD). Los valores de FTMO
+  están en `config/prop.yaml`; verifícalos en el contrato. Cerrar/reducir
+  siempre está permitido.
 - `ALLOW_LIVE=YES` sigue siendo obligatorio para cuentas reales.
 
 ---
@@ -815,7 +828,9 @@ La activación del bot requiere aprobación humana explícita; `freeze` no cambi
 2. **F12** futuros: ~~elegir firma y adaptador~~ → Topstep + ProjectX en dry-run.
    Falta abrir la cuenta, preset Topstep en el guard y barras históricas.
 3. **F9c** backtester con sesiones, rollover y contratos continuos (los cortos ya están).
-4. **F11b** filtros de noticias, viernes y rollover en el guard.
+4. **F11b** filtros de noticias, viernes y rollover en el guard → ✅ implementado
+   (`news_blackout_min`, `weekend_holding`, `friday_cutoff_hour`,
+   `rollover_blackout_min`) con tests de FOMC/NFP/CPI y cambios de hora.
 5. **F13** paper continuo 4-8 semanas → comparar contra SPY y decidir.
 6. **F7** Trading-R1 en WSL para el informe pre-market + Telegram.
 7. **F15** datos de ticks Dukascopy para modelar spread real en forex.

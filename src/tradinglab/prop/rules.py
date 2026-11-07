@@ -42,6 +42,9 @@ class PropRules:
 
     weekend_holding: bool = True
     news_blackout_min: int = 0
+    # Hora local de la firma (reset_tz, p. ej. Europe/Prague) para el corte del
+    # viernes. Si es None se usa friday_close_utc (compatibilidad).
+    friday_cutoff_hour: int | None = None
     friday_close_utc: str = "20:00"
     rollover_utc: str = "21:00"
     rollover_blackout_min: int = 0

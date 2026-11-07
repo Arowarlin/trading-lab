@@ -11,6 +11,7 @@ from tradinglab.intel.calendar import (
     DbCalendarProvider,
     StaticCalendarProvider,
     add_calendar_event,
+    calendar_block_for_rules,
     calendar_block_for_settings,
     check_blackout,
     record_calendar_fetch,
@@ -34,6 +35,64 @@ def test_blackout_evento_alto():
     assert result.blocked
     assert result.data_ok
     assert "FOMC" in result.reason
+
+
+def test_blackout_fomc_nfp_cpi_antes_y_despues():
+    names = ["FOMC", "NFP", "CPI"]
+    for name in names:
+        before = check_blackout(
+            StaticCalendarProvider([CalendarEvent(name, NOW + timedelta(minutes=10), "high")]),
+            NOW,
+            minutes_before=30,
+            minutes_after=30,
+        )
+        after = check_blackout(
+            StaticCalendarProvider([CalendarEvent(name, NOW - timedelta(minutes=10), "high")]),
+            NOW,
+            minutes_before=30,
+            minutes_after=30,
+        )
+        outside = check_blackout(
+            StaticCalendarProvider([CalendarEvent(name, NOW + timedelta(minutes=31), "high")]),
+            NOW,
+            minutes_before=30,
+            minutes_after=30,
+        )
+        assert before.blocked and name in before.reason
+        assert after.blocked and name in after.reason
+        assert not outside.blocked
+
+
+def test_calendar_block_for_rules_usa_ventana_antes_y_despues(tmp_path):
+    db = tmp_path / "lab.db"
+    for name, minutes in (("FOMC", 10), ("NFP", -10), ("CPI", 40)):
+        add_calendar_event(
+            db,
+            event=name,
+            ts_utc=NOW + timedelta(minutes=minutes),
+            importance="high",
+        )
+    rules = ftmo(100_000, news_blackout_min=30)
+    provider = DbCalendarProvider(db)
+    result = calendar_block_for_rules(provider, rules, now=NOW)
+    assert result.blocked
+    assert result.data_ok
+    assert "FOMC" in result.reason or "NFP" in result.reason
+
+    outside = calendar_block_for_rules(
+        DbCalendarProvider(db),
+        rules,
+        now=NOW + timedelta(minutes=90),
+    )
+    assert not outside.blocked
+
+
+def test_calendar_block_for_rules_sin_datos_bloquea(tmp_path):
+    rules = ftmo(100_000, news_blackout_min=30)
+    provider = StaticCalendarProvider([], status=CalendarStatus.UNCONFIGURED)
+    result = calendar_block_for_rules(provider, rules, now=NOW)
+    assert result.blocked
+    assert result.data_ok is False
 
 
 def test_blackout_evento_bajo_no_bloquea():

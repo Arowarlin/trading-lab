@@ -11,6 +11,16 @@
 #   trailing_intraday -> el suelo sigue el máximo de equity intradía
 # daily_loss_mode: balance | equity  (equity incluye flotante)
 #
+# Filtros de sesión y noticias (verifica cada uno en el contrato de tu firma):
+#   weekend_holding      true = permite mantener el fin de semana; false = exige
+#                        aplanar antes del corte del viernes y bloquea aperturas.
+#   news_blackout_min    minutos antes/después de un evento macro de alto impacto
+#                        en macro_events. 0 = desactivado.
+#   friday_cutoff_hour   hora local de reset_tz (FTMO: Europe/Prague) del corte
+#                        del viernes. null = usar friday_close_utc.
+#   rollover_utc         cierre diario del servidor en UTC (futuros/CFD).
+#   rollover_blackout_min minutos de bloqueo alrededor del rollover. 0 = off.
+#
 # Contraste 2026-11-05 con el directorio público de LuxAlgo
 # (https://app.luxalgo.com/api/propfirms/list, challenge
 # "ftmo-normal-challenge-2-steps-100k"):
@@ -38,6 +48,10 @@ firms:
       max_open_risk_pct: 0.02
       weekend_holding: true
       news_blackout_min: 0
+      friday_cutoff_hour: 20
+      friday_close_utc: "20:00"
+      rollover_utc: "21:00"
+      rollover_blackout_min: 0
       consistency_pct: null
       notes: >
         Verificar en el contrato: límite diario sobre balance o equity, hora de

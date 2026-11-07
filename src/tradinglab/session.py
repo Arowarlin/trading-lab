@@ -1,13 +1,16 @@
 """Filtros de sesión: fin de semana, viernes y rollover.
 
-Todas las horas son UTC. El cierre de posiciones nunca se bloquea; los
-llamadores solo consultan `blocked` para aperturas.
+Las horas de viernes se interpretan en la zona local de la firma
+(`reset_tz`, por defecto `Europe/Prague`) cuando `friday_cutoff_hour` está
+definido; el rollover sigue en UTC. El cierre de posiciones nunca se bloquea;
+los llamadores solo consultan `blocked` para aperturas.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, time, timezone
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .prop.rules import PropRules
 
@@ -18,6 +21,13 @@ class SessionBlock:
     reason: str
     kind: str = ""
     data_ok: bool = True
+
+
+def _zone(name: str) -> ZoneInfo:
+    try:
+        return ZoneInfo(name)
+    except ZoneInfoNotFoundError as exc:
+        raise ValueError(f"zona horaria desconocida: {name}") from exc
 
 
 def _parse_hhmm(value: str, default: time) -> time:
@@ -46,16 +56,29 @@ def session_block(
     if now.tzinfo is None:
         now = now.replace(tzinfo=timezone.utc)
     now = now.astimezone(timezone.utc)
-    weekday = now.weekday()  # 0=lunes, 4=viernes, 5=sábado, 6=domingo
+    local = now.astimezone(_zone(rules.reset_tz))
+    weekday = local.weekday()  # 0=lunes, 4=viernes, 5=sábado, 6=domingo
 
     if not rules.weekend_holding:
-        friday_close = _parse_hhmm(rules.friday_close_utc, time(20, 0, tzinfo=timezone.utc))
-        if weekday == 4 and now.timetz().replace(tzinfo=timezone.utc) >= friday_close:
-            return SessionBlock(
-                True,
-                f"viernes después de {rules.friday_close_utc} UTC: no mantener fin de semana",
-                "friday",
-            )
+        if rules.friday_cutoff_hour is not None:
+            hour = int(rules.friday_cutoff_hour) % 24
+            cutoff_local = local.replace(hour=hour, minute=0, second=0, microsecond=0)
+            cutoff_utc = cutoff_local.astimezone(timezone.utc)
+            if weekday == 4 and now >= cutoff_utc:
+                return SessionBlock(
+                    True,
+                    f"viernes después de {hour:02d}:00 {rules.reset_tz}: "
+                    "no mantener fin de semana",
+                    "friday",
+                )
+        else:
+            friday_close = _parse_hhmm(rules.friday_close_utc, time(20, 0, tzinfo=timezone.utc))
+            if weekday == 4 and now.timetz().replace(tzinfo=timezone.utc) >= friday_close:
+                return SessionBlock(
+                    True,
+                    f"viernes después de {rules.friday_close_utc} UTC: no mantener fin de semana",
+                    "friday",
+                )
         if weekday >= 5:
             return SessionBlock(
                 True,
@@ -75,4 +98,15 @@ def session_block(
     return SessionBlock(False, "sesión permitida")
 
 
-__all__ = ["SessionBlock", "session_block"]
+def flatten_required(
+    rules: PropRules,
+    now: datetime | None = None,
+    *,
+    asset_class: str = "equity",
+) -> bool:
+    """True si toca aplanar por fin de semana (siempre permite cerrar)."""
+    block = session_block(rules, now, asset_class=asset_class)
+    return block.blocked and block.kind in {"friday", "weekend"}
+
+
+__all__ = ["SessionBlock", "flatten_required", "session_block"]

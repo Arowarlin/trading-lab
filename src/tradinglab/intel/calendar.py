@@ -326,24 +326,38 @@ def rules_from_settings(settings: Settings) -> PropRules:
         )
 
 
+def calendar_block_for_rules(
+    provider: CalendarProvider,
+    rules: PropRules,
+    *,
+    now: datetime | None = None,
+) -> BlackoutResult:
+    """Aplica `news_blackout_min` antes y después del evento, sin tocar red."""
+    if rules.news_blackout_min <= 0:
+        return BlackoutResult(False, CalendarStatus.OK, "blackout desactivado")
+    return check_blackout(
+        provider,
+        now or datetime.now(timezone.utc),
+        minutes_before=rules.news_blackout_min,
+        minutes_after=rules.news_blackout_min,
+        require_data=True,
+    )
+
+
 def calendar_block_for_settings(
     db_path: str | Path,
     settings: Settings,
     *,
     now: datetime | None = None,
     source: str = "manual",
+    provider: CalendarProvider | None = None,
 ) -> BlackoutResult:
-    """Atajo para el orquestador/CLI; no hace nada si news_blackout_min=0."""
+    """Atajo para el orquestador/CLI; admite inyectar otro proveedor (Finnhub)."""
     rules = rules_from_settings(settings)
     if rules.news_blackout_min <= 0:
         return BlackoutResult(False, CalendarStatus.OK, "blackout desactivado")
-    provider = DbCalendarProvider(db_path, source=source)
-    return check_blackout(
-        provider,
-        now or datetime.now(timezone.utc),
-        minutes_before=rules.news_blackout_min,
-        require_data=True,
-    )
+    provider = provider or DbCalendarProvider(db_path, source=source)
+    return calendar_block_for_rules(provider, rules, now=now)
 
 
 __all__ = [
@@ -356,6 +370,7 @@ __all__ = [
     "DbCalendarProvider",
     "StaticCalendarProvider",
     "add_calendar_event",
+    "calendar_block_for_rules",
     "calendar_block_for_settings",
     "check_blackout",
     "record_calendar_fetch",

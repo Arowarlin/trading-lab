@@ -56,7 +56,7 @@ from .reconciliation import last_reconciliation
 from .reconciliation import reconcile as reconcile_broker
 from .reporting import build_dashboard
 from .risk import check_order, size_position
-from .session import session_block
+from .session import flatten_required, session_block
 from .strategies import STRATEGIES
 
 app = typer.Typer(
@@ -2292,6 +2292,37 @@ def mt5_run(
             )
             return
 
+        # Fin de semana: si weekend_holding=false, aplanar SIEMPRE antes del corte.
+        if flatten_required(rules, asset_class="forex"):
+            everything = broker.positions()
+            if everything:
+                session = session_block(rules, asset_class="forex")
+                console.print(
+                    Panel(
+                        f"{session.reason}\nSe cierran {len(everything)} posiciones "
+                        f"({state.open_lots:g} lotes) para no mantener el fin de semana.",
+                        title="Cierre de viernes",
+                        style="bold yellow",
+                    )
+                )
+                if execute:
+                    for p in everything:
+                        broker.close_position(p["ticket"])
+                    console.print(f"[green]Cerradas {len(everything)} posiciones[/green]")
+                else:
+                    console.print(
+                        f"[yellow]DRY RUN[/yellow] cerraría {len(everything)} posiciones"
+                    )
+                _record_signal(
+                    inst.symbol,
+                    strategy,
+                    "close",
+                    target,
+                    tick["bid"],
+                    f"session: {session.reason}",
+                )
+                return
+
         desired = 1 if target > 0 else (-1 if target < 0 else 0)
         if desired == 0:
             action = "close" if signed != 0 else "hold"
@@ -2441,6 +2472,28 @@ def prop_rules_cmd(
         ("Máx. lotes", str(rules.max_lots) if rules.max_lots else "sin límite"),
         ("Máx. posiciones", str(rules.max_positions) if rules.max_positions else "sin límite"),
         ("Reset", f"{rules.reset_time} {rules.reset_tz}"),
+        (
+            "Fin de semana",
+            "permitido" if rules.weekend_holding else "aplanar antes del viernes",
+        ),
+        (
+            "Blackout noticias",
+            f"{rules.news_blackout_min} min antes/después"
+            if rules.news_blackout_min > 0
+            else "desactivado",
+        ),
+        (
+            "Corte viernes",
+            f"{int(rules.friday_cutoff_hour):02d}:00 {rules.reset_tz}"
+            if rules.friday_cutoff_hour is not None
+            else f"{rules.friday_close_utc} UTC",
+        ),
+        (
+            "Rollover",
+            f"{rules.rollover_utc} UTC ± {rules.rollover_blackout_min} min"
+            if rules.rollover_blackout_min > 0
+            else "desactivado",
+        ),
     ]
     for k, v in rows:
         t.add_row(k, v)
