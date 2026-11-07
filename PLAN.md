@@ -107,8 +107,10 @@ Reglas de trabajo:
     GLD 40,9%, TLT 46,0% y EURUSD=X 96,0% (sobreajustados).
   - Sin PBO calculable no se proponen bots.
 - [x] **3.2 Walk-forward y regímenes** — 2026-11-07
-  - 4 bloques walk-forward, criterio de ≥2 bloques positivos; retornos por
-    régimen 2018/2020/2022 en el reporte.
+  - Walk-forward global con train 504 / test 126, Sharpe stitched, fracción de
+    folds positivos, eficiencia, rank mediano y estabilidad; veredicto `ok`.
+  - `regime_report`/`regime_gate` por variante para 2018/2020/2022; un régimen
+    sin datos no aprueba. El gate bloquea propuestas, nunca cierres.
 - [x] **3.3 Monte Carlo block bootstrap** — ya existía y research usa
   `block_size=5`; documentado.
 - [ ] **3.4 Optuna** para explorar parámetros con validación walk-forward.
@@ -129,8 +131,10 @@ Reglas de trabajo:
   - `sanitize_untrusted` + `wrap_untrusted`; test de noticia con instrucciones.
 - [ ] **4.5 Planificador**: `TradingLab-Intel` 07:10 + logs/alerta; faltan
   reintentos por fuente.
-- [ ] **4.6 Calendario → guard**: `news_blackout_min`, viernes/fin de semana y
-  rollover; bloquear aperturas y permitir cierres.
+- [x] **4.6 Calendario → guard** — 2026-11-07
+  - `news_blackout_min` (antes/después), `weekend_holding` + `friday_cutoff_hour`
+    en Europe/Prague, `rollover_blackout_min`; proveedor abstracto y cierres
+    siempre permitidos.
 
 ## Fase 5 — Medir si el LLM aporta algo + memoria
 
@@ -140,7 +144,8 @@ Reglas de trabajo:
 - [x] **5.2 `decision_outcomes`** — 2026-11-07
   - Tabla + `lab decisions update` con retorno a 1/5/20 días hábiles.
 - [x] **5.3 Línea base** — 2026-11-07
-  - `lab decisions report` compara ratings; avisa si N < 30.
+  - `lab decisions report` compara LLM lite, buy&hold y señal trend sobre las
+    mismas fechas, con retorno medio, hit rate, N y aviso de muestra insuficiente.
 - [ ] **5.4 Comparar MoE ~30B** vs modelo actual en lite; no cambiar el default.
 - [x] **5.5 Versionado de prompts** — 2026-11-07
   - `prompt_version` + `prompt_hash` guardados por decisión lite; deep usa hash simple.
@@ -151,7 +156,8 @@ Reglas de trabajo:
   obligatorio y cierre permitido; CFD solo si se confirma disponibilidad.
   - Evaluación hecha en `docs/fase6_multimercado.md`; sin cuenta/confirmación.
 - [ ] **6.2 CFD vía MT5** con especificaciones y horarios.
-- [ ] **6.3 Futuros**: preset Topstep, MLL y barras continuas con rollover.
+- [ ] **6.3 Futuros**: preset Topstep 50K añadido como plantilla inactiva;
+  faltan MLL validado y barras continuas con rollover.
 - [ ] **6.4 Catálogo único** de instrumentos por clase.
 - [ ] **6.5 Agentes por mercado** y coordinador determinista.
 - [ ] **6.6 Un mercado a la vez**, cada uno con su mini-F13.
@@ -187,6 +193,9 @@ Reglas de trabajo:
 | 2026-11-07 | 0.3 / final | `pytest -q` → 129 passed; CI 66f2e8f verde |
 | 2026-11-07 | 3.1/3.1b/3.2 | `pytest tests/test_research.py -q`; PBO 16% (simplificado), WF 4 bloques |
 | 2026-11-07 | 3.1b CSCV | `pytest tests/test_validation.py tests/test_research.py -q`; PBO global 24,8% |
+| 2026-11-07 | 0–2 walk-forward/guard | `pytest -q` → 188 passed; `lab doctor` OK salvo Finnhub/ProjectX |
+| 2026-11-07 | 3 decisions/CI/Topstep | `pytest -q` → 188 passed; CI Windows con markers; preset inactivo |
+| 2026-11-07 | 6 cierre | `lab research` → 0 propuestas; PBO 24,8% ok; WF global `debil`; panel HTTP OK |
 | 2026-11-07 | 4.4/4.6/11b | `pytest tests/test_calendar.py tests/test_session.py -q` |
 | 2026-11-07 | SEC/CSV/decisions | `pytest tests/test_sec.py tests/test_decisions.py -q` |
 |  |  |  |

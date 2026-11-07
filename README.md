@@ -27,7 +27,7 @@ Entorno multi-bot de trading sobre **TradingAgents** y **Trading-R1**, con LLM l
 | F11 | Motor de reglas de fondeo (FTMO) | ✅ guard + Monte Carlo + fuente contrastada |
 | F12 | Futuros (Topstep + ProjectX) | ✅ adaptador y CLI en dry-run · ⏳ cuenta y guard |
 | F13 | Paper continuo 4-8 semanas | ⏳ |
-| F14 | Investigación automática (`lab research`) | ✅ barrido + OOS + propuestas |
+| F14 | Investigación automática (`lab research`) | ✅ barrido + OOS + DSR + PBO + walk-forward + regímenes |
 | F15 | Datos de ticks Dukascopy / spread real forex | ⏳ |
 
 ---
@@ -190,7 +190,7 @@ Qué muestra:
 | **Cuentas** | paper interno, Alpaca paper, FTMO demo y TopstepX/ProjectX, con equity, cash, posiciones y estado. |
 | **Bots** | catálogo, enabled/disabled, propuestas, evaluación con backtest, archivo reversible y última señal. |
 | **Agentes** | historial lite/deep con rating, confianza, duración y tesis; detalle en modal; runs deep en curso o terminados. |
-| **Research** | ranking, propuestas (`enabled: false`), casi propuestas y métricas OOS. |
+| **Research** | ranking, propuestas (`enabled: false`), casi propuestas y métricas OOS/DSR/PBO, walk-forward global y gate de regímenes. |
 | **Riesgo** | guard de FTMO (colchón restante, suelos, límites usados), reglas activas, cuenta MT5 y estado de TopstepX/ProjectX. |
 | **Registros** | logs de dry-run, agentes, backups y tareas, con visor integrado. |
 
@@ -597,40 +597,52 @@ Qué hace:
    **block bootstrap** con bloques de 5 días);
 3. puntúa `pasa − revienta` con el Sharpe como desempate;
 4. reserva el último 30% de la muestra para validación OOS;
-5. calcula el **Deflated Sharpe Ratio (DSR)**, un **walk-forward de 4 bloques**
-   y el **PBO/CSCV** sobre una matriz de retornos diarios alineada por fecha
-   (16 bloques contiguos → 12.870 combinaciones train/test);
+5. calcula el **Deflated Sharpe Ratio (DSR)**, un **walk-forward global** con
+   train 504 / test 126 días y el **PBO/CSCV** sobre una matriz de retornos
+   diarios alineada por fecha (16 bloques contiguos → 12.870 combinaciones
+   train/test). Además calcula `regime_report`/`regime_gate` por variante para
+   2018, 2020 y 2022;
 6. escribe `reports/research/latest.md`, `latest.json` y `proposals.{md,json}`.
 
 Criterios de propuesta: pasa ≥ 35%, revienta ≤ 15%, OOS ≥ 25%, Sharpe > 0,
 ≥ 20 trades, **DSR ≥ 90%**, **WF positivos ≥ 2/4**, **PBO ≤ 30% global y por
-activo** y **mediana de la familia de parámetros ≥ 35%** (evita proponer un
-pico aislado). Si el PBO no se puede calcular (muestra insuficiente o menos de
-2 variantes), **no se propone nada**. Las variantes que cumplen todo salvo el
-mínimo de operaciones aparecen en **“casi propuestas”**, sin activarse: sirven
-para vigilarlas, no para operar. **Ninguna propuesta se activa sola**: van con
-`enabled: false` y hay que revisarlas, añadirlas a `config/bots.yaml` y volver a
-simular con datos intradía.
+activo**, **walk-forward global con veredicto `ok`**, **régimen aprobado en
+2018/2020/2022** y **mediana de la familia de parámetros ≥ 35%** (evita proponer
+un pico aislado). Si el PBO no se puede calcular (muestra insuficiente o menos de
+2 variantes), **no se propone nada**. Un régimen sin datos **no aprueba**. Las
+variantes que fallan solo los controles nuevos van a **“casi propuestas”** con
+el motivo; las que tienen pocas operaciones también, sin activarse. **Ninguna
+propuesta se activa sola**: van con `enabled: false` y hay que revisarlas,
+añadirlas a `config/bots.yaml` y volver a simular con datos intradía.
 
 Salida real (2026-11-07, FTMO 100k 2-step, horizonte 120 días, 192 resultados
 = 96 variantes únicas × 2 escalas):
 
-- **0 propuestas.**
+- **0 propuestas** y **0 casi propuestas**: ninguna variante pasa todos los
+  filtros antiguos y nuevos a la vez.
 - **PBO CSCV global 24,8% (ok).** Por activo: QQQ 7,5%, SPY 14,4% e IWM 26,3%
   son aceptables; **GLD 40,9%, TLT 46,0% y EURUSD=X 96,0% están sobreajustados**
   y sus candidatos quedan bloqueados aunque pasen DSR.
+- **Walk-forward global: `debil`.** 19 folds, Sharpe stitched 0,55, 63% de folds
+  positivos, eficiencia 0,49, rank mediano 59% y estabilidad 17% (las variantes
+  elegidas cambian demasiado entre folds).
+- **Régimen:** el mejor candidato (SPY `trend` fast=20 slow=200, 0.5×) tiene DSR
+  59,3%, pero 2022 cae **-11,2%** y el gate lo bloquea.
 - El DSR elimina los 18 candidatos que antes pasaban: eran variantes
   correlacionadas de `trend`, no 18 edges independientes.
 - Mejor DSR: QQQ `trend` fast=20 slow=100, 0.5× → DSR 92,5%, pero solo 18
   trades y 20,4% de breach; no cumple muestra/riesgo.
-- Mejor ranking: SPY `trend` fast=20 slow=200, 0.5× → DSR 59,3%; no alcanza
-  el 90%.
 - `trend-ls` y `meanrev` no superan a `trend` en esta muestra.
 
 Decisión: se mantiene `min_trades=20` y no se propone nada hasta que un
 candidato pase DSR, walk-forward y PBO con muestra suficiente. El PBO
 reemplaza al cálculo simplificado por bloques (16% entonces); ahora usa
 retornos diarios alineados y 12.870 combinaciones CSCV.
+
+> **Nota sobre el PBO:** con ~11 años de datos diarios el PBO de una sola
+> muestra es ruidoso (en ruido puro puede variar aproximadamente entre 0,12 y
+> 0,73). Se interpreta como **alarma**, no como prueba de edge. Un régimen sin
+> datos **no aprueba**.
 
 Advertencias: elegir el mejor de cientos de variantes sesga el resultado al
 alza; OOS es un filtro mínimo, no una garantía. La muestra 2015-2026 (y su
@@ -829,7 +841,8 @@ La activación del bot requiere aprobación humana explícita; `freeze` no cambi
 1. ~~**F6** validar un `agent` real y medir latencia~~ → `lite` validado (77-95 s);
    `deep` queda como opción nocturna.
 2. **F12** futuros: ~~elegir firma y adaptador~~ → Topstep + ProjectX en dry-run.
-   Falta abrir la cuenta, preset Topstep en el guard y barras históricas.
+   Preset Topstep 50K añadido como plantilla inactiva; faltan abrir la cuenta,
+   validar el MLL y las barras históricas.
 3. **F9c** backtester con sesiones, rollover y contratos continuos (los cortos ya están).
 4. **F11b** filtros de noticias, viernes y rollover en el guard → ✅ implementado
    (`news_blackout_min`, `weekend_holding`, `friday_cutoff_hour`,
@@ -845,6 +858,6 @@ La activación del bot requiere aprobación humana explícita; `freeze` no cambi
 - GitHub privado: **https://github.com/Arowarlin/trading-lab**
 - Rama `master` conectada a `origin/master`.
 - El panel web es local (`127.0.0.1`); no se despliega en GitHub Pages.
-- `.env` está en `.gitignore` y **nunca** se sube. El zip de backup local sí
-  contiene `.env`: no se comparte ni se sube a la nube.
+- `.env` está en `.gitignore` y **nunca** se sube. Los zips de backup nuevos
+  **no** contienen `.env`; no se comparten ni se suben a la nube.
 
