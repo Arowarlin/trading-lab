@@ -35,6 +35,14 @@ class AlertConfig:
 
     @classmethod
     def from_env(cls) -> "AlertConfig":
+        # El CLI de alertas debe funcionar sin depender de que otro comando
+        # haya cargado .env/keyring antes.
+        try:
+            from .config import load_secrets
+
+            load_secrets()
+        except Exception:
+            pass
         channel = (os.getenv("ALERT_CHANNEL") or "ntfy").strip().lower()
         enabled = (os.getenv("ALERTS_ENABLED") or "1").strip().lower() not in {"0", "false", "no"}
         return cls(
@@ -144,7 +152,7 @@ def send(
     try:
         if cfg.channel == "ntfy":
             headers = {
-                "Title": f"TradingLab · {severity}",
+                "Title": f"TradingLab {severity}",
                 "Priority": "high" if severity in {"error", "critical"} else "default",
                 "Tags": "warning" if severity == "warning" else "rotating_light",
             }

@@ -9,9 +9,11 @@ from __future__ import annotations
 import hashlib
 import json
 import statistics
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from statistics import NormalDist
+
+import pandas as pd
 
 from . import data as data_mod
 from .config import ROOT
@@ -143,4 +145,74 @@ def report(db_path: str | Path) -> list[dict]:
     return out
 
 
-__all__ = ["lite_prompt_version", "record_decision", "report", "update_outcomes"]
+def trend_target_at(ticker: str, decision_date: str, cache_dir: str | Path):
+    """Objetivo de la estrategia trend en la fecha de la decisión."""
+    from . import data as data_mod
+    from .strategies import trend_signal
+
+    start = (date.fromisoformat(decision_date) - timedelta(days=400)).isoformat()
+    df = data_mod.fetch(ticker, start, date.today().isoformat(), cache_dir)
+    if len(df) < 210:
+        return None
+    result = trend_signal(df)
+    target = result.target
+    stamp = pd.Timestamp(decision_date)
+    if target.index.tz is not None:
+        stamp = stamp.tz_localize(target.index.tz)
+    mask = target.index <= stamp
+    if not mask.any():
+        return None
+    return float(target[mask].iloc[-1])
+
+
+def compare(db_path: str | Path, cache_dir: str | Path) -> dict:
+    """Compara LLM lite, buy&hold y señal trend sobre el mismo forward 20d."""
+    from .agents.bridge import RATING_TO_TARGET
+
+    init_db(db_path)
+    with connect(db_path) as con:
+        rows = con.execute(
+            "SELECT ticker, decision_date, rating, return_20d FROM decision_outcomes "
+            "WHERE return_20d IS NOT NULL ORDER BY id"
+        ).fetchall()
+
+    llm_returns = []
+    bh_returns = []
+    trend_returns = []
+    trend_covered = 0
+    trend_cache: dict[tuple[str, str], float | None] = {}
+
+    for row in rows:
+        raw = float(row["return_20d"])
+        target = RATING_TO_TARGET.get(str(row["rating"]))
+        position = float(target) if target is not None else 0.0
+        llm_returns.append(position * raw)
+        bh_returns.append(raw)
+
+        key = (str(row["ticker"]), str(row["decision_date"]))
+        if key not in trend_cache:
+            try:
+                trend_cache[key] = trend_target_at(key[0], key[1], cache_dir)
+            except Exception:
+                trend_cache[key] = None
+        trend_target = trend_cache[key]
+        if trend_target is not None:
+            trend_returns.append(float(trend_target) * raw)
+            trend_covered += 1
+
+    def mean(values: list[float]) -> float | None:
+        return statistics.mean(values) if values else None
+
+    return {
+        "n": len(rows),
+        "llm_n": len(llm_returns),
+        "llm_mean_20d": mean(llm_returns),
+        "buy_hold_n": len(bh_returns),
+        "buy_hold_mean_20d": mean(bh_returns),
+        "trend_n": trend_covered,
+        "trend_mean_20d": mean(trend_returns),
+        "trend_coverage": trend_covered / len(rows) if rows else 0.0,
+    }
+
+
+__all__ = ["lite_prompt_version", "record_decision", "report", "compare", "update_outcomes"]

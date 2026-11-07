@@ -4,6 +4,7 @@ import pandas as pd
 import pytest
 
 from tradinglab.db import connect, init_db
+from tradinglab.decisions import compare as compare_decisions
 from tradinglab.decisions import (
     lite_prompt_version,
     record_decision,
@@ -66,3 +67,41 @@ def test_record_y_update_outcomes(tmp_path, monkeypatch):
     assert rows[0]["rating"] == "Buy"
     assert rows[0]["n"] == 1
     assert rows[0]["mean_20d"] == pytest.approx(0.20)
+
+
+def test_compare_llm_buy_hold_y_trend(tmp_path, monkeypatch):
+    db = tmp_path / "lab.db"
+    init_db(db)
+    rows = [
+        ("SPY", "2026-01-05", "Buy", 0.10),
+        ("QQQ", "2026-01-05", "Hold", 0.02),
+        ("IWM", "2026-01-05", "Sell", -0.05),
+    ]
+    with connect(db) as con:
+        for ticker, day, rating, ret in rows:
+            con.execute(
+                "INSERT INTO decision_outcomes"
+                "(ts, ticker, decision_date, mode, rating, return_20d) VALUES(?,?,?,?,?,?)",
+                ("2026-01-05T00:00:00+00:00", ticker, day, "lite", rating, ret),
+            )
+
+    idx = pd.bdate_range("2024-01-01", periods=700)
+    close = [100 + i for i in range(700)]
+    frame = pd.DataFrame(
+        {
+            "open": close,
+            "high": [x + 1 for x in close],
+            "low": [x - 1 for x in close],
+            "close": close,
+            "volume": [1_000] * 700,
+        },
+        index=idx,
+    )
+    monkeypatch.setattr("tradinglab.data.fetch", lambda *a, **k: frame)
+
+    result = compare_decisions(db, tmp_path)
+    assert result["n"] == 3
+    assert result["llm_mean_20d"] == pytest.approx((0.10 + 0.0 + 0.0) / 3)
+    assert result["buy_hold_mean_20d"] == pytest.approx((0.10 + 0.02 - 0.05) / 3)
+    assert result["trend_n"] == 3
+    assert result["trend_coverage"] == pytest.approx(1.0)

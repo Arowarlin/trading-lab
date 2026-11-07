@@ -239,6 +239,17 @@ CREATE TABLE IF NOT EXISTS calendar_fetches (
     message TEXT
 );
 
+CREATE TABLE IF NOT EXISTS sec_fetches (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts TEXT NOT NULL,
+    endpoint TEXT NOT NULL,
+    cik TEXT,
+    status TEXT NOT NULL,
+    http_status INTEGER,
+    cache_hit INTEGER NOT NULL DEFAULT 0,
+    error TEXT
+);
+
 CREATE INDEX IF NOT EXISTS idx_alerts_ts ON alerts(ts);
 CREATE INDEX IF NOT EXISTS idx_reconciliation_ts ON reconciliation(ts);
 CREATE INDEX IF NOT EXISTS idx_signals_ts ON signals(ts);

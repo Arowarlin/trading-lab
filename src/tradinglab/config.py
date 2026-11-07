@@ -21,6 +21,9 @@ SECRET_KEYS = (
     "MT5_PASSWORD",
     "PROJECTX_API_KEY",
     "FRED_API_KEY",
+    "FINNHUB_API_KEY",
+    "NTFY_TOPIC",
+    "NTFY_TOKEN",
     "ALPHA_VANTAGE_API_KEY",
     "TELEGRAM_BOT_TOKEN",
     "OPENAI_API_KEY",
@@ -93,6 +96,19 @@ def secret_status() -> dict:
         "dotenv": (ROOT / ".env").exists(),
         "missing": [key for key in SECRET_KEYS if not os.getenv(key) and key not in in_keyring],
     }
+
+
+def sec_user_agent_status() -> dict:
+    """Valida el formato del User-Agent de SEC sin exponer el contacto."""
+    value = os.getenv("SEC_USER_AGENT", "").strip()
+    has_contact = "@" in value
+    format_ok = value.startswith("TradingLab/") and has_contact
+    return {
+        "configured": bool(value),
+        "has_contact": has_contact,
+        "format_ok": format_ok,
+    }
+
 
 
 

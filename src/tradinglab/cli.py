@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -21,6 +22,7 @@ from .backtest import run as run_backtest
 from .botlab import archive_bot, evaluate_all, propose_bot, restore_bot
 from .config import DEFAULT_DB, ROOT, get_settings
 from .db import connect, init_db, utcnow
+from .decisions import compare as decisions_compare
 from .decisions import record_decision, update_outcomes
 from .decisions import report as decisions_report
 from .execution import get_broker, get_mt5_broker, get_projectx_broker
@@ -41,6 +43,7 @@ from .intel.calendar import (
     rules_from_settings,
 )
 from .intel.news import fetch_rss, news_count, recent_news, store_news
+from .intel.sec import SecClient
 from .killswitch import allows_order
 from .killswitch import ensure as ensure_killswitch
 from .killswitch import evaluate as evaluate_killswitch
@@ -74,6 +77,7 @@ f13_app = typer.Typer(no_args_is_help=True, help="F13: pilot operativo de paper 
 bots_app = typer.Typer(no_args_is_help=True, help="Bots: listar, evaluar, proponer, archivar.")
 decisions_app = typer.Typer(no_args_is_help=True, help="Decisiones LLM: resultados y líneas base.")
 intel_app = typer.Typer(no_args_is_help=True, help="Información continua: RSS, saneado y estado.")
+sec_app = typer.Typer(no_args_is_help=True, help="SEC EDGAR: CIK, filings y company facts.")
 app.add_typer(mt5_app, name="mt5")
 app.add_typer(prop_app, name="prop")
 app.add_typer(futures_app, name="futures")
@@ -83,6 +87,7 @@ app.add_typer(f13_app, name="f13")
 app.add_typer(bots_app, name="bots")
 app.add_typer(decisions_app, name="decisions")
 app.add_typer(intel_app, name="intel")
+app.add_typer(sec_app, name="sec")
 console = Console()
 
 OK = "[green]OK[/green]"
@@ -238,6 +243,52 @@ def doctor(network: bool = typer.Option(False, "--network", help="Probar descarg
     except Exception as exc:
         table.add_row("Secretos", WARN, str(exc)[:160])
 
+    # Integraciones opcionales: solo estado, nunca valores.
+    try:
+        from .config import sec_user_agent_status
+
+        sec = sec_user_agent_status()
+        if sec["format_ok"]:
+            table.add_row("SEC EDGAR", OK, "User-Agent con contacto configurado")
+        elif sec["configured"]:
+            table.add_row("SEC EDGAR", WARN, "User-Agent sin formato/contacto válido")
+        else:
+            table.add_row("SEC EDGAR", WARN, "falta SEC_USER_AGENT")
+    except Exception as exc:
+        table.add_row("SEC EDGAR", WARN, str(exc)[:160])
+
+    fred_ok = bool(os.getenv("FRED_API_KEY"))
+    table.add_row(
+        "FRED",
+        OK if fred_ok else WARN,
+        "API key presente" if fred_ok else "falta FRED_API_KEY",
+    )
+    finnhub_ok = bool(os.getenv("FINNHUB_API_KEY"))
+    table.add_row(
+        "Finnhub",
+        OK if finnhub_ok else WARN,
+        "API key presente" if finnhub_ok else "falta FINNHUB_API_KEY (calendario)",
+    )
+    try:
+        alerts_cfg = AlertConfig.from_env()
+        table.add_row(
+            "Alertas",
+            OK if alerts_cfg.configured else WARN,
+            f"canal={alerts_cfg.channel} · "
+            f"{'configurado' if alerts_cfg.configured else 'sin topic/token'}",
+        )
+    except Exception as exc:
+        table.add_row("Alertas", WARN, str(exc)[:160])
+    if settings:
+        px = settings.projectx
+        px_ok = bool(px.username and os.getenv("PROJECTX_API_KEY") and px.account_id)
+        table.add_row(
+            "ProjectX",
+            OK if px_ok else WARN,
+            f"credenciales={'sí' if px_ok else 'faltan'} · "
+            f"dry_run={px.dry_run} · simulated={px.require_simulated}",
+        )
+
     # Base de datos
     try:
         init_db(DEFAULT_DB)
@@ -264,8 +315,6 @@ def doctor(network: bool = typer.Option(False, "--network", help="Probar descarg
     table.add_row("bun", OK if bun else WARN, bun or "no instalado (necesario para la TUI de Trading-R1)")
 
     # Alpaca
-    import os
-
     key = os.getenv("ALPACA_API_KEY")
     secret = os.getenv("ALPACA_SECRET_KEY")
     if key and secret:
@@ -1469,6 +1518,136 @@ def f13_config_check_cmd() -> None:
         raise typer.Exit(1)
 
 
+def _sec_client() -> SecClient:
+    settings = get_settings()
+    return SecClient(cache_dir=settings.data.cache_dir / "sec", db_path=DEFAULT_DB)
+
+
+@sec_app.command("status")
+def sec_status_cmd() -> None:
+    """Estado del cliente SEC, caché y últimas consultas."""
+    client = _sec_client()
+    try:
+        state = client.status()
+    finally:
+        client.close()
+    t = Table(title="SEC EDGAR · estado")
+    t.add_column("Campo", style="bold")
+    t.add_column("Valor", overflow="fold")
+    t.add_row("User-Agent", "válido" if state["user_agent_ok"] else "falta o inválido")
+    t.add_row("Caché", state["cache_dir"])
+    t.add_row("Rate limit", f"{state['min_interval_s']:.2f} s entre peticiones")
+    console.print(t)
+    if not state["user_agent_ok"]:
+        console.print("[yellow]Define SEC_USER_AGENT con contacto antes de consultar.[/yellow]")
+        return
+    if state["last"]:
+        last = Table(title="Últimas consultas SEC")
+        for col in ("Fecha", "Endpoint", "CIK", "Estado", "HTTP", "Caché", "Error"):
+            last.add_column(col)
+        for row in state["last"]:
+            last.add_row(
+                str(row["ts"])[:19],
+                str(row["endpoint"]),
+                str(row["cik"] or ""),
+                str(row["status"]),
+                str(row["http_status"] or ""),
+                "sí" if row["cache_hit"] else "no",
+                str(row["error"] or ""),
+            )
+        console.print(last)
+
+
+@sec_app.command("cik")
+def sec_cik_cmd(ticker: str = typer.Argument(..., help="Ticker, ej. NVDA")) -> None:
+    """Resuelve el CIK de un ticker usando company_tickers.json."""
+    client = _sec_client()
+    try:
+        result = client.cik_for_ticker(ticker)
+    finally:
+        client.close()
+    if result.status == "ok":
+        console.print(f"{result.data['ticker']} · CIK {result.data['cik']} · {result.data.get('title')}")
+        return
+    console.print(f"[yellow]SEC {result.status}:[/yellow] {result.error or 'sin resultado'}")
+    if result.status in {"error", "unconfigured"}:
+        raise typer.Exit(1)
+
+
+@sec_app.command("filings")
+def sec_filings_cmd(
+    ticker: str = typer.Argument(..., help="Ticker, ej. NVDA"),
+    forms: str = typer.Option("10-K,10-Q,8-K", "--forms"),
+    limit: int = typer.Option(20, "--limit"),
+) -> None:
+    """Lista filings recientes de SEC (10-K, 10-Q, 8-K)."""
+    client = _sec_client()
+    try:
+        result = client.submissions(
+            ticker,
+            forms=[x.strip().upper() for x in forms.split(",") if x.strip()],
+            limit=limit,
+        )
+    finally:
+        client.close()
+
+    if result.status == "empty":
+        console.print(f"[yellow]SEC respondió sin filings para {ticker.upper()}.[/yellow]")
+        return
+    if not result.usable and result.status != "stale":
+        console.print(f"[red]SEC {result.status}:[/red] {result.error}")
+        raise typer.Exit(1)
+    if result.stale:
+        console.print("[yellow]Aviso: datos de caché obsoletos; SEC no respondió.[/yellow]")
+    data = result.data or {}
+    t = Table(title=f"SEC filings · {data.get('ticker')} · CIK {data.get('cik')}")
+    for col in ("Form", "Filed", "Report", "Accession", "Documento"):
+        t.add_column(col)
+    for filing in data.get("filings") or []:
+        t.add_row(
+            str(filing.get("form") or ""),
+            str(filing.get("filingDate") or ""),
+            str(filing.get("reportDate") or ""),
+            str(filing.get("accessionNumber") or ""),
+            str(filing.get("primaryDocument") or ""),
+        )
+    console.print(t)
+
+
+@sec_app.command("facts")
+def sec_facts_cmd(ticker: str = typer.Argument(..., help="Ticker, ej. NVDA")) -> None:
+    """Extrae hechos XBRL clave de companyfacts."""
+    client = _sec_client()
+    try:
+        result = client.company_facts(ticker)
+    finally:
+        client.close()
+
+    if result.status == "empty":
+        console.print(f"[yellow]SEC respondió sin key facts para {ticker.upper()}.[/yellow]")
+        return
+    if not result.usable and result.status != "stale":
+        console.print(f"[red]SEC {result.status}:[/red] {result.error}")
+        raise typer.Exit(1)
+    if result.stale:
+        console.print("[yellow]Aviso: datos de caché obsoletos; SEC no respondió.[/yellow]")
+    data = result.data or {}
+    t = Table(title=f"SEC company facts · {data.get('ticker')} · CIK {data.get('cik')}")
+    for col in ("Tag", "Valor", "Unidad", "Periodo", "FY", "FP", "Form"):
+        t.add_column(col, justify="right" if col in {"Valor"} else "left")
+    for fact in data.get("key_facts") or []:
+        t.add_row(
+            str(fact.get("tag")),
+            str(fact.get("value")),
+            str(fact.get("unit")),
+            str(fact.get("end")),
+            str(fact.get("fy") or ""),
+            str(fact.get("fp") or ""),
+            str(fact.get("form") or ""),
+        )
+    console.print(t)
+
+
 @intel_app.command("fetch")
 def intel_fetch_cmd(
     source: str = typer.Option(None, "--source", help="Feed concreto de config/intel.yaml"),
@@ -1580,6 +1759,7 @@ def decisions_update_cmd() -> None:
 @decisions_app.command("report")
 def decisions_report_cmd() -> None:
     """Compara el rating del LLM con comprar siempre / no hacer nada."""
+    settings = get_settings()
     rows = decisions_report(DEFAULT_DB)
     if not rows:
         console.print("[yellow]Sin decisiones con retorno a 20 días todavía.[/yellow]")
@@ -1598,14 +1778,25 @@ def decisions_report_cmd() -> None:
             f"{row['p_value']:.3f}" if row["p_value"] is not None else "—",
         )
     console.print(t)
+
+    baseline = decisions_compare(DEFAULT_DB, settings.data.cache_dir)
+    b = Table(title="Línea base · retorno forward 20d")
+    b.add_column("Estrategia", style="bold")
+    b.add_column("N", justify="right")
+    b.add_column("Retorno medio", justify="right")
+    b.add_row("LLM lite (posición por rating)", str(baseline["llm_n"]), _fmt_pct(baseline["llm_mean_20d"]) if baseline["llm_mean_20d"] is not None else "—")
+    b.add_row("Buy & hold (siempre largo)", str(baseline["buy_hold_n"]), _fmt_pct(baseline["buy_hold_mean_20d"]) if baseline["buy_hold_mean_20d"] is not None else "—")
+    b.add_row("Señal trend", str(baseline["trend_n"]), _fmt_pct(baseline["trend_mean_20d"]) if baseline["trend_mean_20d"] is not None else "—")
+    console.print(b)
+
     total = sum(row["n"] for row in rows)
     if total < 30:
         console.print(
             f"[yellow]Muestra total {total} < 30: no saques conclusiones de edge todavía.[/yellow]"
         )
     console.print(
-        "[dim]Línea base: 0% = no hacer nada; el retorno medio de todas las decisiones "
-        "equivale a comprar siempre en las fechas analizadas.[/dim]"
+        f"[dim]Cobertura trend: {baseline['trend_coverage']:.0%}. "
+        "0% = no hacer nada; buy&hold siempre largo; trend usa la señal en la fecha.</dim>"
     )
 
 

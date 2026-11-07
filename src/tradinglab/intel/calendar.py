@@ -7,6 +7,7 @@ fiables cuando el blackout está activado.
 
 from __future__ import annotations
 
+import csv
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from enum import StrEnum
@@ -31,6 +32,8 @@ class CalendarEvent:
     ts_utc: datetime
     importance: str = "medium"
     source: str = "manual"
+    blackout_before_min: int | None = None
+    blackout_after_min: int | None = None
 
 
 @dataclass
@@ -76,6 +79,60 @@ class StaticCalendarProvider:
     def fetch(self, start: datetime, end: datetime) -> CalendarResult:
         in_window = [e for e in self.events if start <= e.ts_utc <= end]
         return CalendarResult(self.status, in_window, self.fetched_at, self.message)
+
+
+class CsvCalendarProvider:
+    """Lee data/calendar/events.csv; archivo ausente != archivo vacío."""
+
+    def __init__(self, path: str | Path, *, source: str = "csv") -> None:
+        self.path = Path(path)
+        self.source = source
+        self.name = f"csv:{path}"
+
+    def fetch(self, start: datetime, end: datetime) -> CalendarResult:
+        if not self.path.exists():
+            return CalendarResult(
+                CalendarStatus.UNCONFIGURED,
+                [],
+                None,
+                f"no existe {self.path}",
+            )
+        try:
+            with self.path.open("r", encoding="utf-8", newline="") as handle:
+                reader = csv.DictReader(handle)
+                if not reader.fieldnames or "scheduled_at_utc" not in reader.fieldnames:
+                    return CalendarResult(
+                        CalendarStatus.ERROR,
+                        [],
+                        None,
+                        "CSV sin cabecera scheduled_at_utc",
+                    )
+                events = []
+                for row in reader:
+                    raw = (row.get("scheduled_at_utc") or "").strip()
+                    if not raw:
+                        continue
+                    when = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+                    if when.tzinfo is None:
+                        when = when.replace(tzinfo=timezone.utc)
+                    when = when.astimezone(timezone.utc)
+                    if not (start <= when <= end):
+                        continue
+                    before = row.get("blackout_before_min") or ""
+                    after = row.get("blackout_after_min") or ""
+                    events.append(
+                        CalendarEvent(
+                            event=str(row.get("event") or "").strip(),
+                            ts_utc=when,
+                            importance=str(row.get("impact") or "medium").strip().lower(),
+                            source=str(row.get("source_url") or self.source),
+                            blackout_before_min=int(before) if str(before).strip() else None,
+                            blackout_after_min=int(after) if str(after).strip() else None,
+                        )
+                    )
+            return CalendarResult(CalendarStatus.OK, events, None, f"{len(events)} eventos CSV")
+        except Exception as exc:
+            return CalendarResult(CalendarStatus.ERROR, [], None, f"CSV inválido: {exc}"[:300])
 
 
 class DbCalendarProvider:
@@ -207,8 +264,11 @@ def check_blackout(
     """
     if now.tzinfo is None:
         now = now.replace(tzinfo=timezone.utc)
-    start = now - timedelta(minutes=max(0, minutes_after))
-    end = now + timedelta(minutes=max(0, minutes_before))
+    # Ventana amplia para poder aplicar ventanas por evento; luego se filtra.
+    lookback = max(max(0, minutes_after), 1_440)
+    lookahead = max(max(0, minutes_before), 1_440)
+    start = now - timedelta(minutes=lookback)
+    end = now + timedelta(minutes=lookahead)
     result = provider.fetch(start, end)
 
     if result.status != CalendarStatus.OK:
@@ -222,9 +282,16 @@ def check_blackout(
 
     rank = {"low": 1, "medium": 2, "high": 3}
     threshold = rank.get(min_importance.lower(), 3)
-    relevant = [
-        event for event in result.events if rank.get(event.importance.lower(), 0) >= threshold
-    ]
+    relevant = []
+    for event in result.events:
+        before = event.blackout_before_min
+        after = event.blackout_after_min
+        before = max(0, minutes_before if before is None else before)
+        after = max(0, minutes_after if after is None else after)
+        in_window = now - timedelta(minutes=after) <= event.ts_utc <= now + timedelta(minutes=before)
+        if in_window and rank.get(event.importance.lower(), 0) >= threshold:
+            relevant.append(event)
+    relevant.sort(key=lambda event: event.ts_utc)
     if relevant:
         event = relevant[0]
         return BlackoutResult(
@@ -285,6 +352,7 @@ __all__ = [
     "CalendarProvider",
     "CalendarResult",
     "CalendarStatus",
+    "CsvCalendarProvider",
     "DbCalendarProvider",
     "StaticCalendarProvider",
     "add_calendar_event",

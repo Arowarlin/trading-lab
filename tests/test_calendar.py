@@ -7,6 +7,7 @@ from tradinglab.db import connect, init_db
 from tradinglab.intel.calendar import (
     CalendarEvent,
     CalendarStatus,
+    CsvCalendarProvider,
     DbCalendarProvider,
     StaticCalendarProvider,
     add_calendar_event,
@@ -118,3 +119,47 @@ def test_guard_bloquea_apertura_y_permite_cierre():
 def test_calendar_block_for_settings_desactivado():
     result = calendar_block_for_settings("data/lab.db", Settings())
     assert not result.blocked
+
+
+def test_csv_ausente_vacio_y_valido(tmp_path):
+    missing = CsvCalendarProvider(tmp_path / "missing.csv")
+    assert missing.fetch(NOW, NOW).status == CalendarStatus.UNCONFIGURED
+
+    empty = tmp_path / "empty.csv"
+    empty.write_text("event_id,currency,event,scheduled_at_utc,impact,blackout_before_min,blackout_after_min,source_url\n", encoding="utf-8")
+    assert CsvCalendarProvider(empty).fetch(NOW - timedelta(days=1), NOW + timedelta(days=1)).status == CalendarStatus.OK
+
+    valid = tmp_path / "events.csv"
+    valid.write_text(
+        "event_id,currency,event,scheduled_at_utc,impact,blackout_before_min,blackout_after_min,source_url\n"
+        "1,USD,FOMC,2026-11-07T18:10:00Z,high,30,30,https://example.com\n",
+        encoding="utf-8",
+    )
+    result = CsvCalendarProvider(valid).fetch(NOW - timedelta(days=1), NOW + timedelta(days=1))
+    assert result.status == CalendarStatus.OK
+    assert len(result.events) == 1
+
+
+def test_csv_ventana_por_evento(tmp_path):
+    path = tmp_path / "events.csv"
+    path.write_text(
+        "event_id,currency,event,scheduled_at_utc,impact,blackout_before_min,blackout_after_min,source_url\n"
+        "1,USD,FOMC,2026-11-07T18:10:00Z,high,30,30,https://example.com\n",
+        encoding="utf-8",
+    )
+    provider = CsvCalendarProvider(path)
+    # La ventana global es 5 min, pero el evento pide 30.
+    result = check_blackout(provider, NOW, minutes_before=5, minutes_after=0)
+    assert result.blocked
+    assert result.data_ok
+
+
+def test_csv_invalido_es_error(tmp_path):
+    path = tmp_path / "bad.csv"
+    path.write_text(
+        "event_id,currency,event,scheduled_at_utc,impact,blackout_before_min,blackout_after_min,source_url\n"
+        "1,USD,FOMC,no-es-fecha,high,30,30,https://example.com\n",
+        encoding="utf-8",
+    )
+    result = CsvCalendarProvider(path).fetch(NOW - timedelta(days=1), NOW + timedelta(days=1))
+    assert result.status == CalendarStatus.ERROR
