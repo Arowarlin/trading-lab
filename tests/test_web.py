@@ -33,6 +33,7 @@ def test_index_disponible() -> None:
     assert "view-market" in text
     assert "view-repos" in text
     assert "command-palette" in text
+    assert "research-horizons" in text
 
 
 def test_account_lee_sqlite(tmp_path: Path) -> None:
@@ -170,6 +171,10 @@ def test_research_usa_ultimo_informe(tmp_path: Path) -> None:
         json.dumps({"proposals": [{"symbol": "QQQ", "enabled": False}]}),
         encoding="utf-8",
     )
+    (research / "horizons.json").write_text(
+        json.dumps({"top": 1, "firms": []}),
+        encoding="utf-8",
+    )
 
     report = _data(tmp_path).research(limit=1)
     assert report["candidates"] == 2
@@ -177,6 +182,7 @@ def test_research_usa_ultimo_informe(tmp_path: Path) -> None:
     assert report["proposals"][0]["enabled"] is False
     assert report["pbo"]["verdict"] == "ok"
     assert report["walk_forward"]["verdict"] == "ok"
+    assert report["horizons"]["top"] == 1
 
 
 def test_tail_log_no_permite_salir_de_logs(tmp_path: Path) -> None:
@@ -314,7 +320,7 @@ def test_servidor_http_responde(tmp_path: Path) -> None:
         assert overview["account"]["equity"] == pytest.approx(100_000.0)
         assert "market" in overview and "calendar" in overview and "repos" in overview
 
-        for path in ("/api/market", "/api/calendar", "/api/decisions", "/api/decisions/compare", "/api/repos"):
+        for path in ("/api/market", "/api/calendar", "/api/decisions", "/api/decisions/compare", "/api/repos", "/api/research/horizons"):
             with urllib.request.urlopen(f"{base}{path}", timeout=5) as response:
                 payload = json.load(response)
             assert isinstance(payload, dict)

@@ -424,6 +424,11 @@
     .grid-3 { grid-template-columns: 1fr; }
   }
 
+  .horizon-block { border: 1px solid var(--border-soft); border-radius: 9px; padding: 8px 10px; margin-bottom: 8px; background: var(--panel-2); }
+  .horizon-block summary { cursor: pointer; font-size: 12px; color: #c6d2de; }
+  .horizon-block summary:hover { color: var(--text); }
+  .horizon-block .table-wrap { margin-top: 8px; }
+
   /* --------------------------------------------------------------- responsive */
   @media (max-width: 1050px) {
     .grid-2, .grid-2.equal { grid-template-columns: 1fr; }
@@ -745,6 +750,10 @@
           <div class="panel-head"><h2>Walk-forward global</h2><span class="muted tiny" id="research-wf-meta"></span></div>
           <div id="research-wf"></div>
         </div>
+      </div>
+      <div class="panel" style="margin-bottom:14px">
+        <div class="panel-head"><h2>Monte Carlo por horizonte</h2><span class="muted tiny" id="horizons-meta"></span></div>
+        <div id="research-horizons"></div>
       </div>
       <div class="panel" style="margin-bottom:14px">
         <div class="panel-head"><h2>Ranking de estrategias</h2><span class="muted tiny" id="research-meta"></span></div>
@@ -2369,6 +2378,8 @@ function renderResearch() {
     { label: "Regímenes" }, { label: "Motivo" },
   ], near, { empty: "Sin casi propuestas." });
 
+  renderHorizons(r.horizons);
+
   [
     ["#research-top", r.results || []],
     ["#research-proposals", r.proposals || []],
@@ -2380,6 +2391,66 @@ function renderResearch() {
       tr.addEventListener("click", () => showResearchDetail(rows[i]));
     });
   });
+}
+
+function renderHorizons(h) {
+  const box = $("#research-horizons");
+  const meta = $("#horizons-meta");
+  if (!box) return;
+  if (!h || !h.firms || !h.firms.length) {
+    box.innerHTML = `<div class="empty">sin datos. Ejecuta <code>lab research-horizons</code>.</div>`;
+    if (meta) meta.textContent = "sin tabla";
+    return;
+  }
+  if (meta) {
+    meta.textContent = `${h.top} variantes · ${h.paths} paths · ${h.horizons.join("/")}d · ${h.exposures.map((x) => x + "×").join(" ")}`;
+  }
+  let html = "";
+  let first = true;
+  for (const firm of h.firms) {
+    for (const exposure of h.exposures) {
+      const exp = String(exposure);
+      const rows = (firm.variants || []).map((v) => {
+        const cells = (h.horizons || []).map((horizon) => {
+          const cell = v.exposures?.[exp]?.[String(horizon)];
+          if (!cell || cell.status !== "ok") return "sin datos";
+          return `${pct(cell.pass_rate, 1)} / ${pct(cell.breach_rate, 1)}`;
+        });
+        return [
+          String(v.rank),
+          `<b>${esc(v.symbol)}</b> <span class="muted tiny">${esc(v.strategy)} · ${esc(paramsText(v.params))}</span>`,
+          ...cells,
+          num(v.num_trades, 0),
+        ];
+      });
+      const headers = [
+        { label: "#", num: true }, { label: "Variante" },
+        ...(h.horizons || []).map((x) => ({ label: `${x}d pasa / revienta`, num: true })),
+        { label: "Trades", num: true },
+      ];
+      html += `<details class="horizon-block" ${first ? "open" : ""}><summary>${esc(firm.name)} · ${exposure}×</summary>${grid(headers, rows, { empty: "sin datos" })}</details>`;
+      first = false;
+    }
+  }
+  const required = h.required_22d;
+  if (required?.firms?.length) {
+    html += `<details class="horizon-block"><summary>Requerido para 22d · pass ≥ ${pct(required.min_pass_rate, 0)} · breach < ${pct(required.max_breach_rate, 0)}</summary>`;
+    for (const firm of required.firms) {
+      html += `<div class="muted tiny" style="margin:8px 0 4px">${esc(firm.name)}</div>`;
+      html += grid(
+        [{ label: "Vol diaria", num: true }, { label: "Retorno diario", num: true }, { label: "Retorno 22d", num: true }, { label: "Pasa", num: true }, { label: "Revienta", num: true }],
+        (firm.rows || []).map((r) => [
+          pct(r.daily_volatility, 2),
+          r.daily_return === null || r.daily_return === undefined ? "—" : pct(r.daily_return, 2),
+          r.daily_return === null || r.daily_return === undefined ? "—" : pct((1 + r.daily_return) ** 22 - 1, 1),
+          pct(r.pass_rate, 1), pct(r.breach_rate, 1),
+        ]),
+        { empty: "sin datos" },
+      );
+    }
+    html += `<div class="note">${esc(required.assumption || "")}</div></details>`;
+  }
+  box.innerHTML = html;
 }
 
 function showResearchDetail(row) {

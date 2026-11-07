@@ -2915,6 +2915,37 @@ def research_cmd(
     console.print(f"JSON:    {files['latest_json']}")
 
 
+@app.command("research-horizons")
+def research_horizons_cmd(
+    top: int = typer.Option(10, "--top", help="Variantes del ranking a simular"),
+    paths: int = typer.Option(2_000, "--paths", help="Paths Monte Carlo por celda"),
+    out: str = typer.Option(None, "--out", help="Carpeta de research"),
+) -> None:
+    """Monte Carlo 22/44/120d para el top de research (informativo)."""
+    from .horizons import matrix, write
+
+    report_dir = Path(out) if out else ROOT / "reports" / "research"
+    if not (report_dir / "latest.json").exists():
+        console.print(f"[red]No existe {report_dir / 'latest.json'}.[/red] Ejecuta lab research.")
+        raise typer.Exit(1)
+    console.print(
+        Panel(
+            f"Top {top} · {paths} paths · horizontes 22/44/120d · "
+            "exposiciones 0.5×/1×/2×\n"
+            "FTMO 100k 2-step + Topstep 50K (plantilla). No cambia criterios.",
+            title="Monte Carlo por horizonte",
+        )
+    )
+    payload = matrix(report_dir, top=top, paths=paths)
+    files = write(payload, report_dir)
+    console.print(
+        f"[green]Tabla generada[/green] · {files['md']} · {files['json']}"
+    )
+    for firm in payload["firms"]:
+        console.print(f"[dim]{firm['name']}: {len(firm['variants'])} variantes × "
+                      f"{len(payload['exposures'])} exposiciones.[/dim]")
+
+
 # ==================================================================== Futuros
 
 @futures_app.command("status")

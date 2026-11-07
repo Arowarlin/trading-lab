@@ -665,6 +665,24 @@ Al hacer clic en una fila de Research se abre el detalle de la variante con:
 Las gráficas son SVG propio del panel, sin librerías ni CDNs. Si el artefacto
 no existe o está vacío, el panel muestra **“sin datos”** y no inventa curvas.
 
+### Monte Carlo por horizonte y exposición
+
+```powershell
+.\.venv\Scripts\lab.exe research-horizons --top 10 --paths 2000
+```
+
+Simula el top 10 del ranking con el simulador Monte Carlo existente:
+
+- horizontes **22, 44 y 120 días hábiles**;
+- exposiciones **0,5×, 1× y 2×**;
+- **FTMO 100k 2-step** y **Topstep 50K** (plantilla, no activa);
+- salida en `reports/research/horizons.md` y `horizons.json`;
+- el panel Research muestra las tablas por firma/exposición.
+
+Es **solo informativo** y no cambia criterios de propuesta. Incluye una tabla
+de qué retorno diario y volatilidad harían falta para pasar en 22 días con
+pass ≥ 50% y breach < 15% (retornos iid normales, sin costes ni intradía).
+
 Criterios de propuesta: pasa ≥ 35%, revienta ≤ 15%, OOS ≥ 25%, Sharpe > 0,
 ≥ 20 trades, **DSR ≥ 90%**, **WF positivos ≥ 2/4**, **PBO ≤ 30% global y por
 activo**, **walk-forward global con veredicto `ok`**, **régimen aprobado en

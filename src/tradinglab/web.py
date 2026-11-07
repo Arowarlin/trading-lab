@@ -950,6 +950,7 @@ class LabData:
             "walk_forward_ok": latest.get("walk_forward_ok"),
             "dsr_n_trials": latest.get("dsr_n_trials"),
             "dsr_trial_sr_std": latest.get("dsr_trial_sr_std"),
+            "horizons": _read_json(self.research_dir / "horizons.json", {}) or {},
             "errors": latest.get("errors") or [],
         }
 
@@ -1519,6 +1520,8 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     self._json({"ok": False, "error": "sin datos"}, status=404)
                 except ValueError as exc:
                     self._error(400, str(exc))
+            elif path == "/api/research/horizons":
+                self._json(self.server.data.research().get("horizons") or {})
             elif path == "/api/decisions":
                 self._json(self.server.data.decisions())
             elif path == "/api/decisions/compare":
