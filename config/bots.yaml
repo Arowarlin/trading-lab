@@ -5,6 +5,7 @@ bots:
   - id: trend-spy
     type: deterministic
     profile: swing_equity
+    account: paper_main
     cluster: trend_equity
     strategy: trend
     universe: [SPY, QQQ]
@@ -16,6 +17,7 @@ bots:
   - id: qqq-trend-f13
     type: deterministic
     profile: swing_equity
+    account: paper_main
     cluster: trend_equity
     strategy: trend
     universe: [QQQ]
@@ -28,6 +30,7 @@ bots:
   - id: meanrev-large
     type: deterministic
     profile: swing_equity
+    account: paper_main
     cluster: meanrev_equity
     strategy: meanrev
     universe: [AAPL, MSFT, NVDA, AMZN, GOOGL, META]
@@ -38,6 +41,7 @@ bots:
   - id: llm-swing
     type: llm
     profile: swing_equity
+    account: paper_main
     cluster: llm_equity
     strategy: tradingagents
     universe: [NVDA, AAPL, MSFT, SPY]
@@ -48,6 +52,7 @@ bots:
   - id: llm-filter
     type: hybrid
     profile: swing_equity
+    account: paper_main
     cluster: llm_equity
     strategy: deterministic+llm
     universe: [SPY, QQQ, NVDA]
@@ -58,6 +63,7 @@ bots:
   - id: research-desk
     type: research
     profile: swing_equity
+    account: paper_main
     cluster: research
     strategy: trading-r1
     universe: [SPY, NVDA, AAPL, MSFT]

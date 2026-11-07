@@ -8,6 +8,7 @@ from pathlib import Path
 
 import yaml
 
+from .accounts import AccountDefinition, effective_limits, load_accounts, rules_for_account
 from .alerts import send as send_alert
 from .config import DEFAULT_DB, ROOT, Settings
 from .data import fetch
@@ -18,7 +19,7 @@ from .killswitch import allows_order
 from .killswitch import ensure as ensure_killswitch
 from .portfolio import load_clusters
 from .profiles import BotProfile, load_profiles
-from .prop.guard import AccountSnapshot, PropGuard, evaluate_account
+from .prop.guard import AccountLimits, AccountSnapshot, PropGuard, evaluate_account
 from .risk import check_order, size_position
 from .session import session_block
 from .strategies import STRATEGIES
@@ -37,6 +38,7 @@ class BotSpec:
     enabled: bool = False
     profile: str | None = None
     cluster: str | None = None
+    account: str = "paper_main"
     params: dict = field(default_factory=dict)
     description: str = ""
     exposure: float = 1.0
@@ -81,6 +83,7 @@ def load_bots(path: Path | None = None) -> list[BotSpec]:
                 enabled=bool(item.get("enabled", False)),
                 profile=item.get("profile"),
                 cluster=item.get("cluster"),
+                account=str(item.get("account") or "paper_main"),
                 params=item.get("params", {}) or {},
                 description=item.get("description", ""),
                 exposure=float(item.get("exposure", 1.0)),
@@ -143,6 +146,8 @@ def run_bot(
     dry_run: bool = False,
     start: str | None = None,
     profile: BotProfile | None = None,
+    account: AccountDefinition | None = None,
+    limits: AccountLimits | None = None,
     cluster_open_risk_usd: float = 0.0,
     max_cluster_risk_pct: float | None = None,
 ) -> list[BotAction]:
@@ -166,7 +171,11 @@ def run_bot(
         current=snap["equity"],
         tz=settings.timezone,
     )
-    prop_rules = rules_from_settings(settings)
+    prop_rules = (
+        rules_for_account(account)
+        if account is not None
+        else rules_from_settings(settings)
+    )
     open_risk_usd = _open_risk_usd(snap.get("positions") or [])
     trades_today = _trades_today(spec.id)
     opened_today = 0
@@ -242,10 +251,17 @@ def run_bot(
         if flatten_session:
             desired = 0
         risk_per_share = max(atr_value * settings.risk.atr_stop_mult, price * 0.005)
-        if profile is not None and risk_per_share > 0:
+        if limits is not None:
+            effective_risk_pct = min(
+                profile.max_risk_pct if profile else limits.per_trade_risk_pct,
+                limits.per_trade_risk_pct,
+            )
+        else:
+            effective_risk_pct = profile.max_risk_pct if profile else None
+        if effective_risk_pct is not None and risk_per_share > 0:
             desired = min(
                 desired,
-                int(snap["equity"] * profile.max_risk_pct / risk_per_share),
+                int(snap["equity"] * effective_risk_pct / risk_per_share),
             )
 
         delta = int(desired - held)
@@ -315,6 +331,7 @@ def run_bot(
                     open_risk_usd=open_risk_usd + opened_risk,
                     trades_today=trades_today + opened_today,
                 ),
+                limits=limits,
                 max_risk_pct=profile.max_risk_pct if profile else None,
                 max_trades_per_day=profile.max_trades_per_day if profile else None,
                 proposed_risk_usd=proposed_risk,
@@ -398,6 +415,7 @@ def run_all(
         "clusters", []
     )
     specs = load_bots()
+    account_map = load_accounts()
     needs_cluster = bool(clusters) or any(spec.cluster for spec in specs)
     equity = (
         float(broker.snapshot({}).get("equity") or 0.0) if needs_cluster else 0.0
@@ -416,10 +434,15 @@ def run_all(
         if profile is None:
             # Regla dura: un bot sin perfil (o con perfil desconocido) no corre.
             continue
+        account = account_map.get(spec.account or "paper_main")
+        if account is None:
+            continue
+        limits = effective_limits(DEFAULT_DB, account)
         if not profile.schedule.allows(current):
             continue
         cluster = _cluster_key(spec, clusters)
-        reserved = equity * profile.max_risk_pct if equity > 0 else 0.0
+        risk_pct = min(profile.max_risk_pct, limits.per_trade_risk_pct)
+        reserved = equity * risk_pct if equity > 0 else 0.0
         if (
             cluster is not None
             and equity > 0
@@ -434,6 +457,8 @@ def run_all(
                 broker,
                 dry_run=dry_run,
                 profile=profile,
+                account=account,
+                limits=limits,
                 cluster_open_risk_usd=cluster_used.get(cluster, 0.0)
                 if cluster is not None
                 else 0.0,

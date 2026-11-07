@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -312,10 +312,20 @@ class PropGuard:
 __all__ = ["AccountState", "GuardReport", "PropGuard", "PropError"]
 
 
+@dataclass(frozen=True)
+class AccountLimits:
+    """Límites efectivos de una cuenta (porcentajes sobre account_size)."""
+
+    daily_loss_pct: float
+    max_drawdown_pct: float
+    per_trade_risk_pct: float
+    max_open_risk_pct: float
+    max_trades_per_day: int
+
+
 @dataclass
 class AccountSnapshot:
     """Estado agregado de una cuenta compartida por varios bots."""
-
     equity: float
     day_start_equity: float
     initial_balance: float
@@ -343,6 +353,7 @@ def evaluate_account(
     rules: PropRules,
     snapshot: AccountSnapshot,
     *,
+    limits: AccountLimits | None = None,
     max_risk_pct: float | None = None,
     max_trades_per_day: int | None = None,
     proposed_risk_usd: float = 0.0,
@@ -354,8 +365,25 @@ def evaluate_account(
 
     Suma el riesgo abierto de todos los bots y el riesgo propuesto; las
     pérdidas del día se reflejan en el equity agregado. Cerrar/reducir nunca
-    se bloquea.
+    se bloquea. Si se pasan `limits`, se usan como límites efectivos de cuenta.
     """
+    if limits is not None:
+        rules = replace(
+            rules,
+            max_daily_loss_pct=limits.daily_loss_pct,
+            max_loss_pct=limits.max_drawdown_pct,
+            max_open_risk_pct=limits.max_open_risk_pct,
+        )
+        max_risk_pct = (
+            limits.per_trade_risk_pct
+            if max_risk_pct is None
+            else min(float(max_risk_pct), limits.per_trade_risk_pct)
+        )
+        max_trades_per_day = (
+            limits.max_trades_per_day
+            if max_trades_per_day is None
+            else min(int(max_trades_per_day), limits.max_trades_per_day)
+        )
     open_risk = max(0.0, float(snapshot.open_risk_usd))
     proposed = max(0.0, float(proposed_risk_usd))
     total_risk = open_risk + proposed

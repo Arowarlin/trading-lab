@@ -1894,6 +1894,7 @@ def list_bots() -> None:
     t.add_column("Estrategia")
     t.add_column("Perfil")
     t.add_column("Clúster")
+    t.add_column("Cuenta")
     t.add_column("Estado")
     t.add_column("Descripción", overflow="fold")
     for bot in data.get("bots", []):
@@ -1903,6 +1904,7 @@ def list_bots() -> None:
             bot.get("strategy", ""),
             bot.get("profile", "—"),
             bot.get("cluster", "—"),
+            bot.get("account", "—"),
             bot.get("enabled", False) and "on" or "off",
             bot.get("description", ""),
         )
