@@ -38,13 +38,12 @@ Reglas de trabajo:
     Zips antiguos con `.env` listados en `docs/backups.md` (pendientes de borrado
     con autorización).
 
-- [ ] **0.3 Reproducibilidad**
-  - Generar `uv.lock`, fijar versiones directas, añadir `pre-commit` y
-    actualizar CI (lint + tests, sin secretos ni brokers).
-  - Documentar versiones verificadas en `docs/dependencias.md`.
-  - Criterio: `uv sync --frozen` funciona, `pre-commit run --all-files` pasa,
-    CI en verde y `pytest` local en verde.
-  - Comando: `uv lock && uv sync --frozen --extra dev && pytest -q`.
+- [x] **0.3 Reproducibilidad** — 2026-11-07
+  - `uv.lock`, versiones directas fijadas, `pre-commit` y CI Windows con
+    lint + tests (sin secretos ni brokers).
+  - Documentado en `docs/dependencias.md`.
+  - Evidencia: `uv sync --frozen --extra dev --extra mt5` OK; CI verde en
+    `66f2e8f`; `pytest -q` → 129 passed.
 
 - [x] **0.4 Zona horaria y horario de verano** — 2026-11-06
   - Revisar el autodetector de offset MT5 y el reset FTMO (00:00 Praga).
@@ -176,4 +175,5 @@ Reglas de trabajo:
 | 2026-11-07 | 3.1/3.3 | `lab research` → 0 propuestas, DSR aplicado |
 | 2026-11-07 | 5.1–5.3/5.5 | `pytest tests/test_decisions.py -q` → 2 passed |
 | 2026-11-07 | 4.3/4.4 | `lab intel fetch` → 5 noticias; `pytest tests/test_intel.py -q` → 5 passed |
+| 2026-11-07 | 0.3 / final | `pytest -q` → 129 passed; CI 66f2e8f verde |
 |  |  |  |
