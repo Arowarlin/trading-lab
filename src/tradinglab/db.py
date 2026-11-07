@@ -364,6 +364,36 @@ CREATE TABLE IF NOT EXISTS model_registry_history (
     details TEXT
 );
 
+CREATE TABLE IF NOT EXISTS account_limit_versions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts TEXT NOT NULL,
+    account_id TEXT NOT NULL,
+    version INTEGER NOT NULL,
+    limits TEXT NOT NULL,
+    effective TEXT NOT NULL,
+    hash TEXT NOT NULL,
+    created_by TEXT NOT NULL,
+    reason TEXT,
+    UNIQUE(account_id, version)
+);
+
+CREATE TABLE IF NOT EXISTS bot_capital_limits (
+    bot TEXT PRIMARY KEY,
+    max_capital_usd REAL NOT NULL,
+    updated_at TEXT NOT NULL,
+    updated_by TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS bot_capital_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts TEXT NOT NULL,
+    bot TEXT NOT NULL,
+    old_value REAL,
+    new_value REAL NOT NULL,
+    updated_by TEXT NOT NULL,
+    reason TEXT
+);
+
 CREATE INDEX IF NOT EXISTS idx_lesson_tests_lesson ON lesson_tests(lesson_id);
 CREATE INDEX IF NOT EXISTS idx_account_cash_flows_account
     ON account_cash_flows(account_id, ts);

@@ -2946,6 +2946,125 @@ def models_qlib_cmd() -> None:
     console.print(f"[dim]{status['note']}[/dim]")
 
 
+@fund_app.command("snapshot")
+def fund_snapshot_cmd(
+    account: str = typer.Argument(...),
+    reason: str = typer.Option("", "--reason"),
+) -> None:
+    """Congela una versión numerada de los límites de una cuenta."""
+    from .limit_versions import snapshot_limits
+
+    try:
+        result = snapshot_limits(
+            DEFAULT_DB, account, created_by="cli", reason=reason
+        )
+    except ValueError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2) from exc
+    console.print(
+        f"[green]Versión {result['version']}[/green] · {account} · hash {result['hash']}"
+    )
+
+
+@fund_app.command("versions")
+def fund_versions_cmd(account: str = typer.Argument(...)) -> None:
+    """Lista versiones congeladas de límites."""
+    from .limit_versions import list_versions
+
+    rows = list_versions(DEFAULT_DB, account)
+    t = Table(title=f"Versiones de límites · {account}")
+    for col in ("Versión", "Fecha", "Hash", "Creador", "Motivo", "Diario", "MaxDD"):
+        t.add_column(col)
+    for row in rows:
+        limits = row.get("limits") or {}
+        t.add_row(
+            str(row["version"]),
+            str(row["ts"]),
+            str(row["hash"]),
+            str(row["created_by"]),
+            str(row["reason"] or ""),
+            f"{float(limits.get('daily_loss_pct', 0)):.4g}",
+            f"{float(limits.get('max_drawdown_pct', 0)):.4g}",
+        )
+    console.print(t)
+
+
+@fund_app.command("rollback")
+def fund_rollback_cmd(
+    account: str = typer.Argument(...),
+    version: int = typer.Option(..., "--version"),
+    confirm: bool = typer.Option(False, "--confirm"),
+) -> None:
+    """Restaura una versión; F13 congelado solo permite apretar."""
+    from .limit_versions import rollback_version
+
+    try:
+        result = rollback_version(
+            DEFAULT_DB, account, version, confirm=confirm, by="cli"
+        )
+    except ValueError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2) from exc
+    if not result["changes"]:
+        console.print("[dim]Sin cambios: la versión ya coincide.[/dim]")
+        return
+    t = Table(title=f"Rollback · {account} · v{version}")
+    for col in ("Campo", "Antes", "Después", "Efectivo desde", "Tipo"):
+        t.add_column(col)
+    for change in result["changes"]:
+        t.add_row(
+            change["field"],
+            str(change["old"]),
+            str(change["new"]),
+            change["effective_from"],
+            "aflojar" if change["loosening"] else "apretar",
+        )
+    console.print(t)
+    if any(change["loosening"] for change in result["changes"]):
+        console.print("[yellow]Aflojamiento: aplica el siguiente día hábil.[/yellow]")
+
+
+@bots_app.command("capital")
+def bots_capital_cmd() -> None:
+    """Lista el capital máximo configurado por bot."""
+    from .limit_versions import list_bot_capital
+
+    rows = list_bot_capital(DEFAULT_DB)
+    t = Table(title="Capital máximo por bot")
+    for col in ("Bot", "Máx. USD", "Actualizado", "Por"):
+        t.add_column(col)
+    for row in rows:
+        t.add_row(
+            row["bot"],
+            f"{float(row['max_capital_usd']):,.2f}",
+            str(row["updated_at"]),
+            str(row["updated_by"]),
+        )
+    console.print(t)
+
+
+@bots_app.command("capital-set")
+def bots_capital_set_cmd(
+    bot: str = typer.Argument(...),
+    max_capital: float = typer.Option(..., "--max-capital"),
+    reason: str = typer.Option("", "--reason"),
+) -> None:
+    """Fija el capital máximo por bot (SQLite con historial)."""
+    from .limit_versions import set_bot_capital
+
+    try:
+        result = set_bot_capital(
+            DEFAULT_DB, bot, max_capital, by="cli", reason=reason
+        )
+    except ValueError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2) from exc
+    console.print(
+        f"[green]{bot}[/green] · antes {result['old']} · ahora "
+        f"{result['max_capital_usd']:,.2f}"
+    )
+
+
 @operator_app.command("pin")
 def operator_pin_cmd() -> None:
     """Configura el PIN del modo operador en el keyring (nunca en .env)."""

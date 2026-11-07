@@ -268,6 +268,12 @@ def run_bot(
                 int(snap["equity"] * effective_risk_pct / risk_per_share),
             )
 
+        from .limit_versions import bot_capital, cap_quantity
+
+        capital_cap = bot_capital(DEFAULT_DB, spec.id)
+        if capital_cap is not None and target > 0:
+            desired = cap_quantity(desired, price, capital_cap)
+
         delta = int(desired - held)
         action = BotAction(spec.id, ticker, target, price, held, desired, delta, "sin_cambios")
 

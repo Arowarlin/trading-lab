@@ -16,6 +16,13 @@ Implementado sin añadir dependencias: ridge determinista en numpy.
 - Qlib solo se comprueba en `.venv-qlib`; no se instala en `.venv`.
 - Challenger SPY v1 registrado el 2026-11-07 sin promoción.
 
+## Límites versionados (7.3)
+
+- `account_limit_versions` con snapshot, hash y rollback confirmado.
+- Con F13 congelado solo se permite rollback que apriete.
+- `bot_capital_limits` + historial; el orquestador recorta el tamaño por el
+  capital máximo del bot.
+
 ## Lecciones
 
 - Un job semanal revisará `decision_outcomes` y propondrá textos breves con

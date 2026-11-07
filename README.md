@@ -871,7 +871,7 @@ stdlib y `127.0.0.1`. Se conservan todas las pestañas, rutas, CSRF, Host/Origin
 y la lista blanca `WRITE_ROUTES`.
 
 Evidencia: `pytest tests/test_console_shell.py -q` → **3 passed**; suite completa
-**320 passed**; cubre las seis secciones, las 15 vistas actuales, los
+**325 passed**; cubre las seis secciones, las 15 vistas actuales, los
 componentes del dashboard y la ausencia de URLs externas/CDNs.
 
 ---
@@ -1112,6 +1112,44 @@ Modelo base **ridge determinista en numpy**, sin dependencias nuevas:
 Estado real: challenger SPY v1 registrado (`hash b61f4e53…`), sin promoción ni
 activación. Evidencia: `pytest tests/test_models.py -q` → **3 passed**; suite
 completa **320 passed**; `ruff` limpio; `lab doctor` OK con avisos conocidos.
+
+---
+
+## 6r. Fase 8 cerrada (motor de eventos)
+
+Se evaluó NautilusTrader 1.231.0 y se decidió **no adoptarlo**: sin v2 estable,
+coste alto de migración y datos de pago, y el backtester propio cubre F13 y
+research diario. No se añaden dependencias (`nautilus`, `databento`, IBKR).
+Gate para reabrir: F13 activo + datos intradía reales + necesidad demostrada de
+rollover/eventos; la PoC iría en un venv separado.
+
+Evidencia: `pytest tests/test_engine_decision.py -q` → **2 passed**; suite
+completa **322 passed**; `ruff` limpio; `lab doctor` OK con avisos conocidos.
+
+---
+
+## 6s. Versionado de límites y capital por bot (7.3)
+
+- `account_limit_versions`: snapshot numerado de límites propios/efectivos con
+  hash, autor y motivo. El rollback exige confirmación.
+- Con F13 congelado/iniciado, un rollback que **afloje** se rechaza; apretar sí
+  se permite. El aflojamiento respeta la espera al siguiente día hábil de
+  `set_limits`.
+- `bot_capital_limits` + `bot_capital_history`: capital máximo por bot en SQLite,
+  con historial. El orquestador recorta `desired` para no superar ese capital.
+- CLI: `lab fund snapshot|versions|rollback` y `lab bots capital|capital-set`.
+- No edita YAML, no activa bots y no cambia el hash de F13.
+
+```powershell
+lab fund snapshot paper_main --reason "antes de ajustar"
+lab fund versions paper_main
+lab fund rollback paper_main --version 1 --confirm
+lab bots capital-set trend-spy --max-capital 50000
+lab bots capital
+```
+
+Evidencia: `pytest tests/test_limit_versions.py -q` → **3 passed**; suite
+completa **325 passed**; `ruff` limpio; `lab doctor` OK con avisos conocidos.
 
 ---
 

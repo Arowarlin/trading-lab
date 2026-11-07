@@ -204,14 +204,26 @@ Reglas de trabajo:
   - Qlib: solo se comprueba `.venv-qlib`; no se añaden dependencias.
   - Evidencia: `pytest tests/test_models.py -q` → 3 passed; suite completa
     320 passed; challenger SPY v1 registrado sin promoción.
-- [ ] **7.3 Límites**: versionado, capital máximo por agente y rollback.
-  - Evaluación en `docs/fase7_aprendizaje.md`.
+- [x] **7.3 Límites: versionado, capital máximo por agente y rollback** — 2026-11-07
+  - `account_limit_versions` con snapshot/hash y rollback confirmado.
+  - F13 congelado solo permite rollback que apriete; aflojar espera al
+    siguiente día hábil.
+  - `bot_capital_limits` + historial; el orquestador recorta `desired` por el
+    capital máximo del bot.
+  - CLI `lab fund snapshot|versions|rollback` y `lab bots capital|capital-set`.
+  - Evidencia: `pytest tests/test_limit_versions.py -q` → 3 passed; suite
+    completa 325 passed.
 
 ## Fase 8 — Motor de eventos (opcional)
 
 - [x] **8.1 Comparación escrita** — 2026-11-07
   - `docs/fase8_nautilus.md`: NautilusTrader 1.231.0, LGPL-3.0, sin v2 estable;
     se mantiene el backtester propio hasta que F13/intradía lo justifiquen.
+- [x] **8.2 Cierre de fase** — 2026-11-07
+  - Decisión formal de no adoptar Nautilus ni añadir `nautilus`/`databento`/
+    IBKR; gate de reapertura documentado.
+  - Evidencia: `pytest tests/test_engine_decision.py -q` → 2 passed; suite
+    completa 322 passed.
 
 ## Fase 9 — Fondo personal (etapas 1–6)
 
@@ -437,7 +449,7 @@ sin romper vistas ni añadir dependencias.
 | 2026-11-07 | E6 documentación | README 6d y Fase 9; tabla por perfil en Research; `ruff` + doctor |
 | 2026-11-07 | 10.1 Diario | `pytest tests/test_journal.py -q` → 7 passed; `lab journal` → sin datos; README 6e |
 | 2026-11-07 | 11 Modo operador | `pytest tests/test_operator.py -q` → 11 passed; 2 pasos/PIN/keyring/auditoría; README 6f |
-| 2026-11-07 | 12 Shell consola | `pytest tests/test_console_shell.py -q` → 3 passed; `pytest -q` → 320 passed; 6 secciones, 15 vistas, dashboard; README 6g |
+| 2026-11-07 | 12 Shell consola | `pytest tests/test_console_shell.py -q` → 3 passed; `pytest -q` → 325 passed; 6 secciones, 15 vistas, dashboard; README 6g |
 | 2026-11-07 | 10.2 Multiverse | `pytest tests/test_multiverse.py -q` → 7 passed; `pytest -q` → 279 passed; 1.000 permutaciones, seed 42, Diario + Run Detail |
 | 2026-11-07 | 10.3 Deriva | `pytest tests/test_drift.py -q` → 5 passed; `pytest -q` → 284 passed; IC bootstrap, mínimo 20, slippage, Bots + `lab drift` |
 | 2026-11-07 | 10.4 Salud/TWR | `pytest tests/test_health.py -q` → 5 passed; `pytest -q` → 289 passed; score 0-100, flujos y TWR en Fondo |
@@ -448,4 +460,6 @@ sin romper vistas ni añadir dependencias.
 | 2026-11-07 | 6.5 Agentes mercado | `pytest tests/test_market_agents.py -q` → 5 passed; `pytest -q` → 312 passed; routing, coordinador, CLI/API/Agentes |
 | 2026-11-07 | 6.6 Pilotos mercado | `pytest tests/test_market_pilots.py -q` → 4 passed; `pytest -q` → 317 passed; un mercado, gate aperturas, CLI/API/Agentes |
 | 2026-11-07 | 7.2 Modelos/registry | `pytest tests/test_models.py -q` → 3 passed; `pytest -q` → 320 passed; walk-forward, challenger, promote/rollback, Qlib status |
+| 2026-11-07 | 8 Cierre motor | `pytest tests/test_engine_decision.py -q` → 2 passed; `pytest -q` → 322 passed; sin Nautilus/databento/IBKR |
+| 2026-11-07 | 7.3 Versiones/capital | `pytest tests/test_limit_versions.py -q` → 3 passed; `pytest -q` → 325 passed; snapshot/rollback y capital por bot |
 |  |  |  |
