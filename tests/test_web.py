@@ -34,6 +34,7 @@ def test_index_disponible() -> None:
     assert "view-repos" in text
     assert "command-palette" in text
     assert "research-horizons" in text
+    assert "chart-empty" in text
     assert "research-intraday" in text
     assert "research-clusters" in text
     assert "research-portfolio" in text

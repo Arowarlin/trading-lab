@@ -1653,6 +1653,14 @@ def serve(
     settings = settings or get_settings()
     data = LabData(settings, external=external)
     server = DashboardServer((host, port), data)
+
+    def _warm() -> None:
+        try:
+            data.overview()
+        except Exception:
+            pass
+
+    threading.Thread(target=_warm, daemon=True).start()
     url = f"http://{host}:{port}/"
     print(f"TradingLab Console · {url}")
     print("Pulsa Ctrl+C para detener el servidor.")

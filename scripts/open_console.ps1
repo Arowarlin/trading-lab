@@ -104,6 +104,13 @@ if (-not (Test-Current $build)) {
     exit 1
 }
 
+# Precalienta el overview (tareas, LLM, mercado) antes de abrir la pagina.
+try {
+    Invoke-RestMethod -Uri "$url/api/overview" -TimeoutSec 25 | Out-Null
+} catch {
+    # La pagina mostrara el error; no bloqueamos la apertura.
+}
+
 $openUrl = "$url/?v=$build"
 if (-not $NoBrowser) {
     Start-Process $openUrl
