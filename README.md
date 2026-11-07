@@ -739,6 +739,27 @@ Es **solo informativo** y no cambia criterios de propuesta. Incluye una tabla
 de qué retorno diario y volatilidad harían falta para pasar en 22 días con
 pass ≥ 50% y breach < 15% (retornos iid normales, sin costes ni intradía).
 
+### Cartera simulada y costes
+
+```powershell
+lab portfolio-simulate --top 10 --paths 2000
+lab research-costs --top 10
+```
+
+- `portfolio-simulate` elige como máximo 2 variantes por clúster, las
+  equipondera y simula la cartera contra FTMO/Topstep. Salida:
+  `reports/research/portfolio.md` y `.json`.
+- `research-costs` reejecuta el top 10 con comisión/slippage 0/0, 1/5, 2/10 y
+  2/20 bps. Salida: `reports/research/costs.md` y `.json`.
+
+Resultado actual de la cartera: **3 bots** (2 del clúster trend + GLD),
+retorno 81,1%, Sharpe 1,03, MaxDD -9,2%. FTMO 120d: 70,6% pasa / 3,5%
+revienta. Topstep 50K sigue siendo mucho más restrictivo.
+
+Costes: **0 de 10 variantes frágiles** con 2/20 bps; el drag de costes es
+5,8–10,2 puntos porcentuales sobre el retorno total de la muestra. No cambia
+ningún criterio de propuesta.
+
 Criterios de propuesta: pasa ≥ 35%, revienta ≤ 15%, OOS ≥ 25%, Sharpe > 0,
 ≥ 20 trades, **DSR ≥ 90%**, **WF positivos ≥ 2/4**, **PBO ≤ 30% global y por
 activo**, **walk-forward global con veredicto `ok`**, **régimen aprobado en

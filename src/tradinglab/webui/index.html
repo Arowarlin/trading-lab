@@ -764,6 +764,14 @@
         <div id="research-clusters"></div>
       </div>
       <div class="panel" style="margin-bottom:14px">
+        <div class="panel-head"><h2>Cartera simulada</h2><span class="muted tiny" id="portfolio-meta"></span></div>
+        <div id="research-portfolio"></div>
+      </div>
+      <div class="panel" style="margin-bottom:14px">
+        <div class="panel-head"><h2>Sensibilidad a costes</h2><span class="muted tiny" id="costs-meta"></span></div>
+        <div id="research-costs"></div>
+      </div>
+      <div class="panel" style="margin-bottom:14px">
         <div class="panel-head"><h2>Ranking de estrategias</h2><span class="muted tiny" id="research-meta"></span></div>
         <div id="research-top"></div>
       </div>
@@ -2388,6 +2396,8 @@ function renderResearch() {
 
   renderHorizons(r.horizons);
   renderClusters(r.clusters);
+  renderPortfolio(r.portfolio);
+  renderCosts(r.costs);
   renderIntraday(r.intraday);
 
   [
@@ -2500,6 +2510,60 @@ function renderClusters(c) {
     { label: "#", num: true }, { label: "Bots" }, { label: "N", num: true },
     { label: "Riesgo máx. por clúster", num: true }, { label: "Nota" },
   ], rows, { empty: "sin datos" });
+}
+
+function renderPortfolio(p) {
+  const box = $("#research-portfolio");
+  const meta = $("#portfolio-meta");
+  if (!box) return;
+  if (!p || !p.members) {
+    box.innerHTML = `<div class="empty">sin datos. Ejecuta <code>lab portfolio-simulate</code>.</div>`;
+    if (meta) meta.textContent = "sin datos";
+    return;
+  }
+  if (meta) {
+    meta.textContent = `${p.members.length} bots · equiponderada · Sharpe ${num(p.portfolio?.sharpe, 2)} · MaxDD ${pct(p.portfolio?.max_drawdown, 1)}`;
+  }
+  const rows = p.members.map((m) => [
+    String(m.rank), `<b>${esc(m.label)}</b>`, `<span class="muted tiny">${esc(paramsText(m.params))}</span>`,
+    `${num(m.exposure, 2)}×`, pct(m.weight, 1), num(m.num_trades, 0),
+  ]);
+  const mcRows = (p.monte_carlo || []).map((r) => [
+    esc(r.firm), `${r.horizon}d`, pct(r.pass_rate, 1), pct(r.breach_rate, 1), pct(r.timeout_rate, 1),
+  ]);
+  box.innerHTML = grid([
+    { label: "#", num: true }, { label: "Variante" }, { label: "Parámetros" },
+    { label: "Escala", num: true }, { label: "Peso", num: true }, { label: "Trades", num: true },
+  ], rows, { empty: "sin datos" }) +
+    `<div class="note" style="margin:8px 0 6px">Cartera: retorno ${pct(p.portfolio?.total_return, 1)} · Sharpe ${num(p.portfolio?.sharpe, 2)} · MaxDD ${pct(p.portfolio?.max_drawdown, 1)} · ${num(p.portfolio?.days, 0)} días</div>` +
+    grid([{ label: "Firma" }, { label: "Horizonte" }, { label: "Pasa", num: true }, { label: "Revienta", num: true }, { label: "Timeout", num: true }], mcRows, { empty: "sin datos" });
+}
+
+function renderCosts(c) {
+  const box = $("#research-costs");
+  const meta = $("#costs-meta");
+  if (!box) return;
+  if (!c || !c.results) {
+    box.innerHTML = `<div class="empty">sin datos. Ejecuta <code>lab research-costs</code>.</div>`;
+    if (meta) meta.textContent = "sin datos";
+    return;
+  }
+  if (meta) meta.textContent = `${c.results.length} variantes · frágiles ${c.fragile_count} · ${c.start} → ${c.end}`;
+  const rows = c.results.map((r) => [
+    String(r.rank),
+    `<b>${esc(r.symbol)}</b> <span class="muted tiny">${esc(r.strategy)} · ${esc(paramsText(r.params))}</span>`,
+    pct(r.scenarios.base.total_return, 1),
+    pct(r.scenarios.double.total_return, 1),
+    pct(r.scenarios.stress.total_return, 1),
+    pct(r.scenarios.zero.total_return, 1),
+    r.fragile ? `<span class="tag red">frágil</span>` : `<span class="tag green">ok</span>`,
+  ]);
+  box.innerHTML = `<div class="note" style="margin:0 0 8px">Un edge que desaparece con costes realistas no se propone. Base 1/5 bps · doble 2/10 · estrés 2/20.</div>` +
+    grid([
+      { label: "#", num: true }, { label: "Variante" }, { label: "Base", num: true },
+      { label: "Doble", num: true }, { label: "Estrés", num: true }, { label: "Zero", num: true },
+      { label: "Fragilidad" },
+    ], rows, { empty: "sin datos" });
 }
 
 function renderIntraday(i) {

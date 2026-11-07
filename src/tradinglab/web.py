@@ -953,6 +953,8 @@ class LabData:
             "horizons": _read_json(self.research_dir / "horizons.json", {}) or {},
             "intraday": _read_json(self.research_dir / "intraday.json", {}) or {},
             "clusters": _read_json(self.research_dir / "clusters.json", {}) or {},
+            "portfolio": _read_json(self.research_dir / "portfolio.json", {}) or {},
+            "costs": _read_json(self.research_dir / "costs.json", {}) or {},
             "errors": latest.get("errors") or [],
         }
 
@@ -1528,6 +1530,10 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 self._json(self.server.data.research().get("intraday") or {})
             elif path == "/api/research/clusters":
                 self._json(self.server.data.research().get("clusters") or {})
+            elif path == "/api/research/portfolio":
+                self._json(self.server.data.research().get("portfolio") or {})
+            elif path == "/api/research/costs":
+                self._json(self.server.data.research().get("costs") or {})
             elif path == "/api/decisions":
                 self._json(self.server.data.decisions())
             elif path == "/api/decisions/compare":

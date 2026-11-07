@@ -3050,6 +3050,67 @@ def research_clusters_cmd(
     console.print(f"[green]Tabla generada[/green] · {files['md']} · {files['json']}")
 
 
+@app.command("portfolio-simulate")
+def portfolio_simulate_cmd(
+    top: int = typer.Option(10, "--top"),
+    paths: int = typer.Option(2_000, "--paths"),
+    max_per_cluster: int = typer.Option(2, "--max-per-cluster"),
+    out: str = typer.Option(None, "--out"),
+) -> None:
+    """Simula una cartera equiponderada respetando clústeres."""
+    from .portfolio import simulate, write_simulation
+
+    report_dir = Path(out) if out else ROOT / "reports" / "research"
+    try:
+        payload = simulate(
+            report_dir,
+            top=top,
+            paths=paths,
+            max_per_cluster=max_per_cluster,
+        )
+    except Exception as exc:
+        console.print(f"[red]No se pudo simular la cartera:[/red] {exc}")
+        raise typer.Exit(1)
+    files = write_simulation(payload, report_dir)
+    console.print(
+        Panel(
+            f"{len(payload['members'])} bots · equiponderada · "
+            f"retorno {payload['portfolio']['total_return']:.1%} · "
+            f"Sharpe {payload['portfolio']['sharpe']:.2f} · "
+            f"MaxDD {payload['portfolio']['max_drawdown']:.1%}\n"
+            f"Monte Carlo: {len(payload['monte_carlo'])} celdas",
+            title="Cartera simulada",
+        )
+    )
+    console.print(f"[green]Tabla generada[/green] · {files['md']} · {files['json']}")
+
+
+@app.command("research-costs")
+def research_costs_cmd(
+    top: int = typer.Option(10, "--top"),
+    out: str = typer.Option(None, "--out"),
+) -> None:
+    """Sensibilidad del top de research a comisión y slippage."""
+    from .costs import run_costs, write
+
+    settings = get_settings()
+    report_dir = Path(out) if out else ROOT / "reports" / "research"
+    try:
+        payload = run_costs(report_dir, cache_dir=settings.data.cache_dir, top=top)
+    except Exception as exc:
+        console.print(f"[red]No se pudo calcular la sensibilidad:[/red] {exc}")
+        raise typer.Exit(1)
+    files = write(payload, report_dir)
+    console.print(
+        Panel(
+            f"{len(payload['results'])} variantes · "
+            f"frágiles {payload['fragile_count']} · escenarios {', '.join(payload['scenarios'])}",
+            title="Sensibilidad a costes",
+        )
+    )
+    console.print(f"[green]Tabla generada[/green] · {files['md']} · {files['json']}")
+
+
 # ==================================================================== Futuros
 
 @futures_app.command("status")

@@ -36,6 +36,8 @@ def test_index_disponible() -> None:
     assert "research-horizons" in text
     assert "research-intraday" in text
     assert "research-clusters" in text
+    assert "research-portfolio" in text
+    assert "research-costs" in text
 
 
 def test_account_lee_sqlite(tmp_path: Path) -> None:
@@ -322,7 +324,7 @@ def test_servidor_http_responde(tmp_path: Path) -> None:
         assert overview["account"]["equity"] == pytest.approx(100_000.0)
         assert "market" in overview and "calendar" in overview and "repos" in overview
 
-        for path in ("/api/market", "/api/calendar", "/api/decisions", "/api/decisions/compare", "/api/repos", "/api/research/horizons", "/api/research/intraday", "/api/research/clusters"):
+        for path in ("/api/market", "/api/calendar", "/api/decisions", "/api/decisions/compare", "/api/repos", "/api/research/horizons", "/api/research/intraday", "/api/research/clusters", "/api/research/portfolio", "/api/research/costs"):
             with urllib.request.urlopen(f"{base}{path}", timeout=5) as response:
                 payload = json.load(response)
             assert isinstance(payload, dict)
