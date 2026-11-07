@@ -961,6 +961,35 @@ Evidencia: `pytest tests/test_health.py -q` → **5 passed**; suite completa
 
 ---
 
+## 6k. Streak lock y pausa (10.5)
+
+Pausa de **aperturas** por racha perdedora o pérdida diaria propia. Cerrar y
+reducir **nunca** se bloquean.
+
+- Umbrales por cuenta en SQLite (`account_risk_config`) con historial
+  (`account_risk_history`), fuera del hash de F13.
+- Defaults: **3 pérdidas seguidas** y **2% de pérdida diaria** del tamaño de
+  cuenta. La pausa se latcha hasta reanudación explícita.
+- Apretar umbrales es inmediato. Aflojar exige `--confirm` y **F13 no
+  congelado/iniciado**; con F13 solo se aprieta.
+- Reanudar exige confirmación y también se rechaza con F13 congelado. El reset
+  no reactiva nada: solo permite volver a abrir.
+- Guard integrado en `orchestrator.run_bot` y en el modo operador: si la cuenta
+  está en pausa, la apertura se bloquea; el cierre sigue permitido.
+- Fondo muestra el badge **PAUSA de aperturas**, motivo y botón **Reanudar**.
+
+```powershell
+lab fund pause-status
+lab fund pause-set paper_main --max-losses 2 --daily-loss-pct 0.015
+lab fund pause-set paper_main --max-losses 4 --confirm   # aflojar
+lab fund pause-resume paper_main --confirm
+```
+
+Evidencia: `pytest tests/test_riskpause.py -q` → **4 passed**; suite completa
+**295 passed**; `ruff` limpio; `lab doctor` OK con avisos conocidos.
+
+---
+
 ## 7. Trading-R1 en Windows
 
 Trading-R1 usa `fcntl`, `os.O_NOFOLLOW` y `os.getuid()`: **no funciona en Windows**.

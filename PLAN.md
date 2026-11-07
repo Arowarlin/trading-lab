@@ -279,8 +279,17 @@ controladas, sin activar bots, sin órdenes, sin dinero real y sin tocar `.env`.
   - Visible en **Fondo** (salud y libro de capital).
   - Evidencia: `pytest tests/test_health.py -q` → 5 passed; suite completa
     289 passed.
-- [ ] **10.5 Streak lock y pausa** — umbrales en SQLite, historial, fuera del
-  hash de F13; reanudar con confirmación.
+- [x] **10.5 Streak lock y pausa** — 2026-11-07
+  - Pausa de aperturas por N pérdidas seguidas o X% de pérdida diaria propia;
+    cerrar/reducir nunca se bloquea.
+  - Umbrales en `account_risk_config` con `account_risk_history`, fuera del
+    hash de F13. Apretar inmediato; aflojar/reanudar con confirmación y F13
+    congelado solo permite apretar.
+  - Integrado en `orchestrator.run_bot` y modo operador; Fondo muestra pausa y
+    botón Reanudar.
+  - CLI `lab fund pause-status|pause-set|pause-resume`.
+  - Evidencia: `pytest tests/test_riskpause.py -q` → 4 passed; suite completa
+    295 passed.
 - [ ] **10.6 Aprendizaje controlado** — `lessons` proposed/approved/rejected,
   contador DSR, holdout sellado y campeón/retador; auto-aplicación solo para
   reducir riesgo y con reversión.
@@ -384,4 +393,5 @@ sin romper vistas ni añadir dependencias.
 | 2026-11-07 | 10.2 Multiverse | `pytest tests/test_multiverse.py -q` → 7 passed; `pytest -q` → 279 passed; 1.000 permutaciones, seed 42, Diario + Run Detail |
 | 2026-11-07 | 10.3 Deriva | `pytest tests/test_drift.py -q` → 5 passed; `pytest -q` → 284 passed; IC bootstrap, mínimo 20, slippage, Bots + `lab drift` |
 | 2026-11-07 | 10.4 Salud/TWR | `pytest tests/test_health.py -q` → 5 passed; `pytest -q` → 289 passed; score 0-100, flujos y TWR en Fondo |
+| 2026-11-07 | 10.5 Pausa | `pytest tests/test_riskpause.py -q` → 4 passed; `pytest -q` → 295 passed; racha/día, F13 solo aprieta, Fondo + CLI |
 |  |  |  |

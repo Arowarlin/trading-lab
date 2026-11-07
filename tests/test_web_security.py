@@ -154,6 +154,7 @@ def test_rutas_de_escritura_son_lista_blanca(server) -> None:
         "/api/bots/propose",
         "/api/fund/limits",
         "/api/fund/killswitch",
+        "/api/fund/pause/resume",
         "/api/operator/arm",
         "/api/operator/disarm",
         "/api/operator/preview",

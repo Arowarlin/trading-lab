@@ -2178,6 +2178,100 @@ def fund_flows_cmd(
         )
 
 
+@fund_app.command("pause-status")
+def fund_pause_status_cmd(account: str = typer.Argument(None)) -> None:
+    """Muestra pausa de aperturas y umbrales de racha/pérdida diaria."""
+    from .accounts import load_accounts
+    from .riskpause import pause_status
+
+    settings = get_settings()
+    accounts = load_accounts()
+    rows = [account] if account else list(accounts)
+    t = Table(title="Pausa de aperturas")
+    for col in ("Cuenta", "Pausa", "Racha", "Máx. racha", "Pérdida día", "Límite día", "Motivo"):
+        t.add_column(col)
+    for account_id in rows:
+        if account_id not in accounts:
+            console.print(f"[red]cuenta desconocida: {account_id}[/red]")
+            continue
+        state = pause_status(
+            DEFAULT_DB,
+            account_id,
+            tz=settings.timezone,
+            persist=False,
+        )
+        t.add_row(
+            account_id,
+            "SÍ" if state["paused"] else "no",
+            str(state.get("consecutive_losses") if state.get("consecutive_losses") is not None else "sin datos"),
+            str(state.get("max_consecutive_losses")),
+            f"{state.get('daily_loss_usd'):,.2f}" if state.get("daily_loss_usd") is not None else "sin datos",
+            f"{state.get('daily_limit_usd'):,.2f}" if state.get("daily_limit_usd") is not None else "sin datos",
+            state.get("reason") or "",
+        )
+    console.print(t)
+
+
+@fund_app.command("pause-set")
+def fund_pause_set_cmd(
+    account: str = typer.Argument(...),
+    max_losses: int = typer.Option(None, "--max-losses", help="Pérdidas seguidas"),
+    daily_loss_pct: float = typer.Option(None, "--daily-loss-pct", help="Fracción, ej. 0.02"),
+    confirm: bool = typer.Option(False, "--confirm", help="Confirmar aflojar"),
+) -> None:
+    """Ajusta umbrales de pausa; apretar es inmediato, aflojar exige confirmar."""
+    from .riskpause import set_thresholds
+
+    changes = {}
+    if max_losses is not None:
+        changes["max_consecutive_losses"] = max_losses
+    if daily_loss_pct is not None:
+        changes["daily_loss_pct"] = daily_loss_pct
+    try:
+        result = set_thresholds(
+            DEFAULT_DB,
+            account,
+            changes=changes,
+            origin="cli",
+            confirm=confirm,
+        )
+    except ValueError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2) from exc
+    if not result["changes"]:
+        console.print("[dim]Sin cambios.[/dim]")
+        return
+    t = Table(title=f"Umbrales de pausa · {account}")
+    for col in ("Campo", "Antes", "Después", "Tipo"):
+        t.add_column(col)
+    for change in result["changes"]:
+        t.add_row(
+            change["field"],
+            str(change["old"]),
+            str(change["new"]),
+            "aflojar" if change["loosening"] else "apretar",
+        )
+    console.print(t)
+
+
+@fund_app.command("pause-resume")
+def fund_pause_resume_cmd(
+    account: str = typer.Argument(...),
+    confirm: bool = typer.Option(False, "--confirm"),
+) -> None:
+    """Reanuda aperturas; exige confirmación y F13 no congelado."""
+    from .riskpause import resume
+
+    try:
+        result = resume(DEFAULT_DB, account, confirm=confirm, actor="cli")
+    except ValueError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2) from exc
+    console.print(
+        f"[green]Pausa reanudada[/green] · {result['account_id']} · {result['reset_at']}"
+    )
+
+
 @operator_app.command("pin")
 def operator_pin_cmd() -> None:
     """Configura el PIN del modo operador en el keyring (nunca en .env)."""

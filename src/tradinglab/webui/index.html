@@ -2495,6 +2495,7 @@ function renderFund() {
   }
 
   $("#fund-accounts").innerHTML = accounts.map(accountFundCard).join("");
+  $$("[data-fund-resume]").forEach((button) => button.addEventListener("click", () => resumeFundPause(button.dataset.fundResume)));
   renderFundEditor();
   renderFundHistory();
   renderFundPockets();
@@ -2597,12 +2598,18 @@ function accountFundCard(a) {
   const use = a.usage || {};
   const typeTag = a.type === "fondeo" ? `<span class="badge warn">fondeo</span>` : `<span class="badge paper">capital propio</span>`;
   const pendTag = (a.pending || []).length ? `<span class="badge warn">${(a.pending || []).length} pendiente(s)</span>` : "";
+  const pause = a.pause || {};
+  const pauseTag = pause.paused ? `<span class="badge bad">PAUSA de aperturas</span>` : "";
+  const pauseLine = pause.paused
+    ? `<div class="alert red" style="margin-top:8px"><b>Pausa de aperturas:</b> ${esc(pause.reason || "sin motivo")}. Cerrar/reducir sigue permitido. <button class="btn small" data-fund-resume="${esc(a.id)}">Reanudar</button></div>`
+    : "";
   const usageLine = use.available
     ? `<div class="muted tiny">Equity ${money(use.equity)} · inicio del día ${money(use.day_start_equity)} (${esc(use.source || "")}) · usado ${pct(use.daily_used_pct, 1)} del diario · colchón ${money(use.daily_cushion_usd)} · drawdown usado ${pct(use.drawdown_used_pct, 1)} · colchón ${money(use.drawdown_cushion_usd)}</div>`
     : `<div class="muted tiny">Uso del día: ${esc(use.reason || "sin datos")} · límite diario ${money(use.daily_limit_usd)}</div>`;
   return `<div class="panel account-card">
-    <div class="panel-head"><h2>${esc(a.name)}</h2><span style="display:flex;gap:5px;flex-wrap:wrap">${typeTag}${pendTag}</span></div>
+    <div class="panel-head"><h2>${esc(a.name)}</h2><span style="display:flex;gap:5px;flex-wrap:wrap">${typeTag}${pendTag}${pauseTag}</span></div>
     <div class="muted tiny">${esc(a.id)} · ${esc(a.broker)} · ${esc(a.status)}${a.firm ? ` · ${esc(a.firm)} ${esc(a.phase || "")}` : ""} · bolsillo ${esc(a.pocket_label || a.pocket)}</div>
+    ${pauseLine}
     <div class="account-kpis">
       <div><span>Tamaño</span><b>${money(a.account_size)}</b></div>
       <div><span>Equity</span><b>${money(use.equity)}</b></div>
@@ -2732,6 +2739,21 @@ async function refreshFund() {
     renderFund();
   } catch (error) {
     toast("No se pudo actualizar el fondo: " + error.message, true);
+  }
+}
+
+async function resumeFundPause(accountId) {
+  if (!window.confirm(`¿Reanudar aperturas en ${accountId}? Solo si revisaste la racha/pérdida.`)) return;
+  try {
+    await getJSON("/api/fund/pause/resume", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ account: accountId, confirm: true }),
+    });
+    toast("Pausa reanudada.");
+    await refreshFund();
+  } catch (error) {
+    toast(error.message, true);
   }
 }
 

@@ -577,6 +577,19 @@ class OperatorService:
         if side == "sell" and sl <= price:
             raise OperatorError("SL debe estar por encima del precio de venta", 400)
 
+        from .riskpause import pause_status
+
+        try:
+            pause = pause_status(
+                self.db_path, account.id, tz=self.settings.timezone
+            )
+        except Exception as exc:
+            raise OperatorError(f"pausa de riesgo no disponible: {exc}", 409) from exc
+        if pause.get("paused"):
+            raise OperatorError(
+                f"pausa de aperturas: {pause.get('reason')}", 409
+            )
+
         broker = self._connect_broker(account)
         try:
             snap = broker.snapshot({ticker: price})

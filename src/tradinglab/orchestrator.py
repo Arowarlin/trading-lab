@@ -321,6 +321,29 @@ def run_bot(
             )
             continue
 
+        if delta > 0 and account is not None:
+            try:
+                from .riskpause import pause_status
+
+                pause = pause_status(
+                    DEFAULT_DB, account.id, tz=settings.timezone
+                )
+            except Exception as exc:
+                action.status = "bloqueado"
+                action.detail = f"pausa de riesgo no disponible: {exc}"[:200]
+                actions.append(action)
+                continue
+            if pause.get("paused"):
+                action.status = "bloqueado"
+                action.detail = f"pausa de aperturas: {pause.get('reason')}"
+                actions.append(action)
+                send_alert(
+                    "risk_pause_block",
+                    f"{spec.id}/{ticker}: {pause.get('reason')}",
+                    severity="warning",
+                )
+                continue
+
         if delta > 0:
             proposed_risk = abs(delta) * risk_per_share
             account_guard = evaluate_account(

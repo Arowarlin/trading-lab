@@ -68,6 +68,8 @@ from .profiles import load_profiles
 from .prop import AccountState, PropGuard, PropRules, from_yaml, ftmo
 from .prop.simulator import multiverse_by_trade
 from .reconciliation import last_reconciliation
+from .riskpause import pause_status
+from .riskpause import resume as resume_pause
 
 INDEX_FILE = Path(__file__).with_name("webui") / "index.html"
 TICKER_RE = re.compile(r"^[A-Z0-9][A-Z0-9.\-=^]{0,11}$")
@@ -85,6 +87,7 @@ WRITE_ROUTES = (
     "/api/bots/propose",
     "/api/fund/limits",
     "/api/fund/killswitch",
+    "/api/fund/pause/resume",
     "/api/operator/arm",
     "/api/operator/disarm",
     "/api/operator/preview",
@@ -746,6 +749,20 @@ class LabData:
             twr = time_weighted_return(
                 paper_curve if account.id == "paper_main" else [], flows
             )
+            try:
+                pause = pause_status(
+                    self.db_path,
+                    account.id,
+                    trades=account_trades,
+                    tz=self.settings.timezone,
+                    persist=False,
+                )
+            except Exception as exc:
+                pause = {
+                    "paused": False,
+                    "reason": f"Sin datos: {exc}",
+                    "trigger_type": None,
+                }
             rows.append(
                 {
                     "id": account.id,
@@ -774,6 +791,7 @@ class LabData:
                     ),
                     "twr": twr,
                     "health": health,
+                    "pause": pause,
                     "history": history,
                     "pending": [item for item in history if item["pending"]],
                 }
@@ -2424,6 +2442,33 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     return
                 self.server.data.cache.clear()
                 self._json(result)
+            elif path == "/api/fund/pause/resume":
+                account = str(body.get("account") or "").strip()
+                try:
+                    result = resume_pause(
+                        self.server.data.db_path,
+                        account,
+                        confirm=bool(body.get("confirm")),
+                        actor="console",
+                    )
+                except ValueError as exc:
+                    self._error(403, str(exc))
+                else:
+                    try:
+                        from .runtime import record_console_action
+
+                        record_console_action(
+                            self.server.data.db_path,
+                            action="fund_pause_resume",
+                            params={"account": account},
+                            result="reanudado",
+                            ok=True,
+                            actor="console",
+                        )
+                    except Exception:
+                        pass
+                    self.server.data.cache.clear()
+                    self._json(result)
             elif path == "/api/operator/arm":
                 try:
                     state = self.server.data.operator.arm(

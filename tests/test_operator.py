@@ -13,6 +13,7 @@ from tradinglab import web
 from tradinglab.config import Settings
 from tradinglab.db import init_db
 from tradinglab.f13 import config_hash, freeze
+from tradinglab.journal import ClosedTrade
 from tradinglab.killswitch import activate as activate_killswitch
 from tradinglab.killswitch import load_state
 from tradinglab.operator import (
@@ -20,6 +21,7 @@ from tradinglab.operator import (
     OperatorService,
     OperatorSession,
 )
+from tradinglab.riskpause import pause_status
 from tradinglab.runtime import console_actions, get_bot_state
 
 
@@ -194,6 +196,57 @@ def test_cierre_permitido_con_killswitch_activo(tmp_path: Path, monkeypatch) -> 
     assert result["ok"] is True
     assert fake.orders[-1]["qty"] == -5
     assert fake.orders[-1]["price"] == pytest.approx(101.0)
+
+
+def test_pausa_bloquea_apertura_pero_no_cierre(tmp_path: Path) -> None:
+    fake = FakeBroker(
+        positions=[
+            {"ticker": "SPY", "qty": 5.0, "avg_price": 100.0, "last": 101.0}
+        ]
+    )
+    service, fake, db = _service(tmp_path, broker=fake)
+    service.arm("1234")
+    now = datetime(2026, 1, 7, 20, 0, tzinfo=timezone.utc)
+    trades = []
+    for index in range(3):
+        stamp = f"2026-01-0{5 + index}T15:00:00+00:00"
+        trades.append(
+            ClosedTrade(
+                bot="trend-spy",
+                account="paper_main",
+                profile="swing_equity",
+                ticker="SPY",
+                qty=1.0,
+                entry_price=100.0,
+                exit_price=90.0,
+                entry_ts=stamp,
+                exit_ts=stamp,
+                pnl=-10.0,
+                fees=0.0,
+                return_pct=-0.1,
+                holding_hours=1.0,
+                day=f"2026-01-0{5 + index}",
+                hour=15,
+                entry_order_id=index + 1,
+                exit_order_id=index + 2,
+                exit_fill_id=index + 3,
+            )
+        )
+    paused = pause_status(db, "paper_main", trades=trades, tz="UTC", now=now)
+    assert paused["paused"] is True
+    with pytest.raises(OperatorError) as exc:
+        service.preview("order", _order_params())
+    assert "pausa" in str(exc.value).lower()
+    preview = service.preview(
+        "close", {"account": "paper_main", "ticket": "SPY", "price": 101.0}
+    )
+    result = service.execute(
+        "close",
+        {"account": "paper_main", "ticket": "SPY", "price": 101.0},
+        preview["token"],
+    )
+    assert result["ok"] is True
+    assert fake.orders[-1]["qty"] == -5
 
 
 def test_mode_live_y_plantilla_rechazadas(tmp_path: Path) -> None:

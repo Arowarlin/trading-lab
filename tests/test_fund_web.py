@@ -13,9 +13,11 @@ from tradinglab import web
 from tradinglab.accounts import load_accounts
 from tradinglab.config import Settings
 from tradinglab.db import connect, init_db
+from tradinglab.journal import ClosedTrade
 from tradinglab.killswitch import load_state
 from tradinglab.operator import OperatorService, OperatorSession
 from tradinglab.orchestrator import BotSpec
+from tradinglab.riskpause import pause_status
 
 
 def _data(tmp_path: Path) -> web.LabData:
@@ -265,6 +267,49 @@ def test_killswitch_global_requiere_confirmacion(server, monkeypatch) -> None:
     )
     assert status == 200, payload
     assert payload["killswitch"]["active"] is False
+
+
+def test_pausa_de_fondo_se_reanuda_con_confirmacion(server) -> None:
+    db = server.data.db_path
+    trades = []
+    for index in range(3):
+        stamp = f"2026-01-0{5 + index}T15:00:00+00:00"
+        trades.append(
+            ClosedTrade(
+                bot="trend-spy",
+                account="paper_main",
+                profile="swing_equity",
+                ticker="SPY",
+                qty=1.0,
+                entry_price=100.0,
+                exit_price=90.0,
+                entry_ts=stamp,
+                exit_ts=stamp,
+                pnl=-10.0,
+                fees=0.0,
+                return_pct=-0.1,
+                holding_hours=1.0,
+                day=f"2026-01-0{5 + index}",
+                hour=15,
+                entry_order_id=index + 1,
+                exit_order_id=index + 2,
+                exit_fill_id=index + 3,
+            )
+        )
+    assert pause_status(db, "paper_main", trades=trades, tz="UTC")["paused"] is True
+    token = _token(server)
+    fund = _request(server, "GET", "/api/fund")[1]
+    paper = next(row for row in fund["accounts"] if row["id"] == "paper_main")
+    assert paper["pause"]["paused"] is True
+    status, payload = _request(
+        server,
+        "POST",
+        "/api/fund/pause/resume",
+        body={"account": "paper_main", "confirm": True},
+        token=token,
+    )
+    assert status == 200, payload
+    assert payload["paused"] is False
 
 
 def test_cluster_avisa_si_supera_presupuesto(tmp_path: Path, monkeypatch) -> None:

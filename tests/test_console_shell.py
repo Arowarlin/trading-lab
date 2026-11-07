@@ -50,6 +50,7 @@ def test_dashboard_tiene_kpis_balance_performers_y_calendario() -> None:
         'id="fund-health-meta"',
         'id="fund-flows"',
         'id="fund-twr"',
+        "resumeFundPause",
         'id="sidebar-toggle"',
         "sidebar-collapsed",
         "computeDailyPnl",
