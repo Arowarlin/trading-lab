@@ -129,6 +129,17 @@ cd E:\trading-lab
 .\.venv\Scripts\lab.exe alerts test
 .\.venv\Scripts\lab.exe reconcile
 
+# Ciclo de vida de bots
+.\.venv\Scripts\lab.exe bots list
+.\.venv\Scripts\lab.exe bots evaluate           # añade --apply para archivar no aptos deshabilitados
+.\.venv\Scripts\lab.exe bots propose mi-bot --strategy trend --universe QQQ
+.\.venv\Scripts\lab.exe bots archive mi-bot --yes
+.\.venv\Scripts\lab.exe bots restore mi-bot
+
+# Decisiones LLM y resultados forward
+.\.venv\Scripts\lab.exe decisions update
+.\.venv\Scripts\lab.exe decisions report
+
 # Reproducibilidad y secretos
 uv sync --frozen --extra dev --extra mt5
 .\.venv\Scripts\python.exe scripts\migrate_secrets.py --status
@@ -164,15 +175,20 @@ Qué muestra:
 |---|---|
 | **Resumen** | equity, cash, retorno, drawdown, curva de equity, estado de LM Studio/MT5/FTMO, tareas programadas, últimas decisiones y órdenes. |
 | **Sala** | oficina pixel con los 10 roles de TradingAgents, estados en vivo, burbujas, tablero y acceso al detalle de cada rol. |
-| **Bots** | catálogo de `config/bots.yaml`, enabled/disabled, universo, estrategia y resultado del último dry-run por ticker. |
+| **Cuentas** | paper interno, Alpaca paper, FTMO demo y TopstepX/ProjectX, con equity, cash, posiciones y estado. |
+| **Bots** | catálogo, enabled/disabled, propuestas, evaluación con backtest, archivo reversible y última señal. |
 | **Agentes** | historial lite/deep con rating, confianza, duración y tesis; detalle en modal; runs deep en curso o terminados. |
 | **Research** | ranking, propuestas (`enabled: false`), casi propuestas y métricas OOS. |
 | **Riesgo** | guard de FTMO (colchón restante, suelos, límites usados), reglas activas, cuenta MT5 y estado de TopstepX/ProjectX. |
 | **Registros** | logs de dry-run, agentes, backups y tareas, con visor integrado. |
 
-La página se refresca sola cada **15 s**. El servidor escucha solo en
+La página se refresca sola cada **8 s**. El servidor escucha solo en
 **127.0.0.1** por defecto (no se publica en la red) y usa la biblioteca estándar
 de Python: no añade FastAPI/Flask ni CDNs externos.
+
+La gráfica de equity tiene rangos **1M/3M/6M/1A/Todo**, tooltip al pasar el
+ratón, eje de fechas, línea base y área. La pestaña **Cuentas** reúne las cuatro
+cuentas; **Bots** permite evaluar, proponer y archivar (sin borrar) con un clic.
 
 **Acciones disponibles (nunca envían órdenes):**
 

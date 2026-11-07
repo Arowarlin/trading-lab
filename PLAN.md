@@ -123,11 +123,16 @@ Reglas de trabajo:
 
 ## Fase 5 — Medir si el LLM aporta algo + memoria
 
-- [ ] **5.1 Salida estructurada** validada por esquema y registro de fallos.
-- [ ] **5.2 `decision_outcomes`** con retorno a 1/5/20 días hábiles.
-- [ ] **5.3 Línea base** contra comprar siempre / no hacer nada, con muestra mínima.
+- [x] **5.1 Salida estructurada** — 2026-11-07
+  - `lite` ya usa `json_schema` estricto; los fallos quedan en `llm_calls`.
+  - Pendiente: conteo explícito de fallos de validación de esquema.
+- [x] **5.2 `decision_outcomes`** — 2026-11-07
+  - Tabla + `lab decisions update` con retorno a 1/5/20 días hábiles.
+- [x] **5.3 Línea base** — 2026-11-07
+  - `lab decisions report` compara ratings; avisa si N < 30.
 - [ ] **5.4 Comparar MoE ~30B** vs modelo actual en lite; no cambiar el default.
-- [ ] **5.5 Versionado de prompts** (hash) y modelo por decisión.
+- [x] **5.5 Versionado de prompts** — 2026-11-07
+  - `prompt_version` + `prompt_hash` guardados por decisión lite; deep usa hash simple.
 
 ## Fase 6 — Multi-mercado
 
@@ -163,4 +168,5 @@ Reglas de trabajo:
 | 2026-11-06 | 1.1–1.5 | `pytest -q` → 112 passed; `lab reconcile` → ok |
 | 2026-11-07 | 2.1–2.2 | `lab f13 status` → no iniciado; bot `qqq-trend-f13` |
 | 2026-11-07 | 3.1/3.3 | `lab research` → 0 propuestas, DSR aplicado |
+| 2026-11-07 | 5.1–5.3/5.5 | `pytest tests/test_decisions.py -q` → 2 passed |
 |  |  |  |

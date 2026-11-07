@@ -20,6 +20,8 @@ from .backtest import run as run_backtest
 from .botlab import archive_bot, evaluate_all, propose_bot, restore_bot
 from .config import DEFAULT_DB, ROOT, get_settings
 from .db import connect, init_db, utcnow
+from .decisions import record_decision, update_outcomes
+from .decisions import report as decisions_report
 from .execution import get_broker, get_mt5_broker, get_projectx_broker
 from .f13 import config_check as f13_config_check
 from .f13 import freeze as f13_freeze
@@ -58,6 +60,7 @@ alerts_app = typer.Typer(
 )
 f13_app = typer.Typer(no_args_is_help=True, help="F13: pilot operativo de paper y criterios.")
 bots_app = typer.Typer(no_args_is_help=True, help="Bots: listar, evaluar, proponer, archivar.")
+decisions_app = typer.Typer(no_args_is_help=True, help="Decisiones LLM: resultados y líneas base.")
 app.add_typer(mt5_app, name="mt5")
 app.add_typer(prop_app, name="prop")
 app.add_typer(futures_app, name="futures")
@@ -65,6 +68,7 @@ app.add_typer(killswitch_app, name="killswitch")
 app.add_typer(alerts_app, name="alerts")
 app.add_typer(f13_app, name="f13")
 app.add_typer(bots_app, name="bots")
+app.add_typer(decisions_app, name="decisions")
 console = Console()
 
 OK = "[green]OK[/green]"
@@ -557,6 +561,11 @@ def agent(
         console.print(Panel(str(exc)[-3000:], title="Agente falló", style="bold red"))
         raise typer.Exit(1)
 
+    try:
+        record_decision(DEFAULT_DB, result, mode=mode)
+    except Exception:
+        pass
+
     table = Table(title=f"Decisión · {ticker.upper()} · {day}")
     table.add_column("Campo", style="bold")
     table.add_column("Valor")
@@ -603,6 +612,11 @@ def agent_run(
     except AgentError as exc:
         console.print(Panel(str(exc)[-3000:], title="Agente falló", style="bold red"))
         raise typer.Exit(1)
+
+    try:
+        record_decision(DEFAULT_DB, result, mode=mode)
+    except Exception:
+        pass
 
     rating = str(result.get("rating", "REVIEW"))
     target_fraction = RATING_TO_TARGET.get(rating, None)
@@ -1332,6 +1346,46 @@ def f13_config_check_cmd() -> None:
     console.print(check)
     if not check["ok"]:
         raise typer.Exit(1)
+
+
+@decisions_app.command("update")
+def decisions_update_cmd() -> None:
+    """Rellena retornos a 1/5/20 días hábiles de decisiones antiguas."""
+    settings = get_settings()
+    updated = update_outcomes(DEFAULT_DB, settings.data.cache_dir)
+    console.print(f"[green]{updated} decisiones actualizadas[/green]")
+
+
+@decisions_app.command("report")
+def decisions_report_cmd() -> None:
+    """Compara el rating del LLM con comprar siempre / no hacer nada."""
+    rows = decisions_report(DEFAULT_DB)
+    if not rows:
+        console.print("[yellow]Sin decisiones con retorno a 20 días todavía.[/yellow]")
+        return
+    t = Table(title="Decisiones LLM · retorno forward")
+    for col in ("Rating", "N", "1d", "5d", "20d", "t", "p"):
+        t.add_column(col, justify="right" if col != "Rating" else "left")
+    for row in rows:
+        t.add_row(
+            row["rating"],
+            str(row["n"]),
+            _fmt_pct(row["mean_1d"]) if row["mean_1d"] is not None else "—",
+            _fmt_pct(row["mean_5d"]) if row["mean_5d"] is not None else "—",
+            _fmt_pct(row["mean_20d"]),
+            f"{row['t_stat']:.2f}" if row["t_stat"] is not None else "—",
+            f"{row['p_value']:.3f}" if row["p_value"] is not None else "—",
+        )
+    console.print(t)
+    total = sum(row["n"] for row in rows)
+    if total < 30:
+        console.print(
+            f"[yellow]Muestra total {total} < 30: no saques conclusiones de edge todavía.[/yellow]"
+        )
+    console.print(
+        "[dim]Línea base: 0% = no hacer nada; el retorno medio de todas las decisiones "
+        "equivale a comprar siempre en las fechas analizadas.[/dim]"
+    )
 
 
 @bots_app.command("list")

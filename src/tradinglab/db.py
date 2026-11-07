@@ -175,6 +175,25 @@ CREATE TABLE IF NOT EXISTS bot_evaluations (
     details TEXT
 );
 
+CREATE TABLE IF NOT EXISTS decision_outcomes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts TEXT NOT NULL,
+    ticker TEXT NOT NULL,
+    decision_date TEXT NOT NULL,
+    mode TEXT NOT NULL,
+    rating TEXT NOT NULL,
+    confidence REAL,
+    model TEXT,
+    prompt_version TEXT,
+    prompt_hash TEXT,
+    ref_price REAL,
+    return_1d REAL,
+    return_5d REAL,
+    return_20d REAL,
+    updated_at TEXT,
+    UNIQUE(ticker, decision_date, mode)
+);
+
 CREATE INDEX IF NOT EXISTS idx_alerts_ts ON alerts(ts);
 CREATE INDEX IF NOT EXISTS idx_reconciliation_ts ON reconciliation(ts);
 CREATE INDEX IF NOT EXISTS idx_signals_ts ON signals(ts);
