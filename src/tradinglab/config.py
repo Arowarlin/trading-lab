@@ -180,6 +180,20 @@ class OperatorSettings(BaseModel):
     lock_seconds: int = 300
 
 
+class FundHealthWeights(BaseModel):
+    daily_cushion: float = 0.30
+    drawdown_cushion: float = 0.30
+    streak: float = 0.15
+    drift: float = 0.15
+    concentration: float = 0.10
+
+
+class FundHealthSettings(BaseModel):
+    weights: FundHealthWeights = Field(default_factory=FundHealthWeights)
+    max_streak: int = 5
+    max_concentration: float = 0.50
+
+
 class Settings(BaseModel):
     mode: Literal["paper", "live"] = "paper"
     timezone: str = "America/New_York"
@@ -193,6 +207,7 @@ class Settings(BaseModel):
     projectx: ProjectXSettings = Field(default_factory=ProjectXSettings)
     prop: PropSettings = Field(default_factory=PropSettings)
     operator: OperatorSettings = Field(default_factory=OperatorSettings)
+    fund_health: FundHealthSettings = Field(default_factory=FundHealthSettings)
 
     @model_validator(mode="after")
     def _resolve_paths(self) -> "Settings":

@@ -65,3 +65,14 @@ operator:
   confirm_seconds: 60         # caducidad del token de confirmación
   max_pin_attempts: 5         # intentos antes de bloquear
   lock_seconds: 300           # duración del bloqueo tras fallar
+
+# Salud de cuenta 0-100 y libro de capital.
+fund_health:
+  weights:
+    daily_cushion: 0.30
+    drawdown_cushion: 0.30
+    streak: 0.15
+    drift: 0.15
+    concentration: 0.10
+  max_streak: 5               # racha perdedora que lleva el componente a 0
+  max_concentration: 0.50     # top-3/neto que lleva concentración a 0

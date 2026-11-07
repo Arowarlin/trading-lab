@@ -2104,6 +2104,80 @@ def fund_history_cmd(account: str = typer.Argument(...)) -> None:
     console.print(t)
 
 
+@fund_app.command("flow-add")
+def fund_flow_add_cmd(
+    account: str = typer.Argument(...),
+    amount: float = typer.Option(..., "--amount", help="Importe positivo"),
+    kind: str = typer.Option("deposit", "--kind", help="deposit | withdrawal"),
+    note: str = typer.Option("", "--note"),
+) -> None:
+    """Registra un depósito/retiro externo (libro de capital)."""
+    from .accounts import add_cash_flow
+
+    try:
+        flow = add_cash_flow(
+            DEFAULT_DB,
+            account_id=account,
+            kind=kind,
+            amount=amount,
+            note=note,
+            origin="cli",
+        )
+    except ValueError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2) from exc
+    console.print(
+        f"[green]{flow['kind']}[/green] {flow['amount']:,.2f} · "
+        f"{flow['account_id']} · {flow['ts']}"
+    )
+
+
+@fund_app.command("flows")
+def fund_flows_cmd(
+    account: str = typer.Argument(None),
+) -> None:
+    """Lista depósitos/retiros y el TWR disponible por cuenta."""
+    from .accounts import cash_flows
+    from .health import time_weighted_return
+
+    rows = cash_flows(DEFAULT_DB, account or None, limit=200)
+    t = Table(title="Flujos de capital")
+    for col in ("Fecha", "Cuenta", "Tipo", "Importe", "Origen", "Nota"):
+        t.add_column(col)
+    for row in rows:
+        t.add_row(
+            str(row["ts"]),
+            str(row["account_id"]),
+            str(row["kind"]),
+            f"{float(row['amount']):,.2f}",
+            str(row["origin"]),
+            str(row["note"] or ""),
+        )
+    console.print(t)
+    if account:
+        from .db import connect
+
+        curve = []
+        if account == "paper_main":
+            with connect(DEFAULT_DB) as con:
+                curve = [
+                    {"ts": r["ts"], "equity": float(r["equity"])}
+                    for r in con.execute(
+                        "SELECT ts, equity FROM equity ORDER BY ts"
+                    ).fetchall()
+                ]
+        result = time_weighted_return(curve, rows)
+        console.print(
+            f"[dim]TWR {account}: "
+            + (
+                f"{result['twr']:.4%}"
+                if result["twr"] is not None
+                else "Sin datos"
+            )
+            + f" · {result['days']} días · {result['flows']} flujos[/dim]"
+        )
+
+
 @operator_app.command("pin")
 def operator_pin_cmd() -> None:
     """Configura el PIN del modo operador en el keyring (nunca en .env)."""

@@ -977,6 +977,12 @@
       <div class="grid-2 equal" id="fund-accounts"></div>
 
       <div class="panel" style="margin:14px 0">
+        <div class="panel-head"><h2>Salud de cuenta (0-100)</h2><span class="muted tiny" id="fund-health-meta"></span></div>
+        <div id="fund-health"></div>
+        <div class="muted tiny" style="margin-top:8px">Score determinista: colchón diario, colchón de drawdown, racha, deriva y concentración. Pesos en <code>config/lab.yaml</code>; cobertura mostrada si faltan datos.</div>
+      </div>
+
+      <div class="panel" style="margin:14px 0">
         <div class="panel-head"><h2>Editar límites propios</h2><span class="muted tiny">nunca modifica prop.yaml</span></div>
         <div class="action-bar" style="margin:0 0 12px">
           <select class="input" id="fund-account" style="min-width:240px"></select>
@@ -1009,6 +1015,12 @@
       <div class="panel" style="margin:14px 0">
         <div class="panel-head"><h2>Capital por bolsillo</h2><span class="muted tiny">asignación estática</span></div>
         <div id="fund-pockets"></div>
+      </div>
+
+      <div class="panel" style="margin:14px 0">
+        <div class="panel-head"><h2>Libro de capital</h2><span class="muted tiny" id="fund-twr"></span></div>
+        <div id="fund-flows"></div>
+        <div class="muted tiny" style="margin-top:8px">Depósitos/retiros externos; el retorno TWR descuenta los flujos. Añade movimientos con <code>lab fund flow-add</code>.</div>
       </div>
 
       <div class="panel" style="margin:14px 0">
@@ -2486,9 +2498,87 @@ function renderFund() {
   renderFundEditor();
   renderFundHistory();
   renderFundPockets();
+  renderFundHealth();
+  renderFundFlows();
   renderFundClusters();
   renderFundKillswitch();
   renderFundExposure();
+}
+
+function renderFundHealth() {
+  const host = $("#fund-health");
+  if (!host) return;
+  const fund = S.fund || {};
+  const accounts = fund.accounts || [];
+  const meta = $("#fund-health-meta");
+  if (meta) {
+    meta.textContent = fund.health
+      ? `Fondo ${num(fund.health.score, 1)}/100 · cobertura ${pct(fund.health.coverage, 0)} · ${fund.health.accounts} cuentas`
+      : "Sin datos";
+  }
+  const labels = {
+    daily_cushion: "Colchón diario",
+    drawdown_cushion: "Colchón DD",
+    streak: "Racha",
+    drift: "Deriva",
+    concentration: "Concentración",
+  };
+  const rows = accounts.map((account) => {
+    const health = account.health || {};
+    const components = health.components || {};
+    const cells = Object.entries(labels).map(([key, label]) => {
+      const item = components[key] || {};
+      const value = item.score == null ? "Sin datos" : num(item.score, 0);
+      return `<span title="${esc(label)} · peso ${pct(item.weight || 0, 0)} · ${esc(item.detail || "Sin datos")}" class="${item.score == null ? "muted" : ""}">${value}</span>`;
+    });
+    const badge = health.label === "ok"
+      ? `<span class="badge ok">ok</span>`
+      : health.label === "vigilar"
+        ? `<span class="badge warn">vigilar</span>`
+        : health.label === "riesgo"
+          ? `<span class="badge bad">riesgo</span>`
+          : `<span class="badge">Sin datos</span>`;
+    return [
+      `<b>${esc(account.name)}</b><div class="muted tiny">${esc(account.id)}</div>`,
+      health.score == null ? "Sin datos" : `<b>${num(health.score, 1)}</b>`,
+      pct(health.coverage || 0, 0),
+      ...cells,
+      badge,
+    ];
+  });
+  host.innerHTML = grid(
+    [{ label: "Cuenta" }, { label: "Score", num: true }, { label: "Cobertura", num: true }, ...Object.values(labels).map((label) => ({ label, num: true })), { label: "Estado" }],
+    rows,
+    { empty: "Sin datos de salud." }
+  );
+}
+
+function renderFundFlows() {
+  const host = $("#fund-flows");
+  if (!host) return;
+  const fund = S.fund || {};
+  const flows = (fund.accounts || []).flatMap((account) =>
+    (account.cash_flows || []).map((flow) => ({ ...flow, account_name: account.name }))
+  ).sort((a, b) => String(b.ts).localeCompare(String(a.ts)));
+  const returnData = fund.fund_return || {};
+  if ($("#fund-twr")) {
+    $("#fund-twr").textContent = returnData.twr == null
+      ? "TWR: Sin datos"
+      : `TWR ${pct(returnData.twr, 2)} · cobertura ${pct(returnData.coverage, 0)} · ${returnData.accounts?.join(", ") || "Sin datos"}`;
+  }
+  const rows = flows.map((flow) => [
+    esc(dateTime(flow.ts)),
+    esc(flow.account_name || flow.account_id),
+    flow.kind === "deposit" ? `<span class="badge ok">deposit</span>` : `<span class="badge warn">withdrawal</span>`,
+    `<span class="${flow.kind === "deposit" ? "pos" : "neg"}">${flow.kind === "deposit" ? "+" : "−"}${money(flow.amount)}</span>`,
+    esc(flow.origin || ""),
+    esc(flow.note || ""),
+  ]);
+  host.innerHTML = grid(
+    [{ label: "Fecha" }, { label: "Cuenta" }, { label: "Tipo" }, { label: "Importe", num: true }, { label: "Origen" }, { label: "Nota", wrap: true }],
+    rows,
+    { empty: "Sin datos de flujos. Añade con lab fund flow-add." }
+  );
 }
 
 function accountFundCard(a) {

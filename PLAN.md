@@ -268,8 +268,17 @@ controladas, sin activar bots, sin órdenes, sin dinero real y sin tocar `.env`.
     antiguas sin ella → Sin datos.
   - Evidencia: `pytest tests/test_drift.py -q` → 5 passed; suite completa
     284 passed.
-- [ ] **10.4 Salud de cuenta y libro de capital** — score 0–100 con desglose,
-  depósitos/retiros y retorno time-weighted.
+- [x] **10.4 Salud de cuenta y libro de capital** — 2026-11-07
+  - Score 0-100 con pesos en `config/lab.yaml` (`fund_health.weights`):
+    colchón diario, colchón de drawdown, racha, deriva y concentración.
+  - Desglose por componente, cobertura y `partial`; sin datos no se inventa.
+  - Tabla `account_cash_flows` (depósitos/retiros), CLI `lab fund flow-add` y
+    `lab fund flows`, y TWR diario descontando flujos.
+  - Retorno del fondo TWR ponderado por capital con cobertura; solo cuentas con
+    equity histórico local.
+  - Visible en **Fondo** (salud y libro de capital).
+  - Evidencia: `pytest tests/test_health.py -q` → 5 passed; suite completa
+    289 passed.
 - [ ] **10.5 Streak lock y pausa** — umbrales en SQLite, historial, fuera del
   hash de F13; reanudar con confirmación.
 - [ ] **10.6 Aprendizaje controlado** — `lessons` proposed/approved/rejected,
@@ -374,4 +383,5 @@ sin romper vistas ni añadir dependencias.
 | 2026-11-07 | 12 Shell consola | `pytest tests/test_console_shell.py -q` → 3 passed; `pytest -q` → 272 passed; 6 secciones, 14 vistas, dashboard; README 6g |
 | 2026-11-07 | 10.2 Multiverse | `pytest tests/test_multiverse.py -q` → 7 passed; `pytest -q` → 279 passed; 1.000 permutaciones, seed 42, Diario + Run Detail |
 | 2026-11-07 | 10.3 Deriva | `pytest tests/test_drift.py -q` → 5 passed; `pytest -q` → 284 passed; IC bootstrap, mínimo 20, slippage, Bots + `lab drift` |
+| 2026-11-07 | 10.4 Salud/TWR | `pytest tests/test_health.py -q` → 5 passed; `pytest -q` → 289 passed; score 0-100, flujos y TWR en Fondo |
 |  |  |  |

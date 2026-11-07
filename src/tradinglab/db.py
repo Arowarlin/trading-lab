@@ -281,6 +281,18 @@ CREATE TABLE IF NOT EXISTS bot_runtime_history (
     source TEXT
 );
 
+CREATE TABLE IF NOT EXISTS account_cash_flows (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts TEXT NOT NULL,
+    account_id TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    amount REAL NOT NULL,
+    note TEXT,
+    origin TEXT NOT NULL DEFAULT 'manual'
+);
+
+CREATE INDEX IF NOT EXISTS idx_account_cash_flows_account
+    ON account_cash_flows(account_id, ts);
 CREATE INDEX IF NOT EXISTS idx_console_actions_ts ON console_actions(ts);
 CREATE INDEX IF NOT EXISTS idx_alerts_ts ON alerts(ts);
 CREATE INDEX IF NOT EXISTS idx_reconciliation_ts ON reconciliation(ts);

@@ -334,12 +334,84 @@ def history(db_path: str | Path, account_id: str, limit: int = 100) -> list[dict
     return [dict(row) for row in rows]
 
 
+FLOW_KINDS = ("deposit", "withdrawal")
+
+
+def add_cash_flow(
+    db_path: str | Path,
+    *,
+    account_id: str,
+    kind: str,
+    amount: float,
+    ts: str | None = None,
+    note: str = "",
+    origin: str = "manual",
+    accounts: dict[str, AccountDefinition] | None = None,
+) -> dict:
+    """Registra un depósito/retiro externo. No modifica límites ni YAML."""
+    definitions = accounts if accounts is not None else load_accounts()
+    if account_id not in definitions:
+        raise ValueError(f"cuenta desconocida: {account_id}")
+    if kind not in FLOW_KINDS:
+        raise ValueError("kind debe ser deposit o withdrawal")
+    try:
+        value = float(amount)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("amount debe ser numérico") from exc
+    if value <= 0 or value != value or value in (float("inf"), float("-inf")):
+        raise ValueError("amount debe ser > 0 y finito")
+    stamp = ts or utcnow()
+    try:
+        datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValueError("ts inválido: usa ISO 8601") from exc
+    init_db(db_path)
+    with connect(db_path) as con:
+        con.execute(
+            "INSERT INTO account_cash_flows(ts, account_id, kind, amount, note, origin) "
+            "VALUES(?,?,?,?,?,?)",
+            (stamp, account_id, kind, value, note[:500], origin[:40]),
+        )
+    return {
+        "account_id": account_id,
+        "kind": kind,
+        "amount": value,
+        "ts": stamp,
+        "note": note,
+    }
+
+
+def cash_flows(
+    db_path: str | Path, account_id: str | None = None, limit: int = 200
+) -> list[dict]:
+    path = Path(db_path)
+    if not path.exists():
+        return []
+    init_db(path)
+    with connect(path) as con:
+        if account_id:
+            rows = con.execute(
+                "SELECT * FROM account_cash_flows WHERE account_id = ? "
+                "ORDER BY ts DESC, id DESC LIMIT ?",
+                (account_id, int(limit)),
+            ).fetchall()
+        else:
+            rows = con.execute(
+                "SELECT * FROM account_cash_flows ORDER BY ts DESC, id DESC LIMIT ?",
+                (int(limit),),
+            ).fetchall()
+    return [dict(row) for row in rows]
+
+
 __all__ = [
     "ACCOUNTS_FILE",
     "AccountDefinition",
     "DEFAULT_LOOSEN_WAIT_DAYS",
+    "FLOW_KINDS",
     "LIMIT_FIELDS",
     "PCT_FIELDS",
+    "add_cash_flow",
+    "cash_flows",
     "effective_limits",
     "firm_limits",
     "history",

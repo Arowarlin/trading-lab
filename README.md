@@ -926,6 +926,41 @@ Evidencia: `pytest tests/test_drift.py -q` → **5 passed**; suite completa
 
 ---
 
+## 6j. Salud de cuenta y libro de capital (10.4)
+
+### Salud 0-100
+
+Score determinista por cuenta con pesos en
+`config/lab.yaml → fund_health.weights` (30% colchón diario, 30% colchón de
+drawdown, 15% racha, 15% deriva, 10% concentración):
+
+- **Colchón diario/drawdown**: `100 × (1 − uso del límite)`.
+- **Racha**: `100 × (1 − pérdidas seguidas / max_streak)`.
+- **Deriva**: `ok=100`, `vigilar=50`, `deriva=0`; se usa el peor bot de la
+  cuenta.
+- **Concentración**: `100 × (1 − top3/neto / max_concentration)`, solo con neto
+  positivo.
+
+Si falta un componente se ignora y se muestra **cobertura** y `partial`; si no
+hay ninguno, **Sin datos**. El desglose completo está en **Fondo → Salud de
+cuenta**, no solo el número.
+
+### Libro de capital y TWR
+
+- Tabla `account_cash_flows` (depósito/retiro, importe, fecha, nota, origen).
+- `lab fund flow-add paper_main --amount 1000 --kind deposit --note "..."`
+  y `lab fund flows [cuenta]`.
+- TWR diario: `r = (equity_fin − flujo_neto) / equity_inicio − 1`; los depósitos
+  suman y los retiros restan. El retorno del fondo es el TWR ponderado por
+  capital, con cobertura y cuentas incluidas.
+- Solo se calcula con al menos 2 cierres diarios de equity locales; el resto
+  muestra **Sin datos** (no se inventa una curva para MT5/Alpaca).
+
+Evidencia: `pytest tests/test_health.py -q` → **5 passed**; suite completa
+**289 passed**; `ruff` limpio; `lab doctor` OK con avisos conocidos.
+
+---
+
 ## 7. Trading-R1 en Windows
 
 Trading-R1 usa `fcntl`, `os.O_NOFOLLOW` y `os.getuid()`: **no funciona en Windows**.

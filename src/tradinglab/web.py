@@ -38,6 +38,7 @@ import pandas as pd
 
 from . import __version__
 from .accounts import (
+    cash_flows,
     effective_limits,
     firm_limits,
     load_accounts,
@@ -58,7 +59,8 @@ from .botlab import (
 )
 from .config import DEFAULT_DB, ROOT, Settings, get_settings
 from .drift import build_drift
-from .journal import build_journal
+from .health import score_account, time_weighted_return
+from .journal import build_journal, load_closed_trades
 from .killswitch import load_state as load_killswitch
 from .operator import OperatorError, OperatorService
 from .orchestrator import load_bots
@@ -689,6 +691,25 @@ class LabData:
         accounts_info = (
             {item["id"]: item for item in self.accounts()} if self.external else {}
         )
+        specs = load_bots()
+        bot_accounts = {spec.id: spec.account for spec in specs}
+        trades, _ = load_closed_trades(
+            self.db_path,
+            tz=self.settings.timezone,
+            bots={
+                spec.id: {"account": spec.account, "profile": spec.profile}
+                for spec in specs
+            },
+        )
+        trades_by_account: dict[str, list] = {}
+        for trade in trades:
+            if trade.account:
+                trades_by_account.setdefault(trade.account, []).append(trade)
+        drift_by_bot = {
+            row["bot"]: row["status"]
+            for row in (self.drift().get("bots") or [])
+        }
+        paper_curve = self.account().get("equity_curve") or []
         rows: list[dict] = []
         for account in definitions.values():
             firm = firm_limits(account)
@@ -707,6 +728,24 @@ class LabData:
                 item = _json_safe(row)
                 item["pending"] = str(row["effective_from"]) > now.isoformat()
                 history.append(item)
+            account_trades = trades_by_account.get(account.id, [])
+            drift_statuses = [
+                status
+                for bot, assigned in bot_accounts.items()
+                if assigned == account.id
+                for status in [drift_by_bot.get(bot)]
+                if status
+            ]
+            health = score_account(
+                usage=usage,
+                trades=account_trades,
+                drift_statuses=drift_statuses,
+                cfg=self.settings.fund_health,
+            )
+            flows = cash_flows(self.db_path, account.id, limit=50)
+            twr = time_weighted_return(
+                paper_curve if account.id == "paper_main" else [], flows
+            )
             rows.append(
                 {
                     "id": account.id,
@@ -724,12 +763,60 @@ class LabData:
                     "own_limits": _json_safe(asdict(own)),
                     "effective_limits": _json_safe(asdict(effective)),
                     "usage": usage,
+                    "cash_flows": flows,
+                    "cash_flow_net": round(
+                        sum(
+                            float(flow["amount"])
+                            * (1 if flow["kind"] == "deposit" else -1)
+                            for flow in flows
+                        ),
+                        2,
+                    ),
+                    "twr": twr,
+                    "health": health,
                     "history": history,
                     "pending": [item for item in history if item["pending"]],
                 }
             )
 
         total_capital = sum(row["account_size"] for row in rows)
+        scored = [row for row in rows if row["health"]["score"] is not None]
+        fund_health = None
+        if scored:
+            scored_capital = sum(row["account_size"] for row in scored)
+            fund_health = {
+                "score": round(
+                    sum(row["health"]["score"] * row["account_size"] for row in scored)
+                    / scored_capital,
+                    1,
+                ),
+                "coverage": round(scored_capital / total_capital, 4)
+                if total_capital
+                else 0.0,
+                "accounts": len(scored),
+                "partial": len(scored) < len(rows),
+            }
+        twr_rows = [row for row in rows if row["twr"]["twr"] is not None]
+        fund_return = {"twr": None, "coverage": 0.0, "accounts": []}
+        if twr_rows:
+            twr_capital = sum(row["account_size"] for row in twr_rows)
+            fund_return = {
+                "twr": round(
+                    sum(
+                        row["twr"]["twr"] * row["account_size"] for row in twr_rows
+                    )
+                    / twr_capital,
+                    6,
+                ),
+                "coverage": round(twr_capital / total_capital, 4)
+                if total_capital
+                else 0.0,
+                "accounts": [row["id"] for row in twr_rows],
+                "note": "TWR ponderado por capital; solo cuentas con equity histórico",
+            }
+        else:
+            fund_return["note"] = "Sin datos de equity histórico por cuenta"
+
         pocket_rows = []
         for pocket in list(POCKET_LABELS) + sorted(
             {row["pocket"] for row in rows} - set(POCKET_LABELS)
@@ -759,6 +846,8 @@ class LabData:
             "limit_meta": [dict(item) for item in LIMIT_META],
             "accounts": rows,
             "pockets": pocket_rows,
+            "health": fund_health,
+            "fund_return": fund_return,
             "clusters": self._fund_clusters(definitions),
             "exposure": self._fund_exposure(accounts_info),
             "killswitch": self.killswitch_status(),
