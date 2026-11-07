@@ -1,0 +1,1639 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TradingLab Console</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0f14;
+    --panel: #121820;
+    --panel-2: #0f151c;
+    --border: #1f2937;
+    --border-soft: #18212c;
+    --text: #e6edf3;
+    --muted: #8b98a8;
+    --accent: #58a6ff;
+    --green: #3fb950;
+    --red: #f85149;
+    --yellow: #d29922;
+    --purple: #bc8cff;
+    --cyan: #39c5cf;
+    --radius: 12px;
+    --shadow: 0 10px 30px rgba(0,0,0,.25);
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: radial-gradient(1200px 700px at 75% -10%, #16202c 0%, var(--bg) 55%) fixed;
+    color: var(--text);
+    font: 14px/1.55 -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  .app { display: flex; min-height: 100vh; }
+
+  /* ------------------------------------------------------------ sidebar */
+  .sidebar {
+    width: 236px; flex: 0 0 236px; position: sticky; top: 0; height: 100vh;
+    display: flex; flex-direction: column; gap: 18px;
+    padding: 22px 16px; background: rgba(13,18,24,.86);
+    border-right: 1px solid var(--border); backdrop-filter: blur(12px);
+  }
+  .brand { display: flex; align-items: center; gap: 11px; padding: 0 6px; }
+  .logo {
+    width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center;
+    font-weight: 800; letter-spacing: .5px; color: #04121f;
+    background: linear-gradient(135deg, #7ee787, #58a6ff 60%, #bc8cff);
+  }
+  .brand strong { display: block; font-size: 15px; letter-spacing: .2px; }
+  .brand small { display: block; color: var(--muted); font-size: 11px; margin-top: -1px; }
+  nav { display: flex; flex-direction: column; gap: 3px; }
+  .nav-btn {
+    appearance: none; border: 0; background: transparent; color: var(--muted);
+    display: flex; align-items: center; gap: 10px; width: 100%;
+    padding: 9px 11px; border-radius: 9px; cursor: pointer;
+    font: inherit; text-align: left; transition: background .15s, color .15s;
+  }
+  .nav-btn:hover { background: #151d27; color: var(--text); }
+  .nav-btn.active { background: #172231; color: var(--text); box-shadow: inset 2px 0 0 var(--accent); }
+  .nav-btn .ico { width: 18px; text-align: center; opacity: .9; }
+  .side-status {
+    margin-top: auto; border: 1px solid var(--border); background: var(--panel-2);
+    border-radius: var(--radius); padding: 12px; display: flex; flex-direction: column; gap: 9px;
+  }
+  .side-status .row { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+  .side-status .row b { color: var(--text); font-weight: 600; margin-left: auto; }
+  .sidebar-footer { color: #63707f; font-size: 10.5px; line-height: 1.45; padding: 0 6px; }
+
+  /* --------------------------------------------------------------- main */
+  main { flex: 1; min-width: 0; padding: 24px 28px 48px; max-width: 1500px; }
+  .topbar { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+  .topbar h1 { margin: 0; font-size: 22px; letter-spacing: -.2px; }
+  .topbar .sub { margin: 3px 0 0; color: var(--muted); font-size: 12.5px; }
+  .top-actions { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; justify-content: flex-end; }
+  .badge {
+    display: inline-flex; align-items: center; gap: 6px; padding: 4px 9px; border-radius: 999px;
+    border: 1px solid var(--border); background: var(--panel-2); color: var(--muted);
+    font-size: 11px; text-transform: uppercase; letter-spacing: .06em; white-space: nowrap;
+  }
+  .badge.paper { color: #7ee787; border-color: #1f5132; background: #10231a; }
+  .badge.live { color: #ffb3ad; border-color: #6b2a28; background: #2a1413; }
+  .badge.ok { color: #7ee787; border-color: #1f5132; background: #10231a; }
+  .badge.warn { color: #e3b341; border-color: #5c4415; background: #2a2110; }
+  .badge.bad { color: #ffb3ad; border-color: #6b2a28; background: #2a1413; }
+  .badge.off { color: #9aa7b5; }
+  .clock { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 12px; }
+  .btn {
+    appearance: none; border: 1px solid var(--border); background: #172231; color: var(--text);
+    padding: 8px 12px; border-radius: 9px; cursor: pointer; font: inherit; font-size: 12.5px;
+    display: inline-flex; align-items: center; gap: 7px; transition: .15s;
+  }
+  .btn:hover { border-color: #2d3b4d; background: #1b2838; }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .btn.primary { background: #1f6feb; border-color: #1f6feb; color: white; }
+  .btn.primary:hover { background: #2a7bf5; }
+  .btn.ghost { background: transparent; }
+  .btn.small { padding: 5px 9px; font-size: 11.5px; border-radius: 7px; }
+  .btn .spin { width: 12px; height: 12px; border: 2px solid rgba(255,255,255,.25); border-top-color: white; border-radius: 50%; animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* --------------------------------------------------------------- views */
+  .view { display: none; animation: fade .18s ease; }
+  .view.active { display: block; }
+  @keyframes fade { from { opacity: .4; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+  .hidden { display: none !important; }
+
+  /* --------------------------------------------------------------- cards */
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .kpi {
+    background: linear-gradient(180deg, #141b24, #111720); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 14px 16px; position: relative; overflow: hidden;
+  }
+  .kpi::after { content: ""; position: absolute; inset: 0 0 auto 0; height: 2px; background: linear-gradient(90deg, var(--accent), transparent 70%); opacity: .45; }
+  .kpi .label { color: var(--muted); font-size: 10.5px; text-transform: uppercase; letter-spacing: .09em; }
+  .kpi .value { font-size: 23px; font-weight: 650; margin-top: 5px; font-variant-numeric: tabular-nums; letter-spacing: -.4px; }
+  .kpi .hint { color: #73808f; font-size: 11px; margin-top: 3px; }
+  .pos { color: var(--green) !important; }
+  .neg { color: var(--red) !important; }
+  .warn { color: var(--yellow) !important; }
+
+  .grid-2 { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr); gap: 14px; margin-bottom: 14px; }
+  .grid-2.equal { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .panel {
+    background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 16px 17px; min-width: 0; box-shadow: var(--shadow);
+  }
+  .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+  .panel h2 { margin: 0; font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: #b8c4d0; }
+  .panel h2 .count { color: var(--muted); font-weight: 400; letter-spacing: 0; text-transform: none; }
+  .muted { color: var(--muted); }
+  .small { font-size: 12px; }
+  .tiny { font-size: 10.5px; }
+  .empty { color: var(--muted); font-size: 12.5px; padding: 18px 4px; }
+
+  /* --------------------------------------------------------------- charts */
+  .chart-wrap { position: relative; width: 100%; height: 276px; }
+  #equity-canvas { width: 100%; height: 276px; display: block; border-radius: 8px; }
+  .chart-loading { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font-size: 12px; }
+
+  /* --------------------------------------------------------------- lists */
+  .system-list { display: flex; flex-direction: column; gap: 4px; }
+  .sys-row { display: flex; align-items: center; gap: 10px; padding: 9px 4px; border-bottom: 1px solid var(--border-soft); }
+  .sys-row:last-child { border-bottom: 0; }
+  .sys-row .name { font-size: 12.5px; }
+  .sys-row .detail { margin-left: auto; color: var(--muted); font-size: 11.5px; text-align: right; max-width: 45%; white-space: nowrap; }
+  #recent-agents .sys-row > div:first-child { flex: 1 1 auto; min-width: 0; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 8px; background: #46505c; box-shadow: 0 0 0 3px rgba(70,80,92,.14); }
+  .dot.ok { background: var(--green); box-shadow: 0 0 0 3px rgba(63,185,80,.14); }
+  .dot.bad { background: var(--red); box-shadow: 0 0 0 3px rgba(248,81,73,.14); }
+  .dot.warn { background: var(--yellow); box-shadow: 0 0 0 3px rgba(210,153,34,.14); }
+
+  /* --------------------------------------------------------------- tables */
+  .table-wrap { overflow-x: auto; border: 1px solid var(--border-soft); border-radius: 9px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12.3px; }
+  th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border-soft); white-space: nowrap; }
+  th { color: #8d9bab; font-size: 10px; text-transform: uppercase; letter-spacing: .07em; background: #0f151c; position: sticky; top: 0; }
+  tr:last-child td { border-bottom: 0; }
+  tbody tr:hover { background: #151e28; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  td.wrap { white-space: normal; min-width: 180px; }
+  .tag { display: inline-block; padding: 1px 7px; border-radius: 999px; font-size: 10.5px; border: 1px solid var(--border); color: var(--muted); white-space: nowrap; }
+  .tag.green { color: #7ee787; border-color: #245b35; background: #10231a; }
+  .tag.red { color: #ffb3ad; border-color: #6b2a28; background: #2a1413; }
+  .tag.yellow { color: #e3b341; border-color: #5c4415; background: #2a2110; }
+  .tag.blue { color: #9ecbff; border-color: #1f4c7a; background: #0f1e2e; }
+  .tag.purple { color: #d8b9ff; border-color: #4c2f70; background: #1d1428; }
+  .chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 7px; }
+  .chip { font-size: 10.5px; padding: 1px 7px; border-radius: 6px; background: #10161e; border: 1px solid var(--border); color: #9fb0c1; }
+
+  /* --------------------------------------------------------------- sala pixel */
+  .office-panel { padding: 0; overflow: hidden; background: #0a0f14; }
+  .office { position: relative; overflow: hidden; background: #0a0f14; }
+  .office-wall { position: relative; height: clamp(168px, 18vw, 218px); background: linear-gradient(180deg, #101a26, #0c141d); border-bottom: 4px solid #1b2634; }
+  .office-window { position: absolute; left: 3%; top: 15%; width: 55%; bottom: 11%; border: 6px solid #1a2432; background: #16283e; box-shadow: inset 0 0 40px rgba(0,0,0,.5), 0 0 0 2px #0b0f14; overflow: hidden; }
+  .skyline { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .window-glare { position: absolute; inset: 0; background: linear-gradient(115deg, rgba(255,255,255,.12), transparent 32%, transparent 68%, rgba(255,120,80,.10)); pointer-events: none; }
+  .office-sign { position: absolute; left: 4%; top: 3%; display: flex; align-items: baseline; gap: 5px; font-family: "Cascadia Code", Consolas, monospace; color: #e3b341; font-size: clamp(11px, 1.1vw, 14px); letter-spacing: .18em; text-shadow: 0 0 14px rgba(227,179,65,.25); z-index: 2; }
+  .office-sign span { color: #f0d18a; }
+  .office-sign small { display: block; color: #8b98a8; font-size: 8px; letter-spacing: .12em; margin-left: 2px; }
+  .office-board { position: absolute; right: 3%; top: 11%; width: 34%; min-height: 96px; border: 3px solid #1b2430; background: #07120d; box-shadow: inset 0 0 18px rgba(63,185,80,.12); padding: 8px 10px; font-family: "Cascadia Code", Consolas, monospace; z-index: 2; }
+  .board-title { color: #e3b341; font-size: 8.5px; letter-spacing: .2em; border-bottom: 1px dashed #2b4a35; padding-bottom: 4px; margin-bottom: 5px; }
+  #office-board-body { color: #7ee787; font-size: 10px; line-height: 1.55; }
+  #office-board-body .tiny { color: #638a70; }
+  .office-clock { position: absolute; right: 4%; top: 63%; display: flex; gap: 7px; align-items: baseline; font-family: "Cascadia Code", Consolas, monospace; z-index: 2; }
+  .office-clock span { color: #6f7d8c; font-size: 8.5px; letter-spacing: .12em; }
+  .office-clock b { color: #c9d5e2; font-size: 12px; font-variant-numeric: tabular-nums; }
+  .office-floor { position: relative; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px 6px; padding: 12px 20px 22px; background: repeating-linear-gradient(90deg, #3a2a1d 0 46px, #332417 46px 48px), linear-gradient(180deg, #2f2217, #1b130d); box-shadow: inset 0 12px 26px rgba(0,0,0,.45); }
+  .office-floor::before { content: ""; position: absolute; inset: 0; background: repeating-linear-gradient(0deg, transparent 0 24px, rgba(0,0,0,.16) 24px 25px); pointer-events: none; }
+  .desk { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; min-height: 158px; padding-top: 34px; cursor: pointer; z-index: 2; }
+  .desk:hover .nameplate { border-color: #3a4c61; }
+  .bubble { position: absolute; left: 50%; bottom: 100%; transform: translate(-50%, 8px); min-width: 108px; max-width: 168px; padding: 6px 8px; background: #f4efdc; color: #1b1b1b; border: 2px solid #171717; font-size: 10px; line-height: 1.35; text-align: left; box-shadow: 3px 3px 0 rgba(0,0,0,.35); opacity: 0; transition: opacity .2s, transform .2s; pointer-events: none; z-index: 20; }
+  .bubble.show { opacity: 1; transform: translate(-50%, 0); }
+  .bubble::after { content: ""; position: absolute; top: 100%; left: 50%; margin-left: -6px; border: 6px solid transparent; border-top-color: #171717; }
+  .person { position: relative; width: 36px; height: 46px; z-index: 3; animation: office-bob 3.6s ease-in-out infinite; }
+  .desk:nth-child(2n) .person { animation-delay: -1.2s; }
+  .desk:nth-child(3n) .person { animation-delay: -2.1s; }
+  .person .head { position: absolute; left: 8px; top: 0; width: 20px; height: 18px; background: var(--skin); border: 2px solid #161616; }
+  .person .hair { position: absolute; left: -2px; top: -4px; width: 24px; height: 8px; background: var(--hair); border: 2px solid #161616; }
+  .person .face { position: absolute; left: 4px; top: 7px; display: flex; gap: 5px; }
+  .person .face i { width: 3px; height: 3px; background: #151515; display: block; }
+  .person .torso { position: absolute; left: 3px; top: 18px; width: 30px; height: 24px; background: var(--shirt); border: 2px solid #161616; }
+  .person .torso::after { content: ""; position: absolute; left: 12px; top: 0; width: 3px; height: 12px; background: rgba(0,0,0,.35); }
+  .monitor { position: relative; width: 60px; height: 38px; margin-top: -10px; z-index: 4; }
+  .monitor .screen { position: absolute; inset: 0 0 7px 0; background: #07130f; border: 3px solid #1b2430; padding: 5px; overflow: hidden; }
+  .monitor .screen::before { content: ""; display: block; width: 70%; height: 2px; background: #2f7d4a; box-shadow: 0 5px 0 #255f3b, 0 10px 0 #1f4a30, 0 15px 0 #173a25; }
+  .monitor .screen::after { content: ""; position: absolute; inset: 0; background: repeating-linear-gradient(0deg, rgba(0,0,0,.18) 0 1px, transparent 1px 3px); pointer-events: none; }
+  .desk.working .screen { background: #0a2416; box-shadow: 0 0 14px rgba(63,185,80,.4); }
+  .desk.done .screen { background: #0a1d14; }
+  .desk.error .screen { background: #2a0f0f; }
+  .monitor .stand { position: absolute; left: 50%; bottom: 0; transform: translateX(-50%); width: 12px; height: 7px; background: #1b2430; }
+  .monitor .stand::after { content: ""; position: absolute; bottom: -4px; left: -10px; width: 32px; height: 4px; background: #111820; }
+  .desk-top { position: relative; width: 94%; height: 11px; margin-top: -4px; background: linear-gradient(180deg, #7b5a36, #4a3521); border: 2px solid #241a10; z-index: 5; }
+  .desk-top::after { content: ""; position: absolute; inset: 1px 0 auto 0; height: 2px; background: rgba(255,220,170,.18); }
+  .keyboard { position: absolute; left: 50%; top: 2px; transform: translateX(-50%); width: 26px; height: 5px; background: #1a2028; border: 1px solid #0b0f14; }
+  .mug { position: absolute; right: 7px; top: -8px; width: 7px; height: 8px; background: var(--mug); border: 2px solid #171717; }
+  .mug::after { content: ""; position: absolute; right: -5px; top: 1px; width: 4px; height: 4px; border: 2px solid #171717; border-left: 0; }
+  .nameplate { display: flex; align-items: center; gap: 5px; margin-top: 5px; padding: 2px 6px; background: #0b1117; border: 1px solid #263342; font-size: 9.5px; white-space: nowrap; z-index: 6; }
+  .nameplate b { font-weight: 600; }
+  .nameplate small { color: var(--muted); font-size: 8px; text-transform: uppercase; letter-spacing: .04em; }
+  .status-led { width: 5px; height: 5px; flex: 0 0 5px; background: #46505c; }
+  .desk.working .status-led { background: #3fb950; animation: blink 1s steps(2) infinite; }
+  .desk.done .status-led { background: #3fb950; }
+  .desk.error .status-led { background: #f85149; }
+  .desk.working .person { animation: office-typing .7s steps(2) infinite; }
+  .desk.idle .person { opacity: .82; }
+  @keyframes office-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
+  @keyframes office-typing { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(1px); } }
+  @keyframes blink { 50% { opacity: .3; } }
+  .office-plant { position: absolute; bottom: 16px; width: 34px; height: 52px; z-index: 7; pointer-events: none; }
+  .plant-left { left: 8px; }
+  .plant-right { right: 8px; }
+  .office-plant .pot { position: absolute; bottom: 0; left: 6px; width: 22px; height: 14px; background: #7a4a2a; border: 2px solid #241a10; }
+  .office-plant .leaf { position: absolute; width: 12px; height: 22px; background: #2f6b3f; border: 2px solid #17341f; border-radius: 50% 50% 40% 40%; transform-origin: bottom center; }
+  .office-plant .leaf.l1 { left: 11px; bottom: 10px; }
+  .office-plant .leaf.l2 { left: 2px; bottom: 12px; transform: rotate(-28deg); }
+  .office-plant .leaf.l3 { right: 2px; bottom: 12px; transform: rotate(28deg); }
+  .cast-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+  .cast-card { appearance: none; text-align: left; background: var(--panel-2); border: 1px solid var(--border); border-radius: 9px; padding: 10px 12px; color: var(--text); font: inherit; cursor: pointer; transition: .15s; }
+  .cast-card:hover { border-color: #2d3b4d; background: #151e28; }
+  .cast-card .cast-top { display: flex; align-items: center; gap: 7px; }
+  .cast-card .cast-top b { font-size: 13px; }
+  .cast-card .role { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .06em; margin-top: 1px; }
+  .cast-card .task { color: #a8b6c6; font-size: 11px; margin-top: 6px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .cast-card .status { margin-left: auto; }
+  .cast-card.working { border-color: #245b35; }
+  .cast-card.done { border-color: #1f3e2b; }
+  .cast-card.error { border-color: #6b2a28; }
+
+  /* --------------------------------------------------------------- bots */
+  .bot-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(310px, 1fr)); gap: 13px; }
+  .bot-card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 15px 16px; display: flex; flex-direction: column; gap: 9px; }
+  .bot-card.on { border-color: #245b35; box-shadow: inset 3px 0 0 var(--green); }
+  .bot-card.off { opacity: .82; }
+  .bot-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .bot-id { font-weight: 650; font-size: 14px; letter-spacing: .1px; }
+  .bot-desc { color: var(--muted); font-size: 12px; line-height: 1.5; }
+  .bot-meta { display: flex; gap: 14px; flex-wrap: wrap; color: #7f8c9b; font-size: 11px; }
+  .bot-actions { margin-top: auto; border-top: 1px solid var(--border-soft); padding-top: 9px; display: flex; flex-direction: column; gap: 5px; }
+  .mini-action { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--muted); }
+  .mini-action b { color: var(--text); font-weight: 600; min-width: 42px; }
+
+  /* --------------------------------------------------------------- research */
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 14px; }
+  .stat { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 13px 15px; }
+  .stat .label { color: var(--muted); font-size: 10.5px; text-transform: uppercase; letter-spacing: .08em; }
+  .stat .value { font-size: 20px; font-weight: 650; margin-top: 3px; }
+  .note { border: 1px dashed #2a3644; border-radius: 9px; padding: 10px 12px; color: #93a2b3; font-size: 11.8px; line-height: 1.55; margin-top: 10px; }
+  .note strong { color: #c6d2de; }
+
+  /* --------------------------------------------------------------- risk */
+  .guard-card { border-radius: var(--radius); border: 1px solid var(--border); padding: 18px 20px; background: var(--panel); position: relative; overflow: hidden; }
+  .guard-card.ok { border-color: #245b35; background: linear-gradient(135deg, #101c15, #121820 55%); }
+  .guard-card.warn { border-color: #5c4415; background: linear-gradient(135deg, #1f1a0d, #121820 55%); }
+  .guard-card.block, .guard-card.breach { border-color: #6b2a28; background: linear-gradient(135deg, #21100f, #121820 55%); }
+  .guard-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+  .guard-label { font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+  .guard-value { font-size: 30px; font-weight: 700; letter-spacing: -.6px; margin-top: 2px; }
+  .guard-reason { color: #b6c2cf; font-size: 12.5px; margin-top: 5px; max-width: 760px; }
+  .bars { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
+  .bar-label { display: flex; justify-content: space-between; color: var(--muted); font-size: 11px; margin-bottom: 5px; }
+  .bar { height: 7px; background: #0b1017; border: 1px solid #1c2530; border-radius: 999px; overflow: hidden; }
+  .bar > span { display: block; height: 100%; background: linear-gradient(90deg, var(--green), var(--yellow), var(--red)); }
+  .guard-floors { display: flex; gap: 22px; flex-wrap: wrap; margin-top: 14px; color: var(--muted); font-size: 11.5px; }
+  .guard-floors b { color: var(--text); font-variant-numeric: tabular-nums; }
+  .risk-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; margin-top: 14px; }
+  .kv { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px 14px; }
+  .kv div { border-bottom: 1px solid var(--border-soft); padding: 6px 0; }
+  .kv .k { color: var(--muted); font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; }
+  .kv .v { font-size: 12.5px; font-variant-numeric: tabular-nums; margin-top: 1px; }
+  .alert { border: 1px solid #5c4415; background: #241d0e; color: #e3c06b; border-radius: 9px; padding: 10px 12px; font-size: 12px; margin-bottom: 12px; }
+  .alert.red { border-color: #6b2a28; background: #26110f; color: #ffb3ad; }
+  .alert.green { border-color: #245b35; background: #0f2117; color: #9be9a8; }
+
+  /* --------------------------------------------------------------- logs */
+  .logs-layout { display: grid; grid-template-columns: 320px minmax(0,1fr); gap: 14px; }
+  .log-list { display: flex; flex-direction: column; gap: 5px; max-height: 70vh; overflow: auto; }
+  .log-item { border: 1px solid var(--border-soft); background: var(--panel-2); border-radius: 8px; padding: 8px 10px; cursor: pointer; text-align: left; color: var(--text); font: inherit; }
+  .log-item:hover { border-color: #2d3b4d; background: #151e28; }
+  .log-item.active { border-color: #2f5f94; background: #122033; }
+  .log-item .name { font-size: 11.5px; word-break: break-all; }
+  .log-item .meta { color: var(--muted); font-size: 10.5px; margin-top: 2px; }
+  .log-viewer { margin: 0; padding: 14px; background: #080c11; border: 1px solid var(--border); border-radius: var(--radius); height: 70vh; overflow: auto; font: 11.5px/1.55 "Cascadia Code", "Consolas", "Courier New", monospace; color: #c9d5e2; white-space: pre-wrap; word-break: break-word; }
+
+  /* --------------------------------------------------------------- misc */
+  .action-bar { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; margin-bottom: 14px; }
+  .input { appearance: none; background: #0c1219; border: 1px solid var(--border); color: var(--text); border-radius: 8px; padding: 8px 10px; font: inherit; font-size: 12.5px; width: 120px; text-transform: uppercase; }
+  .input:focus { outline: 1px solid #315d8d; border-color: #315d8d; }
+  .action-pill { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--border); background: var(--panel-2); padding: 5px 10px; border-radius: 999px; font-size: 11.5px; color: var(--muted); }
+  .action-pill.running { color: #9ecbff; border-color: #1f4c7a; }
+  .action-pill.done { color: #9be9a8; border-color: #245b35; }
+  .action-pill.error { color: #ffb3ad; border-color: #6b2a28; }
+  .detail-grid { display: grid; grid-template-columns: 120px minmax(0,1fr); gap: 7px 14px; font-size: 12.5px; }
+  .detail-grid .k { color: var(--muted); }
+  .thesis { white-space: pre-wrap; color: #c5d1de; font-size: 12.5px; line-height: 1.55; }
+
+  /* --------------------------------------------------------------- modal */
+  .modal { position: fixed; inset: 0; background: rgba(3,6,10,.72); backdrop-filter: blur(4px); display: none; place-items: center; z-index: 50; padding: 24px; }
+  .modal.open { display: grid; }
+  .modal-box { width: min(820px, 100%); max-height: 86vh; overflow: auto; background: var(--panel); border: 1px solid #2a3644; border-radius: 14px; padding: 20px 22px; box-shadow: 0 24px 70px rgba(0,0,0,.5); }
+  .modal-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+  .modal-head h2 { margin: 0; font-size: 16px; text-transform: none; letter-spacing: 0; color: var(--text); }
+  .icon-btn { appearance: none; border: 1px solid var(--border); background: #151d27; color: var(--muted); width: 30px; height: 30px; border-radius: 8px; cursor: pointer; font-size: 15px; }
+  .icon-btn:hover { color: var(--text); }
+
+  /* --------------------------------------------------------------- toast */
+  .toast { position: fixed; right: 20px; bottom: 20px; background: #16202b; border: 1px solid #2d3b4d; color: var(--text); padding: 11px 15px; border-radius: 10px; box-shadow: var(--shadow); font-size: 12.5px; opacity: 0; transform: translateY(8px); pointer-events: none; transition: .2s; z-index: 80; max-width: 380px; }
+  .toast.show { opacity: 1; transform: none; }
+  .toast.bad { border-color: #6b2a28; color: #ffb3ad; }
+
+  /* --------------------------------------------------------------- responsive */
+  @media (max-width: 1050px) {
+    .grid-2, .grid-2.equal { grid-template-columns: 1fr; }
+    .logs-layout { grid-template-columns: 1fr; }
+    .log-viewer { height: 50vh; }
+    .office-floor { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .office-window { width: 58%; }
+    .office-board { width: 37%; }
+  }
+  @media (max-width: 760px) {
+    .app { flex-direction: column; }
+    .sidebar { width: 100%; flex: none; height: auto; position: static; padding: 14px; gap: 12px; }
+    nav { flex-direction: row; overflow-x: auto; padding-bottom: 2px; }
+    .nav-btn { width: auto; white-space: nowrap; }
+    .side-status { flex-direction: row; flex-wrap: wrap; gap: 10px; margin-top: 0; }
+    .sidebar-footer { display: none; }
+    main { padding: 18px 14px 36px; }
+    .topbar { flex-direction: column; }
+    .top-actions { justify-content: flex-start; }
+    .bars { grid-template-columns: 1fr; }
+    .office-wall { height: 170px; }
+    .office-window { left: 4%; width: 52%; }
+    .office-board { width: 40%; top: 15%; }
+    .office-sign { font-size: 10px; }
+    .office-clock { top: 66%; }
+    .office-floor { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 10px 12px 18px; }
+    .nameplate small { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="logo">TL</div>
+      <div><strong>TradingLab</strong><small>Console</small></div>
+    </div>
+
+    <nav id="nav">
+      <button class="nav-btn active" data-view="overview"><span class="ico">◈</span> Resumen</button>
+      <button class="nav-btn" data-view="sala"><span class="ico">▦</span> Sala</button>
+      <button class="nav-btn" data-view="bots"><span class="ico">⚙</span> Bots</button>
+      <button class="nav-btn" data-view="agents"><span class="ico">✦</span> Agentes</button>
+      <button class="nav-btn" data-view="research"><span class="ico">⌁</span> Research</button>
+      <button class="nav-btn" data-view="risk"><span class="ico">⛨</span> Riesgo</button>
+      <button class="nav-btn" data-view="logs"><span class="ico">▤</span> Registros</button>
+    </nav>
+
+    <div class="side-status">
+      <div class="row"><span class="dot" id="side-llm-dot"></span> LM Studio <b id="side-llm">—</b></div>
+      <div class="row"><span class="dot" id="side-mt5-dot"></span> MT5 <b id="side-mt5">—</b></div>
+      <div class="row"><span class="dot" id="side-guard-dot"></span> FTMO <b id="side-guard">—</b></div>
+    </div>
+    <div class="sidebar-footer">Modo paper · las acciones del panel nunca envían órdenes. Los bots y propuestas requieren activación humana.</div>
+  </aside>
+
+  <main>
+    <header class="topbar">
+      <div>
+        <h1 id="page-title">Resumen</h1>
+        <p class="sub" id="page-sub">Estado general del laboratorio</p>
+      </div>
+      <div class="top-actions">
+        <span class="clock" id="clock">—</span>
+        <span class="badge paper" id="mode-badge">paper</span>
+        <span class="badge" id="broker-badge">broker</span>
+        <span class="action-pill" id="action-pill">Sin acciones</span>
+        <button class="btn" id="refresh-btn"><span id="refresh-label">Actualizar</span></button>
+      </div>
+    </header>
+
+    <!-- ============================================================ RESUMEN -->
+    <section class="view active" id="view-overview">
+      <div class="kpis" id="kpis"></div>
+
+      <div class="grid-2">
+        <div class="panel">
+          <div class="panel-head">
+            <h2>Curva de equity</h2>
+            <span class="muted tiny" id="equity-caption">—</span>
+          </div>
+          <div class="chart-wrap">
+            <canvas id="equity-canvas"></canvas>
+            <div class="chart-loading" id="chart-loading">Esperando datos…</div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h2>Estado del sistema</h2><span class="muted tiny" id="generated-at"></span></div>
+          <div class="system-list" id="system-list"></div>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="panel">
+          <div class="panel-head"><h2>Últimas decisiones de agentes</h2><span class="muted tiny">lite + deep</span></div>
+          <div id="recent-agents"></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h2>Último dry-run</h2><span class="muted tiny" id="dryrun-when"></span></div>
+          <div id="recent-dryrun"></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2>Últimas órdenes</h2><span class="muted tiny">cuenta paper</span></div>
+        <div id="recent-orders"></div>
+      </div>
+    </section>
+
+    <!-- ================================================================ SALA -->
+    <section class="view" id="view-sala">
+      <div class="note" id="sala-note" style="margin:0 0 14px">
+        <strong>Sala de TradingAgents.</strong> El equipo se activa con los runs lite/deep.
+      </div>
+
+      <div class="panel office-panel">
+        <div class="office">
+          <div class="office-wall">
+            <div class="office-window">
+              <svg class="skyline" viewBox="0 0 600 220" preserveAspectRatio="none" aria-hidden="true">
+                <defs>
+                  <linearGradient id="skyGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0" stop-color="#14243a"/>
+                    <stop offset=".55" stop-color="#2d4f6e"/>
+                    <stop offset=".78" stop-color="#a8614a"/>
+                    <stop offset="1" stop-color="#3a2622"/>
+                  </linearGradient>
+                </defs>
+                <rect width="600" height="220" fill="url(#skyGrad)"/>
+                <circle cx="470" cy="58" r="24" fill="#f2c27a" opacity=".75"/>
+                <path d="M0 220V150h34v-22h22v22h18v-38h30v38h20v-18h26v18h24v-54h34v54h22v-26h30v26h26v-42h38v42h18v-18h26v18h30v-70h40v70h22v-30h34v30h18v-16h28v16h24v-22h30v22h26v70z" fill="#0b1521"/>
+                <g fill="#e8c27a" opacity=".55">
+                  <rect x="46" y="132" width="3" height="3"/><rect x="54" y="140" width="3" height="3"/>
+                  <rect x="108" y="140" width="3" height="3"/><rect x="120" y="128" width="3" height="3"/>
+                  <rect x="196" y="116" width="3" height="3"/><rect x="208" y="126" width="3" height="3"/>
+                  <rect x="280" y="110" width="3" height="3"/><rect x="292" y="120" width="3" height="3"/>
+                  <rect x="360" y="94" width="3" height="3"/><rect x="372" y="104" width="3" height="3"/>
+                  <rect x="442" y="126" width="3" height="3"/><rect x="454" y="136" width="3" height="3"/>
+                  <rect x="510" y="140" width="3" height="3"/><rect x="522" y="128" width="3" height="3"/>
+                </g>
+              </svg>
+              <div class="window-glare"></div>
+            </div>
+            <div class="office-sign">TRADING <span>LAB</span><small>RESEARCH FLOOR · PAPER ONLY</small></div>
+            <div class="office-board">
+              <div class="board-title">MARKET WIRE</div>
+              <div id="office-board-body">SIN RUN</div>
+            </div>
+            <div class="office-clock"><span>LOCAL</span><b id="office-clock">--:--:--</b></div>
+          </div>
+          <div class="office-floor" id="office-floor"></div>
+          <div class="office-plant plant-left"><i class="pot"></i><i class="leaf l1"></i><i class="leaf l2"></i><i class="leaf l3"></i></div>
+          <div class="office-plant plant-right"><i class="pot"></i><i class="leaf l1"></i><i class="leaf l2"></i><i class="leaf l3"></i></div>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-top:14px">
+        <div class="panel-head"><h2>Equipo</h2><span class="muted tiny">clic en una persona para ver su rol y última contribución</span></div>
+        <div class="cast-grid" id="office-roster"></div>
+      </div>
+    </section>
+
+    <!-- =============================================================== BOTS -->
+    <section class="view" id="view-bots">
+      <div class="note" style="margin:0 0 14px">
+        <strong>Activación manual.</strong> Solo los bots con <code>enabled: true</code> se ejecutan en el orquestador.
+        El dry-run calcula señales sin enviar órdenes. Las propuestas de research nunca se activan solas.
+      </div>
+      <div class="stats" id="bots-summary"></div>
+      <div class="bot-grid" id="bots-grid"></div>
+    </section>
+
+    <!-- ============================================================ AGENTES -->
+    <section class="view" id="view-agents">
+      <div class="panel" style="margin-bottom:14px">
+        <div class="panel-head"><h2>Ejecutar análisis</h2><span class="muted tiny">sin órdenes · LLM local</span></div>
+        <div class="action-bar" style="margin-bottom:0">
+          <input class="input" id="agent-ticker" value="NVDA" maxlength="12" spellcheck="false" aria-label="Ticker">
+          <button class="btn primary" id="run-lite-btn">Analizar con lite</button>
+          <span class="action-pill" id="action-status">Sin acciones en curso</span>
+          <span class="muted tiny">El agente lite tarda 1–3 min con qwen3.8-27b. El modo deep se lanza desde la CLI.</span>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-bottom:14px">
+        <div class="panel-head"><h2>Historial de decisiones</h2><span class="muted tiny" id="agents-count"></span></div>
+        <div id="agents-table"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2>Runs deep (TradingAgents)</h2><span class="muted tiny">logs/deep_*.log</span></div>
+        <div id="deep-logs"></div>
+      </div>
+    </section>
+
+    <!-- =========================================================== RESEARCH -->
+    <section class="view" id="view-research">
+      <div class="stats" id="research-stats"></div>
+      <div class="panel" style="margin-bottom:14px">
+        <div class="panel-head"><h2>Ranking de estrategias</h2><span class="muted tiny" id="research-meta"></span></div>
+        <div id="research-top"></div>
+      </div>
+      <div class="panel" style="margin-bottom:14px">
+        <div class="panel-head"><h2>Propuestas</h2><span class="tag yellow">enabled: false</span></div>
+        <div id="research-proposals"></div>
+        <div class="note">Ninguna propuesta se activa automáticamente. Para promover una: revisar el backtest, añadirla a <code>config/bots.yaml</code> y volver a simular.</div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h2>Casi propuestas</h2><span class="muted tiny">muestra insuficiente</span></div>
+        <div id="research-near"></div>
+        <div class="note">Cumplen los criterios salvo <code>min_trades ≥ 20</code>. Se vigilan, pero no se proponen: 15–19 trades no distinguen habilidad de suerte.</div>
+      </div>
+    </section>
+
+    <!-- =============================================================== RIESGO -->
+    <section class="view" id="view-risk">
+      <div id="risk-alert"></div>
+      <div id="guard-card"></div>
+      <div class="risk-grid">
+        <div class="panel">
+          <div class="panel-head"><h2>Reglas activas</h2><span class="muted tiny" id="rules-firm"></span></div>
+          <div id="rules-table"></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h2>Cuenta MT5</h2><span class="muted tiny" id="mt5-when"></span></div>
+          <div id="mt5-card"></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h2>Futuros · TopstepX</h2><span class="muted tiny">ProjectX API</span></div>
+          <div id="futures-card"></div>
+        </div>
+      </div>
+      <div class="panel" style="margin-top:14px">
+        <div class="panel-head"><h2>Posiciones MT5</h2><span class="muted tiny" id="mt5-pos-count"></span></div>
+        <div id="mt5-positions"></div>
+      </div>
+    </section>
+
+    <!-- ============================================================ REGISTROS -->
+    <section class="view" id="view-logs">
+      <div class="logs-layout">
+        <div class="panel">
+          <div class="panel-head"><h2>Archivos</h2><button class="btn small ghost" id="reload-logs">Recargar</button></div>
+          <div class="log-list" id="logs-list"></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h2 id="log-title">Visor</h2><span class="muted tiny" id="log-meta"></span></div>
+          <pre class="log-viewer" id="log-viewer">Selecciona un log de la izquierda.</pre>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div class="modal" id="modal">
+  <div class="modal-box">
+    <div class="modal-head"><h2 id="modal-title">Detalle</h2><button class="icon-btn" id="modal-close" aria-label="Cerrar">×</button></div>
+    <div id="modal-body"></div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+
+const S = {
+  overview: null,
+  risk: null,
+  view: "overview",
+  action: null,
+  selectedLog: null,
+  refreshTimer: null,
+  actionTimer: null,
+};
+
+const TITLES = {
+  overview: ["Resumen", "Estado general del laboratorio"],
+  sala: ["Sala", "TradingAgents en su oficina: estados, runs y decisiones"],
+  bots: ["Bots", "Catálogo, estado y últimas señales"],
+  agents: ["Agentes", "TradingAgents lite/deep y sus decisiones"],
+  research: ["Research", "Ranking, propuestas y casi propuestas"],
+  risk: ["Riesgo", "Guard de FTMO, cuenta MT5 y futuros"],
+  logs: ["Registros", "Dry-runs, agentes, backups y tareas"],
+};
+
+const fmtUSD = new Intl.NumberFormat("es-ES", { style: "currency", currency: "USD", maximumFractionDigits: 2 });
+const fmtNum = new Intl.NumberFormat("es-ES", { maximumFractionDigits: 2 });
+const fmtInt = new Intl.NumberFormat("es-ES", { maximumFractionDigits: 0 });
+
+const $ = (sel) => document.querySelector(sel);
+const $$ = (sel) => Array.from(document.querySelectorAll(sel));
+
+function money(v) { return v === null || v === undefined || !isFinite(v) ? "—" : fmtUSD.format(Number(v)); }
+function num(v, d = 2) { return v === null || v === undefined || !isFinite(v) ? "—" : Number(v).toLocaleString("es-ES", { maximumFractionDigits: d }); }
+function pct(v, d = 1) { return v === null || v === undefined || !isFinite(v) ? "—" : (Number(v) * 100).toFixed(d) + "%"; }
+function pctRaw(v, d = 1) { return v === null || v === undefined || !isFinite(v) ? "—" : Number(v).toFixed(d) + "%"; }
+function esc(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+function dateTime(iso) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  return isNaN(d.getTime()) ? esc(iso) : d.toLocaleString("es-ES", { dateStyle: "short", timeStyle: "short" });
+}
+function ago(iso) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "—";
+  const sec = Math.max(0, Math.floor((Date.now() - d.getTime()) / 1000));
+  if (sec < 60) return `hace ${sec}s`;
+  if (sec < 3600) return `hace ${Math.floor(sec / 60)} min`;
+  if (sec < 86400) return `hace ${Math.floor(sec / 3600)} h`;
+  return `hace ${Math.floor(sec / 86400)} d`;
+}
+function bytes(n) {
+  if (!isFinite(n)) return "—";
+  if (n < 1024) return n + " B";
+  if (n < 1048576) return (n / 1024).toFixed(1) + " KB";
+  return (n / 1048576).toFixed(1) + " MB";
+}
+function dotClass(ok) { return ok === true ? "ok" : ok === false ? "bad" : ""; }
+function ratingTag(rating) {
+  const r = String(rating || "?");
+  const cls = ["Buy", "Overweight"].includes(r) ? "green" : ["Sell", "Underweight", "ERROR"].includes(r) ? "red" : ["Hold"].includes(r) ? "yellow" : "purple";
+  return `<span class="tag ${cls}">${esc(r)}</span>`;
+}
+function statusTag(status) {
+  const map = { "ejecutado": "green", "filled": "green", "dry_run": "blue", "sin_cambios": "off", "bloqueado": "yellow", "error": "red" };
+  const cls = map[status] || "off";
+  return `<span class="tag ${cls === "off" ? "" : cls}">${esc(status || "?")}</span>`;
+}
+function paramsText(params) {
+  if (!params) return "—";
+  return Object.entries(params).map(([k, v]) => `${k}=${v}`).join(" ");
+}
+function ratioText(v) { return v === null || v === undefined ? "—" : (Number(v) * 100).toFixed(1) + "%"; }
+function grid(headers, rows, opts = {}) {
+  if (!rows.length) return `<div class="empty">${esc(opts.empty || "Sin datos.")}</div>`;
+  const head = headers.map((h) => `<th class="${h.num ? "num" : ""} ${h.wrap ? "wrap" : ""}">${esc(h.label)}</th>`).join("");
+  const body = rows.map((row) => "<tr>" + row.map((cell, i) => {
+    const h = headers[i] || {};
+    return `<td class="${h.num ? "num" : ""} ${h.wrap ? "wrap" : ""}">${cell}</td>`;
+  }).join("") + "</tr>").join("");
+  return `<div class="table-wrap"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
+}
+
+async function getJSON(url, options) {
+  const response = await fetch(url, Object.assign({ cache: "no-store" }, options || {}));
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`);
+  return body;
+}
+
+/* ------------------------------------------------------------------- nav */
+function bindNav() {
+  $$("#nav .nav-btn").forEach((btn) => btn.addEventListener("click", () => switchView(btn.dataset.view)));
+}
+
+function switchView(view, updateHash = true) {
+  if (!TITLES[view]) view = "overview";
+  S.view = view;
+  $$("#nav .nav-btn").forEach((b) => b.classList.toggle("active", b.dataset.view === view));
+  $$(".view").forEach((section) => section.classList.toggle("active", section.id === `view-${view}`));
+  const [title, sub] = TITLES[view] || ["TradingLab", ""];
+  $("#page-title").textContent = title;
+  $("#page-sub").textContent = sub;
+  if (updateHash) history.replaceState(null, "", "#" + view);
+  if (view === "overview") requestAnimationFrame(drawEquity);
+  if (view === "sala") renderSala();
+  if (view === "logs" && !S.selectedLog) selectLog();
+}
+
+/* ------------------------------------------------------------------ clock */
+function updateClock() {
+  const now = new Date();
+  $("#clock").textContent = now.toLocaleString("es-ES", { dateStyle: "medium", timeStyle: "medium" });
+  const office = $("#office-clock");
+  if (office) office.textContent = now.toLocaleTimeString("es-ES", { hour12: false });
+}
+
+/* ------------------------------------------------------------------ load */
+async function loadAll(manual = false) {
+  const button = $("#refresh-btn");
+  button.disabled = true;
+  $("#refresh-label").textContent = "Actualizando…";
+  const [overviewResult, riskResult] = await Promise.allSettled([
+    getJSON("/api/overview"),
+    getJSON("/api/risk"),
+  ]);
+  if (overviewResult.status === "fulfilled") {
+    S.overview = overviewResult.value;
+    renderOverview();
+    renderBots();
+    renderAgents();
+    renderSala();
+    renderResearch();
+    renderLogs();
+  }
+  if (riskResult.status === "fulfilled") {
+    S.risk = riskResult.value;
+    renderRisk();
+  }
+  if (overviewResult.status === "rejected" && riskResult.status === "rejected") {
+    toast("No se pudo conectar con el panel: " + overviewResult.reason.message, true);
+  } else if (manual) {
+    toast("Panel actualizado.");
+  }
+  updatePills();
+  button.disabled = false;
+  $("#refresh-label").textContent = "Actualizar";
+}
+
+/* --------------------------------------------------------------- pills */
+function updatePills() {
+  const meta = S.overview?.meta;
+  if (meta) {
+    const mode = $("#mode-badge");
+    mode.textContent = meta.mode;
+    mode.className = "badge " + (meta.mode === "live" ? "live" : "paper");
+    $("#broker-badge").textContent = "broker: " + meta.broker;
+  }
+
+  const llm = S.overview?.llm;
+  if (llm) {
+    $("#side-llm-dot").className = "dot " + dotClass(llm.ok);
+    $("#side-llm").textContent = llm.ok ? (llm.context ? `${Math.round(llm.context / 1024)}k` : "on") : "off";
+    $("#side-llm").title = llm.ok ? `${llm.models.length} modelos · ${llm.loaded_model || llm.model}` : (llm.error || "sin conexión");
+  }
+
+  const mt5 = S.risk?.mt5;
+  const mt5Ok = mt5 ? (mt5.ok === true ? true : mt5.ok === false ? false : null) : null;
+  $("#side-mt5-dot").className = "dot " + dotClass(mt5Ok);
+  $("#side-mt5").textContent = mt5 ? (mt5.ok ? (mt5.account?.mode || "on") : "off") : "…";
+  $("#side-mt5").title = mt5?.error || (mt5?.account ? `${mt5.account.login} · ${mt5.account.server}` : "");
+
+  const prop = S.risk?.prop;
+  const severity = prop?.severity;
+  $("#side-guard-dot").className = "dot " + (severity === "ok" ? "ok" : severity === "warn" ? "warn" : severity ? "bad" : "");
+  $("#side-guard").textContent = prop ? (prop.label || severity || "—") : "…";
+  $("#side-guard").title = prop?.summary || "";
+
+  renderAction(S.action || S.overview?.action || { status: "idle" });
+}
+
+/* --------------------------------------------------------------- overview */
+function renderOverview() {
+  const o = S.overview;
+  if (!o) return;
+  const a = o.account;
+  const meta = o.meta;
+
+  const cards = [
+    { label: "Equity", value: money(a.equity), hint: `inicio ${money(meta.starting_cash)}`, cls: "" },
+    { label: "Cash", value: money(a.cash), hint: "efectivo disponible" },
+    { label: "Posiciones", value: money(a.positions_value), hint: `${a.positions.length} abiertas` },
+    { label: "Retorno", value: pct(a.return_pct, 2), hint: "vs. capital inicial", cls: a.return_pct >= 0 ? "pos" : "neg" },
+    { label: "Max drawdown", value: pct(a.drawdown_pct, 2), hint: "pico → actual", cls: a.drawdown_pct < 0 ? "neg" : "" },
+    {
+      label: "Llamadas LLM",
+      value: fmtInt.format(a.llm_calls.count),
+      hint: a.llm_calls.count ? `media ${num(a.llm_calls.avg_latency_s, 1)} s · ok ${a.llm_calls.ok}/${a.llm_calls.count}` : "sin llamadas",
+    },
+  ];
+  $("#kpis").innerHTML = cards.map((c) => `
+    <div class="kpi">
+      <div class="label">${esc(c.label)}</div>
+      <div class="value ${c.cls || ""}">${c.value}</div>
+      <div class="hint">${esc(c.hint || "")}</div>
+    </div>`).join("");
+
+  $("#generated-at").textContent = "actualizado " + ago(o.generated_at);
+  $("#equity-caption").textContent = a.equity_curve.length
+    ? `${a.equity_curve.length} snapshots · último ${dateTime(a.equity_curve[a.equity_curve.length - 1].ts)}`
+    : "sin historial";
+  $("#chart-loading").style.display = "none";
+
+  const sys = [];
+  const llmOk = o.llm?.ok;
+  sys.push({
+    dot: llmOk,
+    name: "LM Studio",
+    detail: o.llm == null ? "comprobando…" : llmOk ? `${o.llm.model}${o.llm.context ? ` · ${fmtInt.format(o.llm.context)} ctx` : ""}` : (o.llm.error || "sin conexión"),
+  });
+  const mt5 = S.risk?.mt5;
+  sys.push({
+    dot: mt5 ? (mt5.ok === false ? false : true) : null,
+    name: "MetaTrader 5",
+    detail: mt5 == null ? "comprobando…" : mt5.ok ? `${mt5.account.login} · ${mt5.account.server} · ${mt5.account.trade_allowed ? "Algo Trading ON" : "Algo Trading OFF"}` : (mt5.error || (mt5.configured ? "no disponible" : "sin configurar")),
+  });
+  const prop = S.risk?.prop;
+  sys.push({
+    dot: prop ? prop.severity === "ok" : null,
+    name: "Guard FTMO",
+    detail: prop ? `${prop.label} · colchón ${money(prop.remaining_usd)}` : "comprobando…",
+  });
+  const scheduler = o.scheduler;
+  const dryTask = scheduler?.tasks?.find((t) => /dryrun/i.test(t.name));
+  sys.push({
+    dot: scheduler?.ok ? true : null,
+    name: "Tarea dry-run",
+    detail: dryTask ? `${dryTask.state} · próxima ${dryTask.next_run || "—"}` : (scheduler?.error || "no encontrada"),
+  });
+  const deep = (o.agents || []).find((r) => r.mode === "deep");
+  sys.push({
+    dot: deep ? deep.ok : null,
+    name: "Último run deep",
+    detail: deep ? `${deep.ticker} · ${deep.rating} · ${dateTime(deep.generated_at)}` : "sin runs",
+  });
+  sys.push({
+    dot: true,
+    name: "Modo del laboratorio",
+    detail: `${meta.mode.toUpperCase()} · ${meta.broker} · ${meta.data_provider}`,
+  });
+  $("#system-list").innerHTML = sys.map((row) => `
+    <div class="sys-row">
+      <span class="dot ${dotClass(row.dot)}"></span>
+      <span class="name">${esc(row.name)}</span>
+      <span class="detail">${esc(row.detail)}</span>
+    </div>`).join("");
+
+  const runs = (o.agents || []).slice(0, 4);
+  $("#recent-agents").innerHTML = runs.length ? runs.map((r, i) => `
+    <div class="sys-row" style="align-items:flex-start; cursor:pointer" data-agent="${i}">
+      <div style="min-width:0">
+        <div style="display:flex; align-items:center; gap:7px; flex-wrap:wrap">
+          <b>${esc(r.ticker)}</b> ${ratingTag(r.rating)}
+          <span class="tag ${r.mode === "deep" ? "purple" : "blue"}">${esc(r.mode)}</span>
+          ${r.confidence != null ? `<span class="muted tiny">conf. ${pct(r.confidence, 0)}</span>` : ""}
+        </div>
+        <div class="muted small" style="margin-top:3px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden">
+          ${esc(r.decision || r.risks || "Sin tesis registrada.")}
+        </div>
+      </div>
+      <span class="detail">${r.elapsed_s != null ? num(r.elapsed_s, 0) + " s" : ""}<br>${ago(r.generated_at)}</span>
+    </div>`).join("") : `<div class="empty">Aún no hay decisiones. Lanza un análisis lite en la pestaña Agentes.</div>`;
+  $$("#recent-agents [data-agent]").forEach((row) => row.addEventListener("click", () => showAgent(Number(row.dataset.agent))));
+
+  const dry = o.dryruns?.[0];
+  $("#dryrun-when").textContent = dry ? `${dateTime(dry.generated_at)} · ${dry.broker}` : "sin registros";
+  if (!dry) {
+    $("#recent-dryrun").innerHTML = `<div class="empty">Sin dry-runs todavía. Puedes lanzar uno desde la pestaña Agentes o esperar a la tarea programada (22:15).</div>`;
+  } else {
+    const pills = Object.entries(dry.counts).map(([k, v]) => `<span class="tag ${k === "error" ? "red" : k === "bloqueado" ? "yellow" : k === "sin_cambios" ? "" : "blue"}">${esc(k)}: ${v}</span>`).join(" ");
+    const rows = dry.actions.map((a) => [
+      `<b>${esc(a.bot)}</b>`, esc(a.ticker), `<span class="tag ${a.status === "error" ? "red" : a.status === "bloqueado" ? "yellow" : a.status === "sin_cambios" ? "" : "blue"}">${esc(a.status)}</span>`, num(a.delta, 0), money(a.price),
+    ]);
+    $("#recent-dryrun").innerHTML = `<div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:9px">${pills}</div>` +
+      grid([{ label: "Bot" }, { label: "Ticker" }, { label: "Estado" }, { label: "Δ", num: true }, { label: "Precio", num: true }], rows, { empty: "Sin acciones." });
+  }
+
+  const orders = (a.orders || []).slice(0, 8);
+  $("#recent-orders").innerHTML = grid(
+    [{ label: "Fecha" }, { label: "Ticker" }, { label: "Lado" }, { label: "Qty", num: true }, { label: "Estado" }, { label: "Bot" }],
+    orders.map((r) => [esc(dateTime(r.ts)), esc(r.ticker), esc(r.side), num(r.qty, 0), statusTag(r.status), esc(r.bot || "—")]),
+    { empty: "Sin órdenes todavía." }
+  );
+
+  requestAnimationFrame(drawEquity);
+}
+
+/* ------------------------------------------------------------------ chart */
+function drawEquity() {
+  const canvas = $("#equity-canvas");
+  if (!canvas || !constantView()) return;
+  const points = (S.overview?.account?.equity_curve || []).map((p) => ({ x: new Date(p.ts).getTime(), y: Number(p.equity) }));
+  const rect = canvas.getBoundingClientRect();
+  if (!rect.width) return;
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = Math.floor(rect.width * dpr);
+  canvas.height = Math.floor(276 * dpr);
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, rect.width, 276);
+
+  if (points.length < 2) {
+    ctx.fillStyle = "#8b98a8";
+    ctx.font = "12px -apple-system, Segoe UI, sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("Sin historial de equity suficiente", rect.width / 2, 138);
+    return;
+  }
+
+  // downsample para no dibujar miles de puntos
+  const maxPoints = 500;
+  let data = points;
+  if (points.length > maxPoints) {
+    const step = Math.ceil(points.length / maxPoints);
+    data = points.filter((_, i) => i % step === 0 || i === points.length - 1);
+  }
+
+  const padL = 58, padR = 16, padT = 16, padB = 26;
+  const width = rect.width - padL - padR;
+  const height = 276 - padT - padB;
+  let lo = Math.min(...data.map((p) => p.y));
+  let hi = Math.max(...data.map((p) => p.y));
+  const span = (hi - lo) || Math.max(hi * 0.001, 1);
+  lo -= span * 0.08;
+  hi += span * 0.08;
+  const minX = data[0].x, maxX = data[data.length - 1].x || minX + 1;
+  const x = (v) => padL + (v - minX) / Math.max(1, maxX - minX) * width;
+  const y = (v) => padT + (hi - v) / (hi - lo) * height;
+
+  // grid horizontal
+  ctx.strokeStyle = "rgba(139,152,168,.12)";
+  ctx.lineWidth = 1;
+  ctx.font = "10px -apple-system, Segoe UI, sans-serif";
+  ctx.fillStyle = "#73808f";
+  ctx.textAlign = "right";
+  for (let i = 0; i <= 4; i++) {
+    const value = lo + (hi - lo) * i / 4;
+    const yy = y(value);
+    ctx.beginPath(); ctx.moveTo(padL, yy); ctx.lineTo(rect.width - padR, yy); ctx.stroke();
+    ctx.fillText(fmtInt.format(value), padL - 8, yy + 3);
+  }
+
+  const positive = data[data.length - 1].y >= data[0].y;
+  const color = positive ? "#3fb950" : "#f85149";
+
+  // área
+  const gradient = ctx.createLinearGradient(0, padT, 0, padT + height);
+  gradient.addColorStop(0, positive ? "rgba(63,185,80,.22)" : "rgba(248,81,73,.22)");
+  gradient.addColorStop(1, "rgba(63,185,80,0)");
+  ctx.beginPath();
+  ctx.moveTo(x(data[0].x), padT + height);
+  data.forEach((p) => ctx.lineTo(x(p.x), y(p.y)));
+  ctx.lineTo(x(data[data.length - 1].x), padT + height);
+  ctx.closePath();
+  ctx.fillStyle = gradient;
+  ctx.fill();
+
+  // línea
+  ctx.beginPath();
+  data.forEach((p, i) => { if (i === 0) ctx.moveTo(x(p.x), y(p.y)); else ctx.lineTo(x(p.x), y(p.y)); });
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2;
+  ctx.lineJoin = "round";
+  ctx.stroke();
+
+  // último punto
+  const last = data[data.length - 1];
+  ctx.beginPath();
+  ctx.arc(x(last.x), y(last.y), 3.2, 0, Math.PI * 2);
+  ctx.fillStyle = color;
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(x(last.x), y(last.y), 6.5, 0, Math.PI * 2);
+  ctx.fillStyle = positive ? "rgba(63,185,80,.18)" : "rgba(248,81,73,.18)";
+  ctx.fill();
+
+  // etiqueta último valor
+  ctx.textAlign = "left";
+  ctx.font = "600 11px -apple-system, Segoe UI, sans-serif";
+  ctx.fillStyle = "#c9d5e2";
+  const label = money(last.y);
+  const labelWidth = ctx.measureText(label).width;
+  let lx = x(last.x) + 9;
+  if (lx + labelWidth > rect.width - padR) lx = x(last.x) - labelWidth - 9;
+  ctx.fillText(label, lx, Math.max(12, y(last.y) - 10));
+}
+
+function constantView() { return $("#view-overview").classList.contains("active"); }
+
+/* ------------------------------------------------------------------- bots */
+function renderBots() {
+  const bots = S.overview?.bots || [];
+  if (!bots.length) {
+    $("#bots-summary").innerHTML = "";
+    $("#bots-grid").innerHTML = `<div class="empty">No hay bots en config/bots.yaml.</div>`;
+    return;
+  }
+  const enabled = bots.filter((b) => b.enabled).length;
+  $("#bots-summary").innerHTML = [
+    { label: "Bots en catálogo", value: bots.length },
+    { label: "Habilitados", value: enabled, cls: enabled ? "pos" : "" },
+    { label: "Deshabilitados", value: bots.length - enabled, cls: "muted" },
+    { label: "Estrategias", value: new Set(bots.map((b) => b.strategy)).size },
+  ].map((s) => `<div class="stat"><div class="label">${esc(s.label)}</div><div class="value ${s.cls || ""}">${s.value}</div></div>`).join("");
+
+  $("#bots-grid").innerHTML = bots.map((bot) => {
+    const actions = (bot.last_actions || []).map((a) => `
+      <div class="mini-action"><b>${esc(a.ticker)}</b> ${statusTag(a.status)} <span>Δ ${num(a.delta, 0)}</span> <span class="muted">${money(a.price)}</span></div>`).join("");
+    return `
+      <div class="bot-card ${bot.enabled ? "on" : "off"}">
+        <div class="bot-top">
+          <span class="bot-id">${esc(bot.id)}</span>
+          <span class="tag ${bot.enabled ? "green" : ""}">${bot.enabled ? "enabled" : "disabled"}</span>
+        </div>
+        <div class="bot-meta"><span>tipo: <b>${esc(bot.type)}</b></span><span>estrategia: <b>${esc(bot.strategy)}</b></span><span>tf: <b>${esc(bot.timeframe)}</b></span></div>
+        <div class="chips">${(bot.universe || []).map((t) => `<span class="chip">${esc(t)}</span>`).join("")}</div>
+        <div class="bot-desc">${esc(bot.description || "Sin descripción.")}</div>
+        <div class="bot-actions">${actions || `<span class="muted tiny">Sin acciones en el último dry-run.</span>`}</div>
+      </div>`;
+  }).join("");
+}
+
+/* ----------------------------------------------------------------- agents */
+function renderAgents() {
+  const runs = S.overview?.agents || [];
+  $("#agents-count").textContent = `${runs.length} runs`;
+  $("#agents-table").innerHTML = grid(
+    [{ label: "Fecha" }, { label: "Modo" }, { label: "Ticker" }, { label: "Rating" }, { label: "Confianza", num: true }, { label: "Horizonte", num: true }, { label: "Duración", num: true }, { label: "Modelo" }, { label: "" }],
+    runs.map((r, i) => [
+      esc(dateTime(r.generated_at)),
+      `<span class="tag ${r.mode === "deep" ? "purple" : "blue"}">${esc(r.mode)}</span>`,
+      `<b>${esc(r.ticker)}</b>`,
+      ratingTag(r.rating),
+      r.confidence != null ? pct(r.confidence, 0) : "—",
+      r.horizon_days != null ? r.horizon_days + " d" : "—",
+      r.elapsed_s != null ? num(r.elapsed_s, 0) + " s" : "—",
+      esc(r.model || "—"),
+      `<button class="btn small" data-agent-detail="${i}">Ver</button>`,
+    ]),
+    { empty: "Sin decisiones. Usa el botón «Analizar con lite»." }
+  );
+  $$("[data-agent-detail]").forEach((btn) => btn.addEventListener("click", () => showAgent(Number(btn.dataset.agentDetail))));
+
+  const logs = S.overview?.deep_logs || [];
+  if (!logs.length) {
+    const deepRuns = runs.filter((r) => r.mode === "deep");
+    $("#deep-logs").innerHTML = deepRuns.length
+      ? deepRuns.map((r) => `<div class="sys-row"><span class="dot ${r.ok ? "ok" : "bad"}"></span><span class="name">${esc(r.ticker)} · ${esc(r.rating)}</span><span class="detail">${r.elapsed_s != null ? num(r.elapsed_s, 0) + " s" : ""} · ${esc(r.reports_path || "")}</span></div>`).join("")
+      : `<div class="empty">Sin runs deep registrados. Se lanzan desde la CLI: <code>lab agent NVDA --mode deep</code>.</div>`;
+  } else {
+    $("#deep-logs").innerHTML = logs.map((l) => `
+      <details class="panel" style="padding:10px 12px; margin-bottom:8px; box-shadow:none">
+        <summary style="cursor:pointer; font-size:12.5px">
+          <span class="dot ${l.running ? "warn" : "ok"}" style="display:inline-block; margin-right:7px"></span>
+          <b>${esc(l.name)}</b> <span class="muted tiny">${l.running ? "en curso" : "finalizado"} · ${dateTime(l.mtime)} · ${bytes(l.size)}</span>
+        </summary>
+        <pre style="white-space:pre-wrap; color:#aebdcd; font-size:11px; margin:10px 0 0">${esc(l.tail)}</pre>
+      </details>`).join("");
+  }
+}
+
+function showAgent(index) {
+  const run = (S.overview?.agents || [])[index];
+  if (!run) return;
+  const context = run.context || null;
+  let html = `${run.error ? `<div class="alert red"><b>Run fallido:</b> ${esc(run.error)}</div>` : ""}
+    <div class="detail-grid">
+      <div class="k">Ticker</div><div><b>${esc(run.ticker)}</b> · ${esc(run.date || "")}</div>
+      <div class="k">Modo</div><div><span class="tag ${run.mode === "deep" ? "purple" : "blue"}">${esc(run.mode)}</span></div>
+      <div class="k">Rating</div><div>${ratingTag(run.rating)}</div>
+      <div class="k">Confianza</div><div>${run.confidence != null ? pct(run.confidence, 0) : "—"}</div>
+      <div class="k">Horizonte</div><div>${run.horizon_days != null ? run.horizon_days + " días" : "—"}</div>
+      <div class="k">Duración</div><div>${run.elapsed_s != null ? num(run.elapsed_s, 1) + " s" : "—"}</div>
+      <div class="k">Modelo</div><div>${esc(run.model || "—")}</div>
+      <div class="k">Generado</div><div>${esc(dateTime(run.generated_at))}</div>
+      ${run.reports_path ? `<div class="k">Informe</div><div>${esc(run.reports_path)}</div>` : ""}
+    </div>
+    <h3 style="font-size:12px; text-transform:uppercase; letter-spacing:.07em; color:#8d9bab; margin:18px 0 7px">Tesis</h3>
+    <div class="thesis">${esc(run.decision || "Sin tesis registrada.")}</div>
+    <h3 style="font-size:12px; text-transform:uppercase; letter-spacing:.07em; color:#8d9bab; margin:18px 0 7px">Riesgos</h3>
+    <div class="thesis">${esc(run.risks || "Sin riesgos registrados.")}</div>`;
+  if (context) {
+    html += `<h3 style="font-size:12px; text-transform:uppercase; letter-spacing:.07em; color:#8d9bab; margin:18px 0 7px">Contexto técnico</h3>` +
+      grid([{ label: "Métrica" }, { label: "Valor", num: true }], Object.entries(context).filter(([, v]) => typeof v !== "object" || v === null).map(([k, v]) => [esc(k), esc(v == null ? "—" : String(v))]));
+  }
+  if (run.reports_path) {
+    html += `<div style="margin-top:18px; display:flex; align-items:center; gap:10px; flex-wrap:wrap">
+      <button class="btn small primary" id="open-agent-report" data-file="${esc(run.file)}">Ver informe completo</button>
+      <span class="muted tiny">${esc(run.reports_path)}</span>
+    </div>`;
+  }
+  openModal(`${run.ticker} · ${run.mode} · ${run.date || ""}`, html);
+  const reportBtn = $("#open-agent-report");
+  if (reportBtn) reportBtn.addEventListener("click", () => loadAgentReport(reportBtn.dataset.file));
+}
+
+async function loadAgentReport(file) {
+  try {
+    const data = await getJSON("/api/agent-report?file=" + encodeURIComponent(file));
+    if (!data.exists) {
+      toast(data.reason || "Informe no encontrado.", true);
+      return;
+    }
+    openModal("Informe · " + data.path, `<pre class="log-viewer" style="height:62vh">${esc(data.content)}</pre>`);
+  } catch (err) {
+    toast(err.message, true);
+  }
+}
+
+/* --------------------------------------------------------------- sala pixel */
+const CAST = [
+  { id: "market", name: "Mara", short: "Market", role: "Market Analyst", color: "#58a6ff", hair: "#3b2a1f", skin: "#e0b48a", desc: "Lee tendencia, RSI, ATR, volumen y niveles. Alimenta el contexto técnico del agente lite y del run deep." },
+  { id: "news", name: "Nico", short: "News", role: "News Analyst", color: "#39c5cf", hair: "#1e1e1e", skin: "#c98d63", desc: "Revisa titulares y catalizadores. No inventa noticias: solo trabaja con fuentes disponibles." },
+  { id: "social", name: "Sofi", short: "Social", role: "Social Analyst", color: "#bc8cff", hair: "#5a2e1e", skin: "#f0c8a0", desc: "Mide sentimiento y narrativa pública cuando el run incluye el analista social." },
+  { id: "fundamentals", name: "Ema", short: "Fundamentals", role: "Fundamentals Analyst", color: "#3fb950", hair: "#2a2a2a", skin: "#b97a56", desc: "Lee balance, márgenes, guidance y valoración. Separa el dato contable de la opinión." },
+  { id: "bull", name: "Bruno", short: "Bull", role: "Bull Researcher", color: "#56d364", hair: "#4c2c18", skin: "#d9a074", desc: "Construye el caso alcista y ataca la tesis bajista con evidencia." },
+  { id: "bear", name: "Berta", short: "Bear", role: "Bear Researcher", color: "#f85149", hair: "#2b1a12", skin: "#c98d63", desc: "Construye el caso bajista y busca las grietas del caso alcista." },
+  { id: "manager", name: "Rex", short: "Manager", role: "Research Manager", color: "#d29922", hair: "#1f1f1f", skin: "#e0b48a", desc: "Modera el debate, decide qué evidencia pesa y sintetiza el plan de investigación." },
+  { id: "trader", name: "Vera", short: "Trader", role: "Trader", color: "#db6d28", hair: "#5a2e1e", skin: "#f0c8a0", desc: "Convierte la tesis en un plan: entrada, stop, objetivo y tamaño dentro del riesgo." },
+  { id: "risk", name: "Rita", short: "Risk", role: "Risk Manager", color: "#f778ba", hair: "#1e1e1e", skin: "#b97a56", desc: "Estresa la tesis y comprueba drawdown, exposición y reglas de fondeo antes de aprobar." },
+  { id: "pm", name: "Pablo", short: "PM", role: "Portfolio Manager", color: "#e3b341", hair: "#3b2a1f", skin: "#d9a074", desc: "Toma la decisión final: rating, confianza, horizonte y tamaño. No ejecuta órdenes reales." },
+];
+
+const CAST_WORK = {
+  market: "leyendo el tape…",
+  news: "revisando titulares…",
+  social: "midiendo sentimiento…",
+  fundamentals: "leyendo filings…",
+  bull: "afilando el caso alcista…",
+  bear: "buscando grietas…",
+  manager: "moderando el debate…",
+  trader: "armando el plan…",
+  risk: "estresando la tesis…",
+  pm: "esperando al comité…",
+};
+
+function castStatusLabel(status) {
+  return status === "working" ? "trabajando" : status === "done" ? "completado" : status === "error" ? "error" : "en espera";
+}
+
+function deskHTML(c) {
+  return `<div class="desk idle" data-cast="${c.id}" title="${esc(c.role)}">
+    <div class="bubble"></div>
+    <div class="person" style="--shirt:${c.color}; --hair:${c.hair}; --skin:${c.skin}">
+      <div class="head"><div class="hair"></div><div class="face"><i></i><i></i></div></div>
+      <div class="torso"></div>
+    </div>
+    <div class="monitor"><div class="screen"></div><div class="stand"></div></div>
+    <div class="desk-top"><div class="keyboard"></div><div class="mug" style="--mug:${c.color}"></div></div>
+    <div class="nameplate"><span class="status-led"></span><b>${c.name}</b><small>${c.short}</small></div>
+  </div>`;
+}
+
+function deepStage(tail) {
+  const text = String(tail || "").toLowerCase();
+  const checks = [
+    ["pm", /portfolio|final decision|final trade/],
+    ["risk", /risk|drawdown/],
+    ["trader", /trader|investment plan/],
+    ["manager", /research manager|investment debate|judge/],
+    ["bear", /bear/],
+    ["bull", /bull/],
+    ["fundamentals", /fundamental/],
+    ["news", /news/],
+    ["social", /social|sentiment/],
+    ["market", /market|technical/],
+  ];
+  for (const [id, re] of checks) if (re.test(text)) return id;
+  return null;
+}
+
+function salaState() {
+  const o = S.overview || {};
+  const action = S.action || o.action || {};
+  const latest = (o.agents || [])[0] || null;
+  const deepLog = (o.deep_logs || [])[0] || null;
+  const liteRunning = action.status === "running" && action.kind === "agent";
+  const deepRunning = Boolean(deepLog?.running);
+  const ticker = action.ticker || latest?.ticker || "—";
+  const mode = deepRunning ? "deep" : liteRunning ? "lite" : (latest?.mode || "—");
+  const statuses = {};
+  CAST.forEach((c) => { statuses[c.id] = "idle"; });
+
+  let note = "Sin runs todavía. Lanza un análisis lite desde Agentes para ver al equipo en acción.";
+  if (liteRunning) {
+    statuses.market = "working";
+    statuses.pm = "working";
+    note = `Modo lite · ${action.ticker}: una llamada compacta. Mara prepara el contexto y Pablo firma la decisión; el resto del equipo queda en standby.`;
+  } else if (deepRunning) {
+    const stage = deepStage(deepLog?.tail);
+    if (stage) {
+      statuses[stage] = "working";
+      const role = CAST.find((c) => c.id === stage)?.role || stage;
+      note = `Run deep en curso · ${ticker}: etapa activa «${role}». Puede tardar horas.`;
+    } else {
+      CAST.forEach((c) => { statuses[c.id] = "working"; });
+      note = `Run deep en curso · ${ticker}: el equipo completo está debatiendo. Puede tardar horas.`;
+    }
+  } else if (latest) {
+    const ok = latest.ok !== false;
+    if (latest.mode === "lite") {
+      statuses.market = ok ? "done" : "error";
+      statuses.pm = ok ? "done" : "error";
+      note = `Último run lite · ${latest.ticker} · ${latest.rating}. El equipo completo solo participa en deep.`;
+    } else {
+      CAST.forEach((c) => { statuses[c.id] = ok ? "done" : "error"; });
+      const duration = latest.elapsed_s != null ? `${num(latest.elapsed_s, 0)} s` : "sin duración";
+      note = `Último run deep · ${latest.ticker} · ${latest.rating} · ${duration}.`;
+    }
+  }
+  return { statuses, note, ticker, mode, latest, deepLog, liteRunning, deepRunning };
+}
+
+function castSpeech(id, st) {
+  if (st.statuses[id] === "working") return CAST_WORK[id] || "procesando…";
+  if (st.deepRunning || st.liteRunning || !st.latest) return "";
+  if (id === "pm") {
+    const conf = st.latest.confidence != null ? ` · ${pct(st.latest.confidence, 0)}` : "";
+    return `${st.latest.rating}${conf}`;
+  }
+  if (id === "market" && st.latest.context) return `${st.latest.ticker} ${money(st.latest.context.price)}`;
+  if (id === "manager" && st.latest.mode === "deep") return "debate cerrado";
+  if (id === "risk" && st.latest.mode === "deep") return "guard revisado";
+  return "";
+}
+
+function renderSala() {
+  const floor = $("#office-floor");
+  if (!floor) return;
+  if (!floor.dataset.ready) {
+    floor.innerHTML = CAST.map(deskHTML).join("");
+    floor.querySelectorAll(".desk").forEach((desk) => {
+      desk.addEventListener("click", () => showCast(desk.dataset.cast));
+    });
+    floor.dataset.ready = "1";
+  }
+
+  const st = salaState();
+  const spoken = CAST.filter((c) => castSpeech(c.id, st)).slice(0, 3);
+  CAST.forEach((c) => {
+    const desk = floor.querySelector(`.desk[data-cast="${c.id}"]`);
+    if (!desk) return;
+    desk.classList.remove("idle", "working", "done", "error");
+    desk.classList.add(st.statuses[c.id] || "idle");
+    const bubble = desk.querySelector(".bubble");
+    if (bubble) {
+      const speech = spoken.includes(c) ? castSpeech(c.id, st) : "";
+      bubble.textContent = speech;
+      bubble.classList.toggle("show", Boolean(speech));
+    }
+  });
+
+  const board = $("#office-board-body");
+  if (board) {
+    const live = st.liteRunning || st.deepRunning;
+    if (live) {
+      const started = st.liteRunning ? (S.action?.started_at || S.overview?.action?.started_at) : st.deepLog?.mtime;
+      board.innerHTML = `<div>${esc(st.ticker)} · ${esc(String(st.mode).toUpperCase())}</div>
+         <div class="tiny">analizando…</div>
+         <div class="tiny">${esc(dateTime(started))}</div>
+         <div>● LIVE</div>`;
+    } else {
+      board.innerHTML = st.latest
+        ? `<div>${esc(st.ticker)} · ${esc(String(st.mode).toUpperCase())}</div>
+           <div>${ratingTag(st.latest.rating)} ${st.latest.confidence != null ? pct(st.latest.confidence, 0) : ""}</div>
+           <div class="tiny">${esc(dateTime(st.latest.generated_at))}</div>
+           <div>○ standby</div>`
+        : `<div>SIN RUN</div><div class="tiny">lanza un análisis lite</div><div>○ idle</div>`;
+    }
+  }
+
+  const note = $("#sala-note");
+  if (note) {
+    note.innerHTML = `<strong>Sala de TradingAgents.</strong> ${esc(st.note)} <span class="muted">· Cifras: motor determinista · Tesis: LLM local.</span>`;
+  }
+
+  const roster = $("#office-roster");
+  if (roster) {
+    roster.innerHTML = CAST.map((c) => {
+      const status = st.statuses[c.id] || "idle";
+      const speech = castSpeech(c.id, st);
+      const dot = status === "working" ? "warn" : status === "done" ? "ok" : status === "error" ? "bad" : "";
+      const tag = status === "working" ? "blue" : status === "done" ? "green" : status === "error" ? "red" : "";
+      return `<button class="cast-card ${status}" data-cast-roster="${c.id}">
+        <div class="cast-top"><span class="dot ${dot}"></span><b>${c.name}</b><span class="tag ${tag} status">${castStatusLabel(status)}</span></div>
+        <div class="role">${c.role}</div>
+        <div class="task">${esc(speech || c.desc)}</div>
+      </button>`;
+    }).join("");
+    roster.querySelectorAll("[data-cast-roster]").forEach((btn) => {
+      btn.addEventListener("click", () => showCast(btn.dataset.castRoster));
+    });
+  }
+}
+
+function showCast(id) {
+  const c = CAST.find((x) => x.id === id);
+  if (!c) return;
+  const st = salaState();
+  const status = st.statuses[id] || "idle";
+  const latest = st.latest;
+
+  let detail;
+  if (!latest) {
+    detail = `<div class="thesis">${esc(c.desc)}</div>`;
+  } else if (["pm", "trader", "risk", "manager"].includes(id)) {
+    const text = id === "risk" && latest.risks ? latest.risks : (latest.decision || latest.risks || "Sin texto registrado.");
+    detail = `<div class="thesis">${esc(text)}</div>`;
+  } else if (id === "market" && latest.context) {
+    const ctx = latest.context;
+    detail = grid([{ label: "Métrica" }, { label: "Valor", num: true }], [
+      ["Precio", money(ctx.price)],
+      ["RSI14", num(ctx.rsi14, 1)],
+      ["ATR %", pctRaw(ctx.atr_pct, 1)],
+      ["Retorno 20d", pctRaw(ctx.returns_pct?.["20d"], 1)],
+      ["Tendencia", esc(ctx.trend || "—")],
+      ["Vol. 20d", pctRaw(ctx.realized_vol_20d_pct, 1)],
+    ]);
+  } else {
+    detail = `<div class="thesis">${esc(c.desc)}</div>`;
+  }
+
+  let html = `
+    <div class="detail-grid">
+      <div class="k">Nombre</div><div><b>${esc(c.name)}</b></div>
+      <div class="k">Rol</div><div>${esc(c.role)}</div>
+      <div class="k">Estado</div><div>${esc(castStatusLabel(status))}</div>
+      <div class="k">Último run</div><div>${latest ? `${esc(latest.ticker)} · ${esc(latest.mode)} · ${esc(dateTime(latest.generated_at))}` : "sin runs"}</div>
+    </div>
+    <h3 style="font-size:12px; text-transform:uppercase; letter-spacing:.07em; color:#8d9bab; margin:18px 0 7px">Qué hace</h3>
+    <div class="thesis">${esc(c.desc)}</div>
+    <h3 style="font-size:12px; text-transform:uppercase; letter-spacing:.07em; color:#8d9bab; margin:18px 0 7px">Última contribución</h3>
+    ${detail}
+    <div class="note" style="margin-top:14px"><strong>Provenance:</strong> las cifras y los límites salen de código determinista; el LLM solo narra y decide sobre esa evidencia.</div>`;
+
+  if (latest?.reports_path) {
+    html += `<div style="margin-top:14px"><button class="btn small primary" id="open-agent-report" data-file="${esc(latest.file)}">Ver informe completo</button></div>`;
+  }
+  openModal(`${c.name} · ${c.role}`, html);
+  const btn = $("#open-agent-report");
+  if (btn) btn.addEventListener("click", () => loadAgentReport(btn.dataset.file));
+}
+
+/* --------------------------------------------------------------- research */
+function renderResearch() {
+  const r = S.overview?.research;
+  if (!r) return;
+  $("#research-stats").innerHTML = [
+    { label: "Candidatos", value: fmtInt.format(r.candidates || 0) },
+    { label: "Propuestas", value: fmtInt.format((r.proposals || []).length), cls: (r.proposals || []).length ? "warn" : "" },
+    { label: "Casi propuestas", value: fmtInt.format((r.near_misses || []).length) },
+    { label: "Generado", value: r.generated_at ? dateTime(r.generated_at) : "—" },
+  ].map((s) => `<div class="stat"><div class="label">${esc(s.label)}</div><div class="value ${s.cls || ""}" style="font-size:${s.label === "Generado" ? "13px" : "20px"}">${esc(s.value)}</div></div>`).join("");
+
+  const cfg = r.config || {};
+  $("#research-meta").textContent = cfg.symbols ? `${cfg.symbols.join(", ")} · ${cfg.paths || 0} paths · OOS ${pct(cfg.holdout_fraction || 0, 0)}` : "";
+
+  const top = (r.results || []).map((row, i) => [
+    String(i + 1), `<b>${esc(row.symbol)}</b>`, esc(row.strategy), `<span class="muted tiny">${esc(paramsText(row.params))}</span>`,
+    `${num(row.exposure, 2)}×`, num(row.sharpe, 2), pct(row.max_drawdown, 1), num(row.num_trades, 0),
+    pct(row.pass_rate, 1), pct(row.breach_rate, 1), pct(row.oos_pass_rate, 1), num(row.score, 3),
+  ]);
+  $("#research-top").innerHTML = grid([
+    { label: "#", num: true }, { label: "Activo" }, { label: "Estrategia" }, { label: "Parámetros" }, { label: "Escala", num: true },
+    { label: "Sharpe", num: true }, { label: "MaxDD", num: true }, { label: "Trades", num: true },
+    { label: "Pasa", num: true }, { label: "Revienta", num: true }, { label: "OOS", num: true }, { label: "Score", num: true },
+  ], top, { empty: "Sin informe de research." });
+
+  const proposals = (r.proposals || []).map((p) => [
+    `<b>${esc(p.symbol)}</b>`, esc(p.strategy), `<span class="muted tiny">${esc(paramsText(p.params))}</span>`, `${num(p.exposure, 2)}×`,
+    num(p.num_trades, 0), pct(p.pass_rate, 1), pct(p.breach_rate, 1), pct(p.oos_pass_rate, 1), num(p.score, 3),
+    `<span class="tag yellow">enabled: false</span>`,
+  ]);
+  $("#research-proposals").innerHTML = grid([
+    { label: "Activo" }, { label: "Estrategia" }, { label: "Parámetros" }, { label: "Escala", num: true },
+    { label: "Trades", num: true }, { label: "Pasa", num: true }, { label: "Revienta", num: true }, { label: "OOS", num: true }, { label: "Score", num: true }, { label: "Estado" },
+  ], proposals, { empty: "Sin propuestas." });
+
+  const near = (r.near_misses || []).map((p) => [
+    `<b>${esc(p.symbol)}</b>`, esc(p.strategy), `<span class="muted tiny">${esc(paramsText(p.params))}</span>`, `${num(p.exposure, 2)}×`,
+    num(p.num_trades, 0), pct(p.pass_rate, 1), pct(p.breach_rate, 1), pct(p.oos_pass_rate, 1), num(p.score, 3),
+  ]);
+  $("#research-near").innerHTML = grid([
+    { label: "Activo" }, { label: "Estrategia" }, { label: "Parámetros" }, { label: "Escala", num: true },
+    { label: "Trades", num: true }, { label: "Pasa", num: true }, { label: "Revienta", num: true }, { label: "OOS", num: true }, { label: "Score", num: true },
+  ], near, { empty: "Sin casi propuestas." });
+}
+
+/* ------------------------------------------------------------------- risk */
+function renderRisk() {
+  const risk = S.risk;
+  if (!risk) return;
+  const prop = risk.prop || {};
+  const rules = risk.rules || {};
+  const mt5 = risk.mt5 || {};
+  const futures = risk.futures || {};
+  const severity = prop.severity || "ok";
+
+  const alerts = [];
+  if (mt5.configured && mt5.ok === false) alerts.push(`<div class="alert red"><b>MT5 no disponible:</b> ${esc(mt5.error || "error desconocido")}</div>`);
+  if (mt5.ok && mt5.account && !mt5.account.trade_allowed) alerts.push(`<div class="alert"><b>Algo Trading desactivado en el terminal.</b> El guard bloquea las órdenes de FTMO hasta que lo actives en MT5 (Herramientas → Opciones → Expert Advisors).</div>`);
+  if (prop.source === "config" && mt5.configured) alerts.push(`<div class="alert"><b>Guard en modo config:</b> no pudo leer la cuenta MT5; el colchón mostrado es simulado sobre ${money(rules.account_size)}.</div>`);
+  if (severity === "breach") alerts.push(`<div class="alert red"><b>BREACH:</b> una regla de fondeo está rota. No se permiten órdenes nuevas; el guard solo deja cerrar posiciones.</div>`);
+  $("#risk-alert").innerHTML = alerts.join("");
+
+  $("#guard-card").innerHTML = `
+    <div class="guard-card ${esc(severity)}">
+      <div class="guard-top">
+        <div>
+          <div class="guard-label">Guard de fondeo · ${esc(rules.firm || "—")} ${esc(rules.phase || "")}</div>
+          <div class="guard-value">${money(prop.remaining_usd)} <span class="muted" style="font-size:13px; font-weight:400">de colchón restante</span></div>
+          <div class="guard-reason">${esc(prop.reason || "Sin evaluación.")}</div>
+        </div>
+        <span class="badge ${severity === "ok" ? "ok" : severity === "warn" ? "warn" : "bad"}">${esc(prop.label || severity)}</span>
+      </div>
+      <div class="bars">
+        <div>
+          <div class="bar-label"><span>Límite diario usado</span><span>${pct(prop.daily_used_pct, 1)}</span></div>
+          <div class="bar"><span style="width:${Math.min(100, Math.max(0, Number(prop.daily_used_pct || 0) * 100))}%"></span></div>
+        </div>
+        <div>
+          <div class="bar-label"><span>Límite máximo usado</span><span>${pct(prop.max_used_pct, 1)}</span></div>
+          <div class="bar"><span style="width:${Math.min(100, Math.max(0, Number(prop.max_used_pct || 0) * 100))}%"></span></div>
+        </div>
+      </div>
+      <div class="guard-floors">
+        <span>Suelo efectivo <b>${money(prop.effective_floor)}</b></span>
+        <span>Suelo diario <b>${money(prop.daily_floor)}</b></span>
+        <span>Suelo máximo <b>${money(prop.max_floor)}</b></span>
+        <span>Objetivo <b>${pct(prop.profit_progress_pct, 1)}</b></span>
+        <span>Fuente <b>${esc(prop.source || "—")}</b></span>
+      </div>
+    </div>`;
+
+  $("#rules-firm").textContent = rules.description || "";
+  $("#rules-table").innerHTML = grid([{ label: "Regla" }, { label: "Valor", num: true }], [
+    ["Cuenta", money(rules.account_size)],
+    ["Objetivo", `${pct(rules.profit_target_pct, 1)} · ${money(rules.profit_target_usd)}`],
+    ["Pérdida diaria máxima", `${pct(rules.max_daily_loss_pct, 1)} · ${money(rules.daily_limit_usd)}`],
+    ["Pérdida máxima", `${pct(rules.max_loss_pct, 1)} · ${money(rules.max_loss_usd)}`],
+    ["Modo pérdida máxima", esc(rules.max_loss_mode || "—")],
+    ["Base del límite diario", esc(rules.daily_loss_mode || "—")],
+    ["Colchón", pct(rules.buffer_pct, 0)],
+    ["Límite diario efectivo", money(rules.effective_daily_limit_usd)],
+    ["Límite máximo efectivo", money(rules.effective_max_loss_usd)],
+    ["Días mínimos", esc(String(rules.min_trading_days ?? "—"))],
+    ["Máx. lotes / posiciones", `${esc(String(rules.max_lots ?? "sin límite"))} / ${esc(String(rules.max_positions ?? "sin límite"))}`],
+    ["Reset", esc(rules.reset || "—")],
+  ]);
+
+  $("#mt5-when").textContent = `actualizado ${ago(risk.generated_at)}`;
+  if (!mt5.configured) {
+    $("#mt5-card").innerHTML = `<div class="empty">MT5 sin configurar. Añade MT5_LOGIN, MT5_SERVER y MT5_PATH en <code>.env</code>.</div>`;
+  } else if (!mt5.ok) {
+    $("#mt5-card").innerHTML = `<div class="alert red" style="margin:0">${esc(mt5.error || "No se pudo conectar.")}</div>`;
+  } else {
+    const a = mt5.account || {};
+    $("#mt5-card").innerHTML = `<div class="kv">
+      ${[["Login", a.login], ["Servidor", a.server], ["Modo", a.mode], ["Compañía", a.company], ["Balance", money(a.balance)], ["Equity", money(a.equity)], ["Margen libre", money(a.margin_free)], ["Algo Trading", a.trade_allowed ? "ON" : "OFF"], ["Identidad", a.identity_ok ? "OK" : "revisar"], ["Apalancamiento", a.leverage ? a.leverage + ":1" : "—"], ["Offset servidor", a.server_utc_offset_hours != null ? a.server_utc_offset_hours + " h" : "—"], ["Demo requerida", a.require_demo ? "sí" : "no"]]
+        .map(([k, v]) => `<div><div class="k">${esc(k)}</div><div class="v">${esc(v == null ? "—" : String(v))}</div></div>`).join("")}
+    </div>`;
+  }
+
+  if (futures.configured && futures.ok) {
+    const a = futures.account || {};
+    $("#futures-card").innerHTML = `<div class="kv">
+      ${[["Cuenta", a.account_id], ["Nombre", a.name], ["Balance", money(a.balance)], ["Simulada", a.simulated ? "sí" : "no"], ["Puede operar", a.can_trade ? "sí" : "no"], ["Dry-run", a.dry_run ? "sí" : "no"]]
+        .map(([k, v]) => `<div><div class="k">${esc(k)}</div><div class="v">${esc(v == null ? "—" : String(v))}</div></div>`).join("")}
+    </div>`;
+  } else {
+    $("#futures-card").innerHTML = `<div class="empty">${esc(futures.note || futures.error || "TopstepX sin credenciales. El adaptador está listo para cuando abras la cuenta.")}</div>
+      <div class="note" style="margin-top:10px">Ruta recomendada: <strong>Topstep + ProjectX API</strong>. Requiere cuenta y API key; no se envía ninguna orden sin <code>--execute</code>.</div>`;
+  }
+
+  const positions = mt5.positions || [];
+  $("#mt5-pos-count").textContent = `${positions.length} abiertas`;
+  $("#mt5-positions").innerHTML = grid(
+    [{ label: "Símbolo" }, { label: "Lado" }, { label: "Volumen", num: true }, { label: "Apertura", num: true }, { label: "Actual", num: true }, { label: "PnL", num: true }, { label: "Ticket" }],
+    positions.map((p) => [
+      `<b>${esc(p.symbol)}</b>`, esc(p.type || p.side || "—"), num(p.volume, 2), num(p.price_open, 5), num(p.price_current, 5),
+      `<span class="${Number(p.profit) >= 0 ? "pos" : "neg"}">${money(p.profit)}</span>`, esc(p.ticket ?? "—"),
+    ]),
+    { empty: "Sin posiciones MT5." }
+  );
+}
+
+/* ------------------------------------------------------------------- logs */
+function renderLogs() {
+  const logs = S.overview?.logs || [];
+  $("#logs-list").innerHTML = logs.length ? logs.map((l) => `
+    <button class="log-item ${S.selectedLog === l.name ? "active" : ""}" data-log="${esc(l.name)}">
+      <div class="name">${esc(l.name)}</div>
+      <div class="meta">${dateTime(l.mtime)} · ${bytes(l.size)}</div>
+    </button>`).join("") : `<div class="empty">Sin logs todavía.</div>`;
+  $$("[data-log]").forEach((btn) => btn.addEventListener("click", () => selectLog(btn.dataset.log)));
+  if (!S.selectedLog && logs.length) selectLog(logs[0].name);
+}
+
+async function selectLog(name) {
+  if (name) S.selectedLog = name;
+  if (!S.selectedLog) return;
+  $$("[data-log]").forEach((b) => b.classList.toggle("active", b.dataset.log === S.selectedLog));
+  $("#log-title").textContent = S.selectedLog;
+  $("#log-meta").textContent = "cargando…";
+  try {
+    const data = await getJSON("/api/logs/" + encodeURIComponent(S.selectedLog));
+    $("#log-viewer").textContent = data.content || "(vacío)";
+    $("#log-meta").textContent = `${bytes(data.size)}${data.truncated ? " · mostrando el final" : ""}`;
+    const viewer = $("#log-viewer");
+    viewer.scrollTop = viewer.scrollHeight;
+  } catch (err) {
+    $("#log-viewer").textContent = "No se pudo cargar el log: " + err.message;
+    $("#log-meta").textContent = "";
+  }
+}
+
+/* ---------------------------------------------------------------- actions */
+async function startAction(kind) {
+  try {
+    const options = { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" };
+    if (kind === "agent") {
+      const ticker = ($("#agent-ticker").value || "").trim().toUpperCase();
+      options.body = JSON.stringify({ ticker });
+    }
+    const action = await getJSON(`/api/actions/${kind}`, options);
+    S.action = action;
+    renderAction(action);
+    toast(kind === "agent" ? `Analizando ${action.ticker}…` : "Dry-run iniciado…");
+    pollAction();
+  } catch (err) {
+    toast(err.message, true);
+  }
+}
+
+async function pollAction(initial = false) {
+  try {
+    const action = await getJSON("/api/action");
+    S.action = action;
+    renderAction(action);
+    if (action.status === "running") {
+      clearTimeout(S.actionTimer);
+      S.actionTimer = setTimeout(() => pollAction(), 2500);
+    } else if (!initial && action.status === "done") {
+      toast("Acción completada. Actualizando datos…");
+      await loadAll();
+    } else if (!initial && action.status === "error") {
+      toast("La acción falló. Revisa Registros.", true);
+      await loadAll();
+    }
+  } catch (err) {
+    if (!initial) toast("No se pudo consultar la acción: " + err.message, true);
+  }
+}
+
+function renderAction(action) {
+  const status = action?.status || "idle";
+  const labels = { idle: "Sin acciones", running: "Ejecutando…", done: "Completada", error: "Error" };
+  const pill = $("#action-pill");
+  pill.className = "action-pill " + (status === "running" ? "running" : status === "done" ? "done" : status === "error" ? "error" : "");
+  pill.textContent = labels[status] || status;
+  pill.title = action?.label || "";
+
+  const box = $("#action-status");
+  if (box) {
+    if (status === "running") {
+      box.className = "action-pill running";
+      box.innerHTML = `<span class="spin"></span> ${esc(action.label || "Ejecutando")}…`;
+    } else if (status === "done") {
+      box.className = "action-pill done";
+      box.textContent = `${action.label || "Acción"} completada (${action.exit_code ?? 0})`;
+    } else if (status === "error") {
+      box.className = "action-pill error";
+      box.textContent = `${action.label || "Acción"} falló (exit ${action.exit_code ?? "?"})`;
+    } else {
+      box.className = "action-pill";
+      box.textContent = "Sin acciones en curso";
+    }
+  }
+  const busy = status === "running";
+  const lite = $("#run-lite-btn");
+  if (lite) lite.disabled = busy;
+}
+
+/* ----------------------------------------------------------------- modal */
+function openModal(title, html) {
+  $("#modal-title").textContent = title;
+  $("#modal-body").innerHTML = html;
+  $("#modal").classList.add("open");
+}
+function closeModal() { $("#modal").classList.remove("open"); }
+
+/* ----------------------------------------------------------------- toast */
+let toastTimer = null;
+function toast(message, bad = false) {
+  const node = $("#toast");
+  node.textContent = message;
+  node.className = "toast show" + (bad ? " bad" : "");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { node.className = "toast"; }, 4200);
+}
+
+/* ------------------------------------------------------------------ init */
+function init() {
+  bindNav();
+  renderSala();
+  const initial = location.hash.replace("#", "");
+  if (TITLES[initial]) switchView(initial, false);
+  updateClock();
+  setInterval(updateClock, 1000);
+  $("#refresh-btn").addEventListener("click", () => loadAll(true));
+  $("#run-lite-btn").addEventListener("click", () => startAction("agent"));
+  $("#agent-ticker").addEventListener("keydown", (event) => { if (event.key === "Enter") startAction("agent"); });
+  $("#reload-logs").addEventListener("click", () => { S.selectedLog = null; loadAll(true); });
+  $("#modal-close").addEventListener("click", closeModal);
+  $("#modal").addEventListener("click", (event) => { if (event.target.id === "modal") closeModal(); });
+  document.addEventListener("keydown", (event) => { if (event.key === "Escape") closeModal(); });
+  window.addEventListener("resize", () => { if (S.view === "overview") drawEquity(); });
+
+  // Botón de dry-run en la vista de agentes (creado dinámicamente en el DOM si no existe)
+  const dryBtn = document.createElement("button");
+  dryBtn.className = "btn";
+  dryBtn.textContent = "Dry-run ahora";
+  dryBtn.title = "Calcula señales sin enviar órdenes";
+  dryBtn.addEventListener("click", () => startAction("dryrun"));
+  const bar = document.querySelector("#view-agents .action-bar");
+  if (bar) bar.appendChild(dryBtn);
+
+  loadAll();
+  pollAction(true);
+  S.refreshTimer = setInterval(() => loadAll(), 15000);
+}
+
+document.addEventListener("DOMContentLoaded", init);
+</script>
+</body>
+</html>

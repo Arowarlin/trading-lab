@@ -856,6 +856,27 @@ def dashboard() -> None:
     console.print("[dim]Ábrelo en el navegador o sírvelo con `python -m http.server -d reports`[/dim]")
 
 
+@app.command()
+def web(
+    host: str = typer.Option("127.0.0.1", "--host", help="Interfaz de escucha (local por defecto)"),
+    port: int = typer.Option(8420, "--port", help="Puerto HTTP"),
+    open_browser: bool = typer.Option(True, "--open/--no-open", help="Abrir el navegador al arrancar"),
+    no_external: bool = typer.Option(
+        False, "--no-external", help="No consultar LM Studio, MT5 ni tareas programadas"
+    ),
+) -> None:
+    """Sirve el panel web local: resumen, bots, agentes, research, riesgo y logs."""
+    from .web import serve
+
+    serve(
+        get_settings(),
+        host=host,
+        port=port,
+        open_browser=open_browser,
+        external=not no_external,
+    )
+
+
 def _print_guard(rules: PropRules, report) -> None:
     color = {"ok": "green", "warn": "yellow", "block": "red", "breach": "bold red"}[report.severity]
     console.print(Panel(report.summary(), title=f"[{color}]{rules.describe()}[/{color}]"))

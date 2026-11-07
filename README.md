@@ -21,7 +21,7 @@ Entorno multi-bot de trading sobre **TradingAgents** y **Trading-R1**, con LLM l
 | F5 | Alpaca paper + ejecución | ✅ validado (cuenta ACTIVE, equity 100k) |
 | F6 | TradingAgents como fuente de señal | ✅ `lite` validado (77 s) · `deep` opcional |
 | F7 | Trading-R1 (informes/Telegram) | ⏳ requiere WSL |
-| F8 | Dashboard y observabilidad | ✅ `lab dashboard` (HTML) |
+| F8 | Dashboard y observabilidad | ✅ `lab dashboard` (HTML) + `lab web` (panel en vivo con Sala de agentes) |
 | F9 | Núcleo multi-activo (forex, futuros, acciones) | ✅ |
 | F10 | MT5: datos, sizing, órdenes, hora de servidor | ✅ demo validada (abrir/cerrar) |
 | F11 | Motor de reglas de fondeo (FTMO) | ✅ guard + Monte Carlo + fuente contrastada |
@@ -55,7 +55,11 @@ E:\trading-lab\
 │   ├─ research.py   barrido de parámetros + OOS + propuestas (no auto-activa)
 │   ├─ llm.py        cliente OpenAI-compatible con log de llamadas
 │   ├─ agents\       puente a TradingAgents
+│   ├─ reporting.py  dashboard HTML estático
+│   ├─ web.py        panel web local (API JSON + acciones seguras)
+│   ├─ webui\        interfaz del panel (HTML/CSS/JS, sin CDNs)
 │   └─ cli.py        comandos `lab`
+├─ docs\             arquitectura y auditoría de repos de referencia
 ├─ scripts\
 │   ├─ run_tradingagents.py
 │   ├─ research_daily.ps1
@@ -93,6 +97,7 @@ cd E:\trading-lab
 .\.venv\Scripts\lab.exe status
 .\.venv\Scripts\lab.exe report
 .\.venv\Scripts\lab.exe dashboard                            # reports/dashboard.html
+.\.venv\Scripts\lab.exe web                                  # panel web en vivo
 .\.venv\Scripts\lab.exe bots
 .\.venv\Scripts\lab.exe llm-test
 
@@ -116,6 +121,82 @@ cd E:\trading-lab
 ```
 
 Atajo: `.\scripts\lab.ps1 <comando>`.
+
+---
+
+## 3b. Panel web local (TradingLab Console)
+
+`lab web` sirve una consola en vivo en **http://127.0.0.1:8420** con todo el
+laboratorio en una sola página. Está pensada para el día a día: no hay que
+recordar comandos para ver qué está pasando.
+
+```powershell
+# arrancar y abrir el navegador
+.\.venv\Scripts\lab.exe web
+
+# sin abrir el navegador (útil para dejarlo en segundo plano)
+.\.venv\Scripts\lab.exe web --no-open
+
+# otro puerto
+.\.venv\Scripts\lab.exe web --port 8430
+
+# atajo
+.\scripts\web.ps1
+```
+
+Qué muestra:
+
+| Pestaña | Contenido |
+|---|---|
+| **Resumen** | equity, cash, retorno, drawdown, curva de equity, estado de LM Studio/MT5/FTMO, tareas programadas, últimas decisiones y órdenes. |
+| **Sala** | oficina pixel con los 10 roles de TradingAgents, estados en vivo, burbujas, tablero y acceso al detalle de cada rol. |
+| **Bots** | catálogo de `config/bots.yaml`, enabled/disabled, universo, estrategia y resultado del último dry-run por ticker. |
+| **Agentes** | historial lite/deep con rating, confianza, duración y tesis; detalle en modal; runs deep en curso o terminados. |
+| **Research** | ranking, propuestas (`enabled: false`), casi propuestas y métricas OOS. |
+| **Riesgo** | guard de FTMO (colchón restante, suelos, límites usados), reglas activas, cuenta MT5 y estado de TopstepX/ProjectX. |
+| **Registros** | logs de dry-run, agentes, backups y tareas, con visor integrado. |
+
+La página se refresca sola cada **15 s**. El servidor escucha solo en
+**127.0.0.1** por defecto (no se publica en la red) y usa la biblioteca estándar
+de Python: no añade FastAPI/Flask ni CDNs externos.
+
+**Acciones disponibles (nunca envían órdenes):**
+
+- **Dry-run ahora**: ejecuta `orchestrate --dry-run`, calcula señales y escribe
+  `data/dryrun/*.json` y `logs/dryrun/*.log`.
+- **Analizar con lite**: lanza `agent <ticker> --mode lite` (1-3 min con el 27B)
+  y deja el resultado en `data/agent_runs/`.
+
+Ambas se ejecutan en segundo plano; el panel muestra el progreso y enlaza el
+log. Los bots con `enabled: false`, las propuestas de research y el modo live
+siguen requiriendo activación humana explícita desde `config/*.yaml` o la CLI.
+
+Si el puerto está ocupado, usa `--port`. Para dejarlo arrancado al iniciar
+sesión (opcional):
+
+```powershell
+$action = New-ScheduledTaskAction -Execute "powershell.exe" `
+  -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File E:\trading-lab\scripts\web.ps1 -NoOpen" `
+  -WorkingDirectory "E:\trading-lab"
+$trigger = New-ScheduledTaskTrigger -AtLogOn
+Register-ScheduledTask -TaskName "TradingLab-Web" -Action $action -Trigger $trigger
+```
+
+> El panel consulta MT5 (solo lectura) y LM Studio. Si el terminal no está
+> abierto, la tarjeta de riesgo muestra el error y sigue funcionando el resto.
+
+### Repos de referencia y arquitectura
+
+- [`docs/arquitectura.md`](docs/arquitectura.md): cómo encaja el árbol propuesto
+  `C:\TradingLab` (agents/engines/research/execution/risk/monitoring) con el
+  laboratorio actual y qué integrar después.
+- [`docs/auditoria-repos-2026-11-07.md`](docs/auditoria-repos-2026-11-07.md):
+  auditoría de `pixel-hedge-fund` (sin licencia; solo inspiración),
+  `company-pixel-office` (MIT; idea de roster) y `FinRobot` (Apache-2.0;
+  principio de cálculo determinista + narración LLM).
+
+La Sala pixel es arte propio (HTML/CSS/SVG). No se copió código ni arte de los
+repos auditados; si en el futuro se usan assets MIT, se conservará su licencia.
 
 ---
 
