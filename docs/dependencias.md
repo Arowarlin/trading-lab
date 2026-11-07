@@ -1,0 +1,45 @@
+# Dependencias verificadas
+
+Fecha de verificación: 2026-11-06. Fuente: PyPI JSON y GitHub API.
+
+## Runtime (fijadas en `pyproject.toml` + `uv.lock`)
+
+| Paquete | Versión fijada | Notas |
+|---|---|---|
+| pandas | 3.1.1 | motor de datos/backtest |
+| numpy | 2.5.4 | cálculo numérico |
+| yfinance | 1.8.0 | datos diarios |
+| typer | 0.27.3 | CLI |
+| rich | 15.0.0 | salida de consola |
+| pydantic | 2.14.3 | settings |
+| pydantic-settings | 2.16.2 | settings |
+| pyyaml | 6.0.3 | config |
+| python-dotenv | 1.2.4 | `.env` fallback |
+| pyarrow | 26.0.1 | parquet |
+| httpx | 0.28.1 | HTTP |
+| alpaca-py | 0.45.0 | Alpaca paper |
+| **keyring** | **25.7.0** | **nuevo**: Windows Credential Manager; backend verificado `WinVaultKeyring`; licencia MIT; Python >=3.9 |
+
+Extra `mt5`: `MetaTrader5==5.0.6231`, `tzdata==2026.6`.
+
+## Desarrollo
+
+| Paquete | Versión | Notas |
+|---|---|---|
+| pytest | 9.2.0 | tests |
+| ruff | 0.17.4 | lint; reglas del proyecto: `E4,E7,E9,F,I` |
+| **pre-commit** | **4.7.0** | **nuevo**: hook ruff y pytest pre-push; licencia MIT; Python >=3.11 |
+
+## Evaluadas y no instaladas
+
+| Herramienta | Versión | Licencia | Decisión |
+|---|---|---|---|
+| restic | 0.19.1 | BSD-2-Clause | propuesta para backup cifrado externo |
+| Kopia | 0.23.1 | Apache-2.0 | alternativa con GUI |
+
+## Notas
+
+- `uv.lock` fija todo el árbol transitivo; CI usa `uv sync --frozen`.
+- El CI no necesita secretos ni brokers: usa mocks y tests locales.
+- Antes de añadir una dependencia nueva: comprobar PyPI, Python soportado,
+  licencia, mantenimiento y coste de instalación; anotarlo aquí.

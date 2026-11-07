@@ -1,4 +1,4 @@
-# Auditoría de repos de referencia — 2026-11-07
+# Auditoría de repos de referencia - 2026-11-06
 
 Objetivo: decidir qué tomar de los repos propuestos sin contaminar el laboratorio
 con código sin licencia, endpoints de exchange con escritura o dependencias

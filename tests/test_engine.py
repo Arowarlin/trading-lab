@@ -2,7 +2,6 @@
 
 import numpy as np
 import pandas as pd
-import pytest
 
 from tradinglab.backtest import run
 from tradinglab.risk import RiskSettings, kill_switch, size_position

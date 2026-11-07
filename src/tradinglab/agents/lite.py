@@ -12,7 +12,7 @@ from ..config import DEFAULT_DB, ROOT, Settings
 from ..data import fetch
 from ..indicators import atr, rsi, sma
 from ..llm import LLMClient
-from .bridge import AgentError, RATING_TO_TARGET
+from .bridge import RATING_TO_TARGET, AgentError
 
 # Contexto compacto: una sola llamada al LLM con datos objetivos. En un 27B
 # local (~1-2 tok/s) un run multi-agente con herramientas tarda horas; esto

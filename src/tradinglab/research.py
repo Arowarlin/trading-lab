@@ -8,8 +8,6 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
-import pandas as pd
-
 from . import data as data_mod
 from .backtest import run as run_backtest
 from .prop.rules import PropRules

@@ -12,6 +12,89 @@ ROOT = Path(__file__).resolve().parents[2]
 CONFIG_DIR = ROOT / "config"
 DEFAULT_DB = ROOT / "data" / "lab.db"
 
+# Secretos que pueden vivir en Windows Credential Manager (keyring).
+# La precedencia es: variable de shell > keyring > .env.
+KEYRING_SERVICE = "tradinglab"
+SECRET_KEYS = (
+    "ALPACA_API_KEY",
+    "ALPACA_SECRET_KEY",
+    "MT5_PASSWORD",
+    "PROJECTX_API_KEY",
+    "FRED_API_KEY",
+    "ALPHA_VANTAGE_API_KEY",
+    "TELEGRAM_BOT_TOKEN",
+    "OPENAI_API_KEY",
+)
+
+
+def _keyring_get(key: str) -> str | None:
+    """Lee un secreto del backend local (Windows Credential Manager)."""
+    try:
+        import keyring
+
+        return keyring.get_password(KEYRING_SERVICE, key)
+    except Exception:
+        return None
+
+
+def _apply_keyring_secrets(
+    env: dict[str, str],
+    getter,
+    shell_keys: set[str] | None = None,
+) -> dict[str, str]:
+    """Aplica secretos de keyring sin pisar variables de shell.
+
+    Devuelve solo las claves aplicadas, nunca los valores.
+    """
+    shell_keys = shell_keys or set()
+    applied: dict[str, str] = {}
+    for key in SECRET_KEYS:
+        if key in shell_keys:
+            continue
+        try:
+            value = getter(key)
+        except Exception:
+            value = None
+        if value:
+            env[key] = value
+            applied[key] = "keyring"
+    return applied
+
+
+def load_secrets(dotenv_path: Path | None = None) -> dict[str, str]:
+    """Carga .env y después aplica keyring (sin imprimir valores).
+
+    Devuelve un mapa clave -> origen: shell | keyring | dotenv | missing.
+    """
+    path = dotenv_path or ROOT / ".env"
+    shell_keys = {key for key in SECRET_KEYS if os.environ.get(key)}
+    load_dotenv(path, override=False)
+    applied = _apply_keyring_secrets(os.environ, _keyring_get, shell_keys)
+    sources: dict[str, str] = {}
+    for key in SECRET_KEYS:
+        if key in shell_keys:
+            sources[key] = "shell"
+        elif key in applied:
+            sources[key] = "keyring"
+        elif os.environ.get(key):
+            sources[key] = "dotenv"
+        else:
+            sources[key] = "missing"
+    return sources
+
+
+def secret_status() -> dict:
+    """Resumen para doctor: nombres y orígenes, nunca valores."""
+    load_dotenv(ROOT / ".env", override=False)
+    in_keyring = [key for key in SECRET_KEYS if _keyring_get(key)]
+    return {
+        "service": KEYRING_SERVICE,
+        "keyring": in_keyring,
+        "dotenv": (ROOT / ".env").exists(),
+        "missing": [key for key in SECRET_KEYS if not os.getenv(key) and key not in in_keyring],
+    }
+
+
 
 class LLMSettings(BaseModel):
     base_url: str = "http://127.0.0.1:1234/v1"
@@ -94,7 +177,7 @@ class Settings(BaseModel):
 
     @classmethod
     def load(cls, path: Path | None = None) -> "Settings":
-        load_dotenv(ROOT / ".env")
+        load_secrets()
         path = path or CONFIG_DIR / "lab.yaml"
         raw: dict = {}
         if path.exists():

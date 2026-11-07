@@ -1,0 +1,18 @@
+# Pre-commit local: lint rápido antes de commit y tests antes de push.
+# No ejecuta brokers ni necesita secretos.
+repos:
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: ruff check
+        entry: .venv/Scripts/python.exe -m ruff check --fix
+        language: system
+        types: [python]
+        pass_filenames: false
+      - id: pytest
+        name: pytest
+        entry: .venv/Scripts/python.exe -m pytest -q
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]

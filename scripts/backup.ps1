@@ -1,5 +1,6 @@
 # Backup local del laboratorio (código, config, informes e historial git).
-# El zip contiene .env con secretos: no compartirlo ni subirlo a la nube.
+# El zip NO contiene .env: los secretos viven en Windows Credential Manager
+# (keyring) y .env queda solo como fallback local. No compartir este zip.
 param(
     [string]$Dest = "F:\TradingLabBackups",
     [int]$Keep = 20
@@ -18,8 +19,8 @@ New-Item -ItemType Directory -Force -Path $stage | Out-Null
 Push-Location $root
 try {
     foreach ($item in @(
-        "src", "config", "tests", "scripts",
-        "README.md", "pyproject.toml", ".gitignore", ".env.example", ".env"
+        "src", "config", "tests", "scripts", "docs", ".github",
+        "README.md", "PLAN.md", "pyproject.toml", "uv.lock", ".gitignore", ".env.example"
     )) {
         if (Test-Path $item) {
             Copy-Item $item -Destination $stage -Recurse -Force
@@ -52,17 +53,21 @@ try {
 TradingLab backup $stamp
 Origen: $root
 
-Contenido: código, configuración, tests, scripts, informes, lab.db,
-historial git y .env (SECRETOS).
+Contenido: código, configuración, tests, scripts, docs, informes, lab.db,
+historial git y .env.example.
+
+IMPORTANTE: este zip NO incluye .env. Los secretos están en Windows
+Credential Manager (servicio "tradinglab") y .env queda como fallback local.
 
 Restaurar:
   1. Descomprimir en E:\trading-lab
   2. uv venv --python 3.13 .venv
-  3. uv pip install -e .
-  4. Revisar .env (claves Alpaca / MT5 / LLM)
+  3. uv pip install -e .   (o uv sync --frozen)
+  4. Revisar .env.example y reintroducir secretos con scripts\migrate_secrets.py
+     o con .env local; en un PC nuevo no hay Credential Manager del usuario anterior.
   5. lab doctor
 
-NO compartir este zip: contiene .env con claves.
+F: es un disco local. Mantén una segunda copia cifrada en un disco externo.
 "@
     Set-Content -Path (Join-Path $stage "LEEME_BACKUP.txt") -Value $info -Encoding UTF8
 
@@ -79,6 +84,15 @@ Get-ChildItem $Dest -Filter "trading-lab_*.zip" |
     Sort-Object LastWriteTime -Descending |
     Select-Object -Skip $Keep |
     Remove-Item -Force -ErrorAction SilentlyContinue
+
+# Verificación de restauración y de que no haya secretos en claro.
+$restoreTest = Join-Path $root "scripts\restore_test.ps1"
+if (Test-Path $restoreTest) {
+    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $restoreTest -ZipPath $zip
+    if ($LASTEXITCODE -ne 0) {
+        throw "restore_test.ps1 falló para $zip"
+    }
+}
 
 $size = [math]::Round((Get-Item $zip).Length / 1MB, 2)
 Write-Host "Backup: $zip ($size MB)"

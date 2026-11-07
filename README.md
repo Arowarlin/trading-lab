@@ -28,6 +28,7 @@ Entorno multi-bot de trading sobre **TradingAgents** y **Trading-R1**, con LLM l
 | F12 | Futuros (Topstep + ProjectX) | ✅ adaptador y CLI en dry-run · ⏳ cuenta y guard |
 | F13 | Paper continuo 4-8 semanas | ⏳ |
 | F14 | Investigación automática (`lab research`) | ✅ barrido + OOS + propuestas |
+| F15 | Datos de ticks Dukascopy / spread real forex | ⏳ |
 
 ---
 
@@ -118,6 +119,10 @@ cd E:\trading-lab
 
 # Investigación automática (ranking + propuestas, sin activar nada)
 .\.venv\Scripts\lab.exe research --start 2015-01-01
+
+# Reproducibilidad y secretos
+uv sync --frozen --extra dev --extra mt5
+.\.venv\Scripts\python.exe scripts\migrate_secrets.py --status
 ```
 
 Atajo: `.\scripts\lab.ps1 <comando>`.
@@ -187,10 +192,14 @@ Unregister-ScheduledTask -TaskName "TradingLab-Web" -Confirm:$false
 - [`docs/arquitectura.md`](docs/arquitectura.md): cómo encaja el árbol propuesto
   `C:\TradingLab` (agents/engines/research/execution/risk/monitoring) con el
   laboratorio actual y qué integrar después.
-- [`docs/auditoria-repos-2026-11-07.md`](docs/auditoria-repos-2026-11-07.md):
+- [`docs/auditoria-repos-2026-11-06.md`](docs/auditoria-repos-2026-11-06.md):
   auditoría de `pixel-hedge-fund` (sin licencia; solo inspiración),
   `company-pixel-office` (MIT; idea de roster) y `FinRobot` (Apache-2.0;
   principio de cálculo determinista + narración LLM).
+- [`docs/backups.md`](docs/backups.md): keyring, restauración verificada,
+  restic vs Kopia y copia externa cifrada.
+- [`docs/dependencias.md`](docs/dependencias.md): versiones verificadas y
+  política de dependencias.
 
 La Sala pixel es arte propio (HTML/CSS/SVG). No se copió código ni arte de los
 repos auditados; si en el futuro se usan assets MIT, se conservará su licencia.
@@ -226,10 +235,6 @@ $lms = "$env:LOCALAPPDATA\Programs\LM Studio\resources\app\.webpack\lms.exe"
 > El servidor no arranca solo al reiniciar Windows. Si `lab agent` falla con
 > error de conexión, ejecuta los dos comandos de arriba.
 >
-> Con 16 GB de VRAM y 27B en Q4 espera **1-5 tok/s** según contexto y offload.
-> Un run de TradingAgents multi-agente puede tardar **horas**; por eso existe el
-> modo `lite` y el diseño usa el LLM 1 vez al día.
-
 > Con 16 GB de VRAM y 27B en Q4 espera **1-5 tok/s** según contexto y offload.
 > Un run de TradingAgents multi-agente puede tardar **horas**; por eso existe el
 > modo `lite` y el diseño usa el LLM 1 vez al día.
@@ -313,11 +318,16 @@ cruzó el suelo efectivo: bloquear órdenes nuevas no protege una posición abie
 
 ### Hora del servidor (crítico)
 
-Los servidores MT5 **no van en UTC**: el de Darwinex iba en GMT+2. El adaptador
-autodetecta el desfase comparando un tick fresco con UTC y convierte velas,
-posiciones y deals a UTC real. Sin esto, el reset del límite diario de FTMO se
-calcula con 1-3 horas de error. Se puede fijar a mano con
-`mt5.server_utc_offset_hours`.
+Los servidores MT5 **no van en UTC**: muchos usan GMT+2 en invierno y GMT+3 en
+verano. El adaptador autodetecta el desfase comparando un tick fresco con UTC y
+convierte velas, posiciones y deals a UTC real. Un **tick viejo ahora se
+rechaza** (antes podía producir un offset negativo falso con el mercado
+cerrado). Se puede fijar a mano con `mt5.server_utc_offset_hours`.
+
+El offset se detecta al conectar: un proceso de larga duración debe reconectar
+después de un cambio de hora. El reset diario de FTMO no usa ese offset: se
+calcula con `Europe/Prague` y `tzdata`, y está cubierto por tests a ambos lados
+de los cambios de hora de EE. UU. y Europa (`tests/test_timezone.py`).
 
 ### Motor de reglas (`prop/`)
 
@@ -523,24 +533,36 @@ Los logs quedan en `logs/research/`.
 
 ---
 
-## 10. Copias de seguridad
+## 10. Copias de seguridad y secretos
 
-Script: `scripts/backup.ps1`. Destino: **`F:\TradingLabBackups`**. Guarda un zip
-con código, `config`, `tests`, `scripts`, informes, `data\lab.db`, historial git
-y `.env`, más un `LEEME_BACKUP.txt` con las instrucciones de restauración.
-Retención: los **20** zips más recientes.
+Los secretos viven en **Windows Credential Manager** con `keyring` (servicio
+`tradinglab`). `.env` sigue como **fallback local**, pero ya **no se copia** en
+los zips. Precedencia: variable de shell > keyring > `.env`.
 
 ```powershell
-# manual
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File E:\trading-lab\scripts\backup.ps1
+# migrar los secretos actuales de .env a Credential Manager
+.\.venv\Scripts\python.exe scripts\migrate_secrets.py
 
-# ver copias
-Get-ChildItem F:\TradingLabBackups | Sort-Object LastWriteTime -Descending
+# ver claves (nunca muestra valores)
+.\.venv\Scripts\python.exe scripts\migrate_secrets.py --status
+
+# backup + verificación automática
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File E:\trading-lab\scripts\backup.ps1
 ```
 
+`scripts/backup.ps1` guarda un zip en **`F:\TradingLabBackups`** con código,
+`config`, `tests`, `scripts`, `docs`, informes, `data\lab.db`, historial git y
+`.env.example`. Retención: los **20** zips más recientes. Al terminar ejecuta
+`scripts/restore_test.ps1`, que restaura en una carpeta temporal y comprueba:
+
+1. archivos mínimos y `data\lab.db`;
+2. que no haya `.env` dentro del zip;
+3. que no aparezcan valores reales de secretos;
+4. que no haya asignaciones de secretos en `src/config/scripts/tests`;
+5. `PRAGMA integrity_check` de SQLite.
+
 Tarea programada **`TradingLab-Backup`**: todos los días a las **13:00** y
-**19:00** (se ejecuta aunque el equipo estuviera apagado, en el siguiente
-arranque). Comprobar:
+**19:00**. Comprobar:
 
 ```powershell
 Get-ScheduledTask -TaskName "TradingLab-Backup" | Get-ScheduledTaskInfo
@@ -549,13 +571,18 @@ Get-ScheduledTask -TaskName "TradingLab-Backup" | Get-ScheduledTaskInfo
 Restaurar en un PC nuevo:
 
 1. Descomprimir el zip en `E:\trading-lab`.
-2. `uv venv --python 3.13 .venv` y `uv pip install -e .`
-3. Revisar `.env` (Alpaca, MT5, LLM) y `lab doctor`.
-4. Reinstalar los venvs de TradingAgents/Trading-R1 si se usan.
+2. `uv sync --frozen --extra dev --extra mt5`.
+3. Reintroducir secretos con `scripts\migrate_secrets.py` o un `.env` local
+   (en un PC nuevo no existe el Credential Manager del usuario anterior).
+4. `lab doctor`.
 
-> **El zip contiene `.env` con claves.** No lo subas a la nube ni lo compartas.
-> F: es un disco local: si el PC se pierde físicamente, esta copia también.
-> Para protección externa, copia el zip a un disco USB cifrado.
+> **Backups antiguos:** dos zips de `F:\TradingLabBackups` (`20261106_202735` y
+> `20261106_204317`) todavía contienen `.env`. No se han borrado porque la regla
+> del proyecto exige confirmación. Los zips nuevos ya no lo incluyen.
+>
+> **F: es local.** Si se pierde el PC, se pierde la copia. Mantén una segunda
+> copia cifrada en un disco externo. Evaluación restic/Kopia y recomendación en
+> [`docs/backups.md`](docs/backups.md).
 
 ---
 
@@ -583,7 +610,7 @@ Restaurar en un PC nuevo:
 4. **F11b** filtros de noticias, viernes y rollover en el guard.
 5. **F13** paper continuo 4-8 semanas → comparar contra SPY y decidir.
 6. **F7** Trading-R1 en WSL para el informe pre-market + Telegram.
-7. **F14** datos de ticks Dukascopy para modelar spread real en forex.
+7. **F15** datos de ticks Dukascopy para modelar spread real en forex.
 
 ---
 

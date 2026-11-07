@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import platform
 import sys
 from datetime import date, timedelta
 from pathlib import Path
@@ -13,16 +12,16 @@ from rich.table import Table
 
 from . import __version__
 from . import data as data_mod
-from .agents import AgentError, RATING_TO_TARGET, run_lite_agent, run_tradingagents
+from .agents import RATING_TO_TARGET, AgentError, run_lite_agent, run_tradingagents
 from .backtest import run as run_backtest
 from .config import DEFAULT_DB, ROOT, get_settings
 from .db import connect, init_db, utcnow
-from .execution import AlpacaError, PaperBroker, get_broker, get_mt5_broker, get_projectx_broker
+from .execution import get_broker, get_mt5_broker, get_projectx_broker
 from .indicators import atr as atr_indicator
-from .instruments import InstrumentError, get_instrument, list_instruments
+from .instruments import get_instrument, list_instruments
 from .llm import LLMClient
 from .orchestrator import run_all, write_dry_run_log
-from .prop import AccountState, PropError, PropGuard, PropRules, from_yaml, ftmo, monte_carlo
+from .prop import AccountState, PropGuard, PropRules, from_yaml, ftmo, monte_carlo
 from .reporting import build_dashboard
 from .risk import check_order, kill_switch, size_position
 from .strategies import STRATEGIES
@@ -170,6 +169,21 @@ def doctor(network: bool = typer.Option(False, "--network", help="Probar descarg
     except Exception as exc:
         settings = None
         table.add_row("Config", FAIL, str(exc)[:160])
+
+    # Secretos: solo nombres/orígenes, nunca valores
+    try:
+        from .config import secret_status
+
+        secrets = secret_status()
+        n = len(secrets["keyring"])
+        detail = f"keyring {n}"
+        if secrets["dotenv"]:
+            detail += " · .env presente (fallback)"
+        if secrets["missing"]:
+            detail += f" · faltan {len(secrets['missing'])}"
+        table.add_row("Secretos", OK if n else WARN, detail)
+    except Exception as exc:
+        table.add_row("Secretos", WARN, str(exc)[:160])
 
     # Base de datos
     try:
@@ -1404,7 +1418,6 @@ def prop_size(
             inst = broker.instrument(symbol)
             qr = quote_rate or _quote_rate(broker, inst)
             state = _prop_state_from_mt5(broker, rules)
-            tick = broker.tick(symbol)
         finally:
             broker.shutdown()
     else:
@@ -1420,7 +1433,6 @@ def prop_size(
             peak_balance=eq,
             peak_equity=eq,
         )
-        tick = {"bid": None}
 
     stop_distance = stop_pips * inst.pip_size() if inst.is_fx else stop_pips * inst.tick_size
     risk_per_lot = inst.risk_per_lot(stop_distance, quote_rate=qr)

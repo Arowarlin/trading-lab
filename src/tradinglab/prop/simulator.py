@@ -42,7 +42,6 @@ def monte_carlo(
         raise ValueError("n_paths y horizon deben ser > 0")
 
     block_size = max(1, int(block_size))
-    n_blocks = int(np.ceil(horizon / block_size))
     rng = np.random.default_rng(seed)
 
     initial = float(rules.account_size)

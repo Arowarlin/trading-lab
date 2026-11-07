@@ -1,4 +1,4 @@
-from .bridge import AgentError, RATING_TO_TARGET, run_tradingagents
+from .bridge import RATING_TO_TARGET, AgentError, run_tradingagents
 from .lite import build_context, run_lite_agent
 
 __all__ = [
