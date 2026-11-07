@@ -1024,6 +1024,155 @@ def report() -> None:
             )
 
 
+@app.command("journal")
+def journal_cmd(
+    bot: str = typer.Option(None, "--bot", help="Filtrar por id de bot"),
+    account: str = typer.Option(None, "--account", help="Filtrar por cuenta"),
+    profile: str = typer.Option(None, "--profile", help="Filtrar por perfil"),
+    ticker: str = typer.Option(None, "--ticker", help="Filtrar por activo"),
+    since: str = typer.Option(None, "--since", help="Desde YYYY-MM-DD"),
+    until: str = typer.Option(None, "--until", help="Hasta YYYY-MM-DD"),
+    group_by: str = typer.Option(
+        "bot",
+        "--group-by",
+        help="bot | account | profile | ticker | day | hour",
+    ),
+    limit: int = typer.Option(15, "--limit", help="Últimas operaciones a mostrar"),
+) -> None:
+    """Diario de operaciones cerradas reconstruido desde lab.db (solo lectura)."""
+    from .journal import MIN_SAMPLE, build_journal
+
+    settings = get_settings()
+    try:
+        payload = build_journal(
+            DEFAULT_DB,
+            tz=settings.timezone,
+            bot=bot,
+            account=account,
+            profile=profile,
+            ticker=ticker,
+            since=since,
+            until=until,
+            group_by=group_by,
+            limit=limit,
+        )
+    except ValueError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2) from exc
+
+    diag = payload["diagnostics"]
+    summary = payload["summary"]
+    if diag.get("error"):
+        console.print(f"[yellow]{diag['error']}[/yellow]")
+    console.print(
+        f"[dim]lab.db: {diag.get('fills_total', 0)} fills · "
+        f"{diag.get('closed_trades', 0)} operaciones cerradas · "
+        f"{diag.get('open_lots_qty', 0):g} lotes abiertos · "
+        f"{diag.get('unmatched_sell_qty', 0):g} ventas sin lote[/dim]"
+    )
+    if diag.get("bots_sin_cuenta"):
+        console.print(
+            "[dim]Sin cuenta en config/bots.yaml: "
+            + ", ".join(diag["bots_sin_cuenta"])
+            + "[/dim]"
+        )
+
+    if summary["n"] == 0:
+        console.print(Panel("Sin datos: no hay operaciones cerradas con estos filtros.", style="yellow"))
+        return
+
+    t = Table(title="Diario · resumen")
+    t.add_column("Métrica", style="bold")
+    t.add_column("Valor", justify="right")
+    t.add_row("Operaciones", str(summary["n"]))
+    t.add_row("Neto", f"{summary['net_pnl']:,.2f}")
+    t.add_row("Retorno", _fmt_pct(summary["total_return"]) if summary["total_return"] is not None else "sin datos")
+    t.add_row("Win rate", _fmt_pct(summary["win_rate"]) if summary["win_rate"] is not None else "sin datos")
+    t.add_row("Profit factor", f"{summary['profit_factor']:.2f}" if summary["profit_factor"] is not None else "sin datos")
+    t.add_row("Expectancy", f"{summary['expectancy']:,.2f}" if summary["expectancy"] is not None else "sin datos")
+    t.add_row("Sharpe", f"{summary['sharpe']:.2f}" if summary["sharpe"] is not None else "sin datos")
+    t.add_row("Sortino", f"{summary['sortino']:.2f}" if summary["sortino"] is not None else "sin datos")
+    t.add_row("Calmar", f"{summary['calmar']:.2f}" if summary["calmar"] is not None else "sin datos")
+    t.add_row("MaxDD", _fmt_pct(summary["max_drawdown"]) if summary["max_drawdown"] is not None else "sin datos")
+    t.add_row("MaxDD USD", f"{summary['max_drawdown_usd']:,.2f}" if summary["max_drawdown_usd"] is not None else "sin datos")
+    t.add_row("Capital atribuido", f"{summary['capital']:,.2f}" if summary["capital"] is not None else "sin datos")
+    t.add_row("Rango", f"{summary['first_day'] or 'sin datos'} → {summary['last_day'] or 'sin datos'}")
+    if summary["sample_warning"]:
+        t.add_row("Muestra", f"[yellow]{summary['sample_warning']}[/yellow]")
+    console.print(t)
+
+    conc = summary["concentration"]
+    c = Table(title="Concentración")
+    c.add_column("Métrica", style="bold")
+    c.add_column("Valor", justify="right")
+    c.add_row("Top 3 / beneficio neto", _fmt_pct(conc["top3_share"]) if conc["top3_share"] is not None else "sin datos")
+    c.add_row("Top 3 / beneficio bruto", _fmt_pct(conc["top3_gross_share"]) if conc["top3_gross_share"] is not None else "sin datos")
+    c.add_row("Mejor día", f"{conc['best_day'] or 'sin datos'} · {conc['best_day_pnl']:,.2f}" if conc["best_day_pnl"] is not None else "sin datos")
+    c.add_row("Mejor día / neto", _fmt_pct(conc["best_day_share"]) if conc["best_day_share"] is not None else "sin datos")
+    c.add_row("Regla de consistencia", _fmt_pct(conc["consistency_pct"]) if conc["consistency_pct"] is not None else (summary["consistency_note"] or "sin datos"))
+    if conc["consistency_ok"] is not None:
+        c.add_row("Cumple", "[green]sí[/green]" if conc["consistency_ok"] else "[red]no[/red]")
+    console.print(c)
+
+    dist = summary["distribution"]
+    d = Table(title="Distribución de retornos por operación")
+    d.add_column("Estadístico", style="bold")
+    d.add_column("Valor", justify="right")
+    for label, key in (
+        ("N", "n"),
+        ("Mín", "min"),
+        ("P5", "p5"),
+        ("P25", "p25"),
+        ("Mediana", "median"),
+        ("P75", "p75"),
+        ("P95", "p95"),
+        ("Máx", "max"),
+        ("Media", "mean"),
+        ("Desv. típica", "stdev"),
+    ):
+        value = dist[key]
+        d.add_row(label, f"{value:.4%}" if key not in ("n",) and value is not None else ("sin datos" if value is None else str(value)))
+    console.print(d)
+
+    group_rows = payload["groups"]
+    g = Table(title=f"Agrupado por {group_by}")
+    for col in ("Grupo", "N", "Neto", "Retorno", "Win", "PF", "Exp.", "Sharpe", "MaxDD", "Muestra"):
+        g.add_column(col, justify="left" if col == "Grupo" else "right")
+    for row in group_rows:
+        g.add_row(
+            str(row["key"]),
+            str(row["n"]),
+            f"{row['net_pnl']:,.2f}",
+            _fmt_pct(row["total_return"]) if row["total_return"] is not None else "sin datos",
+            _fmt_pct(row["win_rate"]) if row["win_rate"] is not None else "sin datos",
+            f"{row['profit_factor']:.2f}" if row["profit_factor"] is not None else "sin datos",
+            f"{row['expectancy']:,.2f}" if row["expectancy"] is not None else "sin datos",
+            f"{row['sharpe']:.2f}" if row["sharpe"] is not None else "sin datos",
+            _fmt_pct(row["max_drawdown"]) if row["max_drawdown"] is not None else "sin datos",
+            "ok" if row["sample_ok"] else f"N<{MIN_SAMPLE}",
+        )
+    console.print(g)
+
+    t2 = Table(title=f"Últimas {len(payload['trades'])} operaciones cerradas")
+    for col in ("Salida", "Bot", "Cuenta", "Perfil", "Activo", "Qty", "Entrada", "Salida", "PnL", "Ret.", "Horas"):
+        t2.add_column(col, justify="left" if col in ("Salida", "Bot", "Cuenta", "Perfil", "Activo") else "right")
+    for trade in payload["trades"]:
+        t2.add_row(
+            trade["exit_ts"][:19],
+            trade["bot"],
+            trade["account"] or "sin datos",
+            trade["profile"] or "sin datos",
+            trade["ticker"],
+            f"{trade['qty']:g}",
+            f"{trade['entry_price']:,.5f}",
+            f"{trade['exit_price']:,.5f}",
+            f"{trade['pnl']:,.2f}",
+            _fmt_pct(trade["return_pct"]),
+            f"{trade['holding_hours']:.1f}" if trade["holding_hours"] is not None else "sin datos",
+        )
+    console.print(t2)
+
+
 @killswitch_app.command("status")
 def killswitch_status_cmd() -> None:
     """Estado persistido y evaluación actual del kill-switch."""

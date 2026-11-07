@@ -57,6 +57,7 @@ from .botlab import (
     restore_bot,
 )
 from .config import DEFAULT_DB, ROOT, Settings, get_settings
+from .journal import build_journal
 from .killswitch import activate as activate_killswitch
 from .killswitch import load_state as load_killswitch
 from .killswitch import reset as reset_killswitch
@@ -642,6 +643,19 @@ class LabData:
             }
         )
         return out
+
+    # ------------------------------------------------------------- diario
+
+    def journal(self, **filters) -> dict:
+        """Diario de operaciones cerradas; solo lee lab.db."""
+        key = "journal:" + json.dumps(filters, sort_keys=True, default=str)
+        return self.cache.get(
+            key,
+            5.0,
+            lambda: build_journal(
+                self.db_path, tz=self.settings.timezone, **filters
+            ),
+        )
 
     # ------------------------------------------------------------- fondo
 
@@ -2071,6 +2085,27 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 self._json({"accounts": self.server.data.accounts()})
             elif path == "/api/fund":
                 self._json(self.server.data.fund())
+            elif path == "/api/journal":
+                params = parse_qs(urlparse(self.path).query)
+
+                def value(name: str) -> str | None:
+                    return (params.get(name) or [None])[0] or None
+
+                try:
+                    self._json(
+                        self.server.data.journal(
+                            bot=value("bot"),
+                            account=value("account"),
+                            profile=value("profile"),
+                            ticker=value("ticker"),
+                            since=value("since"),
+                            until=value("until"),
+                            group_by=value("group_by") or "bot",
+                            limit=int(value("limit") or 200),
+                        )
+                    )
+                except ValueError as exc:
+                    self._error(400, str(exc))
             elif path == "/api/bots":
                 self._json({"bots": self.server.data.bots()})
             elif path == "/api/action":

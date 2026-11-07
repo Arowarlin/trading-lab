@@ -226,6 +226,36 @@ real, sin tocar `.env` y sin borrar archivos.
   - Resumen final: 249 tests, `ruff` limpio, `lab doctor` OK salvo Finnhub,
     ProjectX y plantilla de fondeo.
 
+## Fase 10 — Diario y control operativo (etapas 1–6)
+
+Objetivo: medir la operación real (no el backtest) y convertirla en decisiones
+controladas, sin activar bots, sin órdenes, sin dinero real y sin tocar `.env`.
+
+- [x] **10.1 Diario de operaciones cerradas** — 2026-11-07
+  - `journal.py` reconstruye operaciones cerradas desde `fills` + `orders` con
+    lotes FIFO por `(bot, ticker)`, en **solo lectura**. Sin fill, sin lote o sin
+    cuenta/perfil en `config/bots.yaml` → **sin datos**; no se inventa PnL.
+  - Métricas: retorno sobre capital atribuido, win rate, profit factor,
+    expectancy, Sharpe/Sortino/Calmar (PnL diario, 252), MaxDD, distribución de
+    retornos e histograma. Aviso si N < 30.
+  - Concentración: top 3/neto, top 3/bruto, mejor día/neto y comparación con
+    `consistency_pct` de `prop.yaml`.
+  - `lab journal` con filtros por bot/cuenta/perfil/activo/fecha y agrupación
+    por bot/cuenta/perfil/activo/día/hora; pestaña **Diario** en la consola.
+  - Evidencia: `pytest tests/test_journal.py -q` → 7 passed; sobre el `lab.db`
+    actual `lab journal` muestra “sin datos” (1 fill abierto, 0 cerradas).
+- [ ] **10.2 Multiverse por operación** — 1.000 reordenamientos, p5/p50/p95,
+  MaxDD esperado y probabilidad de límite; semilla fija y Run Detail.
+- [ ] **10.3 Deriva live vs backtest** — Sharpe/expectancy/slippage con IC y
+  mínimo de operaciones; ok/vigilar/deriva.
+- [ ] **10.4 Salud de cuenta y libro de capital** — score 0–100 con desglose,
+  depósitos/retiros y retorno time-weighted.
+- [ ] **10.5 Streak lock y pausa** — umbrales en SQLite, historial, fuera del
+  hash de F13; reanudar con confirmación.
+- [ ] **10.6 Aprendizaje controlado** — `lessons` proposed/approved/rejected,
+  contador DSR, holdout sellado y campeón/retador; auto-aplicación solo para
+  reducir riesgo y con reversión.
+
 ---
 
 ## Registro de evidencias
@@ -266,4 +296,5 @@ real, sin tocar `.env` y sin borrar archivos.
 | 2026-11-07 | E4 pestaña Fondo | `pytest tests/test_fund_web.py -q` → 6 passed; `pytest -q` → 249 passed |
 | 2026-11-07 | E5 intradía | `lab mt5 status` → offset unknown + mercado cerrado; sin descarga |
 | 2026-11-07 | E6 documentación | README 6d y Fase 9; tabla por perfil en Research; `ruff` + doctor |
+| 2026-11-07 | 10.1 Diario | `pytest tests/test_journal.py -q` → 7 passed; `lab journal` → sin datos; README 6e |
 |  |  |  |

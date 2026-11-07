@@ -695,6 +695,7 @@
       <button class="nav-btn" data-view="market"><span class="ico">▥</span> Mercado</button>
       <button class="nav-btn" data-view="accounts"><span class="ico">▤</span> Cuentas</button>
       <button class="nav-btn" data-view="fund"><span class="ico">◉</span> Fondo</button>
+      <button class="nav-btn" data-view="journal"><span class="ico">▩</span> Diario</button>
       <button class="nav-btn" data-view="bots"><span class="ico">⚙</span> Bots</button>
       <div class="nav-label">Investigar</div>
       <button class="nav-btn" data-view="research"><span class="ico">⌁</span> Research</button>
@@ -947,6 +948,57 @@
       </div>
     </section>
 
+    <!-- =============================================================== DIARIO -->
+    <section class="view" id="view-journal">
+      <div class="note" style="margin:0 0 14px">
+        <strong>Solo lectura sobre lab.db.</strong> Operaciones cerradas reconstruidas
+        emparejando <code>fills</code> y <code>orders</code> FIFO por bot/activo.
+        Si un broker solo registró órdenes, se muestra <b>sin datos</b>: no se inventan
+        precios ni PnL.
+      </div>
+      <div class="panel" style="margin-bottom:14px">
+        <div class="panel-head"><h2>Filtros</h2><span class="muted tiny">bot · cuenta · perfil · activo · fecha</span></div>
+        <div class="action-bar" style="margin:0">
+          <select class="input" id="journal-bot"></select>
+          <select class="input" id="journal-account"></select>
+          <select class="input" id="journal-profile"></select>
+          <input class="input" id="journal-ticker" placeholder="activo" style="width:100px;text-transform:uppercase" spellcheck="false">
+          <input class="input" id="journal-since" type="date" style="width:145px">
+          <input class="input" id="journal-until" type="date" style="width:145px">
+          <select class="input" id="journal-group" style="width:120px">
+            <option value="bot">por bot</option>
+            <option value="account">por cuenta</option>
+            <option value="profile">por perfil</option>
+            <option value="ticker">por activo</option>
+            <option value="day">por día</option>
+            <option value="hour">por hora</option>
+          </select>
+          <button class="btn primary" id="journal-apply">Aplicar</button>
+          <button class="btn ghost" id="journal-reset">Limpiar</button>
+        </div>
+      </div>
+      <div id="journal-alert"></div>
+      <div class="stats" id="journal-summary"></div>
+      <div class="grid-2 equal" style="margin-bottom:14px">
+        <div class="panel">
+          <div class="panel-head"><h2>Concentración</h2><span class="muted tiny">top 3 · mejor día · consistencia</span></div>
+          <div id="journal-concentration"></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h2>Distribución de retornos</h2><span class="muted tiny">por operación</span></div>
+          <div id="journal-distribution"></div>
+        </div>
+      </div>
+      <div class="panel" style="margin-bottom:14px">
+        <div class="panel-head"><h2>Agrupado</h2><span class="muted tiny" id="journal-group-meta"></span></div>
+        <div id="journal-groups"></div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h2>Operaciones cerradas</h2><span class="muted tiny" id="journal-trades-meta"></span></div>
+        <div id="journal-trades"></div>
+      </div>
+    </section>
+
     <!-- =============================================================== BOTS -->
     <section class="view" id="view-bots">
       <div class="note" style="margin:0 0 14px">
@@ -1168,6 +1220,8 @@ const S = {
   risk: null,
   accounts: [],
   fund: null,
+  journal: null,
+  journalGroup: "bot",
   market: null,
   calendar: null,
   decisions: null,
@@ -1194,6 +1248,7 @@ const TITLES = {
   sala: ["Sala", "TradingAgents en su oficina: estados, runs y decisiones"],
   accounts: ["Cuentas", "Paper, Alpaca, MT5 y futuros"],
   fund: ["Fondo", "Límites por cuenta, bolsillos, clústeres y kill-switch"],
+  journal: ["Diario", "Operaciones cerradas, métricas y concentración"],
   bots: ["Bots", "Catálogo, estado y últimas señales"],
   agents: ["Agentes", "TradingAgents lite/deep y sus decisiones"],
   research: ["Research", "PBO, walk-forward, regímenes y propuestas"],
@@ -1376,6 +1431,7 @@ function switchView(view, updateHash = true) {
   if (view === "overview") requestAnimationFrame(drawEquity);
   if (view === "market") renderMarket();
   if (view === "fund") renderFund();
+  if (view === "journal") loadJournal();
   if (view === "decisions") renderDecisions();
   if (view === "repos") renderRepos();
   if (view === "sala") renderSala();
@@ -1443,6 +1499,7 @@ async function loadAll(manual = false) {
     S.fund = fundResult.value;
     renderFund();
   }
+  if (S.view === "journal") loadJournal();
   if (overviewResult.status === "rejected" && riskResult.status === "rejected") {
     toast("No se pudo conectar con el panel: " + overviewResult.reason.message, true);
   } else if (manual) {
@@ -2309,6 +2366,191 @@ async function fundKillswitch(action) {
   } catch (error) {
     toast(error.message, true);
   }
+}
+
+/* ------------------------------------------------------------------ diario */
+function jnum(value, digits = 2) {
+  return value === null || value === undefined || !isFinite(value) ? "sin datos" : num(value, digits);
+}
+function jmoney(value) {
+  return value === null || value === undefined || !isFinite(value) ? "sin datos" : money(value);
+}
+function jpct(value, digits = 2) {
+  return value === null || value === undefined || !isFinite(value) ? "sin datos" : pct(value, digits);
+}
+
+function journalParams() {
+  const params = new URLSearchParams();
+  [["bot", "journal-bot"], ["account", "journal-account"], ["profile", "journal-profile"]].forEach(([key, id]) => {
+    const value = ($(id)?.value || "").trim();
+    if (value) params.set(key, value);
+  });
+  const ticker = ($("#journal-ticker")?.value || "").trim().toUpperCase();
+  if (ticker) params.set("ticker", ticker);
+  const since = ($("#journal-since")?.value || "").trim();
+  if (since) params.set("since", since);
+  const until = ($("#journal-until")?.value || "").trim();
+  if (until) params.set("until", until);
+  params.set("group_by", $("#journal-group")?.value || "bot");
+  params.set("limit", "200");
+  return params;
+}
+
+async function loadJournal() {
+  const params = journalParams();
+  S.journalGroup = params.get("group_by") || "bot";
+  try {
+    S.journal = await getJSON("/api/journal?" + params.toString());
+    renderJournal();
+  } catch (error) {
+    $("#journal-alert").innerHTML = `<div class="alert red">No se pudo leer el diario: ${esc(error.message)}</div>`;
+  }
+}
+
+function populateJournalSelect(id, values, labelSin = "sin datos") {
+  const select = $(id);
+  if (!select) return;
+  const signature = JSON.stringify(values || []);
+  if (select.dataset.signature === signature) return;
+  const current = select.value;
+  select.dataset.signature = signature;
+  select.innerHTML = `<option value="">Todos</option>` + (values || []).map((value) =>
+    `<option value="${esc(value)}">${value === "sin datos" ? labelSin : esc(value)}</option>`
+  ).join("");
+  if ((values || []).includes(current)) select.value = current;
+}
+
+function renderJournal() {
+  const payload = S.journal;
+  if (!payload) return;
+  const summary = payload.summary || {};
+  const conc = summary.concentration || {};
+  const diag = payload.diagnostics || {};
+  const available = payload.filters_available || {};
+
+  populateJournalSelect("#journal-bot", available.bots);
+  populateJournalSelect("#journal-account", available.accounts);
+  populateJournalSelect("#journal-profile", available.profiles);
+  if ($("#journal-group")) $("#journal-group").value = payload.filters?.group_by || S.journalGroup || "bot";
+
+  const alerts = [];
+  if (diag.error) alerts.push(`<div class="alert red">${esc(diag.error)}</div>`);
+  if (summary.sample_warning) alerts.push(`<div class="alert">${esc(summary.sample_warning)}</div>`);
+  if ((diag.unmatched_sell_qty || 0) > 0) {
+    alerts.push(`<div class="alert">${num(diag.unmatched_sell_qty, 4)} unidades vendidas sin lote de entrada: se ignoran, no se inventa el PnL.</div>`);
+  }
+  if ((diag.bots_sin_cuenta || []).length) {
+    alerts.push(`<div class="alert">Sin cuenta/perfil en <code>config/bots.yaml</code>: ${esc(diag.bots_sin_cuenta.join(", "))}. El retorno y la consistencia se muestran como sin datos.</div>`);
+  }
+  if (!summary.n) {
+    alerts.push(`<div class="alert">Sin datos: no hay operaciones cerradas con estos filtros. Fills=${num(diag.fills_total, 0)}, operaciones cerradas=${num(diag.closed_trades, 0)}.</div>`);
+  }
+  $("#journal-alert").innerHTML = alerts.join("");
+
+  $("#journal-summary").innerHTML = [
+    { label: "Operaciones", value: num(summary.n, 0) },
+    { label: "Neto", value: jmoney(summary.net_pnl), cls: Number(summary.net_pnl) >= 0 ? "pos" : "neg" },
+    { label: "Retorno", value: jpct(summary.total_return, 2) },
+    { label: "Win rate", value: jpct(summary.win_rate, 1) },
+    { label: "Profit factor", value: jnum(summary.profit_factor, 2) },
+    { label: "Expectancy", value: jmoney(summary.expectancy) },
+    { label: "Sharpe", value: jnum(summary.sharpe, 2) },
+    { label: "Sortino", value: jnum(summary.sortino, 2) },
+    { label: "Calmar", value: jnum(summary.calmar, 2) },
+    { label: "MaxDD", value: jpct(summary.max_drawdown, 2), cls: "neg" },
+    { label: "Capital atribuido", value: jmoney(summary.capital) },
+  ].map((s) => `<div class="stat"><div class="label">${esc(s.label)}</div><div class="value ${s.cls || ""}">${s.value}</div></div>`).join("");
+
+  const consistTag = conc.consistency_ok === null || conc.consistency_ok === undefined
+    ? `<span class="muted">sin datos</span>`
+    : conc.consistency_ok
+      ? `<span class="badge ok">cumple</span>`
+      : `<span class="badge bad">supera</span>`;
+  const concRows = [
+    ["Top 3 / beneficio neto", jpct(conc.top3_share, 1)],
+    ["Top 3 / beneficio bruto", jpct(conc.top3_gross_share, 1)],
+    ["Mejor día", conc.best_day ? `${esc(conc.best_day)} · ${jmoney(conc.best_day_pnl)}` : "sin datos"],
+    ["Mejor día / neto", jpct(conc.best_day_share, 1)],
+    ["Regla de consistencia", conc.consistency_pct === null || conc.consistency_pct === undefined ? (esc(summary.consistency_note || "sin datos")) : jpct(conc.consistency_pct, 1)],
+  ];
+  $("#journal-concentration").innerHTML = grid(
+    [{ label: "Métrica" }, { label: "Valor", num: true }],
+    concRows.map(([label, value]) => [esc(label), value]),
+    { empty: "sin datos" }
+  ) + `<div style="margin-top:8px">${consistTag}</div>`;
+
+  const dist = summary.distribution || {};
+  const distRows = [
+    ["N", num(dist.n, 0)],
+    ["Mín", jpct(dist.min, 2)],
+    ["P5", jpct(dist.p5, 2)],
+    ["P25", jpct(dist.p25, 2)],
+    ["Mediana", jpct(dist.median, 2)],
+    ["P75", jpct(dist.p75, 2)],
+    ["P95", jpct(dist.p95, 2)],
+    ["Máx", jpct(dist.max, 2)],
+    ["Media", jpct(dist.mean, 2)],
+    ["Desv. típica", jpct(dist.stdev, 2)],
+  ];
+  const hist = dist.histogram || [];
+  const maxCount = Math.max(1, ...hist.map((h) => Number(h.count) || 0));
+  $("#journal-distribution").innerHTML = grid(
+    [{ label: "Estadístico" }, { label: "Valor", num: true }],
+    distRows.map(([label, value]) => [esc(label), value]),
+    { empty: "sin datos" }
+  ) + (hist.length ? `<div style="margin-top:10px">${hist.map((h) => `
+    <div class="pbo-row"><span>${jpct(h.low, 1)} a ${jpct(h.high, 1)}</span>
+    <div class="pbo-track"><div class="pbo-fill" style="width:${Math.max(2, 100 * Number(h.count || 0) / maxCount)}%"></div></div>
+    <span class="num">${num(h.count, 0)}</span></div>`).join("")}</div>` : "");
+
+  const groups = payload.groups || [];
+  $("#journal-group-meta").textContent = `agrupado por ${payload.filters?.group_by || "bot"}`;
+  $("#journal-groups").innerHTML = grid(
+    [{ label: "Grupo" }, { label: "N", num: true }, { label: "Neto", num: true }, { label: "Retorno", num: true }, { label: "Win", num: true }, { label: "PF", num: true }, { label: "Expectancy", num: true }, { label: "Sharpe", num: true }, { label: "MaxDD", num: true }, { label: "Muestra" }],
+    groups.map((row) => [
+      `<b>${esc(row.key)}</b>`,
+      num(row.n, 0),
+      jmoney(row.net_pnl),
+      jpct(row.total_return, 2),
+      jpct(row.win_rate, 1),
+      jnum(row.profit_factor, 2),
+      jmoney(row.expectancy),
+      jnum(row.sharpe, 2),
+      jpct(row.max_drawdown, 2),
+      row.sample_ok ? `<span class="badge ok">ok</span>` : `<span class="badge warn">N&lt;30</span>`,
+    ]),
+    { empty: "sin datos" }
+  );
+
+  const trades = payload.trades || [];
+  $("#journal-trades-meta").textContent = `${num(payload.total_trades, 0)} operaciones · mostrando ${num(trades.length, 0)}`;
+  $("#journal-trades").innerHTML = grid(
+    [{ label: "Salida" }, { label: "Bot" }, { label: "Cuenta" }, { label: "Perfil" }, { label: "Activo" }, { label: "Qty", num: true }, { label: "Entrada", num: true }, { label: "Salida", num: true }, { label: "PnL", num: true }, { label: "Ret.", num: true }, { label: "Horas", num: true }],
+    trades.map((trade) => [
+      esc(dateTime(trade.exit_ts)),
+      esc(trade.bot),
+      esc(trade.account || "sin datos"),
+      esc(trade.profile || "sin datos"),
+      `<b>${esc(trade.ticker)}</b>`,
+      num(trade.qty, 4),
+      num(trade.entry_price, 5),
+      num(trade.exit_price, 5),
+      `<span class="${Number(trade.pnl) >= 0 ? "pos" : "neg"}">${jmoney(trade.pnl)}</span>`,
+      jpct(trade.return_pct, 2),
+      trade.holding_hours === null || trade.holding_hours === undefined ? "sin datos" : num(trade.holding_hours, 1),
+    ]),
+    { empty: "sin datos" }
+  );
+}
+
+function resetJournalFilters() {
+  ["journal-bot", "journal-account", "journal-profile", "journal-ticker", "journal-since", "journal-until"].forEach((id) => {
+    const node = $(`#${id}`);
+    if (node) node.value = "";
+  });
+  if ($("#journal-group")) $("#journal-group").value = "bot";
+  S.journal = null;
+  loadJournal();
 }
 
 /* ------------------------------------------------------------------- bots */
@@ -3671,6 +3913,12 @@ function init() {
   $("#fund-save").addEventListener("click", saveFundLimits);
   $("#fund-ks-activate").addEventListener("click", () => fundKillswitch("activate"));
   $("#fund-ks-reset").addEventListener("click", () => fundKillswitch("reset"));
+  $("#journal-apply").addEventListener("click", loadJournal);
+  $("#journal-reset").addEventListener("click", resetJournalFilters);
+  ["journal-bot", "journal-account", "journal-profile", "journal-group"].forEach((id) => {
+    $(`#${id}`).addEventListener("change", loadJournal);
+  });
+  $("#journal-ticker").addEventListener("keydown", (event) => { if (event.key === "Enter") loadJournal(); });
   $("#decisions-compare").addEventListener("click", loadDecisionCompare);
   $("#reload-logs").addEventListener("click", () => { S.selectedLog = null; loadAll(true); });
   $("#modal-close").addEventListener("click", closeModal);

@@ -41,6 +41,9 @@ def test_index_disponible() -> None:
     assert "research-costs" in text
     assert "research-profiles" in text
     assert "view-fund" in text
+    assert "view-journal" in text
+    assert "journal-apply" in text
+    assert "journal-summary" in text
     assert "fund-save" in text
     assert "fund-killswitch" in text
 

@@ -746,6 +746,49 @@ pueda determinarse o se configure `mt5.server_utc_offset_hours` verificado.
 
 ---
 
+## 6e. Diario de operaciones (etapa 1)
+
+**Solo lectura sobre `lab.db`.** No crea tablas ni escribe. Reconstruye
+operaciones cerradas emparejando `fills` con `orders` y consumiendo lotes
+**FIFO por `(bot, ticker)`**. Si un bróker solo registró órdenes, no hay fill o
+no hay lote de entrada, se muestra **sin datos**; no se inventan precios ni PnL.
+La cuenta y el perfil salen de `config/bots.yaml`; un bot desconocido deja
+`account`/`profile` como `sin datos` y no se le atribuye capital.
+
+Métricas por operación y por grupo (bot, cuenta, perfil, activo, día u hora):
+
+- Retorno = PnL neto / capital atribuido de las cuentas presentes. Si hay
+  operaciones sin cuenta, el retorno se muestra como **sin datos**.
+- Win rate, profit factor, expectancy, best/worst trade y payoff.
+- Sharpe/Sortino/Calmar con PnL diario y anualización 252; MaxDD sobre la curva
+  de PnL acumulado. Con menos de 2 días, **sin datos**.
+- Distribución de retornos por operación: min, P5, P25, mediana, P75, P95, max,
+  media, desviación y histograma de 10 bins.
+- Aviso explícito de muestra insuficiente si **N < 30**.
+
+Concentración:
+
+- Top 3 operaciones / beneficio neto y top 3 / beneficio bruto.
+- Mejor día / beneficio neto, comparado con `consistency_pct` de `prop.yaml`
+  (FTMO: sin regla; Topstep: 55% como plantilla, no activa).
+
+```powershell
+lab journal
+lab journal --bot trend-spy --since 2026-01-01 --group-by day
+lab journal --account paper_main --group-by account
+lab journal --ticker SPY --until 2026-12-31
+```
+
+La pestaña **Diario** de la consola ofrece los mismos filtros (bot, cuenta,
+perfil, activo, desde/hasta y agrupación), resumen, concentración, distribución,
+tabla agrupada y las últimas operaciones cerradas.
+
+Evidencia: `pytest tests/test_journal.py -q` → **7 passed**;
+`lab journal` sobre el `lab.db` actual → “sin datos: no hay operaciones
+cerradas” (1 fill abierto, 0 ventas), sin escribir en la base.
+
+---
+
 ## 7. Trading-R1 en Windows
 
 Trading-R1 usa `fcntl`, `os.O_NOFOLLOW` y `os.getuid()`: **no funciona en Windows**.
