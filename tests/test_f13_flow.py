@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import pandas as pd
@@ -74,6 +75,7 @@ def test_f13_dry_run_alpaca_evalua_filtros_y_no_envia(monkeypatch, tmp_path):
     calls = {"ks": 0, "blackout": 0, "session": 0, "guard": 0}
 
     monkeypatch.setattr(orch, "fetch", lambda *a, **k: _frame())
+    monkeypatch.setattr(orch, "_trades_today", lambda *a, **k: 0)
     monkeypatch.setattr(
         orch,
         "ensure_killswitch",
@@ -117,6 +119,7 @@ def test_f13_dry_run_alpaca_evalua_filtros_y_no_envia(monkeypatch, tmp_path):
         only="qqq-trend-f13",
         dry_run=True,
         include_disabled=True,
+        now=datetime(2026, 11, 9, 22, 20, tzinfo=timezone.utc),
     )
     assert len(actions) == 1
     action = actions[0]

@@ -310,3 +310,139 @@ class PropGuard:
 
 
 __all__ = ["AccountState", "GuardReport", "PropGuard", "PropError"]
+
+
+@dataclass
+class AccountSnapshot:
+    """Estado agregado de una cuenta compartida por varios bots."""
+
+    equity: float
+    day_start_equity: float
+    initial_balance: float
+    peak_equity: float
+    realized_pnl_today: float = 0.0
+    open_positions: int = 0
+    open_risk_usd: float = 0.0
+    trades_today: int = 0
+
+
+@dataclass
+class AccountGuardReport:
+    allowed: bool
+    reason: str
+    severity: Severity
+    total_risk_usd: float
+    open_risk_usd: float
+    proposed_risk_usd: float
+    remaining_usd: float
+
+
+def evaluate_account(
+    rules: PropRules,
+    snapshot: AccountSnapshot,
+    *,
+    max_risk_pct: float | None = None,
+    max_trades_per_day: int | None = None,
+    proposed_risk_usd: float = 0.0,
+    closing: bool = False,
+) -> AccountGuardReport:
+    """Guard agregado para una cuenta compartida.
+
+    Suma el riesgo abierto de todos los bots y el riesgo propuesto; las
+    pérdidas del día se reflejan en el equity agregado. Cerrar/reducir nunca
+    se bloquea.
+    """
+    open_risk = max(0.0, float(snapshot.open_risk_usd))
+    proposed = max(0.0, float(proposed_risk_usd))
+    total_risk = open_risk + proposed
+    if closing:
+        return AccountGuardReport(
+            True,
+            "cierre permitido aunque la cuenta esté al límite",
+            "ok",
+            total_risk,
+            open_risk,
+            proposed,
+            0.0,
+        )
+
+    state = AccountState(
+        balance=snapshot.equity,
+        equity=snapshot.equity,
+        initial_balance=snapshot.initial_balance,
+        day_start_balance=snapshot.day_start_equity,
+        day_start_equity=snapshot.day_start_equity,
+        peak_balance=snapshot.peak_equity,
+        peak_equity=snapshot.peak_equity,
+        closed_pnl_today=snapshot.realized_pnl_today,
+        open_positions=snapshot.open_positions,
+        open_lots=0.0,
+    )
+    base = PropGuard(rules).evaluate(state, proposed_lots=0.0, new_position=True)
+    if not base.allowed:
+        return AccountGuardReport(
+            False,
+            base.reason,
+            base.severity,
+            total_risk,
+            open_risk,
+            proposed,
+            base.remaining_usd,
+        )
+
+    if max_trades_per_day is not None and snapshot.trades_today >= max_trades_per_day:
+        return AccountGuardReport(
+            False,
+            f"máximo de operaciones diarias alcanzado ({max_trades_per_day})",
+            "block",
+            total_risk,
+            open_risk,
+            proposed,
+            base.remaining_usd,
+        )
+
+    if max_risk_pct is not None and proposed > snapshot.equity * max_risk_pct + 1e-9:
+        return AccountGuardReport(
+            False,
+            f"riesgo propuesto {proposed:,.2f} > {max_risk_pct:.2%} del equity",
+            "block",
+            total_risk,
+            open_risk,
+            proposed,
+            base.remaining_usd,
+        )
+
+    cap = base.remaining_usd
+    if rules.max_open_risk_pct is not None:
+        cap = min(cap, rules.account_size * rules.max_open_risk_pct)
+    if total_risk > cap + 1e-9:
+        return AccountGuardReport(
+            False,
+            f"riesgo agregado {total_risk:,.2f} > límite {cap:,.2f}",
+            "block",
+            total_risk,
+            open_risk,
+            proposed,
+            base.remaining_usd,
+        )
+
+    return AccountGuardReport(
+        True,
+        "riesgo agregado dentro del límite",
+        "ok",
+        total_risk,
+        open_risk,
+        proposed,
+        base.remaining_usd,
+    )
+
+
+__all__ = [
+    "AccountGuardReport",
+    "AccountSnapshot",
+    "AccountState",
+    "GuardReport",
+    "PropGuard",
+    "PropError",
+    "evaluate_account",
+]

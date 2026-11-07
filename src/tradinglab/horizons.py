@@ -70,6 +70,65 @@ def _returns_for(report_dir: Path, result: dict, exposure: float) -> np.ndarray 
     return returns * exposure
 
 
+def _returns_series(report_dir: Path, result: dict) -> pd.Series | None:
+    artifact = result.get("artifact")
+    if not artifact:
+        return None
+    root = report_dir.resolve()
+    path = (root / str(artifact)).resolve()
+    if not path.is_relative_to(root) or not path.is_file():
+        return None
+    try:
+        frame = pd.read_parquet(path)
+        equity = pd.to_numeric(frame["equity"], errors="coerce").dropna().astype(float)
+    except Exception:
+        return None
+    if len(equity) < 3:
+        return None
+    return equity.pct_change().dropna()
+
+
+def correlations(report_dir: str | Path, results: list[dict], *, threshold: float = 0.7) -> dict:
+    """Matriz de correlación diaria entre variantes únicas (sin duplicar escalas)."""
+    report_dir = Path(report_dir)
+    series: dict[str, pd.Series] = {}
+    seen: set[str] = set()
+    for rank, result in enumerate(results, 1):
+        key = json.dumps(
+            [result.get("symbol"), result.get("strategy"), result.get("params")],
+            sort_keys=True,
+            ensure_ascii=False,
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        values = _returns_series(report_dir, result)
+        if values is None:
+            continue
+        label = f"#{rank} {result.get('symbol')} {result.get('strategy')} x{result.get('exposure', 1):g}"
+        series[label] = values
+    if len(series) < 2:
+        return {"labels": [], "matrix": [], "high_pairs": [], "threshold": threshold}
+    frame = pd.concat(series, axis=1, join="inner").dropna()
+    if frame.empty:
+        return {"labels": [], "matrix": [], "high_pairs": [], "threshold": threshold}
+    matrix = frame.corr()
+    labels = list(matrix.columns)
+    high_pairs = []
+    for i, left in enumerate(labels):
+        for right in labels[i + 1 :]:
+            value = float(matrix.loc[left, right])
+            if abs(value) > threshold:
+                high_pairs.append({"a": left, "b": right, "corr": value})
+    high_pairs.sort(key=lambda item: abs(item["corr"]), reverse=True)
+    return {
+        "labels": labels,
+        "matrix": [[round(float(value), 4) for value in row] for row in matrix.to_numpy()],
+        "high_pairs": high_pairs,
+        "threshold": threshold,
+    }
+
+
 def _row(result: dict, *, rank: int, exposure: float, horizon: int, mc: dict | None) -> dict:
     base = {
         "rank": rank,
@@ -164,6 +223,7 @@ def matrix(
         "horizons": list(horizons),
         "exposures": list(exposures),
         "firms": firms,
+        "correlations": correlations(report_dir, results),
         "required_22d": required_22d(report_dir, paths=max(2_000, paths))
         if include_required
         else {},
@@ -284,6 +344,21 @@ def render_markdown(payload: dict) -> str:
             lines.append("")
 
     required = payload.get("required_22d") or {}
+    corr = payload.get("correlations") or {}
+    if corr.get("labels"):
+        lines += [
+            "## Correlación entre bots",
+            "",
+            f"Umbral de aviso: |correlación| > {corr.get('threshold', 0.7):.1f}.",
+            "",
+        ]
+        if corr.get("high_pairs"):
+            lines += ["| Bot A | Bot B | Correlación |", "|---|---|---|"]
+            for pair in corr["high_pairs"]:
+                lines.append(f"| {pair['a']} | {pair['b']} | {pair['corr']:.3f} |")
+        else:
+            lines.append("Ningún par supera el umbral de 0,7.")
+        lines.append("")
     if required:
         lines += [
             "## Requerido para pasar en 22 días",

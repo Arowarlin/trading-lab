@@ -16,6 +16,8 @@ from .indicators import atr
 from .intel.calendar import calendar_block_for_settings, rules_from_settings
 from .killswitch import allows_order
 from .killswitch import ensure as ensure_killswitch
+from .profiles import BotProfile, load_profiles
+from .prop.guard import AccountSnapshot, PropGuard, evaluate_account
 from .risk import check_order, size_position
 from .session import session_block
 from .strategies import STRATEGIES
@@ -32,6 +34,7 @@ class BotSpec:
     universe: list[str]
     timeframe: str = "1d"
     enabled: bool = False
+    profile: str | None = None
     params: dict = field(default_factory=dict)
     description: str = ""
     exposure: float = 1.0
@@ -74,6 +77,7 @@ def load_bots(path: Path | None = None) -> list[BotSpec]:
                 universe=[t.upper() for t in item.get("universe", [])],
                 timeframe=item.get("timeframe", "1d"),
                 enabled=bool(item.get("enabled", False)),
+                profile=item.get("profile"),
                 params=item.get("params", {}) or {},
                 description=item.get("description", ""),
                 exposure=float(item.get("exposure", 1.0)),
@@ -88,6 +92,24 @@ def _filtered_params(func, params: dict) -> dict:
     return {k: v for k, v in params.items() if k in allowed}
 
 
+def _trades_today(bot: str) -> int:
+    """Cuenta órdenes del bot en la fecha UTC actual."""
+    try:
+        with connect(DEFAULT_DB) as con:
+            row = con.execute(
+                "SELECT COUNT(*) AS n FROM orders WHERE bot = ? AND ts >= ?",
+                (bot, utcnow()[:10]),
+            ).fetchone()
+        return int(row["n"])
+    except Exception:
+        return 0
+
+
+def _open_risk_usd(positions: list[dict]) -> float:
+    """Estimación conservadora del riesgo abierto (2% del nocional)."""
+    return sum(abs(float(p.get("value") or 0.0)) * 0.02 for p in positions)
+
+
 def run_bot(
     spec: BotSpec,
     settings: Settings,
@@ -95,6 +117,7 @@ def run_bot(
     *,
     dry_run: bool = False,
     start: str | None = None,
+    profile: BotProfile | None = None,
 ) -> list[BotAction]:
     """Evalúa un bot sobre su universo y ejecuta (o simula) los cambios."""
     if spec.strategy not in STRATEGIES:
@@ -117,6 +140,24 @@ def run_bot(
         tz=settings.timezone,
     )
     prop_rules = rules_from_settings(settings)
+    open_risk_usd = _open_risk_usd(snap.get("positions") or [])
+    trades_today = _trades_today(spec.id)
+    opened_today = 0
+    opened_risk = 0.0
+    try:
+        account_state = PropGuard.state_from_equity(
+            prop_rules,
+            broker.equity_series(),
+            initial_balance=prop_rules.account_size,
+            open_positions=len(snap.get("positions") or []),
+        )
+        day_start_equity = account_state.day_start_equity
+        peak_equity = account_state.peak_equity or snap["equity"]
+        realized_today = account_state.closed_pnl_today
+    except Exception:
+        day_start_equity = snap["equity"]
+        peak_equity = snap["equity"]
+        realized_today = 0.0
     session = session_block(
         prop_rules,
         asset_class="equity",
@@ -173,6 +214,12 @@ def run_bot(
             desired = 0
         if flatten_session:
             desired = 0
+        risk_per_share = max(atr_value * settings.risk.atr_stop_mult, price * 0.005)
+        if profile is not None and risk_per_share > 0:
+            desired = min(
+                desired,
+                int(snap["equity"] * profile.max_risk_pct / risk_per_share),
+            )
 
         delta = int(desired - held)
         action = BotAction(spec.id, ticker, target, price, held, desired, delta, "sin_cambios")
@@ -228,6 +275,35 @@ def run_bot(
             continue
 
         if delta > 0:
+            proposed_risk = abs(delta) * risk_per_share
+            account_guard = evaluate_account(
+                prop_rules,
+                AccountSnapshot(
+                    equity=snap["equity"],
+                    day_start_equity=day_start_equity,
+                    initial_balance=prop_rules.account_size,
+                    peak_equity=peak_equity,
+                    realized_pnl_today=realized_today,
+                    open_positions=len(snap.get("positions") or []),
+                    open_risk_usd=open_risk_usd + opened_risk,
+                    trades_today=trades_today + opened_today,
+                ),
+                max_risk_pct=profile.max_risk_pct if profile else None,
+                max_trades_per_day=profile.max_trades_per_day if profile else None,
+                proposed_risk_usd=proposed_risk,
+            )
+            if not account_guard.allowed:
+                action.status = "bloqueado"
+                action.detail = f"guard de cuenta: {account_guard.reason}"
+                actions.append(action)
+                send_alert(
+                    "account_guard_block",
+                    f"{spec.id}/{ticker}: {account_guard.reason}",
+                    severity="warning",
+                )
+                continue
+
+        if delta > 0:
             check = check_order(
                 equity=snap["equity"],
                 cash=snap["cash"],
@@ -263,6 +339,9 @@ def run_bot(
             )
             action.status = "ejecutado"
             action.order = order
+            if delta > 0:
+                opened_risk += abs(delta) * risk_per_share
+                opened_today += 1
         except Exception as exc:
             action.status = "error"
             action.detail = str(exc)[:200]
@@ -279,8 +358,12 @@ def run_all(
     only: str | None = None,
     dry_run: bool = False,
     include_disabled: bool = False,
+    now: datetime | None = None,
+    profiles: dict[str, BotProfile] | None = None,
 ) -> list[BotAction]:
     actions: list[BotAction] = []
+    current = now or datetime.now(timezone.utc)
+    profile_map = profiles if profiles is not None else load_profiles()
     for spec in load_bots():
         if only and spec.id != only:
             continue
@@ -290,7 +373,15 @@ def run_all(
             continue
         if spec.type not in ("deterministic", "hybrid"):
             continue
-        actions.extend(run_bot(spec, settings, broker, dry_run=dry_run))
+        profile = profile_map.get(spec.profile or "")
+        if profile is None:
+            # Regla dura: un bot sin perfil (o con perfil desconocido) no corre.
+            continue
+        if not profile.schedule.allows(current):
+            continue
+        actions.extend(
+            run_bot(spec, settings, broker, dry_run=dry_run, profile=profile)
+        )
     return actions
 
 

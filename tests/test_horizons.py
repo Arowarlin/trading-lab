@@ -29,7 +29,7 @@ def _report(tmp_path: Path, *, missing: bool = False) -> Path:
                 "id": f"bot-{i}",
                 "symbol": "QQQ",
                 "strategy": "trend",
-                "params": {"fast": 50, "slow": 200},
+                "params": {"fast": 50 + i * 10, "slow": 200},
                 "num_trades": 25,
                 "score": 1.0 - i * 0.1,
                 "artifact": f"artifacts/{name}" if not missing else f"artifacts/missing{i}.parquet",
@@ -81,6 +81,25 @@ def test_matrix_marca_sin_datos(tmp_path):
     assert cell["status"] == "sin datos"
     md = render_markdown(payload)
     assert "sin datos" in md
+
+
+def test_correlacion_avisa_si_supera_07(tmp_path):
+    report_dir = _report(tmp_path)
+    artifacts = report_dir / "artifacts"
+    first = pd.read_parquet(artifacts / "a0.parquet")
+    first.to_parquet(artifacts / "a1.parquet")
+    payload = matrix(
+        report_dir,
+        top=2,
+        paths=20,
+        horizons=(22,),
+        exposures=(1.0,),
+        include_required=False,
+    )
+    corr = payload["correlations"]
+    assert corr["labels"]
+    assert any(abs(pair["corr"]) > 0.7 for pair in corr["high_pairs"])
+    assert "Correlación entre bots" in render_markdown(payload)
 
 
 def test_required_22d_estructura(monkeypatch, tmp_path):

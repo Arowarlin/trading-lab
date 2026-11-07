@@ -1,0 +1,53 @@
+# Perfiles de bots por clase de activo.
+# Valores de plantilla: verifica cada límite con tu firma/contrato.
+profiles:
+  swing_equity:
+    description: "Swing de acciones/ETF; señal diaria tras el cierre de EE. UU."
+    timeframe: "1d"
+    schedule:
+      tz: "America/New_York"
+      start: "00:00"
+      end: "23:59"
+      days: ["Mon", "Tue", "Wed", "Thu", "Fri"]
+    max_risk_pct: 0.005
+    max_trades_per_day: 1
+    validation:
+      min_trades: 20
+      min_dsr: 0.90
+      max_pbo: 0.30
+      require_walk_forward: true
+      require_regimes: true
+
+  intraday_fx:
+    description: "Intradía forex/CFD; sesión europea/americana."
+    timeframe: "M15"
+    schedule:
+      tz: "Europe/Prague"
+      start: "08:00"
+      end: "21:00"
+      days: ["Mon", "Tue", "Wed", "Thu", "Fri"]
+    max_risk_pct: 0.0025
+    max_trades_per_day: 4
+    validation:
+      min_trades: 100
+      min_dsr: 0.90
+      max_pbo: 0.30
+      require_walk_forward: true
+      require_regimes: true
+
+  intraday_futures:
+    description: "Intradía de futuros; RTH de Chicago. Solo diseño por ahora."
+    timeframe: "M15"
+    schedule:
+      tz: "America/Chicago"
+      start: "08:30"
+      end: "15:00"
+      days: ["Mon", "Tue", "Wed", "Thu", "Fri"]
+    max_risk_pct: 0.0025
+    max_trades_per_day: 3
+    validation:
+      min_trades: 80
+      min_dsr: 0.90
+      max_pbo: 0.30
+      require_walk_forward: true
+      require_regimes: true

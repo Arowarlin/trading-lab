@@ -2433,6 +2433,22 @@ function renderHorizons(h) {
     }
   }
   const required = h.required_22d;
+  const corr = h.correlations;
+  if (corr?.labels?.length) {
+    html += `<details class="horizon-block"><summary>Correlación entre bots · umbral ${pct(corr.threshold, 0)}</summary>`;
+    if (corr.high_pairs?.length) {
+      html += `<div class="note">Pares con |correlación| > ${pct(corr.threshold, 0)}: ` +
+        corr.high_pairs.map((p) => `${esc(p.a)} ↔ ${esc(p.b)} (${num(p.corr, 3)})`).join(" · ") + `</div>`;
+    } else {
+      html += `<div class="note">Ningún par supera ${pct(corr.threshold, 0)}.</div>`;
+    }
+    const rows = corr.matrix.map((row, i) => [
+      `<b>${esc(corr.labels[i])}</b>`,
+      ...row.map((v) => `<span class="${Math.abs(v) > (corr.threshold || 0.7) ? "trend-down" : "muted"}">${num(v, 2)}</span>`),
+    ]);
+    html += grid([{ label: "Bot" }, ...corr.labels.map((_, i) => ({ label: String(i + 1), num: true }))], rows, { empty: "sin datos" });
+    html += `</details>`;
+  }
   if (required?.firms?.length) {
     html += `<details class="horizon-block"><summary>Requerido para 22d · pass ≥ ${pct(required.min_pass_rate, 0)} · breach < ${pct(required.max_breach_rate, 0)}</summary>`;
     for (const firm of required.firms) {
