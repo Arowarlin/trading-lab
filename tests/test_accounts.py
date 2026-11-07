@@ -12,7 +12,7 @@ from tradinglab.accounts import (
     own_limits,
     set_limits,
 )
-from tradinglab.f13 import config_hash, freeze
+from tradinglab.f13 import config_check, config_hash, freeze
 from tradinglab.prop.guard import AccountLimits, AccountSnapshot, evaluate_account
 from tradinglab.prop.rules import from_yaml
 
@@ -120,14 +120,17 @@ def test_f13_congelado_solo_aprieta(tmp_path):
 
 
 def test_editar_limites_no_cambia_hash_f13(tmp_path):
-    before = config_hash()
+    db = tmp_path / "lab.db"
+    before = config_check(db)
     set_limits(
-        tmp_path / "lab.db",
+        db,
         account_id="paper_main",
         changes={"daily_loss_pct": 0.04},
         accounts=load_accounts(),
     )
-    assert config_hash() == before
+    after = config_check(db)
+    assert after["status"] == "not_started"
+    assert after["current"] == before["current"] == config_hash()
 
 
 def test_tres_bots_misma_cuenta_y_dos_cuentas(tmp_path):

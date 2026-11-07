@@ -77,6 +77,7 @@ alerts_app = typer.Typer(
 f13_app = typer.Typer(no_args_is_help=True, help="F13: pilot operativo de paper y criterios.")
 bots_app = typer.Typer(no_args_is_help=True, help="Bots: listar, evaluar, proponer, archivar.")
 decisions_app = typer.Typer(no_args_is_help=True, help="Decisiones LLM: resultados y líneas base.")
+fund_app = typer.Typer(no_args_is_help=True, help="Fondo: cuentas, límites e historial.")
 intel_app = typer.Typer(no_args_is_help=True, help="Información continua: RSS, saneado y estado.")
 sec_app = typer.Typer(no_args_is_help=True, help="SEC EDGAR: CIK, filings y company facts.")
 app.add_typer(mt5_app, name="mt5")
@@ -87,6 +88,7 @@ app.add_typer(alerts_app, name="alerts")
 app.add_typer(f13_app, name="f13")
 app.add_typer(bots_app, name="bots")
 app.add_typer(decisions_app, name="decisions")
+app.add_typer(fund_app, name="fund")
 app.add_typer(intel_app, name="intel")
 app.add_typer(sec_app, name="sec")
 console = Console()
@@ -1794,6 +1796,106 @@ def intel_calendar_cmd(
         console.print(
             "[yellow]Sin datos fiables: el blackout bloqueará aperturas si está activado.[/yellow]"
         )
+
+
+@fund_app.command("accounts")
+def fund_accounts_cmd() -> None:
+    """Lista cuentas y límites efectivos (firma + propios)."""
+    from .accounts import effective_limits, load_accounts
+
+    accounts = load_accounts()
+    t = Table(title="Cuentas del fondo")
+    for col in ("ID", "Tipo", "Firma", "Estado", "Diario", "MaxDD", "Trade", "Abierto", "Trades/día"):
+        t.add_column(col, justify="right" if col not in ("ID", "Tipo", "Firma", "Estado") else "left")
+    for account in accounts.values():
+        limits = effective_limits(DEFAULT_DB, account)
+        t.add_row(
+            account.id,
+            account.type,
+            account.firm or "—",
+            account.status,
+            f"{limits.daily_loss_pct:.2%}",
+            f"{limits.max_drawdown_pct:.2%}",
+            f"{limits.per_trade_risk_pct:.2%}",
+            f"{limits.max_open_risk_pct:.2%}",
+            str(limits.max_trades_per_day),
+        )
+    console.print(t)
+
+
+@fund_app.command("set")
+def fund_set_cmd(
+    account: str = typer.Argument(...),
+    daily_loss: float = typer.Option(None, "--daily-loss", help="Fracción, ej. 0.03"),
+    max_drawdown: float = typer.Option(None, "--max-drawdown", help="Fracción, ej. 0.08"),
+    per_trade_risk: float = typer.Option(None, "--per-trade-risk", help="Fracción, ej. 0.005"),
+    max_open_risk: float = typer.Option(None, "--max-open-risk", help="Fracción, ej. 0.015"),
+    max_trades: int = typer.Option(None, "--max-trades", help="Operaciones máximas/día"),
+    confirm: bool = typer.Option(False, "--confirm", help="Confirmar aflojamiento"),
+) -> None:
+    """Edita límites propios en SQLite; nunca toca prop.yaml."""
+    from .accounts import set_limits
+
+    changes = {
+        key: value
+        for key, value in {
+            "daily_loss_pct": daily_loss,
+            "max_drawdown_pct": max_drawdown,
+            "per_trade_risk_pct": per_trade_risk,
+            "max_open_risk_pct": max_open_risk,
+            "max_trades_per_day": max_trades,
+        }.items()
+        if value is not None
+    }
+    result = set_limits(
+        DEFAULT_DB,
+        account_id=account,
+        changes=changes,
+        origin="cli",
+        confirm=confirm,
+    )
+    if not result["ok"]:
+        for error in result["errors"]:
+            console.print(f"[red]{error}[/red]")
+        raise typer.Exit(2)
+    if not result["changes"]:
+        console.print("[dim]Sin cambios.[/dim]")
+        return
+    t = Table(title=f"Límites actualizados · {account}")
+    for col in ("Campo", "Antes", "Después", "Efectivo desde", "Tipo"):
+        t.add_column(col)
+    for change in result["changes"]:
+        t.add_row(
+            change["field"],
+            f"{change['old']:.4g}",
+            f"{change['new']:.4g}",
+            change["effective_from"],
+            "aflojar" if change["loosening"] else "apretar",
+        )
+    console.print(t)
+    if result["pending"]:
+        console.print("[yellow]Aflojamiento pendiente: aplica desde el siguiente día hábil.[/yellow]")
+
+
+@fund_app.command("history")
+def fund_history_cmd(account: str = typer.Argument(...)) -> None:
+    """Historial de cambios de límites propios."""
+    from .accounts import history
+
+    rows = history(DEFAULT_DB, account)
+    t = Table(title=f"Historial de límites · {account}")
+    for col in ("Fecha", "Campo", "Antes", "Después", "Origen", "Efectivo desde"):
+        t.add_column(col)
+    for row in rows:
+        t.add_row(
+            str(row["ts"]),
+            str(row["field"]),
+            f"{row['old_value']}",
+            f"{row['new_value']}",
+            str(row["origin"]),
+            str(row["effective_from"]),
+        )
+    console.print(t)
 
 
 @decisions_app.command("update")
