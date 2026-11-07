@@ -756,6 +756,10 @@
         <div id="research-horizons"></div>
       </div>
       <div class="panel" style="margin-bottom:14px">
+        <div class="panel-head"><h2>Intradía FX/CFD</h2><span class="muted tiny" id="intraday-meta"></span></div>
+        <div id="research-intraday"></div>
+      </div>
+      <div class="panel" style="margin-bottom:14px">
         <div class="panel-head"><h2>Ranking de estrategias</h2><span class="muted tiny" id="research-meta"></span></div>
         <div id="research-top"></div>
       </div>
@@ -2379,6 +2383,7 @@ function renderResearch() {
   ], near, { empty: "Sin casi propuestas." });
 
   renderHorizons(r.horizons);
+  renderIntraday(r.intraday);
 
   [
     ["#research-top", r.results || []],
@@ -2467,6 +2472,37 @@ function renderHorizons(h) {
     html += `<div class="note">${esc(required.assumption || "")}</div></details>`;
   }
   box.innerHTML = html;
+}
+
+function renderIntraday(i) {
+  const box = $("#research-intraday");
+  const meta = $("#intraday-meta");
+  if (!box) return;
+  if (!i || !i.outcomes) {
+    box.innerHTML = `<div class="empty">sin datos. Ejecuta <code>lab mt5 fetch EURUSD --timeframe M15</code> y <code>lab research-intraday</code>.</div>`;
+    if (meta) meta.textContent = "sin tabla";
+    return;
+  }
+  if (meta) {
+    meta.textContent = `${i.symbol} · ${i.timeframe} · ${i.bars?.rows || 0} barras · ${i.bars?.years || 0} años · spread ${i.spread_reliable ? "ok" : "NO confiable"}`;
+  }
+  const rows = (i.outcomes || []).map((r) => [
+    `<b>${esc(r.strategy)}</b> <span class="muted tiny">${esc(paramsText(r.params))}</span>`,
+    num(r.metrics?.num_trades, 0),
+    num(r.metrics?.sharpe, 2),
+    pct(r.metrics?.max_drawdown, 1),
+    pct(r.dsr, 1),
+    esc(r.wf_verdict || "—"),
+    r.regime_gate?.passed ? `<span class="tag green">ok</span>` : `<span class="tag red">no</span>`,
+    r.spread_reliable ? `<span class="tag green">sí</span>` : `<span class="tag red">no</span>`,
+    r.passed ? `<span class="tag green">sí</span>` : `<span class="tag">no</span>`,
+  ]);
+  box.innerHTML = `<div class="note" style="margin:0 0 8px">Pasan <b>${fmtInt.format(i.passed || 0)}</b> / ${fmtInt.format((i.outcomes || []).length)} · PBO ${pct(i.pbo?.pbo, 1)} · WF ${esc(i.walk_forward_verdict || "—")} · DSR n=${fmtInt.format(i.n_trials || 0)}. ${i.spread_reliable ? "" : "<b>Sin spread realista: resultados no confiables.</b>"}</div>` +
+    grid([
+      { label: "Estrategia" }, { label: "Trades", num: true }, { label: "Sharpe", num: true },
+      { label: "MaxDD", num: true }, { label: "DSR", num: true }, { label: "WF" },
+      { label: "Régimen" }, { label: "Spread" }, { label: "Pasa" },
+    ], rows, { empty: "sin datos" });
 }
 
 function showResearchDetail(row) {

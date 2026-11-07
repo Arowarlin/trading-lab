@@ -241,6 +241,8 @@ Unregister-ScheduledTask -TaskName "TradingLab-Web" -Confirm:$false
   auditoría de `pixel-hedge-fund` (sin licencia; solo inspiración),
   `company-pixel-office` (MIT; idea de roster) y `FinRobot` (Apache-2.0;
   principio de cálculo determinista + narración LLM).
+- [`docs/fase6_futuros_intradia.md`](docs/fase6_futuros_intradia.md): diseño de
+  futuros intradía, perfil, stub ProjectX y validación parcial con ES=F/NQ=F.
 - [`docs/fred_calendar.md`](docs/fred_calendar.md): verificación de FRED,
   release IDs de CPI/NFP, fechas futuras, limitación de hora y fallback stale.
 - [`docs/auditoria-repos-2026-11-07.md`](docs/auditoria-repos-2026-11-07.md):
@@ -488,6 +490,19 @@ cada valor en el contrato vigente de tu firma.
 - **rollover** (`rollover_blackout_min`): bloquea aperturas alrededor del cierre
   diario del servidor en futuros/CFD.
 
+### Perfiles y guard de cuenta
+
+`config/profiles.yaml` define `swing_equity`, `intraday_fx` e
+`intraday_futures` con temporalidad, horario, riesgo máximo por operación,
+máximo de operaciones diarias y criterios mínimos de validación. Cada bot de
+`config/bots.yaml` declara su `profile`; **sin perfil no se ejecuta**.
+
+`evaluate_account()` suma el riesgo abierto de todos los bots de la misma
+cuenta y el riesgo propuesto antes de cada apertura, además de las pérdidas
+agregadas del día. Cerrar o reducir siempre está permitido. El informe
+`horizons.json` incluye la matriz de correlación diaria entre bots y avisa de
+los pares con |correlación| > 0,7.
+
 `friday_cutoff_hour` se interpreta en la zona local de la firma
 (`reset_tz`, por defecto `Europe/Prague`) y cubre los cambios de hora. Cerrar o
 reducir posiciones **nunca** se bloquea, ni por calendario ni por sesión.
@@ -578,6 +593,39 @@ Para enviar de verdad hay que añadir `--execute`. Una cuenta real exige además
   cada valor en el contrato vigente antes de usarlo.
 - Pendiente: descarga de barras vía `/api/History/retrieveBars` para backtest
   de futuros.
+
+---
+
+## 6c. Intradía forex/CFD (`lab mt5 fetch` / `lab research-intraday`)
+
+La infraestructura está implementada, pero **la descarga M15 real está
+bloqueada ahora mismo**: el terminal FTMO demo está conectado y el mercado
+cerrado, y no hay offset de servidor cacheado (`offset_source=unknown`). No se
+inventa el offset ni se descargan datos de otra fuente.
+
+```powershell
+# con el mercado abierto y offset resuelto:
+lab mt5 fetch EURUSD --timeframe M15 --bars 50000
+lab mt5 fetch EURUSD --timeframe H1 --bars 20000
+lab research-intraday --symbol EURUSD --timeframe M15
+```
+
+- Cachea velas ya corregidas a UTC por `MT5Broker.rates` en
+  `data/cache/mt5/EURUSD_M15.parquet`.
+- Modela spread por hora desde la columna `spread`, más slippage conservador y
+  comisión. Si no hay spread realista, marca `spread_reliable=false` y los
+  resultados como **no confiables**.
+- Estrategias: ruptura de rango de apertura (Londres/NY), tendencia con
+  retroceso y reversión del rango asiático; cada una con rejilla acotada.
+- Pasa por DSR, PBO, walk-forward y regímenes con los mismos umbrales; reporta
+  trades y cuántas pasan (puede ser cero). Monte Carlo a 22/44/120 días.
+
+Los tests usan datos sintéticos. El informe real `intraday.md/json` se generará
+cuando MT5 pueda determinar el offset con el mercado abierto o se configure
+`mt5.server_utc_offset_hours` verificado.
+
+Futuros intradía: perfil definido y proveedor ProjectX como **stub**; no se
+implementa descarga de pago. Ver `docs/fase6_futuros_intradia.md`.
 
 ---
 

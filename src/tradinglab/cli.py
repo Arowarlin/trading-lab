@@ -2296,6 +2296,37 @@ def mt5_close(
     console.print(f"[green]Cerrada[/green] {result}")
 
 
+@mt5_app.command("fetch")
+def mt5_fetch_cmd(
+    symbol: str = typer.Argument("EURUSD", help="Par o instrumento"),
+    timeframe: str = typer.Option("M15", "--timeframe", help="M15, H1, H4..."),
+    bars: int = typer.Option(50_000, "--bars", help="Velas a descargar (lectura)"),
+) -> None:
+    """Cachea velas MT5 corregidas a UTC en parquet. No envía órdenes."""
+    from .intraday import cache_metadata, save_bars
+
+    settings = get_settings()
+    broker = _mt5(settings, dry_run=True)
+    try:
+        df = broker.rates(symbol, timeframe, bars)
+    except Exception as exc:
+        console.print(f"[red]No se pudo leer MT5:[/red] {exc}")
+        raise typer.Exit(1)
+    finally:
+        broker.shutdown()
+    path = save_bars(df, settings.data.cache_dir, symbol, timeframe)
+    meta = cache_metadata(df, timeframe)
+    console.print(
+        Panel(
+            f"{symbol} · {timeframe}\n"
+            f"Barras: {meta['rows']:,}\n"
+            f"Rango: {meta['start']} → {meta['end']} ({meta['years']} años)\n"
+            f"Caché: {path}",
+            title="MT5 fetch (solo lectura)",
+        )
+    )
+
+
 # ==================================================================== Fondeo
 
 @mt5_app.command("run")
@@ -2944,6 +2975,46 @@ def research_horizons_cmd(
     for firm in payload["firms"]:
         console.print(f"[dim]{firm['name']}: {len(firm['variants'])} variantes × "
                       f"{len(payload['exposures'])} exposiciones.[/dim]")
+
+
+@app.command("research-intraday")
+def research_intraday_cmd(
+    symbol: str = typer.Option("EURUSD", "--symbol"),
+    timeframe: str = typer.Option("M15", "--timeframe"),
+    paths: int = typer.Option(500, "--paths"),
+    point: float = typer.Option(0.0001, "--point"),
+    out: str = typer.Option(None, "--out"),
+) -> None:
+    """Valida estrategias intradía sobre caché MT5 (DSR/PBO/WF/regímenes)."""
+    from .intraday import load_bars, run_intraday, write
+
+    settings = get_settings()
+    try:
+        df = load_bars(settings.data.cache_dir, symbol, timeframe)
+    except FileNotFoundError as exc:
+        console.print(f"[red]{exc}[/red] Ejecuta: lab mt5 fetch {symbol} --timeframe {timeframe}")
+        raise typer.Exit(1)
+    report = run_intraday(
+        df,
+        symbol=symbol,
+        timeframe=timeframe,
+        paths=paths,
+        point=point,
+    )
+    files = write(report, Path(out) if out else ROOT / "reports" / "research")
+    console.print(
+        Panel(
+            f"{symbol} · {timeframe} · {report['bars']['rows']:,} barras "
+            f"({report['bars']['years']} años)\n"
+            f"Spread confiable: {'sí' if report['spread_reliable'] else 'NO'}\n"
+            f"PBO: {report['pbo']['pbo']:.1%}" if report.get("pbo") else
+            f"{symbol} · {timeframe} · PBO sin datos",
+            title="Intradía FX/CFD",
+        )
+    )
+    console.print(
+        f"Pasan {report['passed']}/{len(report['outcomes'])} · {files['md']}"
+    )
 
 
 # ==================================================================== Futuros

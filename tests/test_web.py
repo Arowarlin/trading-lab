@@ -34,6 +34,7 @@ def test_index_disponible() -> None:
     assert "view-repos" in text
     assert "command-palette" in text
     assert "research-horizons" in text
+    assert "research-intraday" in text
 
 
 def test_account_lee_sqlite(tmp_path: Path) -> None:
