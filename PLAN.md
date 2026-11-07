@@ -284,6 +284,31 @@ confirmación en dos pasos, guards equivalentes a la CLI y auditoría.
 - [x] **11.5 Tests y documentación** — 2026-11-07
   - `pytest tests/test_operator.py -q` → 11 passed; suite completa y README 6f.
 
+## Fase 12 — Shell de consola y dashboard (etapa 1)
+
+Objetivo: barra lateral oscura colapsable por secciones y dashboard operativo,
+sin romper vistas ni añadir dependencias.
+
+- [x] **12.1 Navegación por secciones** — 2026-11-07
+  - Secciones: Principal, Laboratorio, Portafolios, Riesgo y fondeo,
+    Inteligencia y Sistema.
+  - Se conservan las 14 vistas actuales, incluidas Fondo, Diario y Operador.
+  - Colapso icon-only persistido en `localStorage`; en móvil vuelve a barra
+    horizontal.
+- [x] **12.2 Dashboard** — 2026-11-07
+  - Tarjetas KPI (incluye PnL del mes), distribución cash/posiciones y por
+    cuenta, top performers por Sharpe y calendario mensual de PnL con navegación
+    de mes.
+  - Si no hay datos: **Sin datos**.
+- [x] **12.3 Restricciones de consola** — 2026-11-07
+  - Sin CDNs, frameworks, logos ni textos de terceros; HTML/CSS/JS propio.
+  - Se mantienen CSRF, Host/Origin, `WRITE_ROUTES`, Fondo/Diario/Operador y
+    todas las rutas.
+- [x] **12.4 Tests y documentación** — 2026-11-07
+  - `pytest tests/test_console_shell.py -q` → 3 passed; `test_web.py` añade
+    datos sintéticos de equity/evaluación para el dashboard.
+  - README 6g y PLAN Fase 12.
+
 ---
 
 ## Registro de evidencias
@@ -326,4 +351,5 @@ confirmación en dos pasos, guards equivalentes a la CLI y auditoría.
 | 2026-11-07 | E6 documentación | README 6d y Fase 9; tabla por perfil en Research; `ruff` + doctor |
 | 2026-11-07 | 10.1 Diario | `pytest tests/test_journal.py -q` → 7 passed; `lab journal` → sin datos; README 6e |
 | 2026-11-07 | 11 Modo operador | `pytest tests/test_operator.py -q` → 11 passed; 2 pasos/PIN/keyring/auditoría; README 6f |
+| 2026-11-07 | 12 Shell consola | `pytest tests/test_console_shell.py -q` → 3 passed; `pytest -q` → 272 passed; 6 secciones, 14 vistas, dashboard; README 6g |
 |  |  |  |

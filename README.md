@@ -186,7 +186,7 @@ Qué muestra:
 
 | Pestaña | Contenido |
 |---|---|
-| **Resumen** | equity, cash, retorno, drawdown, curva de equity, pipeline datos→señal→riesgo→ejecución, calendario macro, estado de LM Studio/MT5/FTMO, tareas programadas, últimas decisiones y órdenes. |
+| **Dashboard** | KPIs, distribución cash/posiciones, top performers de bots, calendario mensual de PnL, curva de equity, pipeline datos→señal→riesgo→ejecución, calendario macro, estado de LM Studio/MT5/FTMO, tareas programadas, últimas decisiones y órdenes. |
 | **Mercado** | watchlist desde caché local, sparklines, breadth, retorno 1/5/20d y detalle por activo. **No descarga datos.** |
 | **Sala** | oficina pixel con los 10 roles de TradingAgents, estados en vivo, burbujas, tablero y acceso al detalle de cada rol. |
 | **Cuentas** | paper interno, Alpaca paper, FTMO demo y TopstepX/ProjectX, con equity, cash, posiciones y estado. |
@@ -836,6 +836,43 @@ Evidencia: `pytest tests/test_operator.py -q` → **11 passed**; cubre sin armar
 (403), PIN incorrecto/bloqueo, live/plantilla rechazadas, orden fuera de límite,
 cierre con kill-switch activo, token caducado/reutilizado, F13 intacto y
 auditoría sin secretos.
+
+---
+
+## 6g. Shell de consola y dashboard
+
+La barra lateral es oscura, **colapsable** (icono-only) y recuerda el estado en
+`localStorage`. Agrupa todas las vistas existentes en seis secciones:
+
+| Sección | Vistas |
+|---|---|
+| **Principal** | Dashboard, Mercado |
+| **Laboratorio** | Bots, Research, Agentes |
+| **Portafolios** | Cuentas, Fondo, Diario |
+| **Riesgo y fondeo** | Riesgo, Operador |
+| **Inteligencia** | Sala, Decisiones |
+| **Sistema** | Repos, Registros |
+
+El **Dashboard** mantiene la curva de equity, pipeline, calendario macro,
+sistema, agentes y órdenes, y añade:
+
+- **Tarjetas KPI** con equity, cash, posiciones, retorno, PnL del mes, MaxDD y
+  llamadas LLM. Si falta un dato: **Sin datos**.
+- **Distribución de balance**: barra cash vs posiciones y, si hay equity
+  reportado, desglose por cuenta (Fondo).
+- **Top performers**: bots evaluados ordenados por Sharpe, con retorno, MaxDD y
+  trades. Sin evaluaciones → **Sin datos**.
+- **Calendario mensual de PnL**: deriva el PnL diario de los cierres de equity,
+  permite mes anterior/siguiente y marca días positivos/negativos. Sin al menos
+  dos cierres diarios → **Sin datos**.
+
+No hay CDNs, frameworks, logos ni textos de terceros; solo HTML/CSS/JS propio,
+stdlib y `127.0.0.1`. Se conservan todas las pestañas, rutas, CSRF, Host/Origin
+y la lista blanca `WRITE_ROUTES`.
+
+Evidencia: `pytest tests/test_console_shell.py -q` → **3 passed**; suite completa
+**272 passed**; cubre las seis secciones, las 14 vistas actuales, los
+componentes del dashboard y la ausencia de URLs externas/CDNs.
 
 ---
 

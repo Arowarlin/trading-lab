@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import threading
 import urllib.request
 from datetime import UTC, datetime, timedelta
@@ -10,7 +11,7 @@ import pandas as pd
 import pytest
 
 from tradinglab import web
-from tradinglab.config import Settings
+from tradinglab.config import ROOT, Settings
 from tradinglab.db import connect, init_db, utcnow
 from tradinglab.intel.calendar import add_calendar_event
 
@@ -354,6 +355,51 @@ def test_research_detail_lee_artefacto(tmp_path: Path) -> None:
 
 
 @pytest.mark.network
+def test_overview_datos_para_dashboard(tmp_path: Path) -> None:
+    (tmp_path / "config").mkdir()
+    shutil.copy(ROOT / "config" / "bots.yaml", tmp_path / "config" / "bots.yaml")
+    db = tmp_path / "lab.db"
+    init_db(db)
+    with connect(db) as con:
+        con.execute(
+            "INSERT INTO equity(ts, cash, positions_value, equity) VALUES(?,?,?,?)",
+            ("2026-11-05T20:00:00+00:00", 90_000.0, 10_000.0, 100_000.0),
+        )
+        con.execute(
+            "INSERT INTO equity(ts, cash, positions_value, equity) VALUES(?,?,?,?)",
+            ("2026-11-06T20:00:00+00:00", 91_000.0, 10_500.0, 101_500.0),
+        )
+        con.execute(
+            "INSERT INTO bot_evaluations"
+            "(ts, bot, strategy, universe, params, exposure, start_date, end_date, "
+            "total_return, sharpe, max_drawdown, num_trades, win_rate, status, details) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (
+                utcnow(),
+                "trend-spy",
+                "trend",
+                "SPY",
+                "{}",
+                0.35,
+                "2015-01-01",
+                "2026-11-06",
+                0.81,
+                1.03,
+                -0.09,
+                42,
+                0.55,
+                "ok",
+                "",
+            ),
+        )
+
+    overview = _data(tmp_path, db).overview()
+    assert len(overview["account"]["equity_curve"]) == 2
+    bots = {bot["id"]: bot for bot in overview["bots"]}
+    assert bots["trend-spy"]["evaluation"]["sharpe"] == pytest.approx(1.03)
+    assert bots["trend-spy"]["evaluation"]["total_return"] == pytest.approx(0.81)
+
+
 def test_servidor_http_responde(tmp_path: Path) -> None:
     artifacts = tmp_path / "reports" / "research" / "artifacts"
     artifacts.mkdir(parents=True)

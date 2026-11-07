@@ -70,6 +70,23 @@
   .side-status .row { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
   .side-status .row b { color: var(--text); font-weight: 600; margin-left: auto; }
   .sidebar-footer { color: #63707f; font-size: 10.5px; line-height: 1.45; padding: 0 6px; }
+  .sidebar { transition: width .18s ease, flex-basis .18s ease, padding .18s ease; }
+  .sidebar-toggle {
+    appearance: none; border: 1px solid var(--border); background: var(--panel-2);
+    color: var(--muted); border-radius: 8px; padding: 6px 10px; cursor: pointer;
+    font: inherit; font-size: 13px; line-height: 1;
+  }
+  .sidebar-toggle:hover { color: var(--text); border-color: var(--border-soft); }
+  .app.sidebar-collapsed .sidebar { width: 76px; flex: 0 0 76px; padding: 22px 9px; }
+  .app.sidebar-collapsed .brand { justify-content: center; padding: 0; }
+  .app.sidebar-collapsed .brand-text,
+  .app.sidebar-collapsed .nav-label,
+  .app.sidebar-collapsed .sidebar-footer,
+  .app.sidebar-collapsed .side-status { display: none; }
+  .app.sidebar-collapsed .sidebar-toggle { padding: 6px 0; font-size: 0; }
+  .app.sidebar-collapsed .sidebar-toggle::after { content: "»"; font-size: 14px; }
+  .app.sidebar-collapsed .nav-btn { justify-content: center; padding: 10px 0; font-size: 0; gap: 0; }
+  .app.sidebar-collapsed .nav-btn .ico { font-size: 15px; width: auto; }
 
   /* --------------------------------------------------------------- main */
   main { flex: 1; min-width: 0; padding: 24px 28px 30px; max-width: 1600px; }
@@ -119,6 +136,29 @@
   .kpi .label { color: var(--muted); font-size: 10.5px; text-transform: uppercase; letter-spacing: .09em; }
   .kpi .value { font-size: 23px; font-weight: 650; margin-top: 5px; font-variant-numeric: tabular-nums; letter-spacing: -.4px; }
   .kpi .hint { color: #73808f; font-size: 11px; margin-top: 3px; }
+  .balance-bar { display: flex; height: 26px; border-radius: 8px; overflow: hidden; background: #0d141c; border: 1px solid var(--border); }
+  .balance-seg { height: 100%; min-width: 0; transition: width .25s ease; }
+  .balance-seg.cash { background: linear-gradient(90deg, #1f6feb, #58a6ff); }
+  .balance-seg.pos { background: linear-gradient(90deg, #238636, #7ee787); }
+  .balance-legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; font-size: 11.5px; color: var(--muted); }
+  .balance-legend span { display: flex; align-items: center; gap: 6px; }
+  .balance-swatch { width: 9px; height: 9px; border-radius: 3px; display: inline-block; }
+  .balance-swatch.cash { background: #58a6ff; }
+  .balance-swatch.pos { background: #7ee787; }
+  .balance-legend b { color: var(--text); font-variant-numeric: tabular-nums; }
+  .pnl-calendar { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; }
+  .pnl-weekday { text-align: center; color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .08em; padding: 2px 0; }
+  .pnl-day {
+    min-height: 58px; border: 1px solid var(--border-soft); border-radius: 8px;
+    padding: 5px 7px; background: var(--panel-2); display: flex; flex-direction: column;
+    justify-content: space-between; font-size: 11px;
+  }
+  .pnl-day.empty { background: transparent; border-color: transparent; }
+  .pnl-day .d { color: var(--muted); font-size: 10px; }
+  .pnl-day .v { font-weight: 650; font-variant-numeric: tabular-nums; }
+  .pnl-day.pos { background: rgba(63, 185, 80, .10); border-color: rgba(63, 185, 80, .30); }
+  .pnl-day.neg { background: rgba(248, 81, 73, .10); border-color: rgba(248, 81, 73, .30); }
+  .pnl-day.today { box-shadow: inset 0 0 0 1px rgba(88, 166, 255, .55); }
   .pos { color: var(--green) !important; }
   .neg { color: var(--red) !important; }
   .warn { color: var(--yellow) !important; }
@@ -449,6 +489,12 @@
   @media (max-width: 760px) {
     .app { flex-direction: column; }
     .sidebar { width: 100%; flex: none; height: auto; position: static; padding: 14px; gap: 12px; }
+    .app.sidebar-collapsed .sidebar { width: 100%; flex: none; padding: 14px; }
+    .app.sidebar-collapsed .brand-text,
+    .app.sidebar-collapsed .side-status { display: block; }
+    .app.sidebar-collapsed .nav-btn { font-size: inherit; justify-content: flex-start; padding: 9px 11px; gap: 10px; }
+    .app.sidebar-collapsed .nav-btn .ico { font-size: inherit; width: 18px; }
+    .app.sidebar-collapsed .sidebar-toggle { display: none; }
     nav { flex-direction: row; overflow-x: auto; padding-bottom: 2px; }
     .nav-label { display: none; }
     .nav-btn { width: auto; white-space: nowrap; }
@@ -686,27 +732,31 @@
   <aside class="sidebar">
     <div class="brand">
       <div class="logo">TL</div>
-      <div><strong>TradingLab</strong><small>Console</small></div>
+      <div class="brand-text"><strong>TradingLab</strong><small>Console</small></div>
     </div>
+    <button class="sidebar-toggle" id="sidebar-toggle" title="Colapsar barra lateral" aria-label="Colapsar barra lateral">«</button>
 
     <nav id="nav">
-      <div class="nav-label">Operar</div>
-      <button class="nav-btn active" data-view="overview"><span class="ico">◈</span> Resumen</button>
-      <button class="nav-btn" data-view="market"><span class="ico">▥</span> Mercado</button>
-      <button class="nav-btn" data-view="accounts"><span class="ico">▤</span> Cuentas</button>
-      <button class="nav-btn" data-view="fund"><span class="ico">◉</span> Fondo</button>
-      <button class="nav-btn" data-view="journal"><span class="ico">▩</span> Diario</button>
-      <button class="nav-btn" data-view="operator"><span class="ico">⌘</span> Operador</button>
-      <button class="nav-btn" data-view="bots"><span class="ico">⚙</span> Bots</button>
-      <div class="nav-label">Investigar</div>
-      <button class="nav-btn" data-view="research"><span class="ico">⌁</span> Research</button>
-      <button class="nav-btn" data-view="agents"><span class="ico">✦</span> Agentes</button>
-      <button class="nav-btn" data-view="sala"><span class="ico">▦</span> Sala</button>
-      <button class="nav-btn" data-view="decisions"><span class="ico">◫</span> Decisiones</button>
+      <div class="nav-label">Principal</div>
+      <button class="nav-btn active" data-view="overview" title="Dashboard"><span class="ico">◈</span> Dashboard</button>
+      <button class="nav-btn" data-view="market" title="Mercado"><span class="ico">▥</span> Mercado</button>
+      <div class="nav-label">Laboratorio</div>
+      <button class="nav-btn" data-view="bots" title="Bots"><span class="ico">⚙</span> Bots</button>
+      <button class="nav-btn" data-view="research" title="Research"><span class="ico">⌁</span> Research</button>
+      <button class="nav-btn" data-view="agents" title="Agentes"><span class="ico">✦</span> Agentes</button>
+      <div class="nav-label">Portafolios</div>
+      <button class="nav-btn" data-view="accounts" title="Cuentas"><span class="ico">▤</span> Cuentas</button>
+      <button class="nav-btn" data-view="fund" title="Fondo"><span class="ico">◉</span> Fondo</button>
+      <button class="nav-btn" data-view="journal" title="Diario"><span class="ico">▩</span> Diario</button>
+      <div class="nav-label">Riesgo y fondeo</div>
+      <button class="nav-btn" data-view="risk" title="Riesgo"><span class="ico">⛨</span> Riesgo</button>
+      <button class="nav-btn" data-view="operator" title="Operador"><span class="ico">⌘</span> Operador</button>
+      <div class="nav-label">Inteligencia</div>
+      <button class="nav-btn" data-view="sala" title="Sala"><span class="ico">▦</span> Sala</button>
+      <button class="nav-btn" data-view="decisions" title="Decisiones"><span class="ico">◫</span> Decisiones</button>
       <div class="nav-label">Sistema</div>
-      <button class="nav-btn" data-view="risk"><span class="ico">⛨</span> Riesgo</button>
-      <button class="nav-btn" data-view="repos"><span class="ico">⌘</span> Repos</button>
-      <button class="nav-btn" data-view="logs"><span class="ico">▤</span> Registros</button>
+      <button class="nav-btn" data-view="repos" title="Repos"><span class="ico">⌂</span> Repos</button>
+      <button class="nav-btn" data-view="logs" title="Registros"><span class="ico">▤</span> Registros</button>
     </nav>
 
     <div class="side-status">
@@ -714,7 +764,7 @@
       <div class="row"><span class="dot" id="side-mt5-dot"></span> MT5 <b id="side-mt5">—</b></div>
       <div class="row"><span class="dot" id="side-guard-dot"></span> FTMO <b id="side-guard">—</b></div>
     </div>
-    <div class="sidebar-footer">Modo paper · las acciones del panel nunca envían órdenes. Los bots y propuestas requieren activación humana.<br><a href="https://github.com/Arowarlin/trading-lab" target="_blank" rel="noopener noreferrer">GitHub · trading-lab</a></div>
+    <div class="sidebar-footer">Modo paper/demo · Operador con PIN y confirmación · sin live.<br>Sin CDNs, sin frameworks, solo 127.0.0.1.</div>
   </aside>
 
   <main>
@@ -742,6 +792,29 @@
     <section class="view active" id="view-overview">
       <div id="global-alert"></div>
       <div class="kpis" id="kpis"></div>
+
+      <div class="grid-2 equal" style="margin-bottom:14px">
+        <div class="panel">
+          <div class="panel-head"><h2>Distribución de balance</h2><span class="muted tiny">cash vs posiciones</span></div>
+          <div id="dashboard-balance"></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h2>Top performers</h2><span class="muted tiny">evaluaciones de bots</span></div>
+          <div id="dashboard-performers"></div>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-bottom:14px">
+        <div class="panel-head">
+          <h2>Calendario mensual de PnL</h2>
+          <div class="chart-tools">
+            <span class="muted tiny" id="pnl-month-meta"></span>
+            <button class="btn small ghost" id="pnl-prev" title="Mes anterior">‹</button>
+            <button class="btn small ghost" id="pnl-next" title="Mes siguiente">›</button>
+          </div>
+        </div>
+        <div id="pnl-calendar"></div>
+      </div>
 
       <div class="grid-2 equal">
         <div class="panel">
@@ -1289,6 +1362,8 @@ const S = {
   decisions: null,
   repos: null,
   view: "overview",
+  pnlMonth: null,
+  pnlData: null,
   action: null,
   selectedLog: null,
   refreshTimer: null,
@@ -1305,18 +1380,18 @@ const S = {
 };
 
 const TITLES = {
-  overview: ["Resumen", "Estado general del laboratorio"],
+  overview: ["Dashboard", "Estado general, balance, performers y PnL"],
   market: ["Mercado", "Watchlist desde caché local, breadth y calendario macro"],
-  sala: ["Sala", "TradingAgents en su oficina: estados, runs y decisiones"],
+  bots: ["Bots", "Catálogo, estado y últimas señales"],
+  research: ["Research", "PBO, walk-forward, regímenes y propuestas"],
+  agents: ["Agentes", "TradingAgents lite/deep y sus decisiones"],
   accounts: ["Cuentas", "Paper, Alpaca, MT5 y futuros"],
   fund: ["Fondo", "Límites por cuenta, bolsillos, clústeres y kill-switch"],
   journal: ["Diario", "Operaciones cerradas, métricas y concentración"],
-  operator: ["Operador", "Modo armado paper/demo con confirmación en dos pasos"],
-  bots: ["Bots", "Catálogo, estado y últimas señales"],
-  agents: ["Agentes", "TradingAgents lite/deep y sus decisiones"],
-  research: ["Research", "PBO, walk-forward, regímenes y propuestas"],
-  decisions: ["Decisiones", "Retorno forward del LLM por rating"],
   risk: ["Riesgo", "Guard de FTMO, cuenta MT5 y futuros"],
+  operator: ["Operador", "Modo armado paper/demo con confirmación en dos pasos"],
+  sala: ["Sala", "TradingAgents en su oficina: estados, runs y decisiones"],
+  decisions: ["Decisiones", "Retorno forward del LLM por rating"],
   repos: ["Repos", "Auditoría de AutoHedge, Vibe-Trading y Fincept"],
   logs: ["Registros", "Dry-runs, agentes, backups y tareas"],
 };
@@ -1481,6 +1556,22 @@ async function getJSON(url, options) {
 }
 
 /* ------------------------------------------------------------------- nav */
+function applySidebarCollapsed(collapsed, persist = true) {
+  const app = document.querySelector(".app");
+  if (!app) return;
+  app.classList.toggle("sidebar-collapsed", collapsed);
+  const button = $("#sidebar-toggle");
+  if (button) {
+    button.textContent = collapsed ? "»" : "«";
+    const label = collapsed ? "Expandir barra lateral" : "Colapsar barra lateral";
+    button.title = label;
+    button.setAttribute("aria-label", label);
+  }
+  if (persist) {
+    try { localStorage.setItem("tl.sidebar.collapsed", collapsed ? "1" : "0"); } catch (_) { /* sin almacenamiento */ }
+  }
+}
+
 function bindNav() {
   $$("#nav .nav-btn").forEach((btn) => btn.addEventListener("click", () => switchView(btn.dataset.view)));
 }
@@ -1566,6 +1657,7 @@ async function loadAll(manual = false) {
   if (fundResult.status === "fulfilled") {
     S.fund = fundResult.value;
     renderFund();
+    if (S.overview) renderBalanceDistribution();
   }
   if (operatorResult.status === "fulfilled") {
     S.operator = operatorResult.value;
@@ -1647,12 +1739,176 @@ function updatePills() {
 }
 
 /* --------------------------------------------------------------- overview */
+function localDayKey(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function computeDailyPnl() {
+  const curve = (S.overview?.account?.equity_curve || [])
+    .slice()
+    .sort((a, b) => new Date(a.ts) - new Date(b.ts));
+  const lastByDay = new Map();
+  curve.forEach((point) => {
+    const stamp = new Date(point.ts);
+    if (!isNaN(stamp.getTime())) lastByDay.set(localDayKey(stamp), Number(point.equity));
+  });
+  const days = Array.from(lastByDay.keys()).sort();
+  const pnl = new Map();
+  for (let index = 1; index < days.length; index += 1) {
+    pnl.set(days[index], lastByDay.get(days[index]) - lastByDay.get(days[index - 1]));
+  }
+  return { pnl, lastByDay, days, lastDay: days.length ? days[days.length - 1] : null };
+}
+
+function ensurePnlMonth() {
+  if (S.pnlMonth) return;
+  const fallback = localDayKey(new Date());
+  S.pnlMonth = (S.pnlData?.lastDay || fallback).slice(0, 7);
+}
+
+function monthlyPnlInfo() {
+  ensurePnlMonth();
+  const [year, month] = S.pnlMonth.split("-").map(Number);
+  const label = new Date(year, month - 1, 1).toLocaleDateString("es-ES", {
+    month: "long",
+    year: "numeric",
+  });
+  let total = 0;
+  let count = 0;
+  (S.pnlData?.pnl || new Map()).forEach((value, day) => {
+    if (day.startsWith(S.pnlMonth)) {
+      total += Number(value);
+      count += 1;
+    }
+  });
+  return { total: count ? total : null, count, label };
+}
+
+function signedMoneyShort(value) {
+  const number = Number(value);
+  if (!isFinite(number)) return "Sin datos";
+  const sign = number < 0 ? "-" : number > 0 ? "+" : "";
+  const absolute = Math.abs(number);
+  if (absolute >= 1000) return `${sign}$${(absolute / 1000).toFixed(1)}k`;
+  return `${sign}$${absolute.toFixed(0)}`;
+}
+
+function shiftPnlMonth(delta) {
+  if (!S.pnlMonth) ensurePnlMonth();
+  const [year, month] = S.pnlMonth.split("-").map(Number);
+  const next = new Date(year, month - 1 + delta, 1);
+  S.pnlMonth = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}`;
+  renderPnlCalendar();
+}
+
+function renderPnlCalendar() {
+  const host = $("#pnl-calendar");
+  if (!host) return;
+  S.pnlData = computeDailyPnl();
+  ensurePnlMonth();
+  const info = monthlyPnlInfo();
+  const meta = $("#pnl-month-meta");
+  if (meta) {
+    meta.textContent = info.total === null
+      ? `${info.label} · Sin datos`
+      : `${info.label} · ${money(info.total)} · ${info.count} días`;
+  }
+  if (!S.pnlData.pnl.size) {
+    host.innerHTML = `<div class="empty">Sin datos de PnL diario. Se necesitan al menos 2 cierres diarios de equity.</div>`;
+    return;
+  }
+  const [year, month] = S.pnlMonth.split("-").map(Number);
+  const first = new Date(year, month - 1, 1);
+  const offset = (first.getDay() + 6) % 7; // lunes = 0
+  const totalDays = new Date(year, month, 0).getDate();
+  const today = localDayKey(new Date());
+  const cells = [];
+  ["L", "M", "X", "J", "V", "S", "D"].forEach((day) => {
+    cells.push(`<div class="pnl-weekday">${day}</div>`);
+  });
+  for (let blank = 0; blank < offset; blank += 1) {
+    cells.push(`<div class="pnl-day empty"></div>`);
+  }
+  for (let day = 1; day <= totalDays; day += 1) {
+    const key = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    const value = S.pnlData.pnl.get(key);
+    const cls = value === undefined ? "" : value > 0 ? "pos" : value < 0 ? "neg" : "";
+    const isToday = key === today ? " today" : "";
+    const text = value === undefined ? "—" : signedMoneyShort(value);
+    cells.push(`<div class="pnl-day ${cls}${isToday}" title="${key}${value === undefined ? " · Sin datos" : " · " + money(value)}"><span class="d">${day}</span><span class="v">${text}</span></div>`);
+  }
+  host.innerHTML = `<div class="pnl-calendar">${cells.join("")}</div>`;
+}
+
+function renderBalanceDistribution() {
+  const host = $("#dashboard-balance");
+  if (!host) return;
+  const account = S.overview?.account || {};
+  const cash = Number(account.cash || 0);
+  const positions = Number(account.positions_value || 0);
+  const total = cash + positions;
+  if (!isFinite(total) || total <= 0) {
+    host.innerHTML = `<div class="empty">Sin datos de balance.</div>`;
+    return;
+  }
+  const cashPct = Math.max(0, Math.min(100, (cash / total) * 100));
+  const posPct = Math.max(0, Math.min(100, 100 - cashPct));
+  const fundAccounts = (S.fund?.accounts || []).filter((item) => item.usage?.equity != null);
+  const rows = fundAccounts.map((item) => [
+    `<b>${esc(item.name)}</b>`,
+    money(item.usage.equity),
+    pct(Number(item.usage.equity) / total, 1),
+  ]);
+  host.innerHTML = `
+    <div class="balance-bar">
+      <div class="balance-seg cash" style="width:${cashPct}%"></div>
+      <div class="balance-seg pos" style="width:${posPct}%"></div>
+    </div>
+    <div class="balance-legend">
+      <span><i class="balance-swatch cash"></i> Cash <b>${money(cash)}</b> · ${pct(cashPct / 100, 1)}</span>
+      <span><i class="balance-swatch pos"></i> Posiciones <b>${money(positions)}</b> · ${pct(posPct / 100, 1)}</span>
+    </div>
+    <div class="muted tiny" style="margin-top:8px">Equity total ${money(account.equity)} · ${(account.positions || []).length} posiciones abiertas</div>
+    ${rows.length ? `<div class="muted tiny" style="margin-top:10px">Por cuenta (equity reportado)</div>${grid([{ label: "Cuenta" }, { label: "Equity", num: true }, { label: "Peso", num: true }], rows)}` : ""}`;
+}
+
+function renderTopPerformers() {
+  const host = $("#dashboard-performers");
+  if (!host) return;
+  const rows = (S.overview?.bots || [])
+    .filter((bot) => bot.evaluation && bot.evaluation.status && bot.evaluation.status !== "no_evaluable" && bot.evaluation.sharpe != null)
+    .sort((a, b) => Number(b.evaluation.sharpe) - Number(a.evaluation.sharpe))
+    .slice(0, 5)
+    .map((bot) => {
+      const evaluation = bot.evaluation;
+      return [
+        `<b>${esc(bot.id)}</b>`,
+        esc(bot.profile || "Sin datos"),
+        `<span class="${Number(evaluation.total_return) >= 0 ? "pos" : "neg"}">${pct(evaluation.total_return, 1)}</span>`,
+        num(evaluation.sharpe, 2),
+        pct(evaluation.max_drawdown, 1),
+        num(evaluation.num_trades, 0),
+      ];
+    });
+  host.innerHTML = grid(
+    [{ label: "Bot" }, { label: "Perfil" }, { label: "Retorno", num: true }, { label: "Sharpe", num: true }, { label: "MaxDD", num: true }, { label: "Trades", num: true }],
+    rows,
+    { empty: "Sin datos de evaluaciones. Ejecuta Bots → Evaluar todos." }
+  );
+}
+
 function renderOverview() {
   const o = S.overview;
   if (!o) return;
   const a = o.account;
   const meta = o.meta;
   const ks = o.killswitch || {};
+  S.pnlData = computeDailyPnl();
+  ensurePnlMonth();
+  const monthly = monthlyPnlInfo();
 
   const alertBox = $("#global-alert");
   if (alertBox) {
@@ -1666,6 +1922,12 @@ function renderOverview() {
     { label: "Cash", value: money(a.cash), hint: "efectivo disponible" },
     { label: "Posiciones", value: money(a.positions_value), hint: `${a.positions.length} abiertas` },
     { label: "Retorno", value: pct(a.return_pct, 2), hint: "vs. capital inicial", cls: a.return_pct >= 0 ? "pos" : "neg" },
+    {
+      label: "PnL del mes",
+      value: monthly.total === null ? "Sin datos" : money(monthly.total),
+      hint: monthly.total === null ? "sin cierres diarios" : `${monthly.count} días · ${monthly.label}`,
+      cls: monthly.total === null ? "" : monthly.total >= 0 ? "pos" : "neg",
+    },
     { label: "Max drawdown", value: pct(a.drawdown_pct, 2), hint: "pico → actual", cls: a.drawdown_pct < 0 ? "neg" : "" },
     {
       label: "Llamadas LLM",
@@ -1800,6 +2062,9 @@ function renderOverview() {
   }
 
   renderLiveFeed(o);
+  renderBalanceDistribution();
+  renderTopPerformers();
+  renderPnlCalendar();
   requestAnimationFrame(drawEquity);
 }
 
@@ -4203,6 +4468,17 @@ function toast(message, bad = false) {
 
 /* ------------------------------------------------------------------ init */
 function init() {
+  try {
+    applySidebarCollapsed(localStorage.getItem("tl.sidebar.collapsed") === "1", false);
+  } catch (_) {
+    applySidebarCollapsed(false, false);
+  }
+  $("#sidebar-toggle").addEventListener("click", () => {
+    const app = document.querySelector(".app");
+    applySidebarCollapsed(!app.classList.contains("sidebar-collapsed"));
+  });
+  $("#pnl-prev").addEventListener("click", () => shiftPnlMonth(-1));
+  $("#pnl-next").addEventListener("click", () => shiftPnlMonth(1));
   bindNav();
   bindChart();
   bindCommand();
