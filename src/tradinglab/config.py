@@ -55,6 +55,14 @@ class MT5Settings(BaseModel):
     server_utc_offset_hours: float | None = None  # None = autodetectar
 
 
+class ProjectXSettings(BaseModel):
+    base_url: str = "https://api.topstepx.com"
+    username: str | None = None
+    account_id: int | None = None
+    dry_run: bool = True  # el laboratorio NO envía órdenes salvo --execute
+    require_simulated: bool = True  # el guard rechaza cuentas reales
+
+
 class PropSettings(BaseModel):
     enabled: bool = False
     firm: str = "FTMO"
@@ -74,6 +82,7 @@ class Settings(BaseModel):
     execution: ExecutionSettings = Field(default_factory=ExecutionSettings)
     data: DataSettings = Field(default_factory=DataSettings)
     mt5: MT5Settings = Field(default_factory=MT5Settings)
+    projectx: ProjectXSettings = Field(default_factory=ProjectXSettings)
     prop: PropSettings = Field(default_factory=PropSettings)
 
     @model_validator(mode="after")
@@ -109,6 +118,15 @@ class Settings(BaseModel):
             settings.mt5.server = v
         if v := os.getenv("MT5_REQUIRE_DEMO"):
             settings.mt5.require_demo = v.strip().lower() not in {"0", "false", "no"}
+        # ProjectX / TopstepX (futuros)
+        if v := os.getenv("PROJECTX_BASE_URL"):
+            settings.projectx.base_url = v
+        if v := os.getenv("PROJECTX_USERNAME"):
+            settings.projectx.username = v
+        if v := os.getenv("PROJECTX_ACCOUNT_ID"):
+            settings.projectx.account_id = int(v)
+        if v := os.getenv("PROJECTX_REQUIRE_SIMULATED"):
+            settings.projectx.require_simulated = v.strip().lower() not in {"0", "false", "no"}
         if v := os.getenv("PROP_FIRM"):
             settings.prop.firm = v
         if v := os.getenv("PROP_PHASE"):

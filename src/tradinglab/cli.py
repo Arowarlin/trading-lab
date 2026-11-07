@@ -17,7 +17,7 @@ from .agents import AgentError, RATING_TO_TARGET, run_lite_agent, run_tradingage
 from .backtest import run as run_backtest
 from .config import DEFAULT_DB, ROOT, get_settings
 from .db import connect, init_db, utcnow
-from .execution import AlpacaError, PaperBroker, get_broker, get_mt5_broker
+from .execution import AlpacaError, PaperBroker, get_broker, get_mt5_broker, get_projectx_broker
 from .indicators import atr as atr_indicator
 from .instruments import InstrumentError, get_instrument, list_instruments
 from .llm import LLMClient
@@ -34,8 +34,10 @@ app = typer.Typer(
 )
 mt5_app = typer.Typer(no_args_is_help=True, help="MetaTrader 5: conexión, precios, sizing y órdenes.")
 prop_app = typer.Typer(no_args_is_help=True, help="Cuentas de fondeo: reglas, estado y Monte Carlo.")
+futures_app = typer.Typer(no_args_is_help=True, help="Futuros: ProjectX/TopstepX, contratos y órdenes.")
 app.add_typer(mt5_app, name="mt5")
 app.add_typer(prop_app, name="prop")
+app.add_typer(futures_app, name="futures")
 console = Console()
 
 OK = "[green]OK[/green]"
@@ -83,6 +85,18 @@ def _mt5(settings, dry_run: bool = True):
         broker.connect()
     except MT5Error as exc:
         console.print(Panel(str(exc), title="MT5 no disponible", style="bold red"))
+        raise typer.Exit(1)
+    return broker
+
+
+def _futures(settings, dry_run: bool = True):
+    from .execution.projectx import ProjectXError
+
+    broker = get_projectx_broker(settings, dry_run=dry_run)
+    try:
+        broker.health()
+    except ProjectXError as exc:
+        console.print(Panel(str(exc), title="ProjectX no disponible", style="bold red"))
         raise typer.Exit(1)
     return broker
 
@@ -1621,6 +1635,170 @@ def research_cmd(
         )
     console.print(f"Reporte: {files['latest_md']}")
     console.print(f"JSON:    {files['latest_json']}")
+
+
+# ==================================================================== Futuros
+
+@futures_app.command("status")
+def futures_status() -> None:
+    """Cuenta de futuros en ProjectX/TopstepX y permiso de trading."""
+    settings = get_settings()
+    broker = _futures(settings, dry_run=True)
+    try:
+        health = broker.health()
+        accounts = broker.accounts()
+    finally:
+        broker.close()
+
+    t = Table(title="ProjectX / TopstepX")
+    t.add_column("Campo", style="bold")
+    t.add_column("Valor", justify="right")
+    for key in ("account_id", "name", "balance", "simulated", "can_trade", "dry_run", "require_simulated", "base_url"):
+        value = health[key]
+        t.add_row(key, f"{value:,.2f}" if isinstance(value, float) else str(value))
+    console.print(t)
+
+    if len(accounts) > 1:
+        tt = Table(title=f"Cuentas activas ({len(accounts)})")
+        tt.add_column("ID", justify="right")
+        tt.add_column("Nombre")
+        tt.add_column("Balance", justify="right")
+        tt.add_column("Simulada")
+        tt.add_column("CanTrade")
+        for a in accounts:
+            tt.add_row(
+                str(a.get("id")),
+                str(a.get("name")),
+                f"{float(a.get('balance') or 0):,.2f}",
+                str(bool(a.get("simulated"))),
+                str(bool(a.get("canTrade"))),
+            )
+        console.print(tt)
+
+    if not health["can_trade"]:
+        console.print("[yellow]La cuenta tiene canTrade=false: las órdenes serán rechazadas.[/yellow]")
+    if health["dry_run"]:
+        console.print("[dim]dry_run activo: las órdenes se validan pero no se envían.[/dim]")
+
+
+@futures_app.command("contracts")
+def futures_contracts(
+    search: str = typer.Argument("NQ", help="Símbolo o texto, ej. NQ, MNQ, ES"),
+    live: bool = typer.Option(False, "--live", help="Buscar contratos en vivo (por defecto demo)"),
+    limit: int = typer.Option(20, "--limit", "-n", help="Máximo de filas"),
+) -> None:
+    """Busca contratos disponibles y muestra tick size/value."""
+    broker = _futures(get_settings(), dry_run=True)
+    try:
+        contracts = broker.search_contracts(search, live=live)
+    finally:
+        broker.close()
+
+    if not contracts:
+        console.print(f"[yellow]Sin contratos para '{search}'.[/yellow]")
+        return
+    t = Table(title=f"Contratos para '{search}' ({len(contracts)})")
+    t.add_column("ID", style="bold")
+    t.add_column("Nombre")
+    t.add_column("Descripción")
+    t.add_column("Tick", justify="right")
+    t.add_column("Tick $", justify="right")
+    t.add_column("Activo")
+    for c in contracts[:limit]:
+        t.add_row(
+            str(c.get("id")),
+            str(c.get("name")),
+            str(c.get("description")),
+            f"{float(c.get('tickSize') or 0):g}",
+            f"{float(c.get('tickValue') or 0):,.2f}",
+            "sí" if c.get("activeContract") else "no",
+        )
+    console.print(t)
+
+
+@futures_app.command("order")
+def futures_order(
+    symbol: str = typer.Argument(..., help="Ej. NQ, MNQ, ES"),
+    side: str = typer.Option(..., "--side", "-s", help="buy | sell"),
+    size: int = typer.Option(1, "--size", "-q", help="Número de contratos"),
+    order_type: str = typer.Option("market", "--type", "-t", help="market | limit | stop"),
+    price: float = typer.Option(None, "--price", help="Precio límite o stop"),
+    stop_loss_ticks: int = typer.Option(None, "--stop-loss-ticks", help="Bracket de stop en ticks"),
+    take_profit_ticks: int = typer.Option(None, "--take-profit-ticks", help="Bracket de objetivo en ticks"),
+    execute: bool = typer.Option(False, "--execute", help="Enviar de verdad (si no, dry-run)"),
+) -> None:
+    """Valida o envía una orden de futuros con brackets opcionales."""
+    settings = get_settings()
+    broker = _futures(settings, dry_run=not execute)
+    try:
+        contract = broker.resolve_contract(symbol)
+        result = broker.place_order(
+            str(contract["id"]),
+            side,
+            size,
+            order_type=order_type,
+            limit_price=price if order_type in {"limit", "stop_limit"} else None,
+            stop_price=price if order_type in {"stop", "stop_limit"} else None,
+            stop_loss_ticks=stop_loss_ticks,
+            take_profit_ticks=take_profit_ticks,
+            custom_tag=f"lab:{symbol.upper()}",
+            reason="cli futures order",
+        )
+    finally:
+        broker.close()
+
+    t = Table(title="Orden de futuros")
+    t.add_column("Campo", style="bold")
+    t.add_column("Valor", justify="right")
+    for key, value in result.items():
+        t.add_row(key, f"{value:g}" if isinstance(value, (int, float)) and value is not None else str(value))
+    console.print(t)
+    console.print(f"Contrato: {contract.get('name')} ({contract.get('id')})")
+    if result.get("dry_run"):
+        console.print("[yellow]Dry-run: no se envió nada. Añade --execute para operar.[/yellow]")
+
+
+@futures_app.command("positions")
+def futures_positions() -> None:
+    """Posiciones abiertas en la cuenta de futuros."""
+    broker = _futures(get_settings(), dry_run=True)
+    try:
+        positions = broker.positions()
+    finally:
+        broker.close()
+
+    if not positions:
+        console.print("[dim]Sin posiciones abiertas.[/dim]")
+        return
+    t = Table(title="Posiciones de futuros")
+    for col in ("Contrato", "Nombre", "Lado", "Tamaño", "Precio medio"):
+        t.add_column(col, justify="right" if col in {"Tamaño", "Precio medio"} else "left")
+    for p in positions:
+        t.add_row(
+            str(p["contract_id"]),
+            str(p["name"]),
+            str(p["side"]),
+            str(p["size"]),
+            f"{float(p['avg_price'] or 0):,.2f}",
+        )
+    console.print(t)
+
+
+@futures_app.command("close")
+def futures_close(
+    contract_id: str = typer.Argument(..., help="ID del contrato a cerrar"),
+    execute: bool = typer.Option(False, "--execute", help="Cerrar de verdad"),
+) -> None:
+    """Cierra toda la posición de un contrato."""
+    broker = _futures(get_settings(), dry_run=not execute)
+    try:
+        result = broker.close_position(contract_id, reason="cli futures close")
+    finally:
+        broker.close()
+    console.print(
+        f"Contrato {result['contract_id']}: {result['status']}"
+        + (" [yellow](dry-run)[/yellow]" if result.get("dry_run") else "")
+    )
 
 
 def main() -> None:

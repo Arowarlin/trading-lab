@@ -25,7 +25,7 @@ Entorno multi-bot de trading sobre **TradingAgents** y **Trading-R1**, con LLM l
 | F9 | Núcleo multi-activo (forex, futuros, acciones) | ✅ |
 | F10 | MT5: datos, sizing, órdenes, hora de servidor | ✅ demo validada (abrir/cerrar) |
 | F11 | Motor de reglas de fondeo (FTMO) | ✅ guard + Monte Carlo + fuente contrastada |
-| F12 | Futuros (ProjectX/Tradovate) | ⏳ pendiente de firma y cuenta |
+| F12 | Futuros (Topstep + ProjectX) | ✅ adaptador y CLI en dry-run · ⏳ cuenta y guard |
 | F13 | Paper continuo 4-8 semanas | ⏳ |
 | F14 | Investigación automática (`lab research`) | ✅ barrido + OOS + propuestas |
 
@@ -50,7 +50,7 @@ E:\trading-lab\
 │   ├─ strategies\   trend, trend-ls, meanrev
 │   ├─ backtest.py   motor con comisión y slippage
 │   ├─ risk.py       sizing por ATR, límites y kill-switch
-│   ├─ execution\    PaperBroker · Alpaca · MT5
+│   ├─ execution\    PaperBroker · Alpaca · MT5 · ProjectX
 │   ├─ prop\         rules (firmas/fases), guard (bloqueo), simulator (Monte Carlo)
 │   ├─ research.py   barrido de parámetros + OOS + propuestas (no auto-activa)
 │   ├─ llm.py        cliente OpenAI-compatible con log de llamadas
@@ -291,6 +291,52 @@ fondeo** → orden con SL/TP. Si el guard bloquea, no se envía.
 
 ---
 
+## 6b. Futuros (ProjectX / TopstepX)
+
+Firma elegida: **Topstep** (50K para empezar), porque es la única con API oficial
+documentada. Apex prohíbe la automatización y MFFU no tiene API oficial. El
+análisis completo está en `reports/futures/firms.md`.
+
+### Credenciales
+
+```
+PROJECTX_USERNAME=...
+PROJECTX_API_KEY=...
+PROJECTX_ACCOUNT_ID=...
+PROJECTX_REQUIRE_SIMULATED=1
+```
+
+La API key se genera en el dashboard de TopstepX. El adaptador no guarda
+contraseñas y exige una cuenta **simulada** por defecto.
+
+### Comandos
+
+```powershell
+.\.venv\Scripts\lab.exe futures status
+.\.venv\Scripts\lab.exe futures contracts NQ
+.\.venv\Scripts\lab.exe futures order MNQ --side buy --size 1 `
+    --stop-loss-ticks 40 --take-profit-ticks 80        # dry-run: solo valida
+
+.\.venv\Scripts\lab.exe futures positions
+.\.venv\Scripts\lab.exe futures close <contract_id>    # dry-run
+```
+
+Para enviar de verdad hay que añadir `--execute`. Una cuenta real exige además
+`require_simulated: false` y `ALLOW_LIVE=YES`.
+
+### Reglas operativas
+
+- Topstep **no permite VPS/VPN** para el flujo de órdenes: el bot corre en este PC.
+- Un contrato activo por símbolo; nunca contratos vencidos.
+- Stop obligatorio en ticks; sin stop no se envía la orden.
+- El guard debe bloquear aperturas cerca del MLL, pero **permitir cerrar**.
+- Consistencia 55%: el mejor día no puede superar ese porcentaje del beneficio
+  total al pedir payout.
+- Pendiente: preset Topstep en `config/prop.yaml` y descarga de barras vía
+  `/api/History/retrieveBars` para backtest de futuros.
+
+---
+
 ## 7. Trading-R1 en Windows
 
 Trading-R1 usa `fcntl`, `os.O_NOFOLLOW` y `os.getuid()`: **no funciona en Windows**.
@@ -453,7 +499,8 @@ Restaurar en un PC nuevo:
 
 1. ~~**F6** validar un `agent` real y medir latencia~~ → `lite` validado (77-95 s);
    `deep` queda como opción nocturna.
-2. **F12** futuros: elegir firma (Topstep/Apex) y adaptador ProjectX/Tradovate.
+2. **F12** futuros: ~~elegir firma y adaptador~~ → Topstep + ProjectX en dry-run.
+   Falta abrir la cuenta, preset Topstep en el guard y barras históricas.
 3. **F9c** backtester con sesiones, rollover y contratos continuos (los cortos ya están).
 4. **F11b** filtros de noticias, viernes y rollover en el guard.
 5. **F13** paper continuo 4-8 semanas → comparar contra SPY y decidir.

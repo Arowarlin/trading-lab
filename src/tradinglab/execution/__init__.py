@@ -21,6 +21,21 @@ def get_broker(settings: Settings, db_path=None):
     )
 
 
+def get_projectx_broker(settings: Settings, db_path=None, dry_run: bool | None = None):
+    """Broker de futuros vía ProjectX/TopstepX. Import perezoso (httpx)."""
+    from ..config import DEFAULT_DB
+    from .projectx import ProjectXBroker
+
+    return ProjectXBroker(
+        base_url=settings.projectx.base_url,
+        username=settings.projectx.username,
+        account_id=settings.projectx.account_id,
+        dry_run=settings.projectx.dry_run if dry_run is None else dry_run,
+        require_simulated=settings.projectx.require_simulated,
+        db_path=db_path or DEFAULT_DB,
+    )
+
+
 def get_mt5_broker(settings: Settings, db_path=None, dry_run: bool | None = None):
     """Broker MT5 para forex. Import perezoso: el paquete solo existe en Windows."""
     from ..config import DEFAULT_DB
@@ -39,4 +54,11 @@ def get_mt5_broker(settings: Settings, db_path=None, dry_run: bool | None = None
     )
 
 
-__all__ = ["PaperBroker", "AlpacaBroker", "AlpacaError", "get_broker", "get_mt5_broker"]
+__all__ = [
+    "PaperBroker",
+    "AlpacaBroker",
+    "AlpacaError",
+    "get_broker",
+    "get_mt5_broker",
+    "get_projectx_broker",
+]
