@@ -8,6 +8,7 @@ data/*.db
 data/*.db-*
 data/agent_runs/
 data/tradingagents/
+data/dryrun/
 logs/
 reports/
 .pytest_cache/

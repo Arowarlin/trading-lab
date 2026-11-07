@@ -21,7 +21,7 @@ from .execution import AlpacaError, PaperBroker, get_broker, get_mt5_broker
 from .indicators import atr as atr_indicator
 from .instruments import InstrumentError, get_instrument, list_instruments
 from .llm import LLMClient
-from .orchestrator import run_all
+from .orchestrator import run_all, write_dry_run_log
 from .prop import AccountState, PropError, PropGuard, PropRules, from_yaml, ftmo, monte_carlo
 from .reporting import build_dashboard
 from .risk import check_order, kill_switch, size_position
@@ -674,6 +674,14 @@ def orchestrate(
             a.detail,
         )
     console.print(t)
+
+    if dry_run:
+        log_path = write_dry_run_log(
+            actions,
+            ROOT / "data" / "dryrun",
+            broker=settings.execution.broker,
+        )
+        console.print(f"[dim]Dry-run registrado: {log_path}[/dim]")
 
     executed = [a for a in actions if a.status == "ejecutado"]
     if executed:

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import inspect
-from dataclasses import dataclass, field
+import json
+from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
@@ -177,3 +179,35 @@ def run_all(
             continue
         actions.extend(run_bot(spec, settings, broker, dry_run=dry_run))
     return actions
+
+
+def write_dry_run_log(
+    actions: list[BotAction],
+    out_dir: str | Path,
+    *,
+    broker: str,
+    when: datetime | None = None,
+) -> str:
+    """Persiste un dry-run en JSON para revisar la fase paper sin órdenes."""
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    now = when or datetime.now(timezone.utc)
+    payload = {
+        "generated_at": now.isoformat(timespec="seconds"),
+        "broker": broker,
+        "dry_run": True,
+        "actions": [asdict(a) for a in actions],
+    }
+    path = out / f"dryrun_{now.strftime('%Y%m%d_%H%M%S')}.json"
+    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+    return str(path)
+
+
+__all__ = [
+    "BotAction",
+    "BotSpec",
+    "load_bots",
+    "run_all",
+    "run_bot",
+    "write_dry_run_log",
+]
