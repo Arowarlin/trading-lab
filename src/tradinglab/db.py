@@ -94,6 +94,44 @@ CREATE TABLE IF NOT EXISTS events (
     data TEXT
 );
 
+CREATE TABLE IF NOT EXISTS killswitch (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    active INTEGER NOT NULL DEFAULT 0,
+    reason TEXT,
+    triggered_at TEXT,
+    reset_at TEXT,
+    equity REAL,
+    peak REAL,
+    day_start REAL
+);
+
+CREATE TABLE IF NOT EXISTS alerts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts TEXT NOT NULL,
+    event TEXT NOT NULL,
+    severity TEXT,
+    channel TEXT,
+    ok INTEGER NOT NULL,
+    error TEXT,
+    message TEXT
+);
+
+CREATE TABLE IF NOT EXISTS reconciliation (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts TEXT NOT NULL,
+    source TEXT NOT NULL,
+    broker_equity REAL,
+    db_equity REAL,
+    diff_equity REAL,
+    broker_positions INTEGER,
+    db_positions INTEGER,
+    diff_positions INTEGER,
+    status TEXT NOT NULL,
+    details TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_alerts_ts ON alerts(ts);
+CREATE INDEX IF NOT EXISTS idx_reconciliation_ts ON reconciliation(ts);
 CREATE INDEX IF NOT EXISTS idx_signals_ts ON signals(ts);
 CREATE INDEX IF NOT EXISTS idx_orders_ts ON orders(ts);
 CREATE INDEX IF NOT EXISTS idx_equity_ts ON equity(ts);

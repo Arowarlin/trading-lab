@@ -8,10 +8,13 @@ from pathlib import Path
 
 import yaml
 
-from .config import ROOT, Settings
+from .alerts import send as send_alert
+from .config import DEFAULT_DB, ROOT, Settings
 from .data import fetch
 from .indicators import atr
-from .risk import check_order, kill_switch, size_position
+from .killswitch import allows_order
+from .killswitch import ensure as ensure_killswitch
+from .risk import check_order, size_position
 from .strategies import STRATEGIES
 
 BOTS_FILE = ROOT / "config" / "bots.yaml"
@@ -89,9 +92,13 @@ def run_bot(
 
     actions: list[BotAction] = []
     snap = broker.snapshot({})
-    killed, reason = kill_switch(broker.equity_series(), settings.risk)
-    if killed:
-        raise RuntimeError(f"KILL SWITCH: {reason}")
+    ks, _ = ensure_killswitch(
+        DEFAULT_DB,
+        broker.equity_series(),
+        settings.risk,
+        current=snap["equity"],
+        tz=settings.timezone,
+    )
 
     for ticker in spec.universe:
         try:
@@ -121,6 +128,17 @@ def run_bot(
             actions.append(action)
             continue
 
+        if not allows_order(ks, delta):
+            action.status = "bloqueado"
+            action.detail = f"kill switch: {ks.reason}"
+            actions.append(action)
+            send_alert(
+                "killswitch_block",
+                f"{spec.id}/{ticker}: {ks.reason}",
+                severity="warning",
+            )
+            continue
+
         if delta > 0:
             check = check_order(
                 equity=snap["equity"],
@@ -135,6 +153,11 @@ def run_bot(
                 action.status = "bloqueado"
                 action.detail = check.reason
                 actions.append(action)
+                send_alert(
+                    "guard_block",
+                    f"{spec.id}/{ticker}: {check.reason}",
+                    severity="warning",
+                )
                 continue
             if check.qty < delta:
                 action.detail = check.reason

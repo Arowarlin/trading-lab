@@ -401,6 +401,7 @@
 
     <!-- ============================================================ RESUMEN -->
     <section class="view active" id="view-overview">
+      <div id="global-alert"></div>
       <div class="kpis" id="kpis"></div>
 
       <div class="grid-2">
@@ -546,6 +547,10 @@
     <section class="view" id="view-risk">
       <div id="risk-alert"></div>
       <div id="guard-card"></div>
+      <div class="panel" style="margin-top:14px">
+        <div class="panel-head"><h2>Salud operativa</h2><span class="muted tiny">kill-switch · latido · reconciliación</span></div>
+        <div class="kv" id="ops-health"></div>
+      </div>
       <div class="risk-grid">
         <div class="panel">
           <div class="panel-head"><h2>Reglas activas</h2><span class="muted tiny" id="rules-firm"></span></div>
@@ -778,6 +783,14 @@ function renderOverview() {
   if (!o) return;
   const a = o.account;
   const meta = o.meta;
+  const ks = o.killswitch || {};
+
+  const alertBox = $("#global-alert");
+  if (alertBox) {
+    alertBox.innerHTML = ks.active
+      ? `<div class="alert red" style="margin-bottom:14px"><b>KILL SWITCH ACTIVO:</b> ${esc(ks.reason || "")} · solo se permiten cierres/reducciones. <span class="muted">Reset: lab killswitch reset</span></div>`
+      : "";
+  }
 
   const cards = [
     { label: "Equity", value: money(a.equity), hint: `inicio ${money(meta.starting_cash)}`, cls: "" },
@@ -822,6 +835,23 @@ function renderOverview() {
     dot: prop ? prop.severity === "ok" : null,
     name: "Guard FTMO",
     detail: prop ? `${prop.label} · colchón ${money(prop.remaining_usd)}` : "comprobando…",
+  });
+  sys.push({
+    dot: !ks.active,
+    name: "Kill-switch",
+    detail: ks.active ? `ACTIVO · ${ks.reason || ""}` : "inactivo",
+  });
+  const alerts = o.alerts || {};
+  sys.push({
+    dot: alerts.configured ? true : null,
+    name: "Alertas",
+    detail: `${alerts.channel || "—"}${alerts.configured ? "" : " · sin configurar"}${alerts.last_heartbeat ? " · latido " + ago(alerts.last_heartbeat) : ""}`,
+  });
+  const rec = o.reconciliation || {};
+  sys.push({
+    dot: rec.status === "ok" ? true : rec.status ? false : null,
+    name: "Reconciliación",
+    detail: rec.status ? `${rec.status} · ${dateTime(rec.ts)}` : "sin ejecutar",
   });
   const scheduler = o.scheduler;
   const dryTask = scheduler?.tasks?.find((t) => /dryrun/i.test(t.name));
@@ -1412,6 +1442,20 @@ function renderRisk() {
   if (prop.source === "config" && mt5.configured) alerts.push(`<div class="alert"><b>Guard en modo config:</b> no pudo leer la cuenta MT5; el colchón mostrado es simulado sobre ${money(rules.account_size)}.</div>`);
   if (severity === "breach") alerts.push(`<div class="alert red"><b>BREACH:</b> una regla de fondeo está rota. No se permiten órdenes nuevas; el guard solo deja cerrar posiciones.</div>`);
   $("#risk-alert").innerHTML = alerts.join("");
+  const ks = S.overview?.killswitch || {};
+  const al = S.overview?.alerts || {};
+  const rc = S.overview?.reconciliation || {};
+  const ops = [
+    ["Kill-switch", ks.active ? `ACTIVO · ${ks.reason || ""}` : "inactivo", ks.active],
+    ["Último latido", al.last_heartbeat ? dateTime(al.last_heartbeat) : "sin latido"],
+    ["Alertas", `${al.channel || "—"}${al.configured ? "" : " · sin configurar"}`],
+    ["Reconciliación", rc.status ? `${rc.status} · ${dateTime(rc.ts)}` : "sin ejecutar"],
+    ["Detalle", rc.details || "—"],
+  ];
+  const health = $("#ops-health");
+  if (health) {
+    health.innerHTML = ops.map(([k, v, bad]) => `<div><div class="k">${esc(k)}</div><div class="v ${bad ? "neg" : ""}">${esc(v)}</div></div>`).join("");
+  }
 
   $("#guard-card").innerHTML = `
     <div class="guard-card ${esc(severity)}">

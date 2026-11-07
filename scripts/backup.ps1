@@ -9,6 +9,15 @@ param(
 $ErrorActionPreference = "Stop"
 
 $root = "E:\trading-lab"
+trap {
+    try {
+        & "$root\.venv\Scripts\lab.exe" alerts send backup_failed `
+            -m "Backup falló: $($_.Exception.Message)" --severity error 2>$null
+    } catch {
+        # Si las alertas también fallan, no ocultar el error original.
+    }
+    throw
+}
 $stamp = Get-Date -Format "yyyyMMdd_HHmmss"
 $stage = Join-Path $env:TEMP "tradinglab-backup-$stamp"
 $zip = Join-Path $Dest "trading-lab_$stamp.zip"
@@ -93,6 +102,9 @@ if (Test-Path $restoreTest) {
         throw "restore_test.ps1 falló para $zip"
     }
 }
+
+# Latido opcional (healthchecks.io): no bloquea el backup si falla.
+& "$root\.venv\Scripts\lab.exe" alerts heartbeat 2>$null | Out-Null
 
 $size = [math]::Round((Get-Item $zip).Length / 1MB, 2)
 Write-Host "Backup: $zip ($size MB)"

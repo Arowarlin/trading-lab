@@ -57,20 +57,23 @@ Reglas de trabajo:
 
 ## Fase 1 — Kill-switch, alertas y observabilidad
 
-- [ ] **1.1 Kill-switch persistente y tests**
+- [x] **1.1 Kill-switch persistente y tests** — 2026-11-06
   - Tests de pérdida diaria, drawdown, bloqueo de aperturas, cierre permitido,
     persistencia tras reinicio y reset manual confirmado.
   - Comandos `lab killswitch status|test|reset` (reset pide confirmación).
   - Criterio: tests verdes; cualquier brecha real corregida y reportada.
-- [ ] **1.2 Alertas**
-  - `alerts.py` con Telegram o ntfy (elegir y verificar), eventos de guard,
-    kill-switch, fallos de broker/LLM, desfase DB, ciclo no ejecutado y backup.
-- [ ] **1.3 Dead-man's switch**
-  - Ping a healthchecks.io o similar al final de cada ciclo, configurable.
-- [ ] **1.4 Reconciliación diaria**
-  - Comparar broker vs `lab.db`; tabla `reconciliation` y alerta por diferencia.
-- [ ] **1.5 Panel**
-  - Mostrar kill-switch, último latido y última reconciliación en `lab web`.
+  - Evidencia: `pytest tests/test_killswitch.py -q` → 6 passed.
+- [x] **1.2 Alertas** — 2026-11-06
+  - `alerts.py` con ntfy (recomendado) y Telegram; eventos de guard,
+    kill-switch, fallos de broker/LLM/MT5, desfase DB, ciclo no ejecutado y backup.
+  - Evidencia: `pytest tests/test_alerts.py -q` → 5 passed.
+- [x] **1.3 Dead-man's switch** — 2026-11-06
+  - `lab alerts heartbeat` + `HEALTHCHECKS_URL`; llamado al final de dry-run y backup.
+- [x] **1.4 Reconciliación diaria** — 2026-11-06
+  - `lab reconcile`, tabla `reconciliation`, alerta por diferencia.
+  - Evidencia: `pytest tests/test_reconciliation.py -q` → 2 passed; `lab reconcile` → ok.
+- [x] **1.5 Panel** — 2026-11-06
+  - `lab web` muestra kill-switch, último latido y última reconciliación.
 
 ## Fase 2 — Dejar F13 listo para arrancar
 
@@ -146,5 +149,6 @@ Reglas de trabajo:
 | 2026-11-06 | Plan creado | `PLAN.md` |
 | 2026-11-06 | 0.1 README | `pytest tests/test_docs.py -q` → 3 passed |
 | 2026-11-06 | 0.2 Backups/keyring | `backup.ps1` → PASS; keyring 3 secretos |
-| 2026-11-06 | 0.4 DST/offset | `pytest tests/test_timezone.py -q` → 7 passed |
+| 2026-11-06 | 0.4 DST/offset | `pytest tests/test_timezone.py -q` → 9 passed |
+| 2026-11-06 | 1.1–1.5 | `pytest -q` → 112 passed; `lab reconcile` → ok |
 |  |  |  |

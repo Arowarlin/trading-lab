@@ -17,5 +17,8 @@ $code = $LASTEXITCODE
 
 if ($code -ne 0) {
     Add-Content -Path $log -Value "EXIT=$code"
+    & ".\.venv\Scripts\lab.exe" alerts send dryrun_failed -m "Dry-run falló con código $code" --severity error *>> $log
+} else {
+    & ".\.venv\Scripts\lab.exe" alerts heartbeat *>> $log
 }
 exit $code

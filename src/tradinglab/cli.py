@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import json
 import sys
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
+import pandas as pd
 import typer
 from rich.console import Console
 from rich.panel import Panel
@@ -13,17 +14,25 @@ from rich.table import Table
 from . import __version__
 from . import data as data_mod
 from .agents import RATING_TO_TARGET, AgentError, run_lite_agent, run_tradingagents
+from .alerts import AlertConfig, heartbeat, last_alerts
+from .alerts import send as send_alert
 from .backtest import run as run_backtest
 from .config import DEFAULT_DB, ROOT, get_settings
 from .db import connect, init_db, utcnow
 from .execution import get_broker, get_mt5_broker, get_projectx_broker
 from .indicators import atr as atr_indicator
 from .instruments import get_instrument, list_instruments
+from .killswitch import allows_order
+from .killswitch import ensure as ensure_killswitch
+from .killswitch import evaluate as evaluate_killswitch
+from .killswitch import load_state as load_killswitch
+from .killswitch import reset as reset_killswitch
 from .llm import LLMClient
 from .orchestrator import run_all, write_dry_run_log
 from .prop import AccountState, PropGuard, PropRules, from_yaml, ftmo, monte_carlo
+from .reconciliation import reconcile as reconcile_broker
 from .reporting import build_dashboard
-from .risk import check_order, kill_switch, size_position
+from .risk import check_order, size_position
 from .strategies import STRATEGIES
 
 app = typer.Typer(
@@ -34,9 +43,17 @@ app = typer.Typer(
 mt5_app = typer.Typer(no_args_is_help=True, help="MetaTrader 5: conexión, precios, sizing y órdenes.")
 prop_app = typer.Typer(no_args_is_help=True, help="Cuentas de fondeo: reglas, estado y Monte Carlo.")
 futures_app = typer.Typer(no_args_is_help=True, help="Futuros: ProjectX/TopstepX, contratos y órdenes.")
+killswitch_app = typer.Typer(
+    no_args_is_help=True, help="Kill-switch persistente: estado, pruebas y reset manual."
+)
+alerts_app = typer.Typer(
+    no_args_is_help=True, help="Alertas ntfy/Telegram, latido y chequeo de servicios."
+)
 app.add_typer(mt5_app, name="mt5")
 app.add_typer(prop_app, name="prop")
 app.add_typer(futures_app, name="futures")
+app.add_typer(killswitch_app, name="killswitch")
+app.add_typer(alerts_app, name="alerts")
 console = Console()
 
 OK = "[green]OK[/green]"
@@ -399,13 +416,26 @@ def run(
     snap = broker.snapshot({ticker.upper(): price})
     held = next((p["qty"] for p in snap["positions"] if p["ticker"] == ticker.upper()), 0.0)
 
-    killed, reason = kill_switch(broker.equity_series(), settings.risk)
-    if killed:
-        console.print(Panel(f"KILL SWITCH ACTIVO: {reason}", style="bold red"))
-        raise typer.Exit(1)
-
     desired = size_position(snap["equity"], price, atr_value, settings.risk) if target > 0 else 0
     delta = int(desired - held)
+    ks, _ = ensure_killswitch(
+        DEFAULT_DB,
+        broker.equity_series(),
+        settings.risk,
+        current=snap["equity"],
+        tz=settings.timezone,
+    )
+    if not allows_order(ks, delta):
+        console.print(
+            Panel(
+                f"KILL SWITCH ACTIVO: {ks.reason}\n"
+                "Solo se permiten cierres o reducciones de posición.",
+                style="bold red",
+            )
+        )
+        raise typer.Exit(1)
+    if ks.active:
+        console.print("[yellow]Kill switch activo: se permite reducir/cerrar.[/yellow]")
 
     console.print(
         Panel(
@@ -597,11 +627,6 @@ def agent_run(
     snap = broker.snapshot({ticker.upper(): price})
     held = next((p["qty"] for p in snap["positions"] if p["ticker"] == ticker.upper()), 0.0)
 
-    killed, reason = kill_switch(broker.equity_series(), settings.risk)
-    if killed:
-        console.print(Panel(f"KILL SWITCH ACTIVO: {reason}", style="bold red"))
-        raise typer.Exit(1)
-
     if target_fraction > 0:
         max_pct = settings.risk.max_position_pct * float(target_fraction)
         desired = size_position(snap["equity"], price, atr_value, settings.risk, max_pct=max_pct)
@@ -609,6 +634,24 @@ def agent_run(
         desired = 0
 
     delta = int(desired - held)
+    ks, _ = ensure_killswitch(
+        DEFAULT_DB,
+        broker.equity_series(),
+        settings.risk,
+        current=snap["equity"],
+        tz=settings.timezone,
+    )
+    if not allows_order(ks, delta):
+        console.print(
+            Panel(
+                f"KILL SWITCH ACTIVO: {ks.reason}\n"
+                "Solo se permiten cierres o reducciones de posición.",
+                style="bold red",
+            )
+        )
+        raise typer.Exit(1)
+    if ks.active:
+        console.print("[yellow]Kill switch activo: se permite reducir/cerrar.[/yellow]")
     console.print(
         f"Precio {price:,.2f} · ATR14 {atr_value:,.2f} · posición {held:g} → objetivo {desired} · delta {delta:+d}"
     )
@@ -826,9 +869,289 @@ def report() -> None:
     t.add_row("Snapshots", str(len(eq)))
     console.print(t)
 
-    killed, reason = kill_switch(eq, settings.risk)
-    if killed:
-        console.print(Panel(f"KILL SWITCH: {reason}", style="bold red"))
+    state = load_killswitch(DEFAULT_DB)
+    if state.active:
+        console.print(Panel(f"KILL SWITCH: {state.reason}", style="bold red"))
+    else:
+        evaluation = evaluate_killswitch(eq, settings.risk, tz=settings.timezone)
+        if evaluation.active:
+            console.print(
+                Panel(
+                    f"KILL SWITCH se activaría ahora: {evaluation.reason}",
+                    style="bold red",
+                )
+            )
+
+
+@killswitch_app.command("status")
+def killswitch_status_cmd() -> None:
+    """Estado persistido y evaluación actual del kill-switch."""
+    settings = get_settings()
+    init_db(DEFAULT_DB)
+    state = load_killswitch(DEFAULT_DB)
+
+    current = None
+    series = None
+    try:
+        broker = get_broker(settings, DEFAULT_DB)
+        snap = broker.snapshot({})
+        current = float(snap["equity"])
+        series = broker.equity_series()
+    except Exception as exc:
+        console.print(f"[dim]No se pudo leer el broker para evaluar: {exc}[/dim]")
+
+    evaluation = (
+        evaluate_killswitch(series, settings.risk, current=current, tz=settings.timezone)
+        if current is not None
+        else None
+    )
+
+    t = Table(title="Kill-switch")
+    t.add_column("Campo", style="bold")
+    t.add_column("Valor")
+    t.add_row("Estado", "[red]ACTIVO[/red]" if state.active else "[green]inactivo[/green]")
+    t.add_row("Razón", state.reason or "—")
+    t.add_row("Disparado", state.triggered_at or "—")
+    t.add_row("Reset", state.reset_at or "—")
+    if evaluation:
+        t.add_row("Equity actual", f"{evaluation.equity:,.2f}")
+        t.add_row("Pico", f"{evaluation.peak:,.2f}")
+        t.add_row("Inicio del día", f"{evaluation.day_start:,.2f}")
+        t.add_row("Pérdida diaria", _fmt_pct(evaluation.daily_return))
+        t.add_row("Drawdown", _fmt_pct(evaluation.drawdown))
+    console.print(t)
+
+    if not state.active and evaluation and evaluation.active:
+        console.print(
+            Panel(
+                f"El kill-switch se activaría en la próxima orden: {evaluation.reason}",
+                style="bold red",
+            )
+        )
+    if state.active:
+        console.print(
+            "[yellow]Solo se permiten cierres/reducciones. Reset manual:[/yellow] "
+            "lab killswitch reset"
+        )
+
+
+@killswitch_app.command("test")
+def killswitch_test_cmd() -> None:
+    """Prueba sintética de los dos disparadores, sin tocar la DB."""
+    cfg = get_settings().risk
+    now = pd.Timestamp("2026-11-05 18:00", tz="UTC")
+    scenarios = [
+        ("normal", pd.Series([100_000.0, 100_100.0, 100_050.0]), None, cfg),
+        ("pérdida diaria", pd.Series([100_000.0, 100_000.0, 96_000.0]), None, cfg),
+        (
+            "drawdown",
+            pd.Series([100_000.0, 110_000.0, 120_000.0, 90_000.0]),
+            None,
+            cfg.model_copy(update={"daily_loss_limit_pct": 0.5}),
+        ),
+        ("equity actual", pd.Series([100_000.0, 100_000.0, 100_000.0]), 96_000.0, cfg),
+    ]
+
+    t = Table(title="Kill-switch · pruebas sintéticas")
+    t.add_column("Escenario", style="bold")
+    t.add_column("Activo")
+    t.add_column("Razón", overflow="fold")
+    t.add_column("Diario", justify="right")
+    t.add_column("Drawdown", justify="right")
+    for name, series, current, rules in scenarios:
+        ev = evaluate_killswitch(series, rules, current=current, tz="UTC", now=now)
+        t.add_row(
+            name,
+            "[red]sí[/red]" if ev.active else "[green]no[/green]",
+            ev.reason,
+            _fmt_pct(ev.daily_return),
+            _fmt_pct(ev.drawdown),
+        )
+    console.print(t)
+
+
+@killswitch_app.command("reset")
+def killswitch_reset_cmd(
+    yes: bool = typer.Option(False, "--yes", help="No pedir confirmación interactiva"),
+) -> None:
+    """Reset manual y confirmado del kill-switch."""
+    init_db(DEFAULT_DB)
+    state = load_killswitch(DEFAULT_DB)
+    if not state.active:
+        console.print("[green]El kill-switch ya está inactivo.[/green]")
+        return
+    if not yes:
+        confirmed = typer.confirm(
+            f"Kill-switch activo: {state.reason}. ¿Confirmas el reset manual?"
+        )
+        if not confirmed:
+            console.print("[yellow]Reset cancelado.[/yellow]")
+            raise typer.Exit(1)
+    new_state = reset_killswitch(DEFAULT_DB, confirm=True)
+    console.print(f"[green]Kill-switch reseteado[/green] · reset_at={new_state.reset_at}")
+
+
+@alerts_app.command("status")
+def alerts_status_cmd() -> None:
+    """Estado de configuración y últimas alertas (sin mostrar secretos)."""
+    cfg = AlertConfig.from_env()
+    t = Table(title="Alertas")
+    t.add_column("Campo", style="bold")
+    t.add_column("Valor")
+    t.add_row("Canal", cfg.channel)
+    t.add_row("Configurado", "sí" if cfg.configured else "no")
+    t.add_row("Habilitado", "sí" if cfg.enabled else "no")
+    t.add_row("Cooldown", f"{cfg.cooldown_s} s")
+    t.add_row("Heartbeat", "configurado" if cfg.heartbeat_url else "no")
+    console.print(t)
+
+    rows = last_alerts(8)
+    if rows:
+        h = Table(title="Últimas alertas")
+        for col in ("Fecha", "Evento", "Severidad", "Canal", "OK", "Error"):
+            h.add_column(col)
+        for row in rows:
+            h.add_row(
+                str(row["ts"])[:19],
+                str(row["event"]),
+                str(row["severity"] or ""),
+                str(row["channel"] or ""),
+                "sí" if row["ok"] else "no",
+                str(row["error"] or ""),
+            )
+        console.print(h)
+
+
+@alerts_app.command("test")
+def alerts_test_cmd() -> None:
+    """Envía una alerta de prueba por el canal configurado."""
+    result = send_alert("test", "Prueba de alertas de TradingLab", severity="info")
+    console.print(
+        f"Canal={result.channel} ok={result.ok} skipped={result.skipped} error={result.error or '—'}"
+    )
+
+
+@alerts_app.command("send")
+def alerts_send_cmd(
+    event: str = typer.Argument(..., help="Identificador del evento"),
+    message: str = typer.Option(..., "--message", "-m", help="Texto de la alerta"),
+    severity: str = typer.Option("warning", "--severity", help="info|warning|error|critical"),
+) -> None:
+    """Envía una alerta manual."""
+    result = send_alert(event, message, severity=severity)
+    console.print(
+        f"Canal={result.channel} ok={result.ok} skipped={result.skipped} error={result.error or '—'}"
+    )
+
+
+@alerts_app.command("heartbeat")
+def alerts_heartbeat_cmd() -> None:
+    """Ping de latido (healthchecks.io o similar)."""
+    result = heartbeat()
+    console.print(f"Heartbeat ok={result.ok} skipped={result.skipped} error={result.error or '—'}")
+    if not result.ok:
+        raise typer.Exit(1)
+
+
+@alerts_app.command("check")
+def alerts_check_cmd() -> None:
+    """Comprueba LM Studio, broker y MT5; alerta solo de los fallos."""
+    settings = get_settings()
+    init_db(DEFAULT_DB)
+    checks: list[tuple[str, bool, str]] = []
+
+    try:
+        LLMClient(settings.llm).health()
+        checks.append(("LM Studio", True, "ok"))
+    except Exception as exc:
+        checks.append(("LM Studio", False, str(exc)[:160]))
+        send_alert("llm_fail", f"LM Studio no responde: {exc}", severity="error")
+
+    try:
+        get_broker(settings, DEFAULT_DB).snapshot({})
+        checks.append((f"Broker {settings.execution.broker}", True, "ok"))
+    except Exception as exc:
+        checks.append((f"Broker {settings.execution.broker}", False, str(exc)[:160]))
+        send_alert("broker_fail", f"Broker no responde: {exc}", severity="error")
+
+    if settings.mt5.login or settings.mt5.terminal_path:
+        broker = None
+        try:
+            broker = get_mt5_broker(settings, DEFAULT_DB, dry_run=True)
+            broker.connect()
+            health = broker.health()
+            checks.append(("MT5", True, f"{health['login']} · {health['server']}"))
+        except Exception as exc:
+            checks.append(("MT5", False, str(exc)[:160]))
+            send_alert("mt5_fail", f"MT5 no responde: {exc}", severity="error")
+        finally:
+            if broker is not None:
+                try:
+                    broker.shutdown()
+                except Exception:
+                    pass
+
+    dryruns = sorted((ROOT / "data" / "dryrun").glob("dryrun_*.json"), reverse=True)
+    if not dryruns:
+        checks.append(("Dry-run diario", False, "sin registros"))
+        send_alert("dryrun_missed", "No hay ningún dry-run registrado", severity="warning")
+    else:
+        age_h = round((datetime.now().timestamp() - dryruns[0].stat().st_mtime) / 3600)
+        checks.append(("Dry-run diario", age_h <= 72, f"último hace {age_h} h"))
+        if age_h > 72:
+            send_alert("dryrun_missed", f"Último dry-run hace {age_h} h", severity="warning")
+
+    t = Table(title="Chequeo de servicios")
+    t.add_column("Componente", style="bold")
+    t.add_column("Estado")
+    t.add_column("Detalle", overflow="fold")
+    for name, ok, detail in checks:
+        t.add_row(name, "[green]OK[/green]" if ok else "[red]FALLO[/red]", detail)
+    console.print(t)
+    if any(not ok for _, ok, _ in checks):
+        raise typer.Exit(1)
+
+
+@app.command("reconcile")
+def reconcile_cmd(
+    mt5: bool = typer.Option(False, "--mt5", help="Reconciliar contra la cuenta MT5 en vez del broker"),
+) -> None:
+    """Compara posiciones/equity del broker con SQLite y alerta diferencias."""
+    settings = get_settings()
+    init_db(DEFAULT_DB)
+    broker = None
+    source = "mt5" if mt5 else settings.execution.broker
+    try:
+        if mt5:
+            broker = get_mt5_broker(settings, DEFAULT_DB, dry_run=True)
+            broker.connect()
+        else:
+            broker = get_broker(settings, DEFAULT_DB)
+        result = reconcile_broker(broker, DEFAULT_DB, source=source)
+    except Exception as exc:
+        console.print(Panel(f"Reconciliación falló: {exc}", style="bold red"))
+        raise typer.Exit(1)
+    finally:
+        if mt5 and broker is not None:
+            try:
+                broker.shutdown()
+            except Exception:
+                pass
+
+    t = Table(title=f"Reconciliación · {result.source}")
+    t.add_column("Campo", style="bold")
+    t.add_column("Valor", justify="right")
+    t.add_row("Estado", "[green]ok[/green]" if result.status == "ok" else "[red]mismatch[/red]")
+    t.add_row("Equity broker", f"{result.broker_equity:,.2f}" if result.broker_equity is not None else "—")
+    t.add_row("Equity DB", f"{result.db_equity:,.2f}" if result.db_equity is not None else "—")
+    t.add_row("Diferencia", f"{result.diff_equity:,.2f}" if result.diff_equity is not None else "—")
+    t.add_row("Posiciones broker", str(result.broker_positions))
+    t.add_row("Posiciones DB", str(result.db_positions))
+    t.add_row("Posiciones distintas", str(result.diff_positions))
+    t.add_row("Detalle", result.details or "sin diferencias")
+    console.print(t)
+    if result.status != "ok":
+        raise typer.Exit(1)
 
 
 @app.command("bots")

@@ -33,9 +33,12 @@ from urllib.parse import parse_qs, unquote, urlparse
 import httpx
 
 from . import __version__
+from .alerts import AlertConfig, last_alerts, last_heartbeat
 from .config import DEFAULT_DB, ROOT, Settings, get_settings
+from .killswitch import load_state as load_killswitch
 from .orchestrator import load_bots
 from .prop import AccountState, PropGuard, PropRules, from_yaml, ftmo
+from .reconciliation import last_reconciliation
 
 INDEX_FILE = Path(__file__).with_name("webui") / "index.html"
 TICKER_RE = re.compile(r"^[A-Z0-9][A-Z0-9.\-=^]{0,11}$")
@@ -209,6 +212,9 @@ class LabData:
                 "starting_cash": self.settings.starting_cash,
             },
             "account": self.account(),
+            "killswitch": self.killswitch_status(),
+            "alerts": self.alerts_status(),
+            "reconciliation": self.reconciliation_status(),
             "llm": self._llm_status(),
             "scheduler": self._scheduler(),
             "git": self.git_info(),
@@ -323,6 +329,49 @@ class LabData:
         return out
 
     # ------------------------------------------------------------ LLM / MT5
+
+    def killswitch_status(self) -> dict:
+        try:
+            state = self.cache.get("killswitch", 5.0, lambda: load_killswitch(self.db_path))
+        except Exception as exc:
+            return {"active": False, "reason": f"error: {exc}"[:240]}
+        return {
+            "active": state.active,
+            "reason": state.reason,
+            "triggered_at": state.triggered_at,
+            "reset_at": state.reset_at,
+            "equity": state.equity,
+            "peak": state.peak,
+            "day_start": state.day_start,
+        }
+
+    def alerts_status(self) -> dict:
+        cfg = AlertConfig.from_env()
+
+        def collect() -> dict:
+            return {
+                "channel": cfg.channel,
+                "configured": cfg.configured,
+                "enabled": cfg.enabled,
+                "heartbeat": bool(cfg.heartbeat_url),
+                "last_heartbeat": last_heartbeat(self.db_path),
+                "last": last_alerts(5, self.db_path),
+            }
+
+        try:
+            return self.cache.get("alerts", 10.0, collect)
+        except Exception as exc:
+            return {"channel": cfg.channel, "configured": cfg.configured, "error": str(exc)[:200]}
+
+    def reconciliation_status(self) -> dict:
+        try:
+            return self.cache.get(
+                "reconciliation",
+                15.0,
+                lambda: last_reconciliation(self.db_path) or {},
+            )
+        except Exception as exc:
+            return {"status": "error", "details": str(exc)[:200]}
 
     def _llm_status(self) -> dict:
         if not self.external:

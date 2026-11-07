@@ -120,6 +120,15 @@ cd E:\trading-lab
 # Investigación automática (ranking + propuestas, sin activar nada)
 .\.venv\Scripts\lab.exe research --start 2015-01-01
 
+# Kill-switch, alertas y reconciliación
+.\.venv\Scripts\lab.exe killswitch status
+.\.venv\Scripts\lab.exe killswitch test
+.\.venv\Scripts\lab.exe killswitch reset
+.\.venv\Scripts\lab.exe alerts status
+.\.venv\Scripts\lab.exe alerts check
+.\.venv\Scripts\lab.exe alerts test
+.\.venv\Scripts\lab.exe reconcile
+
 # Reproducibilidad y secretos
 uv sync --frozen --extra dev --extra mt5
 .\.venv\Scripts\python.exe scripts\migrate_secrets.py --status
@@ -601,6 +610,57 @@ Restaurar en un PC nuevo:
 - **Nunca** subas `.env` a git. Las claves de Alpaca paper no mueven dinero, pero las
   live sí.
 - Empieza con 1-3 tickers. Añadir bots antes de validar uno solo multiplica los errores.
+
+---
+
+## 11b. Kill-switch, alertas y reconciliación
+
+### Kill-switch persistente
+
+`lab killswitch` implementa un estado en SQLite que sobrevive a reinicios:
+
+- se activa por **pérdida diaria** (`daily_loss_limit_pct`) o **drawdown máximo**
+  (`max_drawdown_pct`), usando el equity actual antes de cada apertura;
+- una vez activo **no se desactiva** porque el equity se recupere;
+- bloquea aperturas, pero **permite cerrar/reducir**;
+- `lab killswitch reset` exige confirmación explícita;
+- la web muestra un aviso rojo y el estado en Resumen/Riesgo.
+
+```powershell
+lab killswitch status   # estado persistido + evaluación actual
+lab killswitch test     # escenarios sintéticos, sin tocar la DB
+lab killswitch reset    # pide confirmación
+```
+
+### Alertas
+
+Canal recomendado: **ntfy** (sin bot, solo topic). También soporta Telegram.
+Configura en `.env`:
+
+```ini
+ALERTS_ENABLED=1
+ALERT_CHANNEL=ntfy
+NTFY_URL=https://ntfy.sh
+NTFY_TOPIC=tu-topic-privado
+# NTFY_TOKEN=...
+# ALERT_CHANNEL=telegram
+# TELEGRAM_BOT_TOKEN=...
+# TELEGRAM_CHAT_ID=...
+ALERT_COOLDOWN_S=300
+HEALTHCHECKS_URL=   # latido opcional
+```
+
+Eventos: bloqueo de guard, kill-switch, fallo de LM Studio/Alpaca/MT5, desfase
+broker vs DB, dry-run no ejecutado y backup fallido. `lab alerts check` prueba
+servicios; `lab alerts test` envía una prueba. Nunca se imprimen tokens.
+
+### Latido y reconciliación
+
+- `scripts/dryrun_daily.ps1` y `scripts/backup.ps1` hacen `lab alerts heartbeat`
+  al terminar bien (si `HEALTHCHECKS_URL` está configurado).
+- `lab reconcile` compara equity y posiciones del broker con `lab.db`, guarda
+  una fila en `reconciliation` y alerta cualquier diferencia.
+- La web muestra kill-switch, último latido y última reconciliación.
 
 ---
 
