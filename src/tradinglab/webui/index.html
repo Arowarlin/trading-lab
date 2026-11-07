@@ -1025,6 +1025,10 @@
     <!-- =========================================================== RESEARCH -->
     <section class="view" id="view-research">
       <div class="stats" id="research-stats"></div>
+      <div class="panel" style="margin-bottom:14px">
+        <div class="panel-head"><h2>Resultados por perfil</h2><span class="muted tiny">swing · forex/CFD · futuros</span></div>
+        <div id="research-profiles"></div>
+      </div>
       <div class="grid-2 equal" style="margin-bottom:14px">
         <div class="panel">
           <div class="panel-head"><h2>PBO por activo</h2><span class="muted tiny">CSCV · 16 bloques</span></div>
@@ -2969,6 +2973,30 @@ function renderResearch() {
   $("#research-meta").textContent = cfg.symbols
     ? `${cfg.symbols.join(", ")} · ${cfg.paths || 0} paths · OOS ${pct(cfg.holdout_fraction || 0, 0)} · DSR ≥ ${pct(cfg.min_dsr || 0.9, 0)} (n=${r.dsr_n_trials || 0}) · PBO ≤ ${pct(cfg.max_pbo || 0.3, 0)} · WF ${wf.verdict || "—"}`
     : "";
+
+  const profileRows = (r.profiles || []).map((p) => {
+    const tag = p.status === "validado"
+      ? `<span class="tag green">validado</span>`
+      : p.status === "no confiable"
+        ? `<span class="tag red">no confiable</span>`
+        : `<span class="tag yellow">${esc(p.status)}</span>`;
+    return [
+      `<b>${esc(p.label)}</b>`,
+      `<span class="muted tiny">${esc(p.profile)}</span>`,
+      tag,
+      p.total_return == null ? "—" : pct(p.total_return, 1),
+      p.sharpe == null ? "—" : num(p.sharpe, 2),
+      p.max_drawdown == null ? "—" : pct(p.max_drawdown, 1),
+      p.pass_rate == null ? "—" : pct(p.pass_rate, 1),
+      p.breach_rate == null ? "—" : pct(p.breach_rate, 1),
+      `<span class="muted tiny">${esc(p.notes || "")}</span>`,
+    ];
+  });
+  $("#research-profiles").innerHTML = grid(
+    [{ label: "Perfil" }, { label: "ID" }, { label: "Estado" }, { label: "Retorno", num: true }, { label: "Sharpe", num: true }, { label: "MaxDD", num: true }, { label: "Pasa", num: true }, { label: "Breach", num: true }, { label: "Nota", wrap: true }],
+    profileRows,
+    { empty: "Sin resultados por perfil." }
+  );
 
   const pboRows = [];
   if (pbo.pbo !== undefined && pbo.pbo !== null) pboRows.push(["Global", pbo]);

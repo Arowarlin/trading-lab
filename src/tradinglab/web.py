@@ -1324,6 +1324,9 @@ class LabData:
         proposal_rows = proposals.get("proposals") if isinstance(proposals, dict) else None
         if proposal_rows is None:
             proposal_rows = latest.get("proposals") or []
+        portfolio = _read_json(self.research_dir / "portfolio.json", {}) or {}
+        costs = _read_json(self.research_dir / "costs.json", {}) or {}
+        intraday = _read_json(self.research_dir / "intraday.json", {}) or {}
         return {
             "generated_at": latest.get("generated_at"),
             "rules": latest.get("rules"),
@@ -1340,12 +1343,88 @@ class LabData:
             "dsr_n_trials": latest.get("dsr_n_trials"),
             "dsr_trial_sr_std": latest.get("dsr_trial_sr_std"),
             "horizons": _read_json(self.research_dir / "horizons.json", {}) or {},
-            "intraday": _read_json(self.research_dir / "intraday.json", {}) or {},
+            "intraday": intraday,
             "clusters": _read_json(self.research_dir / "clusters.json", {}) or {},
-            "portfolio": _read_json(self.research_dir / "portfolio.json", {}) or {},
-            "costs": _read_json(self.research_dir / "costs.json", {}) or {},
+            "portfolio": portfolio,
+            "costs": costs,
+            "profiles": self._research_profiles(portfolio, costs, intraday),
             "errors": latest.get("errors") or [],
         }
+
+    @staticmethod
+    def _research_profiles(
+        portfolio: dict, costs: dict, intraday: dict
+    ) -> list[dict]:
+        """Resumen honesto por perfil: solo datos generados, sin inventar."""
+        port = portfolio.get("portfolio") or {}
+        mc = portfolio.get("monte_carlo") or []
+        ftmo_120 = next(
+            (
+                row
+                for row in mc
+                if row.get("firm_id") == "ftmo" and row.get("horizon") == 120
+            ),
+            None,
+        )
+        fragile = costs.get("fragile_count")
+        costs_note = (
+            f"{fragile}/10 variantes frágiles a 2/20 bps"
+            if fragile is not None
+            else "sin informe de costes"
+        )
+        swing = {
+            "profile": "swing_equity",
+            "label": "Swing acciones/ETF",
+            "status": "validado" if port else "sin datos",
+            "total_return": port.get("total_return"),
+            "sharpe": port.get("sharpe"),
+            "max_drawdown": port.get("max_drawdown"),
+            "pass_rate": ftmo_120.get("pass_rate") if ftmo_120 else None,
+            "breach_rate": ftmo_120.get("breach_rate") if ftmo_120 else None,
+            "notes": f"Cartera de 3 bots; FTMO 120d; {costs_note}.",
+        }
+
+        passed = intraday.get("passed")
+        trials = intraday.get("n_trials")
+        spread_ok = intraday.get("spread_reliable")
+        if intraday.get("outcomes"):
+            fx_status = "validado" if spread_ok else "no confiable"
+            fx_note = (
+                f"{passed}/{trials} variantes pasan; spread "
+                f"{'realista' if spread_ok else 'no realista'}."
+            )
+        else:
+            fx_status = "pendiente"
+            fx_note = (
+                "Sin datos M15/H1: `offset_source=unknown` y mercado cerrado; "
+                "no se descargó ni se inventó el offset."
+            )
+        fx = {
+            "profile": "intraday_fx",
+            "label": "Intradía forex/CFD",
+            "status": fx_status,
+            "total_return": None,
+            "sharpe": None,
+            "max_drawdown": None,
+            "pass_rate": None,
+            "breach_rate": None,
+            "notes": fx_note,
+        }
+        futures = {
+            "profile": "intraday_futures",
+            "label": "Intradía futuros",
+            "status": "stub",
+            "total_return": None,
+            "sharpe": None,
+            "max_drawdown": None,
+            "pass_rate": None,
+            "breach_rate": None,
+            "notes": (
+                "ProjectX sin credenciales/suscripción; proxy diario ES=F/NQ=F "
+                "documentado, sin conclusiones intradía."
+            ),
+        }
+        return [swing, fx, futures]
 
     def research_detail(self, artifact: str) -> dict:
         """Curva de equity/drawdown de una variante frente a buy&hold.

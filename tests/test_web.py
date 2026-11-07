@@ -39,6 +39,7 @@ def test_index_disponible() -> None:
     assert "research-clusters" in text
     assert "research-portfolio" in text
     assert "research-costs" in text
+    assert "research-profiles" in text
     assert "view-fund" in text
     assert "fund-save" in text
     assert "fund-killswitch" in text
@@ -183,6 +184,29 @@ def test_research_usa_ultimo_informe(tmp_path: Path) -> None:
         json.dumps({"top": 1, "firms": []}),
         encoding="utf-8",
     )
+    (research / "portfolio.json").write_text(
+        json.dumps(
+            {
+                "portfolio": {
+                    "total_return": 0.81,
+                    "sharpe": 1.03,
+                    "max_drawdown": -0.09,
+                },
+                "monte_carlo": [
+                    {
+                        "firm_id": "ftmo",
+                        "horizon": 120,
+                        "pass_rate": 0.70,
+                        "breach_rate": 0.03,
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (research / "costs.json").write_text(
+        json.dumps({"fragile_count": 0}), encoding="utf-8"
+    )
 
     report = _data(tmp_path).research(limit=1)
     assert report["candidates"] == 2
@@ -191,6 +215,14 @@ def test_research_usa_ultimo_informe(tmp_path: Path) -> None:
     assert report["pbo"]["verdict"] == "ok"
     assert report["walk_forward"]["verdict"] == "ok"
     assert report["horizons"]["top"] == 1
+    profiles = {row["profile"]: row for row in report["profiles"]}
+    assert profiles["swing_equity"]["status"] == "validado"
+    assert profiles["swing_equity"]["total_return"] == pytest.approx(0.81)
+    assert profiles["swing_equity"]["pass_rate"] == pytest.approx(0.70)
+    assert "0/10" in profiles["swing_equity"]["notes"]
+    assert profiles["intraday_fx"]["status"] == "pendiente"
+    assert "offset" in profiles["intraday_fx"]["notes"]
+    assert profiles["intraday_futures"]["status"] == "stub"
 
 
 def test_tail_log_no_permite_salir_de_logs(tmp_path: Path) -> None:

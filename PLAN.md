@@ -180,6 +180,54 @@ Reglas de trabajo:
   - `docs/fase8_nautilus.md`: NautilusTrader 1.231.0, LGPL-3.0, sin v2 estable;
     se mantiene el backtester propio hasta que F13/intradía lo justifiquen.
 
+## Fase 9 — Fondo personal (etapas 1–6)
+
+Objetivo: varias cuentas (capital propio y fondeo), bots por perfil de activo y
+límites editables desde la consola. Sin activar bots, sin órdenes, sin dinero
+real, sin tocar `.env` y sin borrar archivos.
+
+- [x] **9.1 Modelo de cuentas y límites efectivos** — 2026-11-07
+  - `config/accounts.yaml`: `paper_main`, `alpaca_paper`, `ftmo_demo`,
+    `topstep_template` (plantilla inactiva), con tipo, broker, plataforma,
+    firma/fase, estado, tamaño y bolsillo.
+  - `AccountLimits`, `own_limits`, `firm_limits`, `effective_limits` y
+    `rules_for_account`; `evaluate_account(limits=...)` usa el mínimo.
+  - Guard por cuenta en `orchestrator` (cierre/reducción permitidos).
+  - Tests: 3 bots simultáneos en `paper_main` (el tercero se bloquea) y 2
+    cuentas con límites distintos.
+- [x] **9.2 Almacén editable e historial en SQLite** — 2026-11-07
+  - Tabla `account_limit_history` (fecha, cuenta, campo, antes, después,
+    origen, efectivo desde, motivo), fuera del hash de F13.
+  - `lab fund accounts|set|history`; apretar inmediato, aflojar con confirmación
+    y espera al siguiente día hábil; con F13 congelado/iniciado solo apretar.
+  - Test: `lab f13 config-check` no cambia al editar límites.
+- [x] **9.3 Seguridad de la consola** — 2026-11-07
+  - Token CSRF por proceso (`/api/session` + `X-CSRF-Token`), validación de
+    `Host`/`Origin` solo `127.0.0.1`, 403 sin token y lista blanca
+    `WRITE_ROUTES`.
+  - Ningún endpoint activa bots, cambia `enabled`, envía órdenes ni modifica
+    los límites de la firma.
+  - Evidencia: `pytest tests/test_web_security.py -q` → 10 passed.
+- [x] **9.4 Pestaña Fondo** — 2026-11-07
+  - Límite de firma (solo lectura), propio editable, efectivo, uso del día,
+    colchón, formulario validado, confirmación al aflojar e historial.
+  - Kill-switch global, exposición agregada y capital por bolsillo con aviso si
+    un clúster supera su presupuesto.
+  - Evidencia: `pytest tests/test_fund_web.py -q` → 6 passed.
+- [ ] **9.5 Intradía forex/CFD** — bloqueada, sin descarga
+  - `lab mt5 status`: `offset_source=unknown`, `offset_known=False`; mercado
+    cerrado (2026-11-07, fin de semana).
+  - No se ejecutó `lab mt5 fetch`, no se inventó el offset y no se generó
+    `intraday.json`. No se relajó ningún umbral. Pendiente de mercado abierto y
+    offset resuelto.
+- [x] **9.6 Documentación** — 2026-11-07
+  - README 6d con cuentas, reglas, seguridad, panel, resultados por perfil y
+    estado de la etapa 5; tabla por perfil también en Research.
+  - Resumen final: 249 tests, `ruff` limpio, `lab doctor` OK salvo Finnhub,
+    ProjectX y plantilla de fondeo.
+
+---
+
 ## Registro de evidencias
 
 | Fecha | Tarea | Comando / evidencia |
@@ -212,4 +260,10 @@ Reglas de trabajo:
 | 2026-11-07 | cartera/costes | 3 bots, Sharpe 1,03, FTMO 120d 70,6%/3,5%; 0/10 frágiles a 2/20 bps |
 | 2026-11-07 | 4.4/4.6/11b | `pytest tests/test_calendar.py tests/test_session.py -q` |
 | 2026-11-07 | SEC/CSV/decisions | `pytest tests/test_sec.py tests/test_decisions.py -q` |
+| 2026-11-07 | E1 fondo cuentas | `pytest tests/test_accounts.py -q` → 8 passed; 3 bots misma cuenta, 2 cuentas |
+| 2026-11-07 | E2 fondo SQLite | `lab fund set/history`; `pytest -q` → 235 passed; hash F13 sin cambios |
+| 2026-11-07 | E3 consola CSRF | `pytest tests/test_web_security.py -q` → 10 passed; `pytest -q` → 244 passed |
+| 2026-11-07 | E4 pestaña Fondo | `pytest tests/test_fund_web.py -q` → 6 passed; `pytest -q` → 249 passed |
+| 2026-11-07 | E5 intradía | `lab mt5 status` → offset unknown + mercado cerrado; sin descarga |
+| 2026-11-07 | E6 documentación | README 6d y Fase 9; tabla por perfil en Research; `ruff` + doctor |
 |  |  |  |

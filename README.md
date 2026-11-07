@@ -190,9 +190,10 @@ Qué muestra:
 | **Mercado** | watchlist desde caché local, sparklines, breadth, retorno 1/5/20d y detalle por activo. **No descarga datos.** |
 | **Sala** | oficina pixel con los 10 roles de TradingAgents, estados en vivo, burbujas, tablero y acceso al detalle de cada rol. |
 | **Cuentas** | paper interno, Alpaca paper, FTMO demo y TopstepX/ProjectX, con equity, cash, posiciones y estado. |
+| **Fondo** | límite de firma (solo lectura), propio editable, efectivo, uso del día, colchón, historial, kill-switch global, exposición agregada, capital por bolsillo y presupuesto de clúster. |
 | **Bots** | catálogo, enabled/disabled, propuestas, evaluación con backtest, archivo reversible y última señal. |
 | **Agentes** | historial lite/deep con rating, confianza, duración y tesis; detalle en modal; runs deep en curso o terminados. |
-| **Research** | ranking, PBO global y por activo, walk-forward, gate de regímenes, propuestas (`enabled: false`) y casi propuestas. Clic en una fila para el detalle. |
+| **Research** | ranking, PBO global y por activo, walk-forward, gate de regímenes, propuestas (`enabled: false`), casi propuestas y **resultados por perfil** (swing, forex/CFD, futuros). Clic en una fila para el detalle. |
 | **Decisiones** | retorno forward por rating, hit rate y aviso de muestra insuficiente. |
 | **Riesgo** | guard de FTMO (colchón restante, suelos, límites usados), reglas activas, cuenta MT5 y estado de TopstepX/ProjectX. |
 | **Repos** | auditoría de AutoHedge, Vibe-Trading y FinceptTerminal: licencia, qué se adoptó y qué no. |
@@ -649,6 +650,99 @@ cuando MT5 pueda determinar el offset con el mercado abierto o se configure
 
 Futuros intradía: perfil definido y proveedor ProjectX como **stub**; no se
 implementa descarga de pago. Ver `docs/fase6_futuros_intradia.md`.
+
+---
+
+## 6d. Fondo personal: cuentas, límites y panel
+
+Objetivo: operar varias cuentas (capital propio y fondeo) con bots asignados por
+perfil de activo y límites de riesgo editables desde la consola, sin tocar
+`prop.yaml`, sin activar bots y sin enviar órdenes.
+
+### Cuentas y reglas
+
+`config/accounts.yaml` guarda la **identidad** de cada cuenta. Los límites
+editables viven en SQLite (`account_limit_history`), con historial de fecha,
+cuenta, campo, valor anterior, valor nuevo y origen; por eso **no cambian el
+hash de F13**.
+
+| Cuenta | Tipo | Firma / fase | Estado | Bolsillo | Diario | MaxDD | Trade | Abierto | Trades/día |
+|---|---|---|---|---|---|---|---|---|---|
+| `paper_main` | capital propio | — | active | swing_equity | 5.00% | 10.00% | 1.00% | 2.00% | 5 |
+| `alpaca_paper` | capital propio | — | active | swing_equity | 3.00% | 8.00% | 0.75% | 1.50% | 3 |
+| `ftmo_demo` | fondeo | FTMO / challenge | demo | intraday_fx | 5.00% | 10.00% | 0.50% | 2.00% | 4 |
+| `topstep_template` | fondeo | Topstep / challenge | template | intraday_futures | 2.00% | 4.00% | 0.25% | 1.00% | 3 |
+
+Reglas duras:
+
+- **Límite efectivo = mínimo** entre el de la firma (`prop.yaml`, solo lectura)
+  y el propio. Un valor propio mayor que el de la firma se rechaza.
+- **Apretar** un límite es inmediato. **Aflojar** exige `--confirm`/confirmación
+  explícita y aplica desde el siguiente día hábil (espera configurable).
+- Con **F13 congelado o iniciado solo se permite apretar**. Aflojar se rechaza
+  con un mensaje claro.
+- Cerrar o reducir posiciones nunca se bloquea; el guard solo frena aperturas.
+- `topstep_template` es una plantilla **inactiva**: no hay cuenta ni credenciales.
+
+```powershell
+lab fund accounts
+lab fund set ftmo_demo --daily-loss 0.04
+lab fund set paper_main --daily-loss 0.06 --confirm   # aflojar: siguiente día hábil
+lab fund history ftmo_demo
+```
+
+### Seguridad de la consola
+
+- Los `POST` requieren el token de `/api/session` en `X-CSRF-Token`; sin token
+  válido devuelven **403**. También se valida `Host`/`Origin` y solo se acepta
+  `127.0.0.1`.
+- Hay una **lista blanca** de rutas de escritura (`WRITE_ROUTES`). No existe
+  ningún endpoint para activar bots, cambiar `enabled`, enviar órdenes ni
+  modificar los límites de la firma.
+- El kill-switch global se puede **activar** desde el panel con confirmación y
+  resetear con confirmación explícita; no activa bots.
+- Evidencia: `pytest tests/test_web_security.py tests/test_fund_web.py -q`.
+
+### Pestaña Fondo
+
+Muestra por cuenta el límite de firma (solo lectura), el propio editable, el
+efectivo, el uso del día, el colchón diario y de drawdown, y el historial.
+Incluye kill-switch global, exposición agregada (solo notional reportado; MT5 no
+publica notional por posición y no se estima) y capital por bolsillo. Los
+clústeres de correlación comparan el riesgo reservado por los bots activos con
+su presupuesto y avisan si lo superan.
+
+### Resultados por perfil
+
+La tabla también está en **Research → Resultados por perfil**.
+
+| Perfil | Estado | Retorno | Sharpe | MaxDD | Pasa FTMO 120d | Breach | Nota |
+|---|---|---|---|---|---|---|---|
+| `swing_equity` | validado | 81.1% | 1.03 | -9.2% | 70.6% | 3.5% | cartera de 3 bots; 0/10 variantes frágiles a 2/20 bps |
+| `intraday_fx` | pendiente | — | — | — | — | — | sin datos M15/H1 por `offset_source=unknown` y mercado cerrado |
+| `intraday_futures` | stub | — | — | — | — | — | ProjectX sin credenciales/suscripción; proxy diario ES=F/NQ=F |
+
+### Etapa 5 pendiente (intradía forex/CFD)
+
+`lab mt5 status` confirma `offset_source=unknown`, `offset_known=False` y el
+mercado cerrado (2026-11-07, fin de semana). Por la regla de la etapa **no se
+descargó M15/H1, no se inventó el offset y no se generó `intraday.json`**. No se
+relajó ningún umbral. Se reanudará cuando el mercado esté abierto y el offset
+pueda determinarse o se configure `mt5.server_utc_offset_hours` verificado.
+
+### Resumen final de decisiones
+
+- Se eligieron **3 bots** (no 10) para los tests de concurrencia y la cartera
+  simulada: bastan para probar el guard agregado, el clúster `trend_equity` y el
+  presupuesto del 1% sin inflar la superficie de prueba.
+- La identidad de cuentas queda en YAML; los límites editables en SQLite con
+  historial. Así la consola puede editar sin entrar en el hash de F13.
+- El guard siempre usa el **mínimo** firma/propio; nunca se puede ampliar un
+  límite de la firma desde la consola.
+- Nada se activa ni se envía: F13 sigue `no iniciado`, `qqq-trend-f13` sigue
+  `enabled: false` y no se registró ninguna tarea F13.
+- Queda pendiente la etapa 5 (datos intradía reales) y, cuando el usuario lo
+  autorice, push/CI y backup de los commits locales.
 
 ---
 
