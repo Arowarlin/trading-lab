@@ -664,6 +664,51 @@ servicios; `lab alerts test` envía una prueba. Nunca se imprimen tokens.
 
 ---
 
+## 11c. F13: pilot operativo en paper
+
+**Estado: no iniciado.** El bot elegido es `qqq-trend-f13`
+(`config/bots.yaml`, `enabled: false`):
+
+- QQQ, estrategia `trend`, `fast=50 slow=200 regime=200`, exposición **0.35**.
+- Evidencia de `lab research`: 21 trades, pasa 65,5%, revienta 7,2%,
+  OOS 83,5%, mediana de familia 64,9%.
+- Se descartó `trend-ls` (más trades pero 13,4% de breach y el orquestador
+  actual no ejecuta cortos) y la variante de 18 trades (muestra insuficiente).
+
+### Criterios (config/f13.yaml)
+
+**Ventana: 8 semanas.** Con 21 trades en ~11 años, la esperanza en 8 semanas es
+**0–3 trades**. Por eso F13 mide **operativa**, no edge:
+
+- ≥95% de ciclos diarios ejecutados;
+- ≥95% de reconciliaciones OK;
+- 100% de señales vivas coincidentes con la recalculada;
+- slippage mediano ≤10 bps y p95 ≤25 bps;
+- error de tamaño ≤1 acción;
+- hash de `config/*.yaml` sin cambios;
+- cero breaches de guard/kill-switch y cero órdenes no autorizadas.
+
+**Paradas duras:** cualquier breach o kill-switch, orden no autorizada/intento
+live, diferencia de reconciliación no explicada, cambio de hash o dos ciclos
+diarios perdidos.
+
+**Regla de decisión:** si la operativa pasa, se **extiende** el paper a 6 meses
+o ≥20 trades antes de opinar sobre edge. Si falla una parada dura, se detiene y
+se revisa. F13 nunca pasa a dinero real.
+
+```powershell
+lab f13 status          # no iniciado + criterios
+lab f13 freeze          # congela hash/criterios; NO activa el bot
+lab f13 report          # snapshot + F13 vs SPY vs backtest
+lab f13 signal-check    # señal viva vs recalculada
+lab f13 config-check    # hash congelado vs actual
+```
+
+La activación del bot requiere aprobación humana explícita; `freeze` no cambia
+`enabled: false`.
+
+---
+
 ## 12. Roadmap restante
 
 1. ~~**F6** validar un `agent` real y medir latencia~~ → `lite` validado (77-95 s);

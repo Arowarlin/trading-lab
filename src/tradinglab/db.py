@@ -130,6 +130,32 @@ CREATE TABLE IF NOT EXISTS reconciliation (
     details TEXT
 );
 
+CREATE TABLE IF NOT EXISTS f13_config (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    bot TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    start_date TEXT NOT NULL,
+    config_hash TEXT NOT NULL,
+    criteria TEXT NOT NULL,
+    frozen_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS f13_metrics (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts TEXT NOT NULL,
+    trade_date TEXT NOT NULL,
+    equity REAL NOT NULL,
+    cash REAL NOT NULL,
+    positions_value REAL NOT NULL,
+    daily_return REAL NOT NULL,
+    drawdown REAL NOT NULL,
+    spy_close REAL,
+    spy_return REAL,
+    open_positions INTEGER NOT NULL,
+    trades INTEGER NOT NULL,
+    notes TEXT
+);
+
 CREATE INDEX IF NOT EXISTS idx_alerts_ts ON alerts(ts);
 CREATE INDEX IF NOT EXISTS idx_reconciliation_ts ON reconciliation(ts);
 CREATE INDEX IF NOT EXISTS idx_signals_ts ON signals(ts);

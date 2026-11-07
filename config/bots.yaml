@@ -8,7 +8,18 @@ bots:
     universe: [SPY, QQQ]
     timeframe: 1d
     enabled: true
+    exposure: 1.0
     description: Seguimiento de tendencia con filtro de régimen. Señal al cierre, ejecución en apertura.
+
+  - id: qqq-trend-f13
+    type: deterministic
+    strategy: trend
+    universe: [QQQ]
+    timeframe: 1d
+    enabled: false
+    exposure: 0.35
+    params: {fast: 50, slow: 200, regime: 200}
+    description: "Candidato F13: pilot operativo en paper. enabled:false hasta aprobación humana."
 
   - id: meanrev-large
     type: deterministic

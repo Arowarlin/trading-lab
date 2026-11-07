@@ -11,6 +11,7 @@ import yaml
 from .alerts import send as send_alert
 from .config import DEFAULT_DB, ROOT, Settings
 from .data import fetch
+from .db import connect, utcnow
 from .indicators import atr
 from .killswitch import allows_order
 from .killswitch import ensure as ensure_killswitch
@@ -30,6 +31,7 @@ class BotSpec:
     enabled: bool = False
     params: dict = field(default_factory=dict)
     description: str = ""
+    exposure: float = 1.0
 
 
 @dataclass
@@ -61,6 +63,7 @@ def load_bots(path: Path | None = None) -> list[BotSpec]:
                 enabled=bool(item.get("enabled", False)),
                 params=item.get("params", {}) or {},
                 description=item.get("description", ""),
+                exposure=float(item.get("exposure", 1.0)),
             )
         )
     return bots
@@ -116,8 +119,34 @@ def run_bot(
         snap = broker.snapshot({ticker: price})
         held = next((p["qty"] for p in snap["positions"] if p["ticker"] == ticker), 0.0)
 
+        if not dry_run:
+            try:
+                with connect(DEFAULT_DB) as con:
+                    con.execute(
+                        "INSERT INTO signals(ts, ticker, bot, side, strength, price, reason) "
+                        "VALUES(?,?,?,?,?,?,?)",
+                        (
+                            utcnow(),
+                            ticker,
+                            spec.id,
+                            "long" if target > 0 else "flat",
+                            target,
+                            price,
+                            f"target={target:.2f}",
+                        ),
+                    )
+            except Exception:
+                pass
+
         if target > 0:
-            desired = size_position(snap["equity"], price, atr_value, settings.risk)
+            max_pct = settings.risk.max_position_pct * max(0.0, min(spec.exposure, 1.0))
+            desired = size_position(
+                snap["equity"],
+                price,
+                atr_value,
+                settings.risk,
+                max_pct=max_pct,
+            )
         else:
             desired = 0
 

@@ -20,6 +20,12 @@ from .backtest import run as run_backtest
 from .config import DEFAULT_DB, ROOT, get_settings
 from .db import connect, init_db, utcnow
 from .execution import get_broker, get_mt5_broker, get_projectx_broker
+from .f13 import config_check as f13_config_check
+from .f13 import freeze as f13_freeze
+from .f13 import load_criteria as f13_criteria
+from .f13 import record_snapshot as f13_record
+from .f13 import signal_check as f13_signal_check
+from .f13 import status as f13_status
 from .indicators import atr as atr_indicator
 from .instruments import get_instrument, list_instruments
 from .killswitch import allows_order
@@ -28,7 +34,7 @@ from .killswitch import evaluate as evaluate_killswitch
 from .killswitch import load_state as load_killswitch
 from .killswitch import reset as reset_killswitch
 from .llm import LLMClient
-from .orchestrator import run_all, write_dry_run_log
+from .orchestrator import load_bots, run_all, write_dry_run_log
 from .prop import AccountState, PropGuard, PropRules, from_yaml, ftmo, monte_carlo
 from .reconciliation import reconcile as reconcile_broker
 from .reporting import build_dashboard
@@ -49,11 +55,13 @@ killswitch_app = typer.Typer(
 alerts_app = typer.Typer(
     no_args_is_help=True, help="Alertas ntfy/Telegram, latido y chequeo de servicios."
 )
+f13_app = typer.Typer(no_args_is_help=True, help="F13: pilot operativo de paper y criterios.")
 app.add_typer(mt5_app, name="mt5")
 app.add_typer(prop_app, name="prop")
 app.add_typer(futures_app, name="futures")
 app.add_typer(killswitch_app, name="killswitch")
 app.add_typer(alerts_app, name="alerts")
+app.add_typer(f13_app, name="f13")
 console = Console()
 
 OK = "[green]OK[/green]"
@@ -1151,6 +1159,175 @@ def reconcile_cmd(
     t.add_row("Detalle", result.details or "sin diferencias")
     console.print(t)
     if result.status != "ok":
+        raise typer.Exit(1)
+
+
+@f13_app.command("status")
+def f13_status_cmd() -> None:
+    """Estado del pilot F13 y hash de configuración."""
+    init_db(DEFAULT_DB)
+    row = f13_status(DEFAULT_DB)
+    criteria = f13_criteria()
+    t = Table(title="F13 · estado")
+    t.add_column("Campo", style="bold")
+    t.add_column("Valor", overflow="fold")
+    if row:
+        t.add_row("Bot", row["bot"])
+        t.add_row("Símbolo", row["symbol"])
+        t.add_row("Inicio", row["start_date"])
+        t.add_row("Congelado", row["frozen_at"])
+        t.add_row("Hash", row["config_hash"][:16] + "…")
+    else:
+        t.add_row("Estado", "no iniciado")
+        t.add_row("Ventana", f"{criteria['window_weeks']} semanas")
+        t.add_row("Trades esperados", f"{criteria['expected_trades_8w_low']}–{criteria['expected_trades_8w_high']}")
+        t.add_row("Extensión de edge", criteria["edge_extension"])
+    console.print(t)
+
+    check = f13_config_check(DEFAULT_DB)
+    if check["status"] == "changed":
+        console.print(
+            Panel(
+                "La configuración cambió respecto al hash congelado. "
+                "F13 queda invalidado hasta revisión humana.",
+                style="bold red",
+            )
+        )
+
+
+@f13_app.command("freeze")
+def f13_freeze_cmd(
+    bot: str = typer.Option("qqq-trend-f13", "--bot"),
+    start: str = typer.Option(None, "--start", help="YYYY-MM-DD (por defecto hoy)"),
+    yes: bool = typer.Option(False, "--yes", help="No pedir confirmación"),
+) -> None:
+    """Congela criterios y hash. No activa el bot."""
+    init_db(DEFAULT_DB)
+    specs = {spec.id: spec for spec in load_bots()}
+    spec = specs.get(bot)
+    if spec is None:
+        console.print(f"[red]Bot no encontrado:[/red] {bot}")
+        raise typer.Exit(2)
+    if spec.enabled:
+        console.print("[red]No se congela un bot enabled.[/red] F13 debe empezar con enabled:false.")
+        raise typer.Exit(2)
+    if not yes:
+        if not typer.confirm(f"¿Congelar F13 con {bot} desde {start or _today()}?"):
+            raise typer.Exit(1)
+    row = f13_freeze(
+        DEFAULT_DB,
+        bot=bot,
+        symbol=spec.universe[0],
+        start_date=start or _today(),
+    )
+    console.print(
+        f"[green]F13 congelado[/green] · bot={row['bot']} · hash={row['config_hash'][:16]}…"
+    )
+    console.print("[yellow]El bot sigue enabled:false; la activación requiere tu aprobación.[/yellow]")
+
+
+@f13_app.command("report")
+def f13_report_cmd() -> None:
+    """Registra un snapshot y muestra el estado de F13 frente a SPY."""
+    init_db(DEFAULT_DB)
+    row = f13_status(DEFAULT_DB)
+    if not row:
+        console.print("[yellow]F13 no iniciado. Criterios:[/yellow]")
+        console.print_json(data=f13_criteria())
+        return
+
+    settings = get_settings()
+    broker = get_broker(settings, DEFAULT_DB)
+    spy_close = None
+    spy_total = None
+    try:
+        spy = data_mod.fetch("SPY", row["start_date"], _today(), settings.data.cache_dir)
+        spy_close = float(spy["close"].iloc[-1])
+        spy_total = spy_close / float(spy["close"].iloc[0]) - 1.0
+    except Exception as exc:
+        console.print(f"[dim]No se pudo leer SPY: {exc}[/dim]")
+
+    specs = {spec.id: spec for spec in load_bots()}
+    spec = specs.get(row["bot"])
+    backtest_metrics = None
+    if spec is not None:
+        try:
+            df = data_mod.fetch(
+                spec.universe[0], row["start_date"], _today(), settings.data.cache_dir
+            )
+            strategy = STRATEGIES[spec.strategy](df, **spec.params)
+            bt = run_backtest(
+                df,
+                strategy.target,
+                starting_cash=settings.starting_cash,
+                commission_bps=settings.execution.commission_bps,
+                slippage_bps=settings.execution.slippage_bps,
+                max_gross=spec.exposure,
+            )
+            backtest_metrics = bt.metrics
+        except Exception as exc:
+            console.print(f"[dim]No se pudo ejecutar el backtest de comparación: {exc}[/dim]")
+
+    snap = f13_record(DEFAULT_DB, broker, bot=row["bot"], spy_close=spy_close)
+    with connect(DEFAULT_DB) as con:
+        first = con.execute("SELECT equity, ts FROM f13_metrics ORDER BY id ASC LIMIT 1").fetchone()
+        count = con.execute("SELECT COUNT(*) AS n FROM f13_metrics").fetchone()["n"]
+        orders = con.execute(
+            "SELECT COUNT(*) AS n FROM orders WHERE bot = ?", (row["bot"],)
+        ).fetchone()["n"]
+
+    total = snap["equity"] / float(first["equity"]) - 1.0 if first and first["equity"] else 0.0
+    t = Table(title=f"F13 · {row['bot']} · desde {row['start_date']}")
+    t.add_column("Métrica", style="bold")
+    t.add_column("Valor", justify="right")
+    t.add_row("Equity", f"{snap['equity']:,.2f}")
+    t.add_row("Retorno F13", _fmt_pct(total))
+    t.add_row("Drawdown actual", _fmt_pct(snap["drawdown"]))
+    if spy_total is not None:
+        t.add_row("Retorno SPY (mismo periodo)", _fmt_pct(spy_total))
+    if backtest_metrics:
+        t.add_row("Retorno backtest", _fmt_pct(float(backtest_metrics["total_return"])))
+        t.add_row("Sharpe backtest", f"{float(backtest_metrics['sharpe']):.2f}")
+        t.add_row("MaxDD backtest", _fmt_pct(float(backtest_metrics["max_drawdown"])))
+        t.add_row("Trades backtest", str(backtest_metrics["num_trades"]))
+    t.add_row("Snapshots", str(count))
+    t.add_row("Órdenes del bot", str(orders))
+    console.print(t)
+    console.print("[dim]F13 no cambia enabled; el pilot solo se activa con aprobación humana.[/dim]")
+
+
+@f13_app.command("signal-check")
+def f13_signal_check_cmd(bot: str = typer.Option("qqq-trend-f13", "--bot")) -> None:
+    """Recalcula la señal del bot con los mismos datos y la compara con la última."""
+    settings = get_settings()
+    specs = {spec.id: spec for spec in load_bots()}
+    spec = specs.get(bot)
+    if spec is None:
+        console.print(f"[red]Bot no encontrado:[/red] {bot}")
+        raise typer.Exit(2)
+    result = f13_signal_check(settings, spec, DEFAULT_DB)
+    if not result.get("ok"):
+        console.print(f"[red]{result.get('error')}[/red]")
+        raise typer.Exit(1)
+    console.print(
+        f"{result['ticker']} · target={result['target']:.0%} · precio={result['price']:,.2f} "
+        f"· ATR={result['atr']:,.2f}"
+    )
+    if result.get("last_signal"):
+        console.print(f"Última señal: {result['last_signal']}")
+        console.print(
+            f"Coincide: {'sí' if result.get('match') else 'NO' if result.get('match') is False else 'sin datos'}"
+        )
+    else:
+        console.print("[yellow]Sin señales registradas todavía; ejecuta el bot en paper (no dry-run).[/yellow]")
+
+
+@f13_app.command("config-check")
+def f13_config_check_cmd() -> None:
+    """Comprueba que config/*.yaml no cambió desde el freeze."""
+    check = f13_config_check(DEFAULT_DB)
+    console.print(check)
+    if not check["ok"]:
         raise typer.Exit(1)
 
 

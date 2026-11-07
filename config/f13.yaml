@@ -1,0 +1,21 @@
+# F13: criterios congelados antes de empezar (no vinculantes hasta `lab f13 freeze`).
+# El bot debe estar enabled: false; la activación requiere aprobación humana.
+bot: qqq-trend-f13
+symbol: QQQ
+status: not_started
+criteria:
+  window_weeks: 8
+  min_cycles_pct: 0.95
+  min_reconciliation_ok_pct: 0.95
+  max_slippage_bps_p50: 10
+  max_slippage_bps_p95: 25
+  max_size_error_shares: 1
+  expected_trades_8w_low: 0
+  expected_trades_8w_high: 3
+  edge_extension: "6 meses o >=20 trades"
+  hard_stops:
+    - cualquier breach de guard o kill-switch
+    - cualquier orden no autorizada o intento de live
+    - reconciliación con diferencia no explicada
+    - hash de configuración distinto al congelado
+    - dos ciclos diarios consecutivos perdidos

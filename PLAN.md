@@ -77,17 +77,22 @@ Reglas de trabajo:
 
 ## Fase 2 — Dejar F13 listo para arrancar
 
-- [ ] **2.1 Definir criterios de éxito de F13**
+- [x] **2.1 Definir criterios de éxito de F13** — 2026-11-07
   - Métricas, umbrales, condiciones de parada y regla de decisión, medibles y
     con tamaño de muestra realista para 4-8 semanas. Documentar en PLAN/README.
-- [ ] **2.2 Elegir el bot del paper**
-  - Un solo bot (activo, estrategia, parámetros y escala) justificado con
-    `lab research` y chequeos propios. Alpaca paper. No activar más bots.
+  - Decisión: 8 semanas = pilot operativo; edge se extiende a 6 meses o >=20
+    trades. 21 trades/11 años => 0-3 trades esperados en 8 semanas.
+- [x] **2.2 Elegir el bot del paper** — 2026-11-07
+  - `qqq-trend-f13` (QQQ, trend 50/200/200, exposición 0.35), `enabled: false`.
+  - Justificación: mejor propuesta de research (21 trades, 65.5% pasa, 7.2%
+    breach, 83.5% OOS). No se activa.
 - [ ] **2.3 Implementar medición automática de F13**
-  - Tabla `f13_metrics`, `lab f13 report`, comparación con SPY y backtest,
-    señal viva vs recalculada, slippage/tamaño real, paradas y hash de config.
+  - Hecho: tablas `f13_config`/`f13_metrics`, `lab f13 status|freeze|report|
+    signal-check|config-check`, comparación con SPY y backtest.
+  - Pendiente: slippage real y tamaño real frente a lo calculado; paradas
+    automáticas conectadas a alertas.
 - [ ] **2.4 Presentar y esperar aprobación**
-  - No arrancar el paper sin confirmación explícita.
+  - No arrancar el paper sin confirmación explícita del usuario.
 
 ## Fase 3 — Mejoras de lab research
 
@@ -151,4 +156,5 @@ Reglas de trabajo:
 | 2026-11-06 | 0.2 Backups/keyring | `backup.ps1` → PASS; keyring 3 secretos |
 | 2026-11-06 | 0.4 DST/offset | `pytest tests/test_timezone.py -q` → 9 passed |
 | 2026-11-06 | 1.1–1.5 | `pytest -q` → 112 passed; `lab reconcile` → ok |
+| 2026-11-07 | 2.1–2.2 | `lab f13 status` → no iniciado; bot `qqq-trend-f13` |
 |  |  |  |
