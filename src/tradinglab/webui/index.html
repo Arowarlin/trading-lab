@@ -118,6 +118,10 @@
   .pos { color: var(--green) !important; }
   .neg { color: var(--red) !important; }
   .warn { color: var(--yellow) !important; }
+  .account-kpis { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 10px; margin: 12px 0; }
+  .account-kpis > div { border-bottom: 1px solid var(--border-soft); padding: 5px 0; }
+  .account-kpis span { display: block; color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .07em; }
+  .account-kpis b { display: block; font-size: 17px; font-variant-numeric: tabular-nums; margin-top: 2px; }
 
   .grid-2 { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr); gap: 14px; margin-bottom: 14px; }
   .grid-2.equal { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -136,6 +140,12 @@
   /* --------------------------------------------------------------- charts */
   .chart-wrap { position: relative; width: 100%; height: 276px; }
   #equity-canvas { width: 100%; height: 276px; display: block; border-radius: 8px; }
+  .chart-tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+  .chart-ranges { display: flex; gap: 3px; background: #0c1219; border: 1px solid var(--border); border-radius: 7px; padding: 2px; }
+  .chart-ranges button { appearance: none; border: 0; background: transparent; color: var(--muted); font: inherit; font-size: 10px; padding: 3px 7px; border-radius: 5px; cursor: pointer; }
+  .chart-ranges button:hover { color: var(--text); }
+  .chart-ranges button.active { background: #1f6feb; color: white; }
+  .chart-tooltip { position: absolute; pointer-events: none; background: #0b1117; border: 1px solid #2d3b4d; border-radius: 7px; padding: 5px 8px; font-size: 11px; color: var(--text); display: none; z-index: 5; white-space: nowrap; box-shadow: var(--shadow); }
   .chart-loading { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font-size: 12px; }
 
   /* --------------------------------------------------------------- lists */
@@ -257,6 +267,9 @@
   .bot-desc { color: var(--muted); font-size: 12px; line-height: 1.5; }
   .bot-meta { display: flex; gap: 14px; flex-wrap: wrap; color: #7f8c9b; font-size: 11px; }
   .bot-actions { margin-top: auto; border-top: 1px solid var(--border-soft); padding-top: 9px; display: flex; flex-direction: column; gap: 5px; }
+  .bot-eval { display: flex; gap: 10px; flex-wrap: wrap; border-top: 1px solid var(--border-soft); padding-top: 8px; color: var(--muted); font-size: 10.5px; }
+  .bot-eval b { color: var(--text); }
+  .bot-buttons { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
   .mini-action { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--muted); }
   .mini-action b { color: var(--text); font-weight: 600; min-width: 42px; }
 
@@ -369,6 +382,7 @@
     <nav id="nav">
       <button class="nav-btn active" data-view="overview"><span class="ico">◈</span> Resumen</button>
       <button class="nav-btn" data-view="sala"><span class="ico">▦</span> Sala</button>
+      <button class="nav-btn" data-view="accounts"><span class="ico">▤</span> Cuentas</button>
       <button class="nav-btn" data-view="bots"><span class="ico">⚙</span> Bots</button>
       <button class="nav-btn" data-view="agents"><span class="ico">✦</span> Agentes</button>
       <button class="nav-btn" data-view="research"><span class="ico">⌁</span> Research</button>
@@ -408,10 +422,20 @@
         <div class="panel">
           <div class="panel-head">
             <h2>Curva de equity</h2>
-            <span class="muted tiny" id="equity-caption">—</span>
+            <div class="chart-tools">
+              <span class="muted tiny" id="equity-caption">—</span>
+              <div class="chart-ranges" id="chart-ranges">
+                <button data-range="1M">1M</button>
+                <button data-range="3M">3M</button>
+                <button data-range="6M">6M</button>
+                <button data-range="1Y">1A</button>
+                <button data-range="ALL" class="active">Todo</button>
+              </div>
+            </div>
           </div>
           <div class="chart-wrap">
             <canvas id="equity-canvas"></canvas>
+            <div class="chart-tooltip" id="chart-tooltip"></div>
             <div class="chart-loading" id="chart-loading">Esperando datos…</div>
           </div>
         </div>
@@ -435,6 +459,11 @@
       <div class="panel">
         <div class="panel-head"><h2>Últimas órdenes</h2><span class="muted tiny">cuenta paper</span></div>
         <div id="recent-orders"></div>
+      </div>
+
+      <div class="panel" style="margin-top:14px">
+        <div class="panel-head"><h2>Actividad en vivo</h2><span class="muted tiny">señales · alertas · agentes</span></div>
+        <div id="live-feed"></div>
       </div>
     </section>
 
@@ -491,13 +520,42 @@
       </div>
     </section>
 
+    <!-- ============================================================== CUENTAS -->
+    <section class="view" id="view-accounts">
+      <div class="note" style="margin:0 0 14px">
+        <strong>Solo paper/demo.</strong> Paper interno (SQLite), Alpaca paper, FTMO demo
+        y TopstepX. Ninguna cuenta real está conectada.
+      </div>
+      <div class="grid-2 equal" id="accounts-grid"></div>
+    </section>
+
     <!-- =============================================================== BOTS -->
     <section class="view" id="view-bots">
       <div class="note" style="margin:0 0 14px">
         <strong>Activación manual.</strong> Solo los bots con <code>enabled: true</code> se ejecutan en el orquestador.
         El dry-run calcula señales sin enviar órdenes. Las propuestas de research nunca se activan solas.
+        <strong>Archivar no borra:</strong> desactiva y conserva historial.
+      </div>
+      <div class="action-bar">
+        <button class="btn primary" id="evaluate-bots">Evaluar todos</button>
+        <span class="muted tiny">Backtest determinista con comisión/slippage; no activa nada.</span>
       </div>
       <div class="stats" id="bots-summary"></div>
+      <div class="panel" style="margin:14px 0">
+        <div class="panel-head"><h2>Proponer bot</h2><span class="muted tiny">nace en enabled:false</span></div>
+        <div class="action-bar" style="margin:0">
+          <input class="input" id="new-bot-id" placeholder="id" maxlength="32" spellcheck="false">
+          <select class="input" id="new-bot-strategy" style="width:110px">
+            <option value="trend">trend</option>
+            <option value="meanrev">meanrev</option>
+            <option value="trend-ls">trend-ls</option>
+          </select>
+          <input class="input" id="new-bot-universe" value="SPY" style="width:130px" spellcheck="false">
+          <input class="input" id="new-bot-params" value='{"fast":50,"slow":200,"regime":200}' style="width:240px; text-transform:none" spellcheck="false">
+          <input class="input" id="new-bot-exposure" value="0.35" style="width:80px; text-transform:none">
+          <button class="btn" id="propose-bot">Crear propuesta</button>
+        </div>
+      </div>
       <div class="bot-grid" id="bots-grid"></div>
     </section>
 
@@ -601,16 +659,22 @@
 const S = {
   overview: null,
   risk: null,
+  accounts: [],
   view: "overview",
   action: null,
   selectedLog: null,
   refreshTimer: null,
   actionTimer: null,
+  chartRange: "ALL",
+  chartHover: null,
+  chartPoints: [],
+  chartGeom: null,
 };
 
 const TITLES = {
   overview: ["Resumen", "Estado general del laboratorio"],
   sala: ["Sala", "TradingAgents en su oficina: estados, runs y decisiones"],
+  accounts: ["Cuentas", "Paper, Alpaca, MT5 y futuros"],
   bots: ["Bots", "Catálogo, estado y últimas señales"],
   agents: ["Agentes", "TradingAgents lite/deep y sus decisiones"],
   research: ["Research", "Ranking, propuestas y casi propuestas"],
@@ -718,9 +782,10 @@ async function loadAll(manual = false) {
   const button = $("#refresh-btn");
   button.disabled = true;
   $("#refresh-label").textContent = "Actualizando…";
-  const [overviewResult, riskResult] = await Promise.allSettled([
+  const [overviewResult, riskResult, accountsResult] = await Promise.allSettled([
     getJSON("/api/overview"),
     getJSON("/api/risk"),
+    getJSON("/api/accounts"),
   ]);
   if (overviewResult.status === "fulfilled") {
     S.overview = overviewResult.value;
@@ -734,6 +799,10 @@ async function loadAll(manual = false) {
   if (riskResult.status === "fulfilled") {
     S.risk = riskResult.value;
     renderRisk();
+  }
+  if (accountsResult.status === "fulfilled") {
+    S.accounts = accountsResult.value.accounts || [];
+    renderAccounts();
   }
   if (overviewResult.status === "rejected" && riskResult.status === "rejected") {
     toast("No se pudo conectar con el panel: " + overviewResult.reason.message, true);
@@ -922,14 +991,57 @@ function renderOverview() {
     { empty: "Sin órdenes todavía." }
   );
 
+  renderLiveFeed(o);
   requestAnimationFrame(drawEquity);
+}
+
+function renderLiveFeed(o) {
+  const events = [];
+  (o.account?.signals || []).forEach((s) => events.push({
+    ts: s.ts,
+    kind: "señal",
+    cls: s.side === "buy" ? "green" : s.side === "sell" ? "red" : "",
+    text: `${s.ticker} · ${s.bot} · ${s.side}${s.reason ? " · " + s.reason : ""}`,
+  }));
+  (o.alerts?.last || []).forEach((a) => events.push({
+    ts: a.ts,
+    kind: a.event === "heartbeat" ? "latido" : "alerta",
+    cls: a.ok ? "" : "red",
+    text: `${a.event} · ${a.severity || ""}${a.error ? " · " + a.error : ""}`,
+  }));
+  (o.agents || []).slice(0, 6).forEach((a) => events.push({
+    ts: a.generated_at,
+    kind: "agente",
+    cls: a.mode === "deep" ? "purple" : "blue",
+    text: `${a.ticker} · ${a.mode} · ${a.rating}${a.confidence != null ? " · " + pct(a.confidence, 0) : ""}`,
+  }));
+  events.sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime());
+  const host = $("#live-feed");
+  if (!host) return;
+  host.innerHTML = events.length
+    ? events.slice(0, 10).map((e) => `<div class="sys-row">
+        <span class="dot ${e.cls === "red" ? "bad" : e.cls === "green" ? "ok" : ""}"></span>
+        <span class="name"><span class="tag ${e.cls}">${esc(e.kind)}</span> ${esc(e.text)}</span>
+        <span class="detail">${ago(e.ts)}</span>
+      </div>`).join("")
+    : `<div class="empty">Sin actividad todavía.</div>`;
 }
 
 /* ------------------------------------------------------------------ chart */
 function drawEquity() {
   const canvas = $("#equity-canvas");
   if (!canvas || !constantView()) return;
-  const points = (S.overview?.account?.equity_curve || []).map((p) => ({ x: new Date(p.ts).getTime(), y: Number(p.equity) }));
+  const all = (S.overview?.account?.equity_curve || []).map((p) => ({
+    x: new Date(p.ts).getTime(),
+    y: Number(p.equity),
+  }));
+  const days = { "1M": 30, "3M": 90, "6M": 180, "1Y": 365, ALL: null }[S.chartRange] ?? null;
+  let points = all;
+  if (days && all.length) {
+    const cutoff = all[all.length - 1].x - days * 86_400_000;
+    points = all.filter((p) => p.x >= cutoff);
+  }
+
   const rect = canvas.getBoundingClientRect();
   if (!rect.width) return;
   const dpr = window.devicePixelRatio || 1;
@@ -938,16 +1050,19 @@ function drawEquity() {
   const ctx = canvas.getContext("2d");
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, rect.width, 276);
+  S.chartPoints = [];
+  S.chartGeom = null;
 
   if (points.length < 2) {
+    S.chartHover = null;
+    $("#chart-tooltip").style.display = "none";
     ctx.fillStyle = "#8b98a8";
     ctx.font = "12px -apple-system, Segoe UI, sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText("Sin historial de equity suficiente", rect.width / 2, 138);
+    ctx.fillText("Sin historial de equity suficiente para este rango", rect.width / 2, 138);
     return;
   }
 
-  // downsample para no dibujar miles de puntos
   const maxPoints = 500;
   let data = points;
   if (points.length > maxPoints) {
@@ -955,7 +1070,7 @@ function drawEquity() {
     data = points.filter((_, i) => i % step === 0 || i === points.length - 1);
   }
 
-  const padL = 58, padR = 16, padT = 16, padB = 26;
+  const padL = 58, padR = 16, padT = 16, padB = 30;
   const width = rect.width - padL - padR;
   const height = 276 - padT - padB;
   let lo = Math.min(...data.map((p) => p.y));
@@ -964,8 +1079,12 @@ function drawEquity() {
   lo -= span * 0.08;
   hi += span * 0.08;
   const minX = data[0].x, maxX = data[data.length - 1].x || minX + 1;
-  const x = (v) => padL + (v - minX) / Math.max(1, maxX - minX) * width;
-  const y = (v) => padT + (hi - v) / (hi - lo) * height;
+  const x = (v) => padL + ((v - minX) / Math.max(1, maxX - minX)) * width;
+  const y = (v) => padT + ((hi - v) / (hi - lo)) * height;
+
+  S.chartPoints = data;
+  S.chartHover = S.chartHover != null && S.chartHover < data.length ? S.chartHover : null;
+  S.chartGeom = { padL, padR, padT, padB, width, height, minX, maxX, lo, hi, x, y };
 
   // grid horizontal
   ctx.strokeStyle = "rgba(139,152,168,.12)";
@@ -974,18 +1093,30 @@ function drawEquity() {
   ctx.fillStyle = "#73808f";
   ctx.textAlign = "right";
   for (let i = 0; i <= 4; i++) {
-    const value = lo + (hi - lo) * i / 4;
+    const value = lo + ((hi - lo) * i) / 4;
     const yy = y(value);
-    ctx.beginPath(); ctx.moveTo(padL, yy); ctx.lineTo(rect.width - padR, yy); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(padL, yy);
+    ctx.lineTo(rect.width - padR, yy);
+    ctx.stroke();
     ctx.fillText(fmtInt.format(value), padL - 8, yy + 3);
   }
+
+  // línea base (primer valor)
+  ctx.setLineDash([4, 4]);
+  ctx.strokeStyle = "rgba(139,152,168,.25)";
+  ctx.beginPath();
+  ctx.moveTo(padL, y(data[0].y));
+  ctx.lineTo(rect.width - padR, y(data[0].y));
+  ctx.stroke();
+  ctx.setLineDash([]);
 
   const positive = data[data.length - 1].y >= data[0].y;
   const color = positive ? "#3fb950" : "#f85149";
 
   // área
   const gradient = ctx.createLinearGradient(0, padT, 0, padT + height);
-  gradient.addColorStop(0, positive ? "rgba(63,185,80,.22)" : "rgba(248,81,73,.22)");
+  gradient.addColorStop(0, positive ? "rgba(63,185,80,.24)" : "rgba(248,81,73,.24)");
   gradient.addColorStop(1, "rgba(63,185,80,0)");
   ctx.beginPath();
   ctx.moveTo(x(data[0].x), padT + height);
@@ -997,7 +1128,10 @@ function drawEquity() {
 
   // línea
   ctx.beginPath();
-  data.forEach((p, i) => { if (i === 0) ctx.moveTo(x(p.x), y(p.y)); else ctx.lineTo(x(p.x), y(p.y)); });
+  data.forEach((p, i) => {
+    if (i === 0) ctx.moveTo(x(p.x), y(p.y));
+    else ctx.lineTo(x(p.x), y(p.y));
+  });
   ctx.strokeStyle = color;
   ctx.lineWidth = 2;
   ctx.lineJoin = "round";
@@ -1023,11 +1157,137 @@ function drawEquity() {
   let lx = x(last.x) + 9;
   if (lx + labelWidth > rect.width - padR) lx = x(last.x) - labelWidth - 9;
   ctx.fillText(label, lx, Math.max(12, y(last.y) - 10));
+
+  // fechas del eje X
+  ctx.font = "9.5px -apple-system, Segoe UI, sans-serif";
+  ctx.fillStyle = "#73808f";
+  ctx.textAlign = "left";
+  ctx.fillText(new Date(minX).toLocaleDateString("es-ES", { day: "2-digit", month: "short" }), padL, 270);
+  ctx.textAlign = "right";
+  ctx.fillText(new Date(maxX).toLocaleDateString("es-ES", { day: "2-digit", month: "short" }), rect.width - padR, 270);
+
+  // crosshair + punto hover
+  if (S.chartHover != null) {
+    const hp = data[S.chartHover];
+    if (hp) {
+      ctx.setLineDash([3, 3]);
+      ctx.strokeStyle = "rgba(201,213,226,.35)";
+      ctx.beginPath();
+      ctx.moveTo(x(hp.x), padT);
+      ctx.lineTo(x(hp.x), padT + height);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.beginPath();
+      ctx.arc(x(hp.x), y(hp.y), 4, 0, Math.PI * 2);
+      ctx.fillStyle = "#e6edf3";
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(x(hp.x), y(hp.y), 7, 0, Math.PI * 2);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+  }
+}
+
+function bindChart() {
+  $$("#chart-ranges button").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      S.chartRange = btn.dataset.range;
+      S.chartHover = null;
+      $$("#chart-ranges button").forEach((b) => b.classList.toggle("active", b === btn));
+      drawEquity();
+    });
+  });
+  const canvas = $("#equity-canvas");
+  if (!canvas) return;
+  canvas.addEventListener("mousemove", (event) => {
+    if (!S.chartGeom || !S.chartPoints.length) return;
+    const rect = canvas.getBoundingClientRect();
+    const px = event.clientX - rect.left;
+    let best = 0;
+    let bestDistance = Infinity;
+    S.chartPoints.forEach((p, i) => {
+      const distance = Math.abs(S.chartGeom.x(p.x) - px);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = i;
+      }
+    });
+    if (bestDistance > 28) {
+      clearChartHover();
+      return;
+    }
+    S.chartHover = best;
+    const p = S.chartPoints[best];
+    const tip = $("#chart-tooltip");
+    tip.style.display = "block";
+    tip.innerHTML = `<b>${money(p.y)}</b><br><span class="muted">${dateTime(new Date(p.x).toISOString())}</span>`;
+    const tx = Math.min(rect.width - 130, Math.max(8, S.chartGeom.x(p.x) + 12));
+    const ty = Math.max(6, S.chartGeom.y(p.y) - 38);
+    tip.style.left = `${tx}px`;
+    tip.style.top = `${ty}px`;
+    drawEquity();
+  });
+  canvas.addEventListener("mouseleave", clearChartHover);
+}
+
+function clearChartHover() {
+  S.chartHover = null;
+  const tip = $("#chart-tooltip");
+  if (tip) tip.style.display = "none";
+  drawEquity();
 }
 
 function constantView() { return $("#view-overview").classList.contains("active"); }
 
+/* ---------------------------------------------------------------- cuentas */
+function renderAccounts() {
+  const host = $("#accounts-grid");
+  if (!host) return;
+  const accounts = S.accounts || [];
+  if (!accounts.length) {
+    host.innerHTML = `<div class="panel"><div class="empty">Cargando cuentas…</div></div>`;
+    return;
+  }
+  host.innerHTML = accounts.map((a) => {
+    const badge = a.ok
+      ? `<span class="badge ok">ok</span>`
+      : a.configured
+        ? `<span class="badge bad">error</span>`
+        : `<span class="badge">sin configurar</span>`;
+    const rows = (a.positions || []).map((p) => [
+      `<b>${esc(p.symbol)}</b>`,
+      num(p.qty, 2),
+      p.value != null ? money(p.value) : "—",
+      `<span class="${Number(p.pnl) >= 0 ? "pos" : "neg"}">${money(p.pnl)}</span>`,
+    ]);
+    return `<div class="panel account-card">
+      <div class="panel-head"><h2>${esc(a.name)}</h2>${badge}</div>
+      <div class="muted tiny">${esc(a.kind)} · ${esc(a.mode)} · ${esc(a.source)}</div>
+      <div class="account-kpis">
+        <div><span>Equity</span><b>${a.equity != null ? money(a.equity) : "—"}</b></div>
+        <div><span>Cash / balance</span><b>${a.cash != null ? money(a.cash) : "—"}</b></div>
+        <div><span>Posiciones</span><b>${(a.positions || []).length}</b></div>
+      </div>
+      ${a.error ? `<div class="alert red" style="margin-top:6px">${esc(a.error)}</div>` : ""}
+      ${grid(
+        [{ label: "Símbolo" }, { label: "Qty", num: true }, { label: "Valor", num: true }, { label: "PnL", num: true }],
+        rows,
+        { empty: "Sin posiciones." }
+      )}
+      ${a.buying_power != null ? `<div class="muted tiny" style="margin-top:8px">Buying power: ${money(a.buying_power)}</div>` : ""}
+      ${a.trade_allowed != null ? `<div class="muted tiny" style="margin-top:4px">Algo Trading: ${a.trade_allowed ? "ON" : "OFF"}</div>` : ""}
+    </div>`;
+  }).join("");
+}
+
 /* ------------------------------------------------------------------- bots */
+function evalTag(status) {
+  const cls = status === "mantener" ? "green" : status === "archivar" ? "red" : status === "muestra_insuficiente" ? "yellow" : status === "propuesto" ? "blue" : "";
+  return `<span class="tag ${cls}">${esc(status || "sin evaluar")}</span>`;
+}
+
 function renderBots() {
   const bots = S.overview?.bots || [];
   if (!bots.length) {
@@ -1035,29 +1295,112 @@ function renderBots() {
     $("#bots-grid").innerHTML = `<div class="empty">No hay bots en config/bots.yaml.</div>`;
     return;
   }
-  const enabled = bots.filter((b) => b.enabled).length;
+  const active = bots.filter((b) => b.enabled && !b.archived).length;
+  const proposed = bots.filter((b) => b.proposed).length;
+  const archived = bots.filter((b) => b.archived).length;
+  const evaluated = bots.filter((b) => b.evaluation?.status).length;
   $("#bots-summary").innerHTML = [
-    { label: "Bots en catálogo", value: bots.length },
-    { label: "Habilitados", value: enabled, cls: enabled ? "pos" : "" },
-    { label: "Deshabilitados", value: bots.length - enabled, cls: "muted" },
-    { label: "Estrategias", value: new Set(bots.map((b) => b.strategy)).size },
+    { label: "Bots", value: bots.length },
+    { label: "Activos", value: active, cls: active ? "pos" : "" },
+    { label: "Propuestos", value: proposed, cls: proposed ? "warn" : "" },
+    { label: "Archivados", value: archived, cls: archived ? "neg" : "" },
+    { label: "Evaluados", value: evaluated },
   ].map((s) => `<div class="stat"><div class="label">${esc(s.label)}</div><div class="value ${s.cls || ""}">${s.value}</div></div>`).join("");
 
   $("#bots-grid").innerHTML = bots.map((bot) => {
     const actions = (bot.last_actions || []).map((a) => `
       <div class="mini-action"><b>${esc(a.ticker)}</b> ${statusTag(a.status)} <span>Δ ${num(a.delta, 0)}</span> <span class="muted">${money(a.price)}</span></div>`).join("");
+    const ev = bot.evaluation || {};
+    const evalLabel = ev.status || (bot.proposed ? "propuesto" : "sin evaluar");
+    const metrics = ev.status && ev.status !== "no_evaluable"
+      ? `<div class="bot-eval">
+          <span>trades <b>${num(ev.num_trades, 0)}</b></span>
+          <span>retorno <b class="${Number(ev.total_return) >= 0 ? "pos" : "neg"}">${pct(ev.total_return, 1)}</b></span>
+          <span>Sharpe <b>${num(ev.sharpe, 2)}</b></span>
+          <span>MaxDD <b class="neg">${pct(ev.max_drawdown, 1)}</b></span>
+        </div>`
+      : "";
+    const stateTag = bot.archived ? `<span class="tag red">archivado</span>` : bot.proposed ? `<span class="tag blue">propuesto</span>` : `<span class="tag ${bot.enabled ? "green" : ""}">${bot.enabled ? "enabled" : "disabled"}</span>`;
     return `
-      <div class="bot-card ${bot.enabled ? "on" : "off"}">
+      <div class="bot-card ${bot.enabled && !bot.archived ? "on" : "off"}">
         <div class="bot-top">
           <span class="bot-id">${esc(bot.id)}</span>
-          <span class="tag ${bot.enabled ? "green" : ""}">${bot.enabled ? "enabled" : "disabled"}</span>
+          <span style="display:flex;gap:5px;flex-wrap:wrap">${stateTag}${evalTag(evalLabel)}</span>
         </div>
-        <div class="bot-meta"><span>tipo: <b>${esc(bot.type)}</b></span><span>estrategia: <b>${esc(bot.strategy)}</b></span><span>tf: <b>${esc(bot.timeframe)}</b></span></div>
+        <div class="bot-meta"><span>tipo: <b>${esc(bot.type)}</b></span><span>estrategia: <b>${esc(bot.strategy)}</b></span><span>exp: <b>${num(bot.exposure, 2)}×</b></span></div>
         <div class="chips">${(bot.universe || []).map((t) => `<span class="chip">${esc(t)}</span>`).join("")}</div>
         <div class="bot-desc">${esc(bot.description || "Sin descripción.")}</div>
+        ${metrics}
         <div class="bot-actions">${actions || `<span class="muted tiny">Sin acciones en el último dry-run.</span>`}</div>
+        <div class="bot-buttons">
+          ${bot.archived
+            ? `<button class="btn small" data-bot-restore="${esc(bot.id)}">Restaurar</button>`
+            : `<button class="btn small ghost" data-bot-archive="${esc(bot.id)}">Archivar</button>`}
+        </div>
       </div>`;
   }).join("");
+
+  $$("[data-bot-archive]").forEach((btn) => btn.addEventListener("click", () => archiveBotAction(btn.dataset.botArchive)));
+  $$("[data-bot-restore]").forEach((btn) => btn.addEventListener("click", () => restoreBotAction(btn.dataset.botRestore)));
+}
+
+async function evaluateBots() {
+  const btn = $("#evaluate-bots");
+  btn.disabled = true;
+  btn.textContent = "Evaluando…";
+  try {
+    const data = await getJSON("/api/bots/evaluate", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+    const losers = (data.results || []).filter((r) => r.status === "archivar").length;
+    toast(`Evaluación lista · ${data.results.length} bots · ${losers} candidatos a archivar.`);
+    await loadAll();
+  } catch (err) {
+    toast(err.message, true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Evaluar todos";
+  }
+}
+
+async function archiveBotAction(id) {
+  if (!window.confirm(`Archivar ${id}? No se borra: se desactiva y conserva historial.`)) return;
+  try {
+    await getJSON("/api/bots/archive", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, reason: "manual desde el panel" }) });
+    toast(`Archivado ${id}.`);
+    await loadAll();
+  } catch (err) {
+    toast(err.message, true);
+  }
+}
+
+async function restoreBotAction(id) {
+  try {
+    await getJSON("/api/bots/restore", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
+    toast(`Restaurado ${id}. Sigue en enabled:false.`);
+    await loadAll();
+  } catch (err) {
+    toast(err.message, true);
+  }
+}
+
+async function proposeBot() {
+  try {
+    const params = JSON.parse($("#new-bot-params").value || "{}");
+    const body = {
+      id: $("#new-bot-id").value.trim(),
+      strategy: $("#new-bot-strategy").value,
+      universe: $("#new-bot-universe").value.trim(),
+      params,
+      exposure: Number($("#new-bot-exposure").value || 1),
+      description: "Propuesta creada desde el panel",
+    };
+    if (!body.id) throw new Error("Falta el id del bot");
+    await getJSON("/api/bots/propose", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    toast(`Propuesta ${body.id} creada en enabled:false.`);
+    $("#new-bot-id").value = "";
+    await loadAll();
+  } catch (err) {
+    toast(err.message, true);
+  }
 }
 
 /* ----------------------------------------------------------------- agents */
@@ -1656,6 +1999,7 @@ function toast(message, bad = false) {
 /* ------------------------------------------------------------------ init */
 function init() {
   bindNav();
+  bindChart();
   renderSala();
   const initial = location.hash.replace("#", "");
   if (TITLES[initial]) switchView(initial, false);
@@ -1664,6 +2008,8 @@ function init() {
   $("#refresh-btn").addEventListener("click", () => loadAll(true));
   $("#run-lite-btn").addEventListener("click", () => startAction("agent"));
   $("#agent-ticker").addEventListener("keydown", (event) => { if (event.key === "Enter") startAction("agent"); });
+  $("#evaluate-bots").addEventListener("click", evaluateBots);
+  $("#propose-bot").addEventListener("click", proposeBot);
   $("#reload-logs").addEventListener("click", () => { S.selectedLog = null; loadAll(true); });
   $("#modal-close").addEventListener("click", closeModal);
   $("#modal").addEventListener("click", (event) => { if (event.target.id === "modal") closeModal(); });
@@ -1681,7 +2027,7 @@ function init() {
 
   loadAll();
   pollAction(true);
-  S.refreshTimer = setInterval(() => loadAll(), 15000);
+  S.refreshTimer = setInterval(() => loadAll(), 8000);
 }
 
 document.addEventListener("DOMContentLoaded", init);

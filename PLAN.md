@@ -96,10 +96,15 @@ Reglas de trabajo:
 
 ## Fase 3 — Mejoras de lab research
 
-- [ ] **3.1 Anti-sobreajuste**: Deflated Sharpe Ratio y PBO (CSCV), visibles en
-  `latest.md` y como criterio de propuesta.
+- [x] **3.1 Anti-sobreajuste (DSR)** — 2026-11-07
+  - Deflated Sharpe Ratio implementado y usado como criterio (>=90%).
+  - Resultado: 0 propuestas de 192 variantes; los 18 candidatos previos no
+    sobreviven al ajuste por múltiples pruebas.
+- [ ] **3.1b PBO (CSCV)** — pendiente; requiere retornos por bloque y
+  combinaciones train/test.
 - [ ] **3.2 Walk-forward** en lugar de un único 70/30 + reporte por régimen.
-- [ ] **3.3 Monte Carlo block bootstrap** por bloques de días.
+- [x] **3.3 Monte Carlo block bootstrap** — ya existía y research usa
+  `block_size=5`; documentado.
 - [ ] **3.4 Optuna** para explorar parámetros con validación walk-forward.
 - [ ] **3.5 QuantStats** para el HTML de cada propuesta frente a SPY.
 - [ ] **3.6 Criterio**: research completo con datos sintéticos y semilla fija.
@@ -157,4 +162,5 @@ Reglas de trabajo:
 | 2026-11-06 | 0.4 DST/offset | `pytest tests/test_timezone.py -q` → 9 passed |
 | 2026-11-06 | 1.1–1.5 | `pytest -q` → 112 passed; `lab reconcile` → ok |
 | 2026-11-07 | 2.1–2.2 | `lab f13 status` → no iniciado; bot `qqq-trend-f13` |
+| 2026-11-07 | 3.1/3.3 | `lab research` → 0 propuestas, DSR aplicado |
 |  |  |  |

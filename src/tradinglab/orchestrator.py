@@ -19,6 +19,7 @@ from .risk import check_order, size_position
 from .strategies import STRATEGIES
 
 BOTS_FILE = ROOT / "config" / "bots.yaml"
+ARCHIVE_FILE = ROOT / "config" / "bots_archive.yaml"
 
 
 @dataclass
@@ -32,6 +33,7 @@ class BotSpec:
     params: dict = field(default_factory=dict)
     description: str = ""
     exposure: float = 1.0
+    archived: bool = False
 
 
 @dataclass
@@ -48,9 +50,18 @@ class BotAction:
     order: dict | None = None
 
 
+def load_archive_ids(path: Path | None = None) -> set[str]:
+    path = path or ARCHIVE_FILE
+    if not path.exists():
+        return set()
+    raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    return {str(x) for x in raw.get("archived", [])}
+
+
 def load_bots(path: Path | None = None) -> list[BotSpec]:
     path = path or BOTS_FILE
     raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    archived = load_archive_ids()
     bots = []
     for item in raw.get("bots", []):
         bots.append(
@@ -64,6 +75,7 @@ def load_bots(path: Path | None = None) -> list[BotSpec]:
                 params=item.get("params", {}) or {},
                 description=item.get("description", ""),
                 exposure=float(item.get("exposure", 1.0)),
+                archived=item["id"] in archived,
             )
         )
     return bots
@@ -225,6 +237,8 @@ def run_all(
     for spec in load_bots():
         if only and spec.id != only:
             continue
+        if spec.archived:
+            continue
         if not spec.enabled and not include_disabled:
             continue
         if spec.type not in ("deterministic", "hybrid"):
@@ -258,6 +272,7 @@ def write_dry_run_log(
 __all__ = [
     "BotAction",
     "BotSpec",
+    "load_archive_ids",
     "load_bots",
     "run_all",
     "run_bot",

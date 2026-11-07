@@ -10,6 +10,16 @@ import tradinglab.research as research
 from tradinglab.prop.rules import ftmo
 
 
+def test_deflated_sharpe_penaliza_mas_variantes():
+    from tradinglab.research import deflated_sharpe
+
+    bajo = deflated_sharpe(1.0, 1000, 0.0, 3.0, 0.5, 10)
+    alto = deflated_sharpe(1.0, 1000, 0.0, 3.0, 0.5, 300)
+    assert bajo is not None and alto is not None
+    assert bajo > alto
+    assert 0.0 <= alto <= 1.0
+
+
 def _frame(n: int = 400, seed: int = 3) -> pd.DataFrame:
     rng = np.random.default_rng(seed)
     rets = rng.normal(0.0004, 0.009, n)

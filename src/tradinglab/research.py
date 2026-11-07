@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import itertools
 import json
+import math
 import statistics
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
+from statistics import NormalDist
 
 from . import data as data_mod
 from .backtest import run as run_backtest
@@ -46,6 +48,7 @@ class ResearchConfig:
     near_miss_slack: int = 5
     min_pass: float = 0.35
     min_oos_pass: float = 0.25
+    min_dsr: float = 0.90
     max_breach: float = 0.15
     holdout_fraction: float = 0.30
     exposures: list[float] = field(default_factory=lambda: [1.0, 0.5])
@@ -64,6 +67,36 @@ def _combos(strategy: str) -> list[dict]:
 def _score(pass_rate: float, breach_rate: float, sharpe: float) -> float:
     """Ventaja neta contra las reglas, con el Sharpe como desempate suave."""
     return (pass_rate - breach_rate) + 0.01 * max(min(sharpe, 3.0), -3.0)
+
+
+EULER_GAMMA = 0.5772156649015329
+
+
+def deflated_sharpe(
+    sharpe: float,
+    n_obs: int,
+    skew: float,
+    kurtosis: float,
+    trial_sr_std: float,
+    n_trials: int,
+) -> float | None:
+    """Deflated Sharpe Ratio (Bailey & López de Prado).
+
+    Descuenta que se probaron muchas variantes y que el Sharpe ganador está
+    sesgado al alza. Devuelve una probabilidad; None si no hay muestra.
+    """
+    if n_trials < 2 or n_obs < 3 or trial_sr_std <= 0:
+        return None
+    nd = NormalDist()
+    sr0 = trial_sr_std * (
+        (1.0 - EULER_GAMMA) * nd.inv_cdf(1.0 - 1.0 / n_trials)
+        + EULER_GAMMA * nd.inv_cdf(1.0 - 1.0 / (n_trials * math.e))
+    )
+    denom = 1.0 - skew * sharpe + ((kurtosis - 1.0) / 4.0) * sharpe * sharpe
+    if denom <= 0:
+        return None
+    z = (sharpe - sr0) * math.sqrt(n_obs - 1) / math.sqrt(denom)
+    return float(nd.cdf(z))
 
 
 def run_research(cfg: ResearchConfig, rules: PropRules, cache_dir: str | Path) -> dict:
@@ -108,6 +141,10 @@ def run_research(cfg: ResearchConfig, rules: PropRules, cache_dir: str | Path) -
                 m = bt.metrics
                 sharpe = float(m.get("sharpe", 0.0))
                 cagr = float(m.get("cagr", 0.0))
+                returns = bt.returns
+                skew = float(returns.skew()) if len(returns) > 2 else 0.0
+                kurtosis = float(returns.kurt()) + 3.0 if len(returns) > 3 else 3.0
+                sample_days = len(returns)
                 split = max(1, int(len(bt.returns) * (1.0 - cfg.holdout_fraction)))
                 oos_returns = bt.returns.iloc[split:]
                 oos_start = (
@@ -169,6 +206,9 @@ def run_research(cfg: ResearchConfig, rules: PropRules, cache_dir: str | Path) -
                             "oos_breach_rate": float(oos["breach_rate"]) if oos else None,
                             "oos_start": oos_start,
                             "oos_end": oos_end,
+                            "sample_days": sample_days,
+                            "skew": skew,
+                            "kurtosis": kurtosis,
                             "score": _score(pass_rate, breach_rate, sharpe),
                         }
                     )
@@ -186,6 +226,18 @@ def run_research(cfg: ResearchConfig, rules: PropRules, cache_dir: str | Path) -
         r["family_size"] = len(values)
         r["family_median_pass"] = statistics.median(values)
 
+    sr_values = [r["sharpe"] for r in results if r.get("sample_days", 0) >= 3]
+    sr_std = statistics.pstdev(sr_values) if len(sr_values) > 1 else 0.0
+    for r in results:
+        r["dsr"] = deflated_sharpe(
+            r["sharpe"],
+            int(r.get("sample_days", 0)),
+            float(r.get("skew", 0.0)),
+            float(r.get("kurtosis", 3.0)),
+            sr_std,
+            len(results),
+        )
+
     def core_eligible(r: dict) -> bool:
         return (
             r["pass_rate"] >= cfg.min_pass
@@ -193,6 +245,7 @@ def run_research(cfg: ResearchConfig, rules: PropRules, cache_dir: str | Path) -
             and (r["oos_pass_rate"] is None or r["oos_pass_rate"] >= cfg.min_oos_pass)
             and r["sharpe"] > 0
             and r["family_median_pass"] >= cfg.min_pass
+            and (r.get("dsr") is not None and r["dsr"] >= cfg.min_dsr)
         )
 
     proposals = [r for r in results if core_eligible(r) and r["num_trades"] >= cfg.min_trades]
@@ -220,6 +273,7 @@ def run_research(cfg: ResearchConfig, rules: PropRules, cache_dir: str | Path) -
             "oos_breach_rate": r["oos_breach_rate"],
             "num_trades": r["num_trades"],
             "family_median_pass": r["family_median_pass"],
+            "dsr": r.get("dsr"),
             "max_drawdown": r["max_drawdown"],
             "sharpe": r["sharpe"],
             "status": status,
@@ -242,6 +296,7 @@ def run_research(cfg: ResearchConfig, rules: PropRules, cache_dir: str | Path) -
             "near_miss_slack": cfg.near_miss_slack,
             "min_pass": cfg.min_pass,
             "min_oos_pass": cfg.min_oos_pass,
+            "min_dsr": cfg.min_dsr,
             "max_breach": cfg.max_breach,
             "holdout_fraction": cfg.holdout_fraction,
             "exposures": cfg.exposures,
@@ -301,8 +356,8 @@ def render_markdown(report: dict, top: int = 25) -> str:
         "",
         "## Ranking",
         "",
-        "| # | Activo | Estrategia | Parámetros | Escala | Sharpe | CAGR | MaxDD | Trades | Pasa | Revienta | Pasa OOS | Score |",
-        "|---|---|---|---|---|---|---|---|---|---|---|---|---|",
+        "| # | Activo | Estrategia | Parámetros | Escala | Sharpe | CAGR | MaxDD | Trades | Pasa | Revienta | Pasa OOS | Score | DSR |",
+        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
 
     def pct(x: float) -> str:
@@ -317,7 +372,7 @@ def render_markdown(report: dict, top: int = 25) -> str:
             f"| {i} | {r['symbol']} | {r['strategy']} | {params} | "
             f"{r['exposure']:g}× | {r['sharpe']:,.2f} | {pct(r['cagr'])} | "
             f"{pct(r['max_drawdown'])} | {r['num_trades']} | {pct(r['pass_rate'])} | "
-            f"{pct(r['breach_rate'])} | {pct_opt(r.get('oos_pass_rate'))} | {r['score']:,.3f} |"
+            f"{pct(r['breach_rate'])} | {pct_opt(r.get('oos_pass_rate'))} | {r['score']:,.3f} | {pct_opt(r.get('dsr'))} |"
         )
 
     lines += [
@@ -325,21 +380,21 @@ def render_markdown(report: dict, top: int = 25) -> str:
         "## Propuestas",
         "",
         f"Criterios: pasa ≥ {cfg['min_pass']:.0%}, revienta ≤ {cfg['max_breach']:.0%}, "
-        f"OOS ≥ {cfg['min_oos_pass']:.0%}, Sharpe > 0, trades ≥ {cfg['min_trades']} "
-        f"y mediana de la familia de parámetros ≥ {cfg['min_pass']:.0%}.",
+        f"OOS ≥ {cfg['min_oos_pass']:.0%}, Sharpe > 0, trades ≥ {cfg['min_trades']}, "
+        f"DSR ≥ {cfg.get('min_dsr', 0.90):.0%} y mediana de la familia de parámetros ≥ {cfg['min_pass']:.0%}.",
         "",
     ]
     if report["proposals"]:
         lines += [
-            "| Activo | Estrategia | Parámetros | Escala | Trades | Pasa | Revienta | OOS | Familia | Score |",
-            "|---|---|---|---|---|---|---|---|---|---|",
+            "| Activo | Estrategia | Parámetros | Escala | Trades | Pasa | Revienta | OOS | DSR | Familia | Score |",
+            "|---|---|---|---|---|---|---|---|---|---|---|",
         ]
         for p in report["proposals"]:
             params = " ".join(f"{k}={v}" for k, v in p["params"].items())
             lines.append(
                 f"| {p['symbol']} | {p['strategy']} | {params} | {p['exposure']:g}× | "
                 f"{p['num_trades']} | {pct(p['pass_rate'])} | {pct(p['breach_rate'])} | "
-                f"{pct_opt(p.get('oos_pass_rate'))} | "
+                f"{pct_opt(p.get('oos_pass_rate'))} | {pct_opt(p.get('dsr'))} | "
                 f"{pct_opt(p.get('family_median_pass'))} | {p['score']:,.3f} |"
             )
         lines += [
@@ -366,15 +421,15 @@ def render_markdown(report: dict, top: int = 25) -> str:
             "Se listan para vigilancia; **no se proponen** porque la muestra es "
             "demasiado pequeña para distinguir habilidad de suerte.",
             "",
-            "| Activo | Estrategia | Parámetros | Escala | Trades | Pasa | Revienta | OOS | Familia | Score |",
-            "|---|---|---|---|---|---|---|---|---|---|",
+            "| Activo | Estrategia | Parámetros | Escala | Trades | Pasa | Revienta | OOS | DSR | Familia | Score |",
+            "|---|---|---|---|---|---|---|---|---|---|---|",
         ]
         for p in near_misses:
             params = " ".join(f"{k}={v}" for k, v in p["params"].items())
             lines.append(
                 f"| {p['symbol']} | {p['strategy']} | {params} | {p['exposure']:g}× | "
                 f"{p['num_trades']} | {pct(p['pass_rate'])} | {pct(p['breach_rate'])} | "
-                f"{pct_opt(p.get('oos_pass_rate'))} | "
+                f"{pct_opt(p.get('oos_pass_rate'))} | {pct_opt(p.get('dsr'))} | "
                 f"{pct_opt(p.get('family_median_pass'))} | {p['score']:,.3f} |"
             )
         lines += [

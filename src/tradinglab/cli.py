@@ -17,6 +17,7 @@ from .agents import RATING_TO_TARGET, AgentError, run_lite_agent, run_tradingage
 from .alerts import AlertConfig, heartbeat, last_alerts
 from .alerts import send as send_alert
 from .backtest import run as run_backtest
+from .botlab import archive_bot, evaluate_all, propose_bot, restore_bot
 from .config import DEFAULT_DB, ROOT, get_settings
 from .db import connect, init_db, utcnow
 from .execution import get_broker, get_mt5_broker, get_projectx_broker
@@ -56,12 +57,14 @@ alerts_app = typer.Typer(
     no_args_is_help=True, help="Alertas ntfy/Telegram, latido y chequeo de servicios."
 )
 f13_app = typer.Typer(no_args_is_help=True, help="F13: pilot operativo de paper y criterios.")
+bots_app = typer.Typer(no_args_is_help=True, help="Bots: listar, evaluar, proponer, archivar.")
 app.add_typer(mt5_app, name="mt5")
 app.add_typer(prop_app, name="prop")
 app.add_typer(futures_app, name="futures")
 app.add_typer(killswitch_app, name="killswitch")
 app.add_typer(alerts_app, name="alerts")
 app.add_typer(f13_app, name="f13")
+app.add_typer(bots_app, name="bots")
 console = Console()
 
 OK = "[green]OK[/green]"
@@ -1331,7 +1334,7 @@ def f13_config_check_cmd() -> None:
         raise typer.Exit(1)
 
 
-@app.command("bots")
+@bots_app.command("list")
 def list_bots() -> None:
     """Lista el catálogo de bots definido en config/bots.yaml."""
     path = ROOT / "config" / "bots.yaml"
@@ -1357,6 +1360,107 @@ def list_bots() -> None:
             bot.get("description", ""),
         )
     console.print(t)
+
+
+@bots_app.command("evaluate")
+def bots_evaluate_cmd(
+    start: str = typer.Option("2015-01-01", "--start"),
+    apply: bool = typer.Option(
+        False, "--apply", help="Archivar los no aptos que estén deshabilitados (nunca enabled)"
+    ),
+) -> None:
+    """Backtest de los bots deterministas y informe de vida o muerte."""
+    settings = get_settings()
+    init_db(DEFAULT_DB)
+    results = evaluate_all(settings, DEFAULT_DB, start=start)
+    if not results:
+        console.print("[yellow]No hay bots evaluables.[/yellow]")
+        return
+
+    specs = {spec.id: spec for spec in load_bots()}
+    t = Table(title="Evaluación de bots (sin activar nada)")
+    for col in ("Bot", "Estrategia", "Universo", "Trades", "Retorno", "Sharpe", "MaxDD", "Estado"):
+        t.add_column(col, justify="right" if col not in ("Bot", "Estrategia", "Universo", "Estado") else "left")
+    for row in results:
+        t.add_row(
+            row["bot"],
+            row["strategy"],
+            row["universe"],
+            str(row.get("num_trades") or 0),
+            _fmt_pct(float(row.get("total_return") or 0.0)),
+            f"{float(row.get('sharpe') or 0.0):.2f}",
+            _fmt_pct(float(row.get("max_drawdown") or 0.0)),
+            row["status"],
+        )
+    console.print(t)
+
+    if apply:
+        archived = []
+        for row in results:
+            spec = specs.get(row["bot"])
+            if row["status"] == "archivar" and spec is not None and not spec.enabled:
+                archive_bot(row["bot"], reason="evaluación automática: métricas bajo umbral")
+                archived.append(row["bot"])
+        if archived:
+            console.print(f"[yellow]Archivados (sin borrar):[/yellow] {', '.join(archived)}")
+        else:
+            console.print("[dim]Nada que archivar con los criterios actuales.[/dim]")
+    else:
+        console.print(
+            "[dim]Usa --apply para archivar los 'archivar' deshabilitados. "
+            "Los bots enabled nunca se archivan solos.[/dim]"
+        )
+
+
+@bots_app.command("archive")
+def bots_archive_cmd(
+    bot: str = typer.Argument(..., help="ID del bot"),
+    reason: str = typer.Option("manual", "--reason"),
+    yes: bool = typer.Option(False, "--yes", help="No pedir confirmación"),
+) -> None:
+    """Archiva un bot (no lo borra; conserva historial)."""
+    if not yes and not typer.confirm(f"¿Archivar {bot}? No se borra, solo se desactiva."):
+        raise typer.Exit(1)
+    ids = archive_bot(bot, reason=reason)
+    console.print(f"[yellow]Archivado[/yellow] {bot} · total={len(ids)}")
+
+
+@bots_app.command("restore")
+def bots_restore_cmd(bot: str = typer.Argument(..., help="ID del bot")) -> None:
+    """Restaura un bot archivado (sigue en enabled:false hasta que lo actives)."""
+    ids = restore_bot(bot)
+    console.print(f"[green]Restaurado[/green] {bot} · quedan {len(ids)} archivados")
+
+
+@bots_app.command("propose")
+def bots_propose_cmd(
+    id: str = typer.Argument(..., help="ID nuevo, ej. qqq-breakout"),
+    strategy: str = typer.Option("trend", "--strategy"),
+    universe: str = typer.Option("SPY", "--universe", help="Lista separada por comas"),
+    params: str = typer.Option("{}", "--params", help="JSON de parámetros"),
+    exposure: float = typer.Option(1.0, "--exposure"),
+    description: str = typer.Option("", "--description"),
+) -> None:
+    """Crea una propuesta de bot en enabled:false (no se activa)."""
+    try:
+        parsed = json.loads(params)
+        if not isinstance(parsed, dict):
+            raise ValueError("params debe ser un objeto JSON")
+        spec = propose_bot(
+            id=id,
+            strategy=strategy,
+            universe=[x.strip() for x in universe.split(",") if x.strip()],
+            params=parsed,
+            exposure=exposure,
+            description=description,
+        )
+    except Exception as exc:
+        console.print(f"[red]No se pudo proponer:[/red] {exc}")
+        raise typer.Exit(2)
+    console.print(
+        f"[green]Propuesta creada[/green] {spec.id} · enabled=false · "
+        "evalúala con `lab bots evaluate`."
+    )
 
 
 @app.command()
@@ -2064,6 +2168,7 @@ def research_cmd(
     top: int = typer.Option(20, "--top", help="Filas del ranking a mostrar"),
     min_pass: float = typer.Option(0.35, "--min-pass", help="Pasa mínimo para proponer"),
     min_oos_pass: float = typer.Option(0.25, "--min-oos-pass", help="Pasa mínimo out-of-sample"),
+    min_dsr: float = typer.Option(0.90, "--min-dsr", help="Deflated Sharpe Ratio mínimo"),
     max_breach: float = typer.Option(0.15, "--max-breach", help="Revienta máximo para proponer"),
     holdout: float = typer.Option(0.30, "--holdout", help="Fracción final reservada a validación"),
     min_trades: int = typer.Option(20, "--min-trades"),
@@ -2094,6 +2199,7 @@ def research_cmd(
         min_pass=min_pass,
         min_oos_pass=min_oos_pass,
         max_breach=max_breach,
+        min_dsr=min_dsr,
         holdout_fraction=holdout,
         exposures=[float(x) for x in exposures.split(",") if x.strip()],
         commission_bps=settings.execution.commission_bps,

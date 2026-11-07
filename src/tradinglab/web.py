@@ -34,6 +34,14 @@ import httpx
 
 from . import __version__
 from .alerts import AlertConfig, last_alerts, last_heartbeat
+from .botlab import (
+    archive_bot,
+    evaluate_all,
+    latest_evaluations,
+    load_proposed,
+    propose_bot,
+    restore_bot,
+)
 from .config import DEFAULT_DB, ROOT, Settings, get_settings
 from .killswitch import load_state as load_killswitch
 from .orchestrator import load_bots
@@ -372,6 +380,139 @@ class LabData:
             )
         except Exception as exc:
             return {"status": "error", "details": str(exc)[:200]}
+
+    def accounts(self) -> list[dict]:
+        """Resumen normalizado de todas las cuentas configuradas."""
+        return self.cache.get("accounts", 20.0, self._accounts)
+
+    def _accounts(self) -> list[dict]:
+        out: list[dict] = []
+        paper = self.account()
+        out.append(
+            {
+                "id": "paper",
+                "name": "Paper interno",
+                "kind": "acciones/ETF",
+                "mode": "paper",
+                "configured": True,
+                "ok": True,
+                "source": "SQLite local",
+                "currency": "USD",
+                "equity": paper["equity"],
+                "cash": paper["cash"],
+                "positions": [
+                    {
+                        "symbol": p["ticker"],
+                        "qty": p["qty"],
+                        "value": p["value"],
+                        "pnl": p.get("unrealized", 0.0),
+                    }
+                    for p in paper["positions"]
+                ],
+                "status": "ok",
+            }
+        )
+
+        try:
+            from .execution.alpaca import AlpacaBroker
+
+            if os.getenv("ALPACA_API_KEY") and os.getenv("ALPACA_SECRET_KEY"):
+                broker = AlpacaBroker(paper=True, db_path=self.db_path)
+                health = broker.health()
+                positions = broker.positions()
+                out.append(
+                    {
+                        "id": "alpaca",
+                        "name": "Alpaca Paper",
+                        "kind": "acciones/ETF",
+                        "mode": "paper",
+                        "configured": True,
+                        "ok": bool(health.get("ok")),
+                        "source": "Alpaca API",
+                        "currency": health.get("currency", "USD"),
+                        "equity": health.get("equity"),
+                        "cash": health.get("cash"),
+                        "positions": [
+                            {
+                                "symbol": p["ticker"],
+                                "qty": p["qty"],
+                                "value": p["value"],
+                                "pnl": p.get("unrealized", 0.0),
+                            }
+                            for p in positions
+                        ],
+                        "status": str(health.get("status", "ok")),
+                        "buying_power": health.get("buying_power"),
+                    }
+                )
+        except Exception as exc:
+            out.append(
+                {
+                    "id": "alpaca",
+                    "name": "Alpaca Paper",
+                    "kind": "acciones/ETF",
+                    "mode": "paper",
+                    "configured": True,
+                    "ok": False,
+                    "source": "Alpaca API",
+                    "equity": None,
+                    "cash": None,
+                    "positions": [],
+                    "status": "error",
+                    "error": str(exc)[:240],
+                }
+            )
+
+        risk = self.risk()
+        mt5 = risk.get("mt5", {})
+        account = mt5.get("account") or {}
+        out.append(
+            {
+                "id": "mt5",
+                "name": "FTMO Demo · MT5",
+                "kind": "forex/CFD",
+                "mode": account.get("mode", "demo"),
+                "configured": bool(mt5.get("configured")),
+                "ok": bool(mt5.get("ok")),
+                "source": "MetaTrader 5",
+                "currency": account.get("currency", "USD"),
+                "equity": account.get("equity"),
+                "cash": account.get("balance"),
+                "positions": [
+                    {
+                        "symbol": p.get("symbol", "?"),
+                        "qty": p.get("volume", 0.0),
+                        "value": None,
+                        "pnl": p.get("profit", 0.0),
+                    }
+                    for p in (mt5.get("positions") or [])
+                ],
+                "status": "ok" if mt5.get("ok") else "error",
+                "error": mt5.get("error"),
+                "trade_allowed": account.get("trade_allowed"),
+            }
+        )
+
+        futures = risk.get("futures", {})
+        fut_account = futures.get("account") or {}
+        out.append(
+            {
+                "id": "projectx",
+                "name": "TopstepX · ProjectX",
+                "kind": "futuros",
+                "mode": "simulada" if futures.get("require_simulated") else "real",
+                "configured": bool(futures.get("configured")),
+                "ok": bool(futures.get("ok")),
+                "source": "ProjectX API",
+                "currency": "USD",
+                "equity": fut_account.get("balance"),
+                "cash": fut_account.get("balance"),
+                "positions": [],
+                "status": "ok" if futures.get("ok") else "no configurada",
+                "error": futures.get("error") or futures.get("note"),
+            }
+        )
+        return out
 
     def _llm_status(self) -> dict:
         if not self.external:
@@ -749,10 +890,19 @@ class LabData:
         if recent:
             for action in recent[0]["actions"]:
                 latest_actions.setdefault(action.get("bot", ""), []).append(action)
+        evaluations = latest_evaluations(self.db_path)
         out = []
         for spec in specs:
             data = asdict(spec)
             data["last_actions"] = latest_actions.get(spec.id, [])
+            data["evaluation"] = evaluations.get(spec.id)
+            data["proposed"] = False
+            out.append(data)
+        for spec in load_proposed():
+            data = asdict(spec)
+            data["last_actions"] = []
+            data["evaluation"] = evaluations.get(spec.id)
+            data["proposed"] = True
             out.append(data)
         return out
 
@@ -1015,6 +1165,10 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 self._json(self.server.data.overview())
             elif path == "/api/risk":
                 self._json(self.server.data.risk())
+            elif path == "/api/accounts":
+                self._json({"accounts": self.server.data.accounts()})
+            elif path == "/api/bots":
+                self._json({"bots": self.server.data.bots()})
             elif path == "/api/action":
                 self._json(self.server.data.action_status())
             elif path == "/api/logs":
@@ -1055,6 +1209,31 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     self._error(409, error)
                 else:
                     self._json(action, status=202)
+            elif path == "/api/bots/evaluate":
+                results = evaluate_all(self.server.data.settings, self.server.data.db_path)
+                self._json({"results": results})
+            elif path == "/api/bots/archive":
+                bot = str(body.get("id") or "").strip()
+                if not bot:
+                    self._error(400, "Falta id")
+                else:
+                    self._json({"archived": archive_bot(bot, str(body.get("reason") or "manual"))})
+            elif path == "/api/bots/restore":
+                bot = str(body.get("id") or "").strip()
+                if not bot:
+                    self._error(400, "Falta id")
+                else:
+                    self._json({"archived": restore_bot(bot)})
+            elif path == "/api/bots/propose":
+                spec = propose_bot(
+                    id=str(body.get("id") or "").strip(),
+                    strategy=str(body.get("strategy") or "trend").strip(),
+                    universe=[x.strip() for x in str(body.get("universe") or "SPY").split(",") if x.strip()],
+                    params=body.get("params") or {},
+                    exposure=float(body.get("exposure") or 1.0),
+                    description=str(body.get("description") or ""),
+                )
+                self._json({"bot": asdict(spec)}, status=201)
             else:
                 self._error(404, "Ruta no encontrada")
         except Exception as exc:

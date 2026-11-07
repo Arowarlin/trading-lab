@@ -156,6 +156,25 @@ CREATE TABLE IF NOT EXISTS f13_metrics (
     notes TEXT
 );
 
+CREATE TABLE IF NOT EXISTS bot_evaluations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts TEXT NOT NULL,
+    bot TEXT NOT NULL,
+    strategy TEXT NOT NULL,
+    universe TEXT NOT NULL,
+    params TEXT NOT NULL,
+    exposure REAL NOT NULL,
+    start_date TEXT NOT NULL,
+    end_date TEXT NOT NULL,
+    total_return REAL,
+    sharpe REAL,
+    max_drawdown REAL,
+    num_trades INTEGER,
+    win_rate REAL,
+    status TEXT NOT NULL,
+    details TEXT
+);
+
 CREATE INDEX IF NOT EXISTS idx_alerts_ts ON alerts(ts);
 CREATE INDEX IF NOT EXISTS idx_reconciliation_ts ON reconciliation(ts);
 CREATE INDEX IF NOT EXISTS idx_signals_ts ON signals(ts);
