@@ -1145,6 +1145,11 @@
       </div>
       <div class="stats" id="bots-summary"></div>
       <div class="panel" style="margin:14px 0">
+        <div class="panel-head"><h2>Deriva live vs backtest</h2><span class="muted tiny" id="drift-meta"></span></div>
+        <div id="bots-drift"></div>
+        <div class="muted tiny" style="margin-top:8px">Informativo: no bloquea bots ni órdenes. Mínimo de operaciones y IC bootstrap; sin muestra suficiente: Sin datos.</div>
+      </div>
+      <div class="panel" style="margin:14px 0">
         <div class="panel-head"><h2>Proponer bot</h2><span class="muted tiny">nace en enabled:false</span></div>
         <div class="action-bar" style="margin:0">
           <input class="input" id="new-bot-id" placeholder="id" maxlength="32" spellcheck="false">
@@ -1361,6 +1366,7 @@ const S = {
   journalGroup: "bot",
   operator: null,
   operatorPreview: null,
+  drift: null,
   market: null,
   calendar: null,
   decisions: null,
@@ -1621,12 +1627,13 @@ async function loadAll(manual = false) {
   const button = $("#refresh-btn");
   button.disabled = true;
   $("#refresh-label").textContent = "Actualizando…";
-  const [overviewResult, riskResult, accountsResult, fundResult, operatorResult] = await Promise.allSettled([
+  const [overviewResult, riskResult, accountsResult, fundResult, operatorResult, driftResult] = await Promise.allSettled([
     getJSON("/api/overview"),
     getJSON("/api/risk"),
     getJSON("/api/accounts"),
     getJSON("/api/fund"),
     getJSON("/api/operator"),
+    getJSON("/api/drift"),
   ]);
   if (overviewResult.status === "fulfilled") {
     const newBuild = overviewResult.value?.meta?.build;
@@ -1666,6 +1673,10 @@ async function loadAll(manual = false) {
   if (operatorResult.status === "fulfilled") {
     S.operator = operatorResult.value;
     renderOperator();
+  }
+  if (driftResult.status === "fulfilled") {
+    S.drift = driftResult.value;
+    renderBotsDrift();
   }
   if (S.view === "journal") loadJournal();
   if (overviewResult.status === "rejected" && riskResult.status === "rejected") {
@@ -3179,6 +3190,50 @@ async function executeOperator() {
 function evalTag(status) {
   const cls = status === "mantener" ? "green" : status === "archivar" ? "red" : status === "muestra_insuficiente" ? "yellow" : status === "propuesto" ? "blue" : "";
   return `<span class="tag ${cls}">${esc(status || "sin evaluar")}</span>`;
+}
+
+function renderBotsDrift() {
+  const host = $("#bots-drift");
+  if (!host) return;
+  const payload = S.drift;
+  if (!payload) {
+    host.innerHTML = `<div class="empty">Sin datos de deriva.</div>`;
+    return;
+  }
+  const summary = payload.summary || {};
+  if ($("#drift-meta")) {
+    $("#drift-meta").textContent = `N≥${payload.min_trades} · ${payload.bootstrap_paths} bootstrap · seed ${payload.seed} · ok ${summary.ok || 0} · vigilar ${summary.vigilar || 0} · deriva ${summary.deriva || 0} · sin datos ${summary["sin datos"] || 0}`;
+  }
+  const rows = (payload.bots || []).map((row) => {
+    const live = row.live || {};
+    const bt = row.backtest || {};
+    const slip = row.slippage || {};
+    const ci = live.sharpe_ci95 || [];
+    const ciText = ci.length && ci[0] != null && ci[1] != null ? ` (${num(ci[0], 2)}…${num(ci[1], 2)})` : "";
+    const badge = row.status === "ok"
+      ? `<span class="badge ok">ok</span>`
+      : row.status === "vigilar"
+        ? `<span class="badge warn">vigilar</span>`
+        : row.status === "deriva"
+          ? `<span class="badge bad">deriva</span>`
+          : `<span class="badge">Sin datos</span>`;
+    return [
+      `<b>${esc(row.bot)}</b><div class="muted tiny">${esc(row.account || "Sin datos")} · ${esc(row.profile || "Sin datos")}</div>`,
+      `${num(live.n, 0)}${row.sample_ok ? "" : `<div class="muted tiny">N&lt;${payload.min_trades}</div>`}`,
+      `${live.sharpe == null ? "Sin datos" : num(live.sharpe, 2)}${ciText}`,
+      bt.sharpe == null ? "Sin datos" : num(bt.sharpe, 2),
+      live.expectancy == null ? "Sin datos" : money(live.expectancy),
+      bt.expectancy == null ? "Sin datos" : money(bt.expectancy),
+      slip.p50_bps == null ? "Sin datos" : `${num(slip.p50_bps, 1)} / ${num(slip.p95_bps, 1)} bps`,
+      badge,
+      `<span class="muted tiny">${esc((row.reasons || []).join(" · "))}</span>`,
+    ];
+  });
+  host.innerHTML = grid(
+    [{ label: "Bot" }, { label: "N live", num: true }, { label: "Sharpe live (IC 95%)", num: true }, { label: "Sharpe BT", num: true }, { label: "Expect. live", num: true }, { label: "Expect. BT", num: true }, { label: "Slippage p50/p95", num: true }, { label: "Estado" }, { label: "Motivo", wrap: true }],
+    rows,
+    { empty: "Sin datos de deriva." }
+  );
 }
 
 function renderBots() {

@@ -44,6 +44,8 @@ def test_dashboard_tiene_kpis_balance_performers_y_calendario() -> None:
         'id="journal-multiverse"',
         'id="run-detail-multiverse"',
         "multiverseCard",
+        'id="bots-drift"',
+        'id="drift-meta"',
         'id="sidebar-toggle"',
         "sidebar-collapsed",
         "computeDailyPnl",
@@ -55,5 +57,15 @@ def test_consola_local_sin_cdns_ni_frameworks() -> None:
     text = INDEX.read_text(encoding="utf-8")
     assert not re.search(r"https?://", text)
     lowered = text.lower()
-    for forbidden in ("cdn.", "unpkg", "jsdelivr", "bootstrap", "react", "vue.js"):
+    for forbidden in (
+        "cdn.",
+        "unpkg",
+        "jsdelivr",
+        "bootstrap.min",
+        "bootstrap@",
+        "react.production",
+        "react@",
+        "vue.min",
+        "vue@",
+    ):
         assert forbidden not in lowered

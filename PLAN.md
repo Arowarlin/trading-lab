@@ -255,8 +255,19 @@ controladas, sin activar bots, sin órdenes, sin dinero real y sin tocar `.env`.
     **Sin datos**.
   - Evidencia: `pytest tests/test_multiverse.py -q` → 7 passed; `lab research`
     nuevo guarda sidecar de operaciones por artefacto.
-- [ ] **10.3 Deriva live vs backtest** — Sharpe/expectancy/slippage con IC y
-  mínimo de operaciones; ok/vigilar/deriva.
+- [x] **10.3 Deriva live vs backtest** — 2026-11-07
+  - `drift.py` compara Sharpe/expectancy del Diario con la última evaluación de
+    backtest, con IC bootstrap 95% (1.000 remuestreos, seed 42) y mínimo de 20
+    operaciones live.
+  - Slippage real (fills vs señal) contra el supuesto del backtest y los máximos
+    de F13; mínimo 5 fills.
+  - Estados **ok / vigilar / deriva**; sin muestra → **Sin datos**. Solo
+    informativo, no bloquea bots ni órdenes.
+  - `lab drift` y panel **Bots → Deriva live vs backtest**.
+  - Nueva columna `bot_evaluations.expectancy` (migración incluida); filas
+    antiguas sin ella → Sin datos.
+  - Evidencia: `pytest tests/test_drift.py -q` → 5 passed; suite completa
+    284 passed.
 - [ ] **10.4 Salud de cuenta y libro de capital** — score 0–100 con desglose,
   depósitos/retiros y retorno time-weighted.
 - [ ] **10.5 Streak lock y pausa** — umbrales en SQLite, historial, fuera del
@@ -362,4 +373,5 @@ sin romper vistas ni añadir dependencias.
 | 2026-11-07 | 11 Modo operador | `pytest tests/test_operator.py -q` → 11 passed; 2 pasos/PIN/keyring/auditoría; README 6f |
 | 2026-11-07 | 12 Shell consola | `pytest tests/test_console_shell.py -q` → 3 passed; `pytest -q` → 272 passed; 6 secciones, 14 vistas, dashboard; README 6g |
 | 2026-11-07 | 10.2 Multiverse | `pytest tests/test_multiverse.py -q` → 7 passed; `pytest -q` → 279 passed; 1.000 permutaciones, seed 42, Diario + Run Detail |
+| 2026-11-07 | 10.3 Deriva | `pytest tests/test_drift.py -q` → 5 passed; `pytest -q` → 284 passed; IC bootstrap, mínimo 20, slippage, Bots + `lab drift` |
 |  |  |  |

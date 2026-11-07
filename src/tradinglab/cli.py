@@ -1178,6 +1178,58 @@ def journal_cmd(
     console.print(t2)
 
 
+@app.command("drift")
+def drift_cmd(
+    min_trades: int = typer.Option(
+        20, "--min-trades", help="Operaciones live mínimas antes de opinar"
+    ),
+) -> None:
+    """Deriva live/paper vs backtest por bot (solo informativo)."""
+    from .drift import build_drift
+
+    settings = get_settings()
+    payload = build_drift(DEFAULT_DB, settings, min_trades=min_trades)
+    summary = payload["summary"]
+    console.print(
+        f"[dim]{payload['bootstrap_paths']} bootstrap · semilla {payload['seed']} · "
+        f"mínimo {payload['min_trades']} operaciones · supuesto slippage "
+        f"{payload['backtest_slippage_bps']:.1f} bps[/dim]"
+    )
+    t = Table(title="Deriva live vs backtest")
+    for col in ("Bot", "N", "Sharpe live", "IC 95%", "Sharpe BT", "Expect.", "Slippage", "Estado"):
+        t.add_column(col, justify="left" if col == "Bot" else "right")
+    for row in payload["bots"]:
+        live = row["live"]
+        bt = row["backtest"]
+        slip = row["slippage"]
+        ci = live["sharpe_ci95"]
+        ci_text = (
+            f"{ci[0]:.2f}…{ci[1]:.2f}"
+            if ci and ci[0] is not None and ci[1] is not None
+            else "sin datos"
+        )
+        t.add_row(
+            row["bot"],
+            str(live["n"]),
+            f"{live['sharpe']:.2f}" if live["sharpe"] is not None else "sin datos",
+            ci_text,
+            f"{bt['sharpe']:.2f}" if bt["sharpe"] is not None else "sin datos",
+            f"{live['expectancy']:.2f}" if live["expectancy"] is not None else "sin datos",
+            f"{slip['p50_bps']:.1f}/{slip['p95_bps']:.1f}"
+            if slip["p50_bps"] is not None and slip["p95_bps"] is not None
+            else "sin datos",
+            row["status"],
+        )
+    console.print(t)
+    console.print(
+        f"[dim]ok={summary.get('ok', 0)} · vigilar={summary.get('vigilar', 0)} · "
+        f"deriva={summary.get('deriva', 0)} · sin datos={summary.get('sin datos', 0)}[/dim]"
+    )
+    for row in payload["bots"]:
+        if row["status"] in {"vigilar", "deriva"}:
+            console.print(f"[yellow]{row['bot']}[/yellow]: " + "; ".join(row["reasons"]))
+
+
 @killswitch_app.command("status")
 def killswitch_status_cmd() -> None:
     """Estado persistido y evaluación actual del kill-switch."""

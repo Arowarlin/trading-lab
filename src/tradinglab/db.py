@@ -171,6 +171,7 @@ CREATE TABLE IF NOT EXISTS bot_evaluations (
     max_drawdown REAL,
     num_trades INTEGER,
     win_rate REAL,
+    expectancy REAL,
     status TEXT NOT NULL,
     details TEXT
 );
@@ -314,6 +315,7 @@ def init_db(path: str | Path) -> None:
         con.execute("PRAGMA journal_mode=WAL")
         con.executescript(SCHEMA)
         _migrate_equity(con)
+        _migrate_bot_evaluations(con)
 
 
 def _migrate_equity(con: sqlite3.Connection) -> None:
@@ -336,6 +338,15 @@ def _migrate_equity(con: sqlite3.Connection) -> None:
             CREATE INDEX IF NOT EXISTS idx_equity_ts ON equity(ts);
             """
         )
+
+
+def _migrate_bot_evaluations(con: sqlite3.Connection) -> None:
+    columns = [
+        row["name"]
+        for row in con.execute("PRAGMA table_info(bot_evaluations)").fetchall()
+    ]
+    if columns and "expectancy" not in columns:
+        con.execute("ALTER TABLE bot_evaluations ADD COLUMN expectancy REAL")
 
 
 def log_event(path: str | Path, level: str, source: str, message: str, data: str | None = None) -> None:

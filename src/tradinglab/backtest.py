@@ -144,6 +144,7 @@ def compute_metrics(
     max_dd = float(drawdown.min())
     calmar = float(cagr / abs(max_dd)) if max_dd < 0 else 0.0
     wins = sum(1 for p in realized if p > 0)
+    expectancy = float(sum(realized) / len(realized)) if realized else 0.0
 
     return {
         "total_return": total_return,
@@ -154,6 +155,7 @@ def compute_metrics(
         "calmar": calmar,
         "num_trades": len(realized),
         "win_rate": (wins / len(realized)) if realized else 0.0,
+        "expectancy": expectancy,
         "exposure": exposure,
         "final_equity": float(eq.iloc[-1]),
         "bars": len(eq),

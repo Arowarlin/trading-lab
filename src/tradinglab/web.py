@@ -57,6 +57,7 @@ from .botlab import (
     restore_bot,
 )
 from .config import DEFAULT_DB, ROOT, Settings, get_settings
+from .drift import build_drift
 from .journal import build_journal
 from .killswitch import load_state as load_killswitch
 from .operator import OperatorError, OperatorService
@@ -662,6 +663,17 @@ class LabData:
             5.0,
             lambda: build_journal(
                 self.db_path, tz=self.settings.timezone, **filters
+            ),
+        )
+
+    def drift(self, *, min_trades: int = 20) -> dict:
+        """Deriva live vs backtest por bot; solo informativo."""
+        key = f"drift:{int(min_trades)}"
+        return self.cache.get(
+            key,
+            30.0,
+            lambda: build_drift(
+                self.db_path, self.settings, min_trades=int(min_trades)
             ),
         )
 
@@ -2197,6 +2209,15 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     )
                 except ValueError as exc:
                     self._error(400, str(exc))
+            elif path == "/api/drift":
+                params = parse_qs(urlparse(self.path).query)
+                raw = (params.get("min_trades") or ["20"])[0]
+                try:
+                    min_trades = max(1, int(raw))
+                except ValueError:
+                    self._error(400, "min_trades inválido")
+                    return
+                self._json(self.server.data.drift(min_trades=min_trades))
             elif path == "/api/bots":
                 self._json({"bots": self.server.data.bots()})
             elif path == "/api/action":

@@ -176,6 +176,12 @@ def _metrics_for(spec: BotSpec, settings: Settings, start: str) -> dict:
     max_dd = min(float(x["max_drawdown"]) for x in per_ticker)
     trades = sum(int(x["num_trades"]) for x in per_ticker)
     win_rate = sum(float(x["win_rate"]) for x in per_ticker) / n
+    expectancy = (
+        sum(float(x.get("expectancy") or 0.0) * int(x.get("num_trades") or 0) for x in per_ticker)
+        / trades
+        if trades
+        else None
+    )
 
     if trades < 15:
         status = "muestra_insuficiente"
@@ -191,6 +197,7 @@ def _metrics_for(spec: BotSpec, settings: Settings, start: str) -> dict:
         "max_drawdown": round(max_dd, 6),
         "num_trades": trades,
         "win_rate": round(win_rate, 4),
+        "expectancy": round(expectancy, 4) if expectancy is not None else None,
         "details": json.dumps(per_ticker, ensure_ascii=False)[:4000],
     }
 
@@ -214,15 +221,15 @@ def evaluate_all(
             "params": json.dumps(spec.params, ensure_ascii=False),
             "exposure": spec.exposure,
             "status": metrics["status"],
-            **{k: metrics.get(k) for k in ("total_return", "sharpe", "max_drawdown", "num_trades", "win_rate")},
+            **{k: metrics.get(k) for k in ("total_return", "sharpe", "max_drawdown", "num_trades", "win_rate", "expectancy")},
             "details": metrics.get("details", ""),
         }
         with connect(db_path) as con:
             con.execute(
                 "INSERT INTO bot_evaluations"
                 "(ts, bot, strategy, universe, params, exposure, start_date, end_date, "
-                "total_return, sharpe, max_drawdown, num_trades, win_rate, status, details) "
-                "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "total_return, sharpe, max_drawdown, num_trades, win_rate, expectancy, status, details) "
+                "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     utcnow(),
                     row["bot"],
@@ -237,6 +244,7 @@ def evaluate_all(
                     row.get("max_drawdown"),
                     row.get("num_trades"),
                     row.get("win_rate"),
+                    row.get("expectancy"),
                     row["status"],
                     row["details"],
                 ),

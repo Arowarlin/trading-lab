@@ -899,6 +899,33 @@ Evidencia: `pytest tests/test_multiverse.py -q` → **7 passed**; suite completa
 
 ---
 
+## 6i. Deriva live vs backtest (10.3)
+
+Panel **Bots → Deriva live vs backtest** y comando `lab drift`. Es **solo
+informativo**: no bloquea bots ni órdenes.
+
+- Por cada bot compara el Sharpe y la expectancy del **Diario** con la última
+  evaluación de backtest (`bot_evaluations`).
+- Intervalos **bootstrap 95%** (1.000 remuestreos, semilla 42). Mínimo **20
+  operaciones live** antes de opinar; con menos: **Sin datos**.
+- Slippage real (fills vs señal) contra el supuesto del backtest
+  (`execution.slippage_bps`, 5 bps por defecto) y los máximos de F13
+  (`max_slippage_bps_p50/p95`). Mínimo 5 fills.
+- Estados: **ok / vigilar / deriva**. Se explica el motivo de cada uno.
+- La expectancy de backtest se guarda en la nueva columna
+  `bot_evaluations.expectancy`; las evaluaciones antiguas sin ella muestran
+  **Sin datos**.
+
+```powershell
+lab drift
+lab drift --min-trades 30
+```
+
+Evidencia: `pytest tests/test_drift.py -q` → **5 passed**; suite completa
+**284 passed**; `ruff` limpio; `lab doctor` OK con avisos conocidos.
+
+---
+
 ## 7. Trading-R1 en Windows
 
 Trading-R1 usa `fcntl`, `os.O_NOFOLLOW` y `os.getuid()`: **no funciona en Windows**.
