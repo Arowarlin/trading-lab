@@ -5,6 +5,7 @@ bots:
   - id: trend-spy
     type: deterministic
     profile: swing_equity
+    cluster: trend_equity
     strategy: trend
     universe: [SPY, QQQ]
     timeframe: 1d
@@ -15,6 +16,7 @@ bots:
   - id: qqq-trend-f13
     type: deterministic
     profile: swing_equity
+    cluster: trend_equity
     strategy: trend
     universe: [QQQ]
     timeframe: 1d
@@ -26,6 +28,7 @@ bots:
   - id: meanrev-large
     type: deterministic
     profile: swing_equity
+    cluster: meanrev_equity
     strategy: meanrev
     universe: [AAPL, MSFT, NVDA, AMZN, GOOGL, META]
     timeframe: 1d
@@ -35,6 +38,7 @@ bots:
   - id: llm-swing
     type: llm
     profile: swing_equity
+    cluster: llm_equity
     strategy: tradingagents
     universe: [NVDA, AAPL, MSFT, SPY]
     timeframe: 1d
@@ -44,6 +48,7 @@ bots:
   - id: llm-filter
     type: hybrid
     profile: swing_equity
+    cluster: llm_equity
     strategy: deterministic+llm
     universe: [SPY, QQQ, NVDA]
     timeframe: 1d
@@ -53,6 +58,7 @@ bots:
   - id: research-desk
     type: research
     profile: swing_equity
+    cluster: research
     strategy: trading-r1
     universe: [SPY, NVDA, AAPL, MSFT]
     timeframe: 1d

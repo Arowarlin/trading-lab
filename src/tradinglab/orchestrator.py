@@ -36,6 +36,7 @@ class BotSpec:
     timeframe: str = "1d"
     enabled: bool = False
     profile: str | None = None
+    cluster: str | None = None
     params: dict = field(default_factory=dict)
     description: str = ""
     exposure: float = 1.0
@@ -79,6 +80,7 @@ def load_bots(path: Path | None = None) -> list[BotSpec]:
                 timeframe=item.get("timeframe", "1d"),
                 enabled=bool(item.get("enabled", False)),
                 profile=item.get("profile"),
+                cluster=item.get("cluster"),
                 params=item.get("params", {}) or {},
                 description=item.get("description", ""),
                 exposure=float(item.get("exposure", 1.0)),
@@ -112,6 +114,8 @@ def _open_risk_usd(positions: list[dict]) -> float:
 
 
 def _cluster_for(spec: BotSpec, clusters: list[dict]) -> int | None:
+    if spec.cluster:
+        return None
     symbol = (spec.universe[0] if spec.universe else "").upper()
     if not symbol:
         return None
@@ -121,6 +125,14 @@ def _cluster_for(spec: BotSpec, clusters: list[dict]) -> int | None:
             if symbol in text and spec.strategy.upper() in text:
                 return index
     return None
+
+
+def _cluster_key(spec: BotSpec, clusters: list[dict]) -> str | None:
+    """Clúster estático del bot o, si no lo tiene, el dinámico por correlación."""
+    if spec.cluster:
+        return f"static:{spec.cluster}"
+    index = _cluster_for(spec, clusters)
+    return f"corr:{index}" if index is not None else None
 
 
 def run_bot(
@@ -385,9 +397,13 @@ def run_all(
     clusters = (cluster_report if cluster_report is not None else load_clusters()).get(
         "clusters", []
     )
-    equity = float(broker.snapshot({}).get("equity") or 0.0) if clusters else 0.0
-    cluster_used: dict[int, float] = {}
-    for spec in load_bots():
+    specs = load_bots()
+    needs_cluster = bool(clusters) or any(spec.cluster for spec in specs)
+    equity = (
+        float(broker.snapshot({}).get("equity") or 0.0) if needs_cluster else 0.0
+    )
+    cluster_used: dict[str, float] = {}
+    for spec in specs:
         if only and spec.id != only:
             continue
         if spec.archived:
@@ -402,7 +418,7 @@ def run_all(
             continue
         if not profile.schedule.allows(current):
             continue
-        cluster = _cluster_for(spec, clusters)
+        cluster = _cluster_key(spec, clusters)
         reserved = equity * profile.max_risk_pct if equity > 0 else 0.0
         if (
             cluster is not None

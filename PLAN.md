@@ -208,6 +208,7 @@ Reglas de trabajo:
 | 2026-11-07 | E2 intradía | estrategias/costes/report con tests sintéticos; `lab mt5 fetch` bloqueado por offset MT5 desconocido (mercado cerrado) |
 | 2026-11-07 | E3 futuros | perfil `intraday_futures` y stub ProjectX documentados; proxy ES=F/NQ=F diario |
 | 2026-11-07 | clústeres | `lab research-clusters` → 9/10 top en un clúster; presupuesto 1% y guard agregado |
+| 2026-11-07 | clúster estático | `trend-spy` y `qqq-trend-f13` comparten `trend_equity`; reserva antes de arrancar |
 | 2026-11-07 | 4.4/4.6/11b | `pytest tests/test_calendar.py tests/test_session.py -q` |
 | 2026-11-07 | SEC/CSV/decisions | `pytest tests/test_sec.py tests/test_decisions.py -q` |
 |  |  |  |
