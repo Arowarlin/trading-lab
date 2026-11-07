@@ -354,20 +354,30 @@ Qué hace:
 4. reserva el último 30% de la muestra para validación OOS;
 5. escribe `reports/research/latest.md`, `latest.json` y `proposals.{md,json}`.
 
-Criterios de propuesta: pasa ≥ 35%, revienta ≤ 15%, OOS ≥ 25%, Sharpe > 0 y
-≥ 20 trades. **Ninguna propuesta se activa sola**: van con `enabled: false` y
+Criterios de propuesta: pasa ≥ 35%, revienta ≤ 15%, OOS ≥ 25%, Sharpe > 0,
+≥ 20 trades y **mediana de la familia de parámetros ≥ 35%** (evita proponer un
+pico aislado). Las variantes que cumplen todo salvo el mínimo de operaciones
+aparecen en **“casi propuestas”**, sin activarse: sirven para vigilarlas, no
+para operar. **Ninguna propuesta se activa sola**: van con `enabled: false` y
 hay que revisarlas, añadirlas a `config/bots.yaml` y volver a simular con datos
 intradía.
 
-Salida esperada (2026-11-05, FTMO 100k 2-step, horizonte 120 días):
+Salida esperada (2026-11-07, FTMO 100k 2-step, horizonte 120 días):
 
 - mejor variante del ranking: QQQ `trend` fast=20 slow=100, exposición 0.35× →
-  pasa 68,8%, revienta 6,2% (no se propone: 17 trades < 20);
-- mejor propuesta: QQQ `trend` fast=50 slow=200, 0.35× → pasa 67,3%,
-  revienta 7,1%, OOS 88,1%;
+  pasa 67,1%, revienta 6,6%, OOS 80,0%, pero solo 18 trades: queda en “casi
+  propuestas”, **no se propone**;
+- mejor propuesta: QQQ `trend` fast=50 slow=200, 0.35× → pasa 65,5%,
+  revienta 7,2%, OOS 83,5%, 21 trades;
 - el mismo `trend` a exposición 1.0× revienta ~36%: **el tamaño de posición
   importa más que la señal**;
 - `trend-ls` y `meanrev` no superan a `trend` en esta muestra.
+
+Decisión sobre el umbral: se mantiene en 20 operaciones. Las 18 operaciones del
+primer candidato son demasiado pocas para distinguir habilidad de suerte; su
+vecino de 21 trades tiene métricas casi idénticas, así que no se pierde señal.
+Las 18 propuestas son variantes correlacionadas de `trend` en QQQ/SPY/GLD/IWM,
+no 18 edges independientes: elige **una** y valídala en paper.
 
 Advertencias: elegir el mejor de cientos de variantes sesga el resultado al
 alza; OOS es un filtro mínimo, no una garantía. La muestra 2015-2026 (y su

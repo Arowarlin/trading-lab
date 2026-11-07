@@ -48,6 +48,7 @@ def test_run_research_ranks_and_never_enables(monkeypatch):
     assert report["candidates"] == 4  # fast × slow
     assert len(report["results"]) == 4
     assert report["results"][0]["score"] >= report["results"][1]["score"]
+    assert all("family_median_pass" in r for r in report["results"])
     assert all(p["enabled"] is False for p in report["proposals"])
     assert all(p["status"] == "proposed" for p in report["proposals"])
     assert all("oos_pass_rate" in p for p in report["proposals"])
@@ -99,6 +100,32 @@ def test_write_outputs_creates_files(tmp_path, monkeypatch):
     md = (tmp_path / "latest.md").read_text(encoding="utf-8")
     assert "Ranking" in md
     assert "enabled: false" in md
+
+
+def test_near_misses_are_listed_but_not_actionable(monkeypatch):
+    monkeypatch.setattr(research.data_mod, "fetch", lambda *a, **k: _frame())
+    cfg = research.ResearchConfig(
+        symbols=["TEST"],
+        strategies=["trend"],
+        paths=50,
+        horizon=10,
+        block_size=1,
+        min_pass=0.0,
+        max_breach=1.0,
+        min_trades=10_000,
+        near_miss_slack=10_000,
+        min_oos_pass=0.0,
+        exposures=[1.0],
+    )
+    report = research.run_research(cfg, ftmo(100_000), cache_dir="unused")
+
+    assert report["proposals"] == []
+    assert report["near_misses"]
+    assert all(p["enabled"] is False for p in report["near_misses"])
+    assert all(p["status"] == "watchlist_few_trades" for p in report["near_misses"])
+    md = research.render_markdown(report)
+    assert "Casi propuestas" in md
+    assert "no se proponen" in md
 
 
 def test_render_markdown_handles_no_results():

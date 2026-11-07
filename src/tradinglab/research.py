@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import itertools
 import json
+import statistics
+from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -41,6 +43,9 @@ class ResearchConfig:
     horizon: int = 120
     block_size: int = 5
     min_trades: int = 20
+    # Las variantes con pocas operaciones no se proponen, pero se listan como
+    # "casi propuestas" para revisarlas a mano si están cerca del umbral.
+    near_miss_slack: int = 5
     min_pass: float = 0.35
     min_oos_pass: float = 0.25
     max_breach: float = 0.15
@@ -171,15 +176,58 @@ def run_research(cfg: ResearchConfig, rules: PropRules, cache_dir: str | Path) -
                     )
 
     results.sort(key=lambda r: r["score"], reverse=True)
-    proposals = [
+
+    # Estabilidad de familia: mediana de pass_rate entre las variantes de
+    # parámetros del mismo activo/estrategia/escala. Evita proponer un pico
+    # aislado que solo funciona con una combinación concreta.
+    families: dict[tuple, list[float]] = defaultdict(list)
+    for r in results:
+        families[(r["symbol"], r["strategy"], r["exposure"])].append(r["pass_rate"])
+    for r in results:
+        values = families[(r["symbol"], r["strategy"], r["exposure"])]
+        r["family_size"] = len(values)
+        r["family_median_pass"] = statistics.median(values)
+
+    def core_eligible(r: dict) -> bool:
+        return (
+            r["pass_rate"] >= cfg.min_pass
+            and r["breach_rate"] <= cfg.max_breach
+            and (r["oos_pass_rate"] is None or r["oos_pass_rate"] >= cfg.min_oos_pass)
+            and r["sharpe"] > 0
+            and r["family_median_pass"] >= cfg.min_pass
+        )
+
+    proposals = [r for r in results if core_eligible(r) and r["num_trades"] >= cfg.min_trades]
+    near_misses = [
         r
         for r in results
-        if r["pass_rate"] >= cfg.min_pass
-        and r["breach_rate"] <= cfg.max_breach
-        and (r["oos_pass_rate"] is None or r["oos_pass_rate"] >= cfg.min_oos_pass)
-        and r["sharpe"] > 0
-        and r["num_trades"] >= cfg.min_trades
-    ]
+        if core_eligible(r)
+        and max(0, cfg.min_trades - cfg.near_miss_slack) <= r["num_trades"] < cfg.min_trades
+    ][:5]
+
+    def _public(r: dict, status: str, note: str) -> dict:
+        return {
+            "id": (
+                f"{r['symbol']}:{r['strategy']}:x{r['exposure']:g}:"
+                f"{json.dumps(r['params'], sort_keys=True)}"
+            ),
+            "symbol": r["symbol"],
+            "strategy": r["strategy"],
+            "params": r["params"],
+            "exposure": r["exposure"],
+            "score": r["score"],
+            "pass_rate": r["pass_rate"],
+            "breach_rate": r["breach_rate"],
+            "oos_pass_rate": r["oos_pass_rate"],
+            "oos_breach_rate": r["oos_breach_rate"],
+            "num_trades": r["num_trades"],
+            "family_median_pass": r["family_median_pass"],
+            "max_drawdown": r["max_drawdown"],
+            "sharpe": r["sharpe"],
+            "status": status,
+            "enabled": False,
+            "note": note,
+        }
 
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
@@ -193,6 +241,7 @@ def run_research(cfg: ResearchConfig, rules: PropRules, cache_dir: str | Path) -
             "horizon": cfg.horizon,
             "block_size": cfg.block_size,
             "min_trades": cfg.min_trades,
+            "near_miss_slack": cfg.near_miss_slack,
             "min_pass": cfg.min_pass,
             "min_oos_pass": cfg.min_oos_pass,
             "max_breach": cfg.max_breach,
@@ -200,31 +249,24 @@ def run_research(cfg: ResearchConfig, rules: PropRules, cache_dir: str | Path) -
             "exposures": cfg.exposures,
             "commission_bps": cfg.commission_bps,
             "slippage_bps": cfg.slippage_bps,
+            "family_stability": True,
         },
         "results": results,
         "proposals": [
-            {
-                "id": (
-                    f"{p['symbol']}:{p['strategy']}:x{p['exposure']:g}:"
-                    f"{json.dumps(p['params'], sort_keys=True)}"
-                ),
-                "symbol": p["symbol"],
-                "strategy": p["strategy"],
-                "params": p["params"],
-                "exposure": p["exposure"],
-                "score": p["score"],
-                "pass_rate": p["pass_rate"],
-                "breach_rate": p["breach_rate"],
-                "oos_pass_rate": p["oos_pass_rate"],
-                "oos_breach_rate": p["oos_breach_rate"],
-                "num_trades": p["num_trades"],
-                "max_drawdown": p["max_drawdown"],
-                "sharpe": p["sharpe"],
-                "status": "proposed",
-                "enabled": False,
-                "note": "Requiere aprobación humana; el bucle no activa bots solo.",
-            }
+            _public(
+                p,
+                "proposed",
+                "Requiere aprobación humana; el bucle no activa bots solo.",
+            )
             for p in proposals
+        ],
+        "near_misses": [
+            _public(
+                p,
+                "watchlist_few_trades",
+                f"No accionable: {p['num_trades']} operaciones < mínimo {cfg.min_trades}.",
+            )
+            for p in near_misses
         ],
         "errors": errors,
         "candidates": len(results),
@@ -285,20 +327,22 @@ def render_markdown(report: dict, top: int = 25) -> str:
         "## Propuestas",
         "",
         f"Criterios: pasa ≥ {cfg['min_pass']:.0%}, revienta ≤ {cfg['max_breach']:.0%}, "
-        f"OOS ≥ {cfg['min_oos_pass']:.0%}, Sharpe > 0, trades ≥ {cfg['min_trades']}.",
+        f"OOS ≥ {cfg['min_oos_pass']:.0%}, Sharpe > 0, trades ≥ {cfg['min_trades']} "
+        f"y mediana de la familia de parámetros ≥ {cfg['min_pass']:.0%}.",
         "",
     ]
     if report["proposals"]:
         lines += [
-            "| Activo | Estrategia | Parámetros | Escala | Pasa | Revienta | OOS | Score |",
-            "|---|---|---|---|---|---|---|---|",
+            "| Activo | Estrategia | Parámetros | Escala | Trades | Pasa | Revienta | OOS | Familia | Score |",
+            "|---|---|---|---|---|---|---|---|---|---|",
         ]
         for p in report["proposals"]:
             params = " ".join(f"{k}={v}" for k, v in p["params"].items())
             lines.append(
                 f"| {p['symbol']} | {p['strategy']} | {params} | {p['exposure']:g}× | "
-                f"{pct(p['pass_rate'])} | {pct(p['breach_rate'])} | "
-                f"{pct_opt(p.get('oos_pass_rate'))} | {p['score']:,.3f} |"
+                f"{p['num_trades']} | {pct(p['pass_rate'])} | {pct(p['breach_rate'])} | "
+                f"{pct_opt(p.get('oos_pass_rate'))} | "
+                f"{pct_opt(p.get('family_median_pass'))} | {p['score']:,.3f} |"
             )
         lines += [
             "",
@@ -311,6 +355,36 @@ def render_markdown(report: dict, top: int = 25) -> str:
             "Ningún candidato cumple los criterios. Es un resultado válido: "
             "no pagues un challenge con estas estrategias todavía."
         )
+
+    near_misses = report.get("near_misses", [])
+    if near_misses:
+        slack = cfg.get("near_miss_slack", 5)
+        lines += [
+            "",
+            "## Casi propuestas (no accionables)",
+            "",
+            f"Cumplen todo salvo el mínimo de operaciones "
+            f"({max(0, cfg['min_trades'] - slack)}-{cfg['min_trades'] - 1} trades). "
+            "Se listan para vigilancia; **no se proponen** porque la muestra es "
+            "demasiado pequeña para distinguir habilidad de suerte.",
+            "",
+            "| Activo | Estrategia | Parámetros | Escala | Trades | Pasa | Revienta | OOS | Familia | Score |",
+            "|---|---|---|---|---|---|---|---|---|---|",
+        ]
+        for p in near_misses:
+            params = " ".join(f"{k}={v}" for k, v in p["params"].items())
+            lines.append(
+                f"| {p['symbol']} | {p['strategy']} | {params} | {p['exposure']:g}× | "
+                f"{p['num_trades']} | {pct(p['pass_rate'])} | {pct(p['breach_rate'])} | "
+                f"{pct_opt(p.get('oos_pass_rate'))} | "
+                f"{pct_opt(p.get('family_median_pass'))} | {p['score']:,.3f} |"
+            )
+        lines += [
+            "",
+            "> El umbral de operaciones se mantiene: un resultado alto con pocos "
+            "trades puede desaparecer al añadir dos años de datos. La familia de "
+            "parámetros ayuda, pero no sustituye una muestra amplia.",
+        ]
 
     if report["errors"]:
         lines += ["", "## Errores", ""]
@@ -352,6 +426,7 @@ def write_outputs(report: dict, out_dir: str | Path) -> dict[str, str]:
         "rules": report["rules"],
         "auto_enable": False,
         "proposals": report["proposals"],
+        "near_misses": report.get("near_misses", []),
     }
     files["proposals_json"].write_text(
         json.dumps(proposals, indent=2, ensure_ascii=False), encoding="utf-8"
@@ -371,14 +446,37 @@ def write_outputs(report: dict, out_dir: str | Path) -> dict[str, str]:
                 if p.get("oos_pass_rate") is not None
                 else ""
             )
+            family = (
+                f", familia {p['family_median_pass']:.1%}"
+                if p.get("family_median_pass") is not None
+                else ""
+            )
             proposals_md.append(
                 f"- **{p['symbol']} · {p['strategy']}** "
                 f"({json.dumps(p['params'], ensure_ascii=False)}, escala {p['exposure']:g}×) — "
-                f"pasa {p['pass_rate']:.1%}, revienta {p['breach_rate']:.1%}{oos} · "
+                f"pasa {p['pass_rate']:.1%}, revienta {p['breach_rate']:.1%}{oos}{family} · "
                 f"`{p['status']}`"
             )
     else:
         proposals_md.append("- Sin propuestas que cumplan los criterios.")
+
+    near_misses = report.get("near_misses", [])
+    if near_misses:
+        proposals_md += [
+            "",
+            "## Casi propuestas (no accionables)",
+            "",
+            "Cumplen los criterios de riesgo/OOS pero tienen menos operaciones que el "
+            "mínimo. No se activan ni se proponen: solo se vigilan.",
+            "",
+        ]
+        for p in near_misses:
+            proposals_md.append(
+                f"- **{p['symbol']} · {p['strategy']}** "
+                f"({json.dumps(p['params'], ensure_ascii=False)}, escala {p['exposure']:g}×) — "
+                f"{p['num_trades']} trades, pasa {p['pass_rate']:.1%}, "
+                f"revienta {p['breach_rate']:.1%} · `{p['status']}`"
+            )
     files["proposals_md"].write_text("\n".join(proposals_md) + "\n", encoding="utf-8")
 
     return {k: str(v) for k, v in files.items()}
