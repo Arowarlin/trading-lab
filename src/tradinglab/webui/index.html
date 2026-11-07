@@ -381,7 +381,7 @@
       <div class="row"><span class="dot" id="side-mt5-dot"></span> MT5 <b id="side-mt5">—</b></div>
       <div class="row"><span class="dot" id="side-guard-dot"></span> FTMO <b id="side-guard">—</b></div>
     </div>
-    <div class="sidebar-footer">Modo paper · las acciones del panel nunca envían órdenes. Los bots y propuestas requieren activación humana.</div>
+    <div class="sidebar-footer">Modo paper · las acciones del panel nunca envían órdenes. Los bots y propuestas requieren activación humana.<br><a href="https://github.com/Arowarlin/trading-lab" target="_blank" rel="noopener noreferrer">GitHub · trading-lab</a></div>
   </aside>
 
   <main>
@@ -840,6 +840,13 @@ function renderOverview() {
     dot: true,
     name: "Modo del laboratorio",
     detail: `${meta.mode.toUpperCase()} · ${meta.broker} · ${meta.data_provider}`,
+  });
+  sys.push({
+    dot: o.git?.ok === true ? true : null,
+    name: "Repositorio",
+    detail: o.git?.ok
+      ? `${o.git.branch}@${o.git.commit}${o.git.dirty ? " · cambios locales" : " · limpio"}`
+      : (o.git?.error || "sin git"),
   });
   $("#system-list").innerHTML = sys.map((row) => `
     <div class="sys-row">

@@ -211,6 +211,7 @@ class LabData:
             "account": self.account(),
             "llm": self._llm_status(),
             "scheduler": self._scheduler(),
+            "git": self.git_info(),
             "agents": self.agent_runs(limit=30),
             "deep_logs": self.deep_logs(),
             "dryruns": self.dryruns(limit=10),
@@ -741,6 +742,41 @@ class LabData:
         }
 
     # ------------------------------------------------------------- scheduler
+
+    def git_info(self) -> dict:
+        """Estado del repositorio local para mostrarlo en el panel."""
+        if not self.external:
+            return {"ok": None}
+        return self.cache.get("git", 30.0, self._git_check)
+
+    def _git_check(self) -> dict:
+        def run(*args: str) -> str:
+            completed = subprocess.run(
+                ["git", "-C", str(self.root), *args],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=5,
+                check=False,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+            return completed.stdout.strip()
+
+        try:
+            branch = run("rev-parse", "--abbrev-ref", "HEAD")
+            commit = run("rev-parse", "--short", "HEAD")
+            dirty = bool(run("status", "--porcelain"))
+            remote = run("remote", "get-url", "origin")
+            return {
+                "ok": bool(commit),
+                "branch": branch or "—",
+                "commit": commit or "—",
+                "dirty": dirty,
+                "remote": remote,
+            }
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)[:200]}
 
     def _scheduler(self) -> dict:
         if not self.external:
