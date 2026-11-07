@@ -2713,6 +2713,62 @@ def markets_coordinate_cmd(
     )
 
 
+@markets_app.command("pilots")
+def markets_pilots_cmd() -> None:
+    """Muestra pilotos/mini-F13 por mercado y el activo."""
+    from .market_pilots import pilot_status
+
+    payload = pilot_status(DEFAULT_DB, get_settings())
+    t = Table(title="Pilotos por mercado")
+    for col in ("Mercado", "Bot", "Perfil", "Estado", "Activo", "Motivo"):
+        t.add_column(col, overflow="fold")
+    for row in payload["pilots"]:
+        t.add_row(
+            row["market"],
+            row["bot"] or "Sin datos",
+            row["profile"],
+            row["status"],
+            "SÍ" if row["active"] else "no",
+            row["reason"],
+        )
+    console.print(t)
+    console.print(
+        f"[dim]activo: {payload['active_market'] or 'ninguno'} · "
+        "seleccionar no activa bots ni F13[/dim]"
+    )
+
+
+@markets_app.command("pilot-select")
+def markets_pilot_select_cmd(
+    market: str = typer.Argument(...),
+    confirm: bool = typer.Option(False, "--confirm"),
+) -> None:
+    """Selecciona el mercado del piloto; no activa bots ni F13."""
+    from .market_pilots import select_pilot
+
+    try:
+        select_pilot(DEFAULT_DB, market, confirm=confirm, actor="cli")
+    except ValueError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2) from exc
+    console.print(f"[green]Piloto activo: {market}[/green] · bots/F13 sin cambios")
+
+
+@markets_app.command("pilot-clear")
+def markets_pilot_clear_cmd(
+    confirm: bool = typer.Option(False, "--confirm"),
+) -> None:
+    """Quita el piloto activo; no toca bots ni F13."""
+    from .market_pilots import clear_pilots
+
+    try:
+        clear_pilots(DEFAULT_DB, confirm=confirm, actor="cli")
+    except ValueError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2) from exc
+    console.print("[green]Pilotos limpiados[/green] · bots/F13 sin cambios")
+
+
 @operator_app.command("pin")
 def operator_pin_cmd() -> None:
     """Configura el PIN del modo operador en el keyring (nunca en .env)."""

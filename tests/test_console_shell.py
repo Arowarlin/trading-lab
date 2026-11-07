@@ -60,6 +60,7 @@ def test_dashboard_tiene_kpis_balance_performers_y_calendario() -> None:
         "renderMarketCatalog",
         'id="market-agents"',
         "renderMarketAgents",
+        'id="market-pilots"',
         'id="sidebar-toggle"',
         "sidebar-collapsed",
         "computeDailyPnl",

@@ -1200,7 +1200,9 @@
       <div class="panel" style="margin-bottom:14px">
         <div class="panel-head"><h2>Agentes por mercado</h2><span class="muted tiny" id="market-agents-meta"></span></div>
         <div id="market-agents"></div>
-        <div class="note">Routing por clase de activo y presupuesto del coordinador determinista; no activa bots ni envía órdenes.</div>
+        <div class="panel-head" style="margin-top:14px"><h2>Pilotos / mini-F13</h2><span class="muted tiny" id="market-pilots-meta"></span></div>
+        <div id="market-pilots"></div>
+        <div class="note">Un mercado a la vez: seleccionar un piloto no activa bots ni F13; solo limita aperturas. Los cierres siguen permitidos.</div>
       </div>
 
       <div class="panel" style="margin-bottom:14px">
@@ -3663,6 +3665,27 @@ function renderMarketAgents() {
     rows,
     { empty: "Sin datos de mercados." }
   );
+  const pilots = payload.pilots || {};
+  if ($("#market-pilots-meta")) {
+    $("#market-pilots-meta").textContent = pilots.active_market
+      ? `activo: ${pilots.active_market}`
+      : "sin piloto activo";
+  }
+  const pilotHost = $("#market-pilots");
+  if (pilotHost) {
+    const pilotRows = (pilots.pilots || []).map((pilot) => [
+      `<b>${esc(pilot.label)}</b><div class="muted tiny">${esc(pilot.market)}</div>`,
+      esc(pilot.bot || "Sin bot"),
+      esc(pilot.profile),
+      pilot.active ? `<span class="badge ok">activo</span>` : `<span class="badge">${esc(pilot.status)}</span>`,
+      esc(pilot.reason || "Sin datos"),
+    ]);
+    pilotHost.innerHTML = grid(
+      [{ label: "Mercado" }, { label: "Bot" }, { label: "Perfil" }, { label: "Estado" }, { label: "Motivo", wrap: true }],
+      pilotRows,
+      { empty: "Sin datos de pilotos." }
+    );
+  }
 }
 
 function renderAgents() {

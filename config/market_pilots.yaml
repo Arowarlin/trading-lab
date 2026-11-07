@@ -1,0 +1,20 @@
+# Pilotos por mercado. Seleccionar un piloto NO activa bots ni F13.
+pilots:
+  equity:
+    label: "Acciones / ETF"
+    bot: qqq-trend-f13
+    profile: swing_equity
+    status: not_started
+    reason: "Mini-F13 de equity; el bot sigue enabled:false hasta aprobación."
+  forex:
+    label: "Forex / CFD"
+    bot: null
+    profile: intraday_fx
+    status: blocked
+    reason: "Sin M15/H1 reales (offset desconocido y mercado cerrado)."
+  futures:
+    label: "Futuros"
+    bot: null
+    profile: intraday_futures
+    status: blocked
+    reason: "ProjectX sin credenciales/suscripción; solo proxy diario."

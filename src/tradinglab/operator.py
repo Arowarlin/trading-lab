@@ -554,6 +554,13 @@ class OperatorService:
 
     def _plan_order(self, params: dict) -> dict:
         account = self._account_for(params.get("account"))
+        from .market_pilots import allows_market, market_for_account
+
+        allowed, reason = allows_market(
+            self.db_path, market_for_account(account)
+        )
+        if not allowed:
+            raise OperatorError(reason, 409)
         ticker = str(params.get("ticker") or "").strip().upper()
         if not re.match(r"^[A-Z0-9.\-=^]{1,12}$", ticker):
             raise OperatorError("ticker inválido", 400)
@@ -805,6 +812,11 @@ class OperatorService:
                 f"bot {bot_id} desactivado (YAML o runtime); no se ejecuta.", 409
             )
         account = self._account_for(spec.account)
+        from .market_pilots import allows_market, market_for_bot
+
+        allowed, reason = allows_market(self.db_path, market_for_bot(spec))
+        if not allowed:
+            raise OperatorError(reason, 409)
         return {
             "summary": {
                 "action": "run_bot",

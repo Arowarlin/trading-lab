@@ -198,6 +198,18 @@ def test_cierre_permitido_con_killswitch_activo(tmp_path: Path, monkeypatch) -> 
     assert fake.orders[-1]["price"] == pytest.approx(101.0)
 
 
+def test_piloto_bloquea_apertura_de_otro_mercado(tmp_path: Path) -> None:
+    from tradinglab.market_pilots import select_pilot
+
+    service, fake, db = _service(tmp_path)
+    select_pilot(db, "equity", confirm=True)
+    service.arm("1234")
+    with pytest.raises(OperatorError) as exc:
+        service.preview("order", _order_params(account="ftmo_demo"))
+    assert "piloto" in str(exc.value).lower()
+    assert fake.orders == []
+
+
 def test_pausa_bloquea_apertura_pero_no_cierre(tmp_path: Path) -> None:
     fake = FakeBroker(
         positions=[

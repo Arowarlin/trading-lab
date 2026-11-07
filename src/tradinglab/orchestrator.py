@@ -444,6 +444,9 @@ def run_all(
     specs = load_bots()
     account_map = load_accounts()
     needs_cluster = bool(clusters) or any(spec.cluster for spec in specs)
+    from .market_pilots import active_market, market_for_bot
+
+    active_pilot = active_market(DEFAULT_DB)
     equity = (
         float(broker.snapshot({}).get("equity") or 0.0) if needs_cluster else 0.0
     )
@@ -456,6 +459,8 @@ def run_all(
         if not spec.enabled and not include_disabled:
             continue
         if spec.type not in ("deterministic", "hybrid"):
+            continue
+        if active_pilot is not None and market_for_bot(spec) != active_pilot:
             continue
         profile = profile_map.get(spec.profile or "")
         if profile is None:

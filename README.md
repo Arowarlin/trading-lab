@@ -871,7 +871,7 @@ stdlib y `127.0.0.1`. Se conservan todas las pestañas, rutas, CSRF, Host/Origin
 y la lista blanca `WRITE_ROUTES`.
 
 Evidencia: `pytest tests/test_console_shell.py -q` → **3 passed**; suite completa
-**312 passed**; cubre las seis secciones, las 15 vistas actuales, los
+**317 passed**; cubre las seis secciones, las 15 vistas actuales, los
 componentes del dashboard y la ausencia de URLs externas/CDNs.
 
 ---
@@ -1069,6 +1069,28 @@ símbolo con el catálogo antes de llamar al agente existente:
 
 Evidencia: `pytest tests/test_market_agents.py -q` → **5 passed**; suite completa
 **312 passed**; `ruff` limpio; `lab doctor` OK con avisos conocidos.
+
+---
+
+## 6p. Un mercado a la vez y mini-F13 (6.6)
+
+`config/market_pilots.yaml` define un piloto por mercado. **Seleccionar un
+piloto no activa bots, no congela F13 y no envía órdenes**: solo limita qué
+mercado puede abrir posiciones.
+
+- Equity: piloto `qqq-trend-f13` (`not_started`, bot sigue `enabled:false`).
+- Forex/CFD y futuros: `blocked` con motivo explícito (sin M15/H1 real u
+  ProjectX sin credenciales).
+- `select_pilot` mantiene **un solo mercado activo**; cambiar de piloto
+  desactiva el anterior y deja historial. `clear_pilots` lo apaga.
+- Gate en `orchestrator.run_all` y en aperturas del modo operador. Cerrar o
+  reducir nunca se bloquea.
+- CLI `lab markets pilots`, `pilot-select`, `pilot-clear`; API `/api/markets` y
+  panel **Agentes → Pilotos / mini-F13**.
+- El hash de F13 y `enabled` de los bots no cambian al seleccionar.
+
+Evidencia: `pytest tests/test_market_pilots.py -q` → **4 passed**; suite completa
+**317 passed**; `ruff` limpio; `lab doctor` OK con avisos conocidos.
 
 ---
 
