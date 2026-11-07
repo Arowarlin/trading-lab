@@ -940,6 +940,29 @@ lab f13 check           # paradas duras + alerta
 La activación del bot requiere aprobación humana explícita; `freeze` no cambia
 `enabled: false`.
 
+### Automatización F13 preparada (NO registrada)
+
+No existe ninguna tarea F13 registrada. Los scripts están listos para que los
+revises y decidas:
+
+- `scripts/f13_daily.ps1`: preflight (aborta si F13 sigue “no iniciado”),
+  ejecuta `lab orchestrate --bot qqq-trend-f13` **sin `--dry-run`**, después
+  `lab reconcile` y `lab f13 check`. Cada paso queda en `logs/f13/`.
+- `scripts/register_f13_task.ps1`: crea la tarea `TradingLab-F13` L-V a las
+  **22:20 hora local de Praga** (después del cierre de EE. UU.). **No se ha
+  ejecutado**.
+
+Comando que ejecutarás tú cuando toque:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File E:\trading-lab\scripts\register_f13_task.ps1
+```
+
+El script diario no envía órdenes mientras el bot siga `enabled: false`; el
+orquestador ignora bots deshabilitados. La activación real exige editar
+`config/bots.yaml` a mano. `lab f13 status` debe seguir mostrando “no iniciado”
+hasta que tú ejecutes `freeze`.
+
 ---
 
 ## 12. Roadmap restante

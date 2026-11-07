@@ -43,3 +43,19 @@ def test_open_console_y_acceso_directo():
     marker = "open_console.ps1"
     assert marker.encode("utf-8") in blob or marker.encode("utf-16-le") in blob
 
+
+def test_f13_scripts_preparados_sin_registrar():
+    daily = (ROOT / "scripts" / "f13_daily.ps1").read_text(encoding="utf-8")
+    assert "orchestrate" in daily and "qqq-trend-f13" in daily
+    assert "reconcile" in daily
+    assert '"f13", "check"' in daily
+    assert "no iniciado" in daily
+    assert "PreflightOnly" in daily
+    assert "Register-ScheduledTask" not in daily
+
+    register = (ROOT / "scripts" / "register_f13_task.ps1").read_text(encoding="utf-8")
+    assert "Register-ScheduledTask" in register
+    assert "TradingLab-F13" in register
+    assert "22:20" in register
+    assert "f13_daily.ps1" in register
+

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pandas as pd
 import pytest
+import yaml
 
 from tradinglab.config import Settings
 from tradinglab.db import connect, init_db
@@ -43,6 +44,24 @@ def test_freeze_y_status(tmp_path):
     assert len(row["config_hash"]) == 64
     assert status(db)["start_date"] == "2026-11-09"
     assert config_check(db)["ok"] is True
+
+
+def test_freeze_no_cambia_enabled(tmp_path):
+    root = tmp_path / "repo"
+    config = root / "config"
+    config.mkdir(parents=True)
+    bots = config / "bots.yaml"
+    bots.write_text(
+        "bots:\n"
+        "  - id: qqq-trend-f13\n"
+        "    enabled: false\n",
+        encoding="utf-8",
+    )
+    db = tmp_path / "lab.db"
+    assert status(db) is None
+    freeze(db, bot="qqq-trend-f13", symbol="QQQ", start_date="2026-11-09", root=root)
+    assert yaml.safe_load(bots.read_text(encoding="utf-8"))["bots"][0]["enabled"] is False
+    assert status(db) is not None
 
 
 def test_record_snapshot(tmp_path):

@@ -116,7 +116,6 @@ def run_bot(
         current=snap["equity"],
         tz=settings.timezone,
     )
-    blackout = calendar_block_for_settings(DEFAULT_DB, settings)
     prop_rules = rules_from_settings(settings)
     session = session_block(
         prop_rules,
@@ -181,6 +180,19 @@ def run_bot(
         if delta == 0:
             actions.append(action)
             continue
+
+        if delta > 0:
+            # Reevaluar SIEMPRE antes de cada apertura. Los cierres/reducciones
+            # no pasan por estos filtros.
+            ks, _ = ensure_killswitch(
+                DEFAULT_DB,
+                broker.equity_series(),
+                settings.risk,
+                current=snap["equity"],
+                tz=settings.timezone,
+            )
+            blackout = calendar_block_for_settings(DEFAULT_DB, settings)
+            session = session_block(prop_rules, asset_class="equity")
 
         if not allows_order(ks, delta):
             action.status = "bloqueado"
