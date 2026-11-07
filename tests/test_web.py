@@ -44,6 +44,8 @@ def test_index_disponible() -> None:
     assert "view-journal" in text
     assert "journal-apply" in text
     assert "journal-summary" in text
+    assert "view-operator" in text
+    assert "console-audit" in text
     assert "fund-save" in text
     assert "fund-killswitch" in text
 

@@ -58,9 +58,8 @@ from .botlab import (
 )
 from .config import DEFAULT_DB, ROOT, Settings, get_settings
 from .journal import build_journal
-from .killswitch import activate as activate_killswitch
 from .killswitch import load_state as load_killswitch
-from .killswitch import reset as reset_killswitch
+from .operator import OperatorError, OperatorService
 from .orchestrator import load_bots
 from .profiles import load_profiles
 from .prop import AccountState, PropGuard, PropRules, from_yaml, ftmo
@@ -82,6 +81,10 @@ WRITE_ROUTES = (
     "/api/bots/propose",
     "/api/fund/limits",
     "/api/fund/killswitch",
+    "/api/operator/arm",
+    "/api/operator/disarm",
+    "/api/operator/preview",
+    "/api/operator/execute",
 )
 POCKET_LABELS = {
     "swing_equity": "Swing acciones/ETF",
@@ -295,6 +298,7 @@ class LabData:
         root: Path | str = ROOT,
         db_path: Path | str = DEFAULT_DB,
         external: bool = True,
+        operator_service: OperatorService | None = None,
     ) -> None:
         self.settings = settings or get_settings()
         self.root = Path(root)
@@ -303,6 +307,9 @@ class LabData:
         self.cache = TTLCache()
         self._action_lock = threading.Lock()
         self._action: dict[str, Any] | None = None
+        self.operator = operator_service or OperatorService(
+            self.settings, self.db_path
+        )
 
     # --------------------------------------------------------------- rutas
 
@@ -2085,6 +2092,8 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 self._json({"accounts": self.server.data.accounts()})
             elif path == "/api/fund":
                 self._json(self.server.data.fund())
+            elif path == "/api/operator":
+                self._json(self.server.data.operator.status())
             elif path == "/api/journal":
                 params = parse_qs(urlparse(self.path).query)
 
@@ -2138,6 +2147,9 @@ class DashboardHandler(BaseHTTPRequestHandler):
         problem = self._write_gate()
         if problem is not None:
             self._error(403, problem)
+            return
+        if path.startswith("/api/operator/") and self.headers.get("X-Operator-Client") != "console":
+            self._error(403, "Solo la consola puede llamar al modo operador")
             return
         try:
             if path not in WRITE_ROUTES:
@@ -2200,8 +2212,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 action = str(body.get("action") or "").strip()
                 try:
                     if action == "activate":
-                        state = activate_killswitch(
-                            self.server.data.db_path,
+                        result = self.server.data.operator.activate_killswitch(
                             reason=str(
                                 body.get("reason")
                                 or "activación manual desde la consola"
@@ -2209,18 +2220,55 @@ class DashboardHandler(BaseHTTPRequestHandler):
                             confirm=bool(body.get("confirm")),
                         )
                     elif action == "reset":
-                        state = reset_killswitch(
-                            self.server.data.db_path,
+                        result = self.server.data.operator.reset_killswitch(
+                            pin=str(body.get("pin") or ""),
                             confirm=bool(body.get("confirm")),
                         )
                     else:
                         self._error(400, "action debe ser activate o reset")
                         return
-                except ValueError as exc:
-                    self._error(400, str(exc))
+                except OperatorError as exc:
+                    self._error(exc.status, str(exc))
                     return
                 self.server.data.cache.clear()
-                self._json({"ok": True, "state": _json_safe(asdict(state))})
+                self._json(result)
+            elif path == "/api/operator/arm":
+                try:
+                    state = self.server.data.operator.arm(
+                        str(body.get("pin") or "")
+                    )
+                except OperatorError as exc:
+                    self._error(exc.status, str(exc))
+                else:
+                    self._json({"ok": True, "session": state})
+            elif path == "/api/operator/disarm":
+                self._json(
+                    {"ok": True, "session": self.server.data.operator.disarm()}
+                )
+            elif path == "/api/operator/preview":
+                params = body.get("params")
+                try:
+                    result = self.server.data.operator.preview(
+                        str(body.get("action") or ""),
+                        params if isinstance(params, dict) else {},
+                    )
+                except OperatorError as exc:
+                    self._error(exc.status, str(exc))
+                else:
+                    self._json(result)
+            elif path == "/api/operator/execute":
+                params = body.get("params")
+                try:
+                    result = self.server.data.operator.execute(
+                        str(body.get("action") or ""),
+                        params if isinstance(params, dict) else {},
+                        str(body.get("token") or ""),
+                    )
+                except OperatorError as exc:
+                    self._error(exc.status, str(exc))
+                else:
+                    self.server.data.cache.clear()
+                    self._json(result)
             else:
                 self._error(404, "Ruta no encontrada")
         except Exception as exc:

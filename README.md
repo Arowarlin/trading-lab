@@ -789,6 +789,56 @@ cerradas” (1 fill abierto, 0 ventas), sin escribir en la base.
 
 ---
 
+## 6f. Modo operador (etapa 7)
+
+La consola puede operar **solo paper/demo**, y solo cuando está **armada**.
+
+- **Desarmada por defecto.** Armar exige PIN verificado con el keyring del
+  sistema (`lab operator pin`), caduca a los 15 min (`operator.arm_minutes`) y
+  se desarma al reiniciar el servidor. El PIN nunca se escribe en `.env`, logs
+  ni auditoría. Tras `operator.max_pin_attempts` fallos se bloquea
+  `operator.lock_seconds`.
+- **Solo si está armada:** ejecutar el orquestador de un bot, enviar una orden
+  paper/demo, cerrar posición, aplanar cuenta y activar/desactivar un bot.
+- **Rechazo duro** si `mode=live`, si la cuenta no es `paper/demo/simulated` o
+  si `MT5 require_demo=False`. La consola no puede cambiar `ALLOW_LIVE`.
+- **Dos pasos:** el preview muestra cuenta, símbolo, lado, tamaño, precio, SL,
+  riesgo %, equity y colchón restante; devuelve un token de **un solo uso** que
+  caduca en 60 s (`operator.confirm_seconds`). Si cambia el precio o el estado,
+  el token no coincide y hay que previsualizar de nuevo.
+- **Mismos guards que la CLI:** `evaluate_account`, límites efectivos,
+  kill-switch, blackout de noticias y guard de identidad del bróker. Cerrar o
+  reducir nunca se bloquea, ni siquiera con el kill-switch activo.
+- **Kill-switch:** activar siempre está permitido; resetear exige confirmación
+  + PIN. No se puede resetear desde una petición sin PIN.
+- **Activación de bots:** `bot_runtime_state` + `bot_runtime_history` en SQLite,
+  sin editar `config/*.yaml`. `enabled` efectivo = YAML **AND** runtime. Si F13
+  está congelado o iniciado, su bot no se puede activar ni modificar desde la
+  consola y el hash de F13 no cambia.
+- **Auditoría:** `console_actions` guarda acción, parámetros saneados, resultado,
+  hora y OK/NO. Se ve en **Operador → Auditoría** y en **Registros**. Nunca
+  guarda PIN ni tokens.
+- **Rechazo de origen no-UI:** además de CSRF, Host/Origin y lista blanca, los
+  endpoints `/api/operator/*` exigen `X-Operator-Client: console`; no hay
+  endpoints para contenido del LLM/noticias, ejecución de código, copy trading
+  ni conexiones EA.
+
+**La consola NO puede:** operar en live, cambiar `ALLOW_LIVE`, editar YAML,
+activar el bot de F13 congelado/iniciado, resetear el kill-switch sin PIN,
+ejecutar código, crear bots con IA, hacer copy trading ni conectar EAs.
+
+```powershell
+lab operator pin       # guarda/rota el PIN en keyring (entrada oculta)
+lab operator status    # PIN, mode y enabled efectivo por bot
+```
+
+Evidencia: `pytest tests/test_operator.py -q` → **11 passed**; cubre sin armar
+(403), PIN incorrecto/bloqueo, live/plantilla rechazadas, orden fuera de límite,
+cierre con kill-switch activo, token caducado/reutilizado, F13 intacto y
+auditoría sin secretos.
+
+---
+
 ## 7. Trading-R1 en Windows
 
 Trading-R1 usa `fcntl`, `os.O_NOFOLLOW` y `os.getuid()`: **no funciona en Windows**.

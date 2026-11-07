@@ -58,3 +58,10 @@ prop:
   account_size: 100000
   buffer_pct: 0.10            # 10% del límite que el bot no usa
   reset_tz: Europe/Prague
+
+# Modo operador de la consola. Solo paper/demo. El PIN vive en keyring.
+operator:
+  arm_minutes: 15             # caducidad del armado
+  confirm_seconds: 60         # caducidad del token de confirmación
+  max_pin_attempts: 5         # intentos antes de bloquear
+  lock_seconds: 300           # duración del bloqueo tras fallar

@@ -78,6 +78,10 @@ f13_app = typer.Typer(no_args_is_help=True, help="F13: pilot operativo de paper 
 bots_app = typer.Typer(no_args_is_help=True, help="Bots: listar, evaluar, proponer, archivar.")
 decisions_app = typer.Typer(no_args_is_help=True, help="Decisiones LLM: resultados y líneas base.")
 fund_app = typer.Typer(no_args_is_help=True, help="Fondo: cuentas, límites e historial.")
+operator_app = typer.Typer(
+    no_args_is_help=True,
+    help="Modo operador de la consola: PIN, estado y auditoría.",
+)
 intel_app = typer.Typer(no_args_is_help=True, help="Información continua: RSS, saneado y estado.")
 sec_app = typer.Typer(no_args_is_help=True, help="SEC EDGAR: CIK, filings y company facts.")
 app.add_typer(mt5_app, name="mt5")
@@ -89,6 +93,7 @@ app.add_typer(f13_app, name="f13")
 app.add_typer(bots_app, name="bots")
 app.add_typer(decisions_app, name="decisions")
 app.add_typer(fund_app, name="fund")
+app.add_typer(operator_app, name="operator")
 app.add_typer(intel_app, name="intel")
 app.add_typer(sec_app, name="sec")
 console = Console()
@@ -2045,6 +2050,59 @@ def fund_history_cmd(account: str = typer.Argument(...)) -> None:
             str(row["effective_from"]),
         )
     console.print(t)
+
+
+@operator_app.command("pin")
+def operator_pin_cmd() -> None:
+    """Configura el PIN del modo operador en el keyring (nunca en .env)."""
+    from .operator import pin_configured, set_pin
+
+    if pin_configured() and not typer.confirm(
+        "Ya existe un PIN. ¿Reemplazarlo?", default=False
+    ):
+        raise typer.Exit(1)
+    pin = typer.prompt(
+        "PIN (4-12 dígitos)", hide_input=True, confirmation_prompt=True
+    )
+    try:
+        set_pin(pin)
+    except (ValueError, RuntimeError) as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2) from exc
+    console.print("[green]PIN guardado en keyring. No se escribió en .env ni logs.[/green]")
+
+
+@operator_app.command("status")
+def operator_status_cmd() -> None:
+    """Muestra si hay PIN y el estado runtime de los bots."""
+    from .operator import pin_configured
+    from .runtime import get_bot_state
+
+    settings = get_settings()
+    t = Table(title="Modo operador")
+    t.add_column("Campo", style="bold")
+    t.add_column("Valor")
+    t.add_row("mode", settings.mode)
+    t.add_row("PIN en keyring", "sí" if pin_configured() else "no")
+    t.add_row("Armado", "solo en el servidor web (se pierde al reiniciar)")
+    t.add_row(
+        "Ventana",
+        f"{settings.operator.arm_minutes} min · "
+        f"token {settings.operator.confirm_seconds}s",
+    )
+    console.print(t)
+    bots = Table(title="Estado runtime de bots")
+    for col in ("Bot", "YAML", "Efectivo", "Actualizado"):
+        bots.add_column(col)
+    for spec in load_bots():
+        state = get_bot_state(DEFAULT_DB, spec.id)
+        bots.add_row(
+            spec.id,
+            "on" if spec.yaml_enabled else "off",
+            "on" if spec.enabled else "off",
+            str(state["updated_at"]) if state else "sin datos",
+        )
+    console.print(bots)
 
 
 @decisions_app.command("update")

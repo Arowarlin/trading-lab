@@ -696,6 +696,7 @@
       <button class="nav-btn" data-view="accounts"><span class="ico">▤</span> Cuentas</button>
       <button class="nav-btn" data-view="fund"><span class="ico">◉</span> Fondo</button>
       <button class="nav-btn" data-view="journal"><span class="ico">▩</span> Diario</button>
+      <button class="nav-btn" data-view="operator"><span class="ico">⌘</span> Operador</button>
       <button class="nav-btn" data-view="bots"><span class="ico">⚙</span> Bots</button>
       <div class="nav-label">Investigar</div>
       <button class="nav-btn" data-view="research"><span class="ico">⌁</span> Research</button>
@@ -999,6 +1000,61 @@
       </div>
     </section>
 
+    <!-- ============================================================ OPERADOR -->
+    <section class="view" id="view-operator">
+      <div class="note" style="margin:0 0 14px">
+        <strong>Solo paper/demo.</strong> Por defecto desarmado. Armar exige PIN del keyring,
+        caduca solo y se pierde al reiniciar. Toda acción pasa por guard de cuenta,
+        límites efectivos, kill-switch y blackout; cerrar/reducir nunca se bloquea.
+        Nada de live, copy trading, EAs ni ejecución de código.
+      </div>
+      <div id="operator-alert"></div>
+      <div class="grid-2 equal" style="margin-bottom:14px">
+        <div class="panel">
+          <div class="panel-head"><h2>Armado</h2><span id="operator-state"></span></div>
+          <div id="operator-session"></div>
+          <div class="action-bar" style="margin-top:12px">
+            <input class="input" id="operator-pin" type="password" placeholder="PIN (keyring)" autocomplete="off" style="width:180px">
+            <button class="btn primary" id="operator-arm">Armar</button>
+            <button class="btn ghost" id="operator-disarm">Desarmar</button>
+          </div>
+          <div class="muted tiny" style="margin-top:8px">El PIN nunca se guarda en `.env` ni en logs. Si falla N veces, se bloquea temporalmente.</div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h2>Acción</h2><span class="muted tiny">preview + token 60 s</span></div>
+          <div class="action-bar" style="margin:0 0 10px">
+            <select class="input" id="operator-action">
+              <option value="order">Enviar orden</option>
+              <option value="close">Cerrar posición</option>
+              <option value="flatten">Aplanar cuenta</option>
+              <option value="run_bot">Ejecutar bot</option>
+              <option value="bot_enable">Activar bot</option>
+              <option value="bot_disable">Desactivar bot</option>
+            </select>
+            <select class="input" id="operator-account"></select>
+            <select class="input" id="operator-bot"></select>
+          </div>
+          <div class="grid-2 equal" id="operator-fields">
+            <label class="fund-field"><span>Ticker / ticket</span><input class="input" id="operator-ticker" placeholder="SPY o ticket" spellcheck="false"></label>
+            <label class="fund-field"><span>Lado</span><select class="input" id="operator-side"><option value="buy">buy</option><option value="sell">sell</option></select></label>
+            <label class="fund-field"><span>Cantidad</span><input class="input" id="operator-qty" placeholder="entero en acciones" inputmode="decimal"></label>
+            <label class="fund-field"><span>Precio (vacío = último cierre)</span><input class="input" id="operator-price" inputmode="decimal"></label>
+            <label class="fund-field"><span>SL obligatorio al abrir</span><input class="input" id="operator-sl" inputmode="decimal"></label>
+            <label class="fund-field"><span>Motivo</span><input class="input" id="operator-reason" placeholder="motivo (sin secretos)"></label>
+          </div>
+          <div class="action-bar" style="margin-top:12px">
+            <button class="btn primary" id="operator-preview">Previsualizar</button>
+            <button class="btn" id="operator-execute" disabled>Confirmar y ejecutar</button>
+          </div>
+          <div id="operator-preview-box" style="margin-top:10px"></div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h2>Auditoría de consola</h2><span class="muted tiny">sin secretos ni tokens</span></div>
+        <div id="operator-audit"></div>
+      </div>
+    </section>
+
     <!-- =============================================================== BOTS -->
     <section class="view" id="view-bots">
       <div class="note" style="margin:0 0 14px">
@@ -1181,6 +1237,10 @@
           <pre class="log-viewer" id="log-viewer">Selecciona un log de la izquierda.</pre>
         </div>
       </div>
+      <div class="panel" style="margin-top:14px">
+        <div class="panel-head"><h2>Auditoría de consola</h2><span class="muted tiny">acciones del modo operador</span></div>
+        <div id="console-audit"></div>
+      </div>
     </section>
     <footer class="statusbar">
       <span>modo <b id="status-mode">paper</b></span>
@@ -1222,6 +1282,8 @@ const S = {
   fund: null,
   journal: null,
   journalGroup: "bot",
+  operator: null,
+  operatorPreview: null,
   market: null,
   calendar: null,
   decisions: null,
@@ -1249,6 +1311,7 @@ const TITLES = {
   accounts: ["Cuentas", "Paper, Alpaca, MT5 y futuros"],
   fund: ["Fondo", "Límites por cuenta, bolsillos, clústeres y kill-switch"],
   journal: ["Diario", "Operaciones cerradas, métricas y concentración"],
+  operator: ["Operador", "Modo armado paper/demo con confirmación en dos pasos"],
   bots: ["Bots", "Catálogo, estado y últimas señales"],
   agents: ["Agentes", "TradingAgents lite/deep y sus decisiones"],
   research: ["Research", "PBO, walk-forward, regímenes y propuestas"],
@@ -1397,6 +1460,9 @@ async function ensureCsrf() {
 async function getJSON(url, options) {
   const opts = Object.assign({ cache: "no-store" }, options || {});
   const method = (opts.method || "GET").toUpperCase();
+  if (url.startsWith("/api/operator/")) {
+    opts.headers = Object.assign({}, opts.headers || {}, { "X-Operator-Client": "console" });
+  }
   if (method !== "GET" && method !== "HEAD") {
     const token = await ensureCsrf();
     opts.headers = Object.assign({}, opts.headers || {}, { "X-CSRF-Token": token });
@@ -1432,6 +1498,7 @@ function switchView(view, updateHash = true) {
   if (view === "market") renderMarket();
   if (view === "fund") renderFund();
   if (view === "journal") loadJournal();
+  if (view === "operator") loadOperator();
   if (view === "decisions") renderDecisions();
   if (view === "repos") renderRepos();
   if (view === "sala") renderSala();
@@ -1459,11 +1526,12 @@ async function loadAll(manual = false) {
   const button = $("#refresh-btn");
   button.disabled = true;
   $("#refresh-label").textContent = "Actualizando…";
-  const [overviewResult, riskResult, accountsResult, fundResult] = await Promise.allSettled([
+  const [overviewResult, riskResult, accountsResult, fundResult, operatorResult] = await Promise.allSettled([
     getJSON("/api/overview"),
     getJSON("/api/risk"),
     getJSON("/api/accounts"),
     getJSON("/api/fund"),
+    getJSON("/api/operator"),
   ]);
   if (overviewResult.status === "fulfilled") {
     const newBuild = overviewResult.value?.meta?.build;
@@ -1498,6 +1566,10 @@ async function loadAll(manual = false) {
   if (fundResult.status === "fulfilled") {
     S.fund = fundResult.value;
     renderFund();
+  }
+  if (operatorResult.status === "fulfilled") {
+    S.operator = operatorResult.value;
+    renderOperator();
   }
   if (S.view === "journal") loadJournal();
   if (overviewResult.status === "rejected" && riskResult.status === "rejected") {
@@ -2355,11 +2427,17 @@ async function fundKillswitch(action) {
     ? "¿Activar el kill-switch global? Bloqueará aperturas en todas las cuentas; los cierres seguirán permitidos."
     : "¿Resetear el kill-switch global? Hazlo solo tras revisar el estado de las cuentas.";
   if (!window.confirm(question)) return;
+  const body = { action, confirm: true };
+  if (!activate) {
+    const pin = window.prompt("PIN del modo operador para resetear el kill-switch:");
+    if (!pin) return;
+    body.pin = pin;
+  }
   try {
     await getJSON("/api/fund/killswitch", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action, confirm: true }),
+      body: JSON.stringify(body),
     });
     toast(activate ? "Kill-switch activado." : "Kill-switch reseteado.");
     await refreshFund();
@@ -2551,6 +2629,238 @@ function resetJournalFilters() {
   if ($("#journal-group")) $("#journal-group").value = "bot";
   S.journal = null;
   loadJournal();
+}
+
+/* ---------------------------------------------------------------- operador */
+function operatorParams() {
+  const action = $("#operator-action")?.value || "order";
+  const account = $("#operator-account")?.value || "";
+  const bot = $("#operator-bot")?.value || "";
+  const ticker = ($("#operator-ticker")?.value || "").trim().toUpperCase();
+  const reason = ($("#operator-reason")?.value || "").trim();
+  if (action === "order") {
+    const params = {
+      account,
+      ticker,
+      side: $("#operator-side")?.value || "buy",
+      qty: $("#operator-qty")?.value || "",
+      sl: $("#operator-sl")?.value || "",
+    };
+    const price = ($("#operator-price")?.value || "").trim();
+    if (price) params.price = price;
+    return { action, params };
+  }
+  if (action === "close") {
+    const params = { account, ticket: ticker, ticker };
+    const qty = ($("#operator-qty")?.value || "").trim();
+    if (qty) params.qty = qty;
+    return { action, params };
+  }
+  if (action === "flatten") return { action, params: { account } };
+  if (action === "run_bot") return { action, params: { bot } };
+  return { action, params: { bot, reason } };
+}
+
+function toggleOperatorField(id, visible) {
+  const input = $(`#${id}`);
+  const label = input ? input.closest("label") : null;
+  if (label) label.style.display = visible ? "" : "none";
+}
+
+function updateOperatorFields(resetPreview = true) {
+  const action = $("#operator-action")?.value || "order";
+  const isOrder = action === "order";
+  const isClose = action === "close";
+  const isFlat = action === "flatten";
+  const isBot = action === "run_bot" || action === "bot_enable" || action === "bot_disable";
+  toggleOperatorField("operator-ticker", isOrder || isClose);
+  toggleOperatorField("operator-side", isOrder);
+  toggleOperatorField("operator-qty", isOrder || isClose);
+  toggleOperatorField("operator-price", isOrder);
+  toggleOperatorField("operator-sl", isOrder);
+  toggleOperatorField("operator-reason", action === "bot_enable" || action === "bot_disable");
+  const botSelect = $("#operator-bot");
+  if (botSelect) botSelect.style.display = isBot ? "" : "none";
+  const tickerLabel = $("#operator-ticker")?.closest("label")?.querySelector("span");
+  if (tickerLabel) tickerLabel.textContent = isClose ? "Ticker o ticket" : "Ticker";
+  if (isFlat && resetPreview) {
+    const box = $("#operator-preview-box");
+    if (box) box.innerHTML = `<div class="muted tiny">Aplanar cerrará todas las posiciones de la cuenta. No lo bloquea el kill-switch.</div>`;
+  }
+  if (resetPreview) {
+    S.operatorPreview = null;
+    if ($("#operator-execute")) $("#operator-execute").disabled = true;
+  }
+}
+
+function renderOperatorAudit() {
+  const audit = S.operator?.audit || [];
+  const html = grid(
+    [{ label: "Hora" }, { label: "Acción" }, { label: "Parámetros", wrap: true }, { label: "Resultado" }, { label: "OK" }],
+    audit.map((row) => [
+      esc(dateTime(row.ts)),
+      esc(row.action),
+      `<span class="muted tiny">${esc(JSON.stringify(row.params || {}).slice(0, 140))}</span>`,
+      esc(row.result || ""),
+      row.ok ? `<span class="badge ok">ok</span>` : `<span class="badge bad">no</span>`,
+    ]),
+    { empty: "Sin datos de auditoría." }
+  );
+  ["operator-audit", "console-audit"].forEach((id) => {
+    const node = $(`#${id}`);
+    if (node) node.innerHTML = html;
+  });
+}
+
+function renderOperatorPreview() {
+  const box = $("#operator-preview-box");
+  if (!box) return;
+  const preview = S.operatorPreview;
+  if (!preview) {
+    box.innerHTML = "";
+    if ($("#operator-execute")) $("#operator-execute").disabled = true;
+    return;
+  }
+  const summary = preview.summary || {};
+  const rows = Object.entries(summary).map(([key, value]) => [
+    `<b>${esc(key)}</b>`,
+    typeof value === "object" ? `<span class="muted tiny">${esc(JSON.stringify(value))}</span>` : esc(String(value ?? "sin datos")),
+  ]);
+  box.innerHTML = `<div class="alert green"><b>Revisa y confirma:</b> token de un solo uso, caduca en ${num(preview.confirm_seconds || 60, 0)} s.</div>` +
+    grid([{ label: "Campo" }, { label: "Valor", wrap: true }], rows, { empty: "sin datos" });
+  if ($("#operator-execute")) $("#operator-execute").disabled = false;
+}
+
+function renderOperator() {
+  const payload = S.operator;
+  if (!payload) return;
+  const session = payload.session || {};
+  const armed = Boolean(session.armed);
+  if ($("#operator-state")) {
+    $("#operator-state").innerHTML = armed
+      ? `<span class="badge ok">armado · ${num(session.seconds_left, 0)} s</span>`
+      : `<span class="badge">desarmado</span>`;
+  }
+  if ($("#operator-session")) {
+    $("#operator-session").innerHTML = `<div class="account-kpis">
+      <div><span>Mode</span><b>${esc(payload.mode || "sin datos")}</b></div>
+      <div><span>PIN keyring</span><b>${session.pin_configured ? "configurado" : "sin datos"}</b></div>
+      <div><span>Intentos</span><b>${num(session.attempts_left, 0)}</b></div>
+    </div>
+    <div class="muted tiny">${armed ? `Expira ${dateTime(session.expires_at)} · ` : ""}${session.locked ? `BLOQUEADO hasta ${dateTime(session.locked_until)} · ` : ""}${payload.can_operate ? "paper/demo permitido" : "mode=live: bloqueado"}</div>`;
+  }
+  const alerts = [];
+  if (!session.pin_configured) alerts.push(`<div class="alert">PIN no configurado: ejecuta <code>lab operator pin</code>.</div>`);
+  if (payload.mode === "live") alerts.push(`<div class="alert red">mode=live: la consola no puede operar. ALLOW_LIVE no se cambia desde aquí.</div>`);
+  if (session.locked) alerts.push(`<div class="alert red">PIN bloqueado temporalmente hasta ${dateTime(session.locked_until)}.</div>`);
+  if ($("#operator-alert")) $("#operator-alert").innerHTML = alerts.join("");
+
+  const accounts = (payload.accounts || []).filter((account) => account.tradeable);
+  const accountSelect = $("#operator-account");
+  if (accountSelect) {
+    const current = accountSelect.value;
+    accountSelect.innerHTML = accounts.length
+      ? accounts.map((account) => `<option value="${esc(account.id)}">${esc(account.id)} · ${esc(account.platform)}</option>`).join("")
+      : `<option value="">sin datos</option>`;
+    if (accounts.some((account) => account.id === current)) accountSelect.value = current;
+  }
+  const botSelect = $("#operator-bot");
+  if (botSelect) {
+    const current = botSelect.value;
+    const bots = payload.bots || [];
+    botSelect.innerHTML = bots.length
+      ? bots.map((bot) => `<option value="${esc(bot.id)}">${esc(bot.id)}${bot.f13_locked ? " · F13 bloqueado" : ""}</option>`).join("")
+      : `<option value="">sin datos</option>`;
+    if (bots.some((bot) => bot.id === current)) botSelect.value = current;
+  }
+  renderOperatorAudit();
+  renderOperatorPreview();
+  updateOperatorFields(false);
+}
+
+async function loadOperator() {
+  try {
+    S.operator = await getJSON("/api/operator");
+    renderOperator();
+  } catch (error) {
+    $("#operator-alert").innerHTML = `<div class="alert red">No se pudo leer el operador: ${esc(error.message)}</div>`;
+  }
+}
+
+async function armOperator() {
+  const pin = $("#operator-pin")?.value || "";
+  if (!pin) return;
+  try {
+    await getJSON("/api/operator/arm", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pin }),
+    });
+    $("#operator-pin").value = "";
+    toast("Modo operador armado.");
+    await loadOperator();
+  } catch (error) {
+    $("#operator-alert").innerHTML = `<div class="alert red">${esc(error.message)}</div>`;
+  }
+}
+
+async function disarmOperator() {
+  try {
+    await getJSON("/api/operator/disarm", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    });
+    S.operatorPreview = null;
+    toast("Modo operador desarmado.");
+    await loadOperator();
+  } catch (error) {
+    toast(error.message, true);
+  }
+}
+
+async function previewOperator() {
+  const request = operatorParams();
+  try {
+    const preview = await getJSON("/api/operator/preview", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request),
+    });
+    S.operatorPreview = { ...preview, action: request.action, params: request.params };
+    renderOperatorPreview();
+    toast("Preview listo. Revisa el resumen y confirma.");
+  } catch (error) {
+    S.operatorPreview = null;
+    renderOperatorPreview();
+    $("#operator-alert").innerHTML = `<div class="alert red">${esc(error.message)}</div>`;
+  }
+}
+
+async function executeOperator() {
+  const preview = S.operatorPreview;
+  if (!preview) return;
+  try {
+    const result = await getJSON("/api/operator/execute", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: preview.action,
+        params: preview.params,
+        token: preview.token,
+      }),
+    });
+    S.operatorPreview = null;
+    renderOperatorPreview();
+    const executed = result.result?.executed;
+    toast(executed === undefined ? "Acción ejecutada y auditada." : `${executed} orden(es) ejecutada(s) y auditada(s).`);
+    await loadOperator();
+    loadAll(true);
+  } catch (error) {
+    S.operatorPreview = null;
+    renderOperatorPreview();
+    $("#operator-alert").innerHTML = `<div class="alert red">${esc(error.message)}</div>`;
+  }
 }
 
 /* ------------------------------------------------------------------- bots */
@@ -3718,6 +4028,7 @@ function renderLogs() {
     </button>`).join("") : `<div class="empty">Sin logs todavía.</div>`;
   $$("[data-log]").forEach((btn) => btn.addEventListener("click", () => selectLog(btn.dataset.log)));
   if (!S.selectedLog && logs.length) selectLog(logs[0].name);
+  renderOperatorAudit();
 }
 
 async function selectLog(name) {
@@ -3919,6 +4230,12 @@ function init() {
     $(`#${id}`).addEventListener("change", loadJournal);
   });
   $("#journal-ticker").addEventListener("keydown", (event) => { if (event.key === "Enter") loadJournal(); });
+  $("#operator-arm").addEventListener("click", armOperator);
+  $("#operator-disarm").addEventListener("click", disarmOperator);
+  $("#operator-preview").addEventListener("click", previewOperator);
+  $("#operator-execute").addEventListener("click", executeOperator);
+  $("#operator-action").addEventListener("change", () => updateOperatorFields(true));
+  $("#operator-pin").addEventListener("keydown", (event) => { if (event.key === "Enter") armOperator(); });
   $("#decisions-compare").addEventListener("click", loadDecisionCompare);
   $("#reload-logs").addEventListener("click", () => { S.selectedLog = null; loadAll(true); });
   $("#modal-close").addEventListener("click", closeModal);

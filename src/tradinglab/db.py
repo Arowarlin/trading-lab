@@ -250,6 +250,37 @@ CREATE TABLE IF NOT EXISTS sec_fetches (
     error TEXT
 );
 
+CREATE TABLE IF NOT EXISTS console_actions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts TEXT NOT NULL,
+    action TEXT NOT NULL,
+    params TEXT NOT NULL,
+    result TEXT NOT NULL,
+    ok INTEGER NOT NULL,
+    actor TEXT,
+    detail TEXT
+);
+
+CREATE TABLE IF NOT EXISTS bot_runtime_state (
+    bot TEXT PRIMARY KEY,
+    enabled INTEGER NOT NULL,
+    updated_at TEXT NOT NULL,
+    updated_by TEXT NOT NULL,
+    reason TEXT
+);
+
+CREATE TABLE IF NOT EXISTS bot_runtime_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts TEXT NOT NULL,
+    bot TEXT NOT NULL,
+    before_enabled INTEGER,
+    after_enabled INTEGER NOT NULL,
+    actor TEXT NOT NULL,
+    reason TEXT,
+    source TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_console_actions_ts ON console_actions(ts);
 CREATE INDEX IF NOT EXISTS idx_alerts_ts ON alerts(ts);
 CREATE INDEX IF NOT EXISTS idx_reconciliation_ts ON reconciliation(ts);
 CREATE INDEX IF NOT EXISTS idx_signals_ts ON signals(ts);

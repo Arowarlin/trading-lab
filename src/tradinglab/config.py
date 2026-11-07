@@ -171,6 +171,15 @@ class PropSettings(BaseModel):
     reset_tz: str = "Europe/Prague"
 
 
+class OperatorSettings(BaseModel):
+    """Modo operador de la consola (solo paper/demo)."""
+
+    arm_minutes: int = 15
+    confirm_seconds: int = 60
+    max_pin_attempts: int = 5
+    lock_seconds: int = 300
+
+
 class Settings(BaseModel):
     mode: Literal["paper", "live"] = "paper"
     timezone: str = "America/New_York"
@@ -183,6 +192,7 @@ class Settings(BaseModel):
     mt5: MT5Settings = Field(default_factory=MT5Settings)
     projectx: ProjectXSettings = Field(default_factory=ProjectXSettings)
     prop: PropSettings = Field(default_factory=PropSettings)
+    operator: OperatorSettings = Field(default_factory=OperatorSettings)
 
     @model_validator(mode="after")
     def _resolve_paths(self) -> "Settings":

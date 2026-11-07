@@ -14,15 +14,24 @@ from tradinglab.accounts import load_accounts
 from tradinglab.config import Settings
 from tradinglab.db import connect, init_db
 from tradinglab.killswitch import load_state
+from tradinglab.operator import OperatorService, OperatorSession
 from tradinglab.orchestrator import BotSpec
 
 
 def _data(tmp_path: Path) -> web.LabData:
+    settings = Settings()
+    db_path = tmp_path / "lab.db"
+    service = OperatorService(
+        settings,
+        db_path,
+        session=OperatorSession(pin_getter=lambda: "1234"),
+    )
     return web.LabData(
-        Settings(),
+        settings,
         root=tmp_path,
-        db_path=tmp_path / "lab.db",
+        db_path=db_path,
         external=False,
+        operator_service=service,
     )
 
 
@@ -214,7 +223,7 @@ def test_killswitch_global_requiere_confirmacion(server, monkeypatch) -> None:
         body={"action": "activate", "confirm": False},
         token=token,
     )
-    assert status == 400
+    assert status == 403
     assert "confirmación" in payload["error"]
 
     status, payload = _request(
@@ -225,7 +234,7 @@ def test_killswitch_global_requiere_confirmacion(server, monkeypatch) -> None:
         token=token,
     )
     assert status == 200, payload
-    assert payload["state"]["active"] is True
+    assert payload["killswitch"]["active"] is True
     assert load_state(server.data.db_path).active is True
 
     status, payload = _request(
@@ -235,17 +244,27 @@ def test_killswitch_global_requiere_confirmacion(server, monkeypatch) -> None:
         body={"action": "reset", "confirm": False},
         token=token,
     )
-    assert status == 400
+    assert status == 403
 
     status, payload = _request(
         server,
         "POST",
         "/api/fund/killswitch",
-        body={"action": "reset", "confirm": True},
+        body={"action": "reset", "confirm": True, "pin": "0000"},
+        token=token,
+    )
+    assert status == 403
+    assert "PIN" in payload["error"]
+
+    status, payload = _request(
+        server,
+        "POST",
+        "/api/fund/killswitch",
+        body={"action": "reset", "confirm": True, "pin": "1234"},
         token=token,
     )
     assert status == 200, payload
-    assert payload["state"]["active"] is False
+    assert payload["killswitch"]["active"] is False
 
 
 def test_cluster_avisa_si_supera_presupuesto(tmp_path: Path, monkeypatch) -> None:

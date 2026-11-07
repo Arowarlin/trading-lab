@@ -21,6 +21,7 @@ from .portfolio import load_clusters
 from .profiles import BotProfile, load_profiles
 from .prop.guard import AccountLimits, AccountSnapshot, PropGuard, evaluate_account
 from .risk import check_order, size_position
+from .runtime import effective_enabled
 from .session import session_block
 from .strategies import STRATEGIES
 
@@ -43,6 +44,7 @@ class BotSpec:
     description: str = ""
     exposure: float = 1.0
     archived: bool = False
+    yaml_enabled: bool = False
 
 
 @dataclass
@@ -73,6 +75,7 @@ def load_bots(path: Path | None = None) -> list[BotSpec]:
     archived = load_archive_ids()
     bots = []
     for item in raw.get("bots", []):
+        yaml_enabled = bool(item.get("enabled", False))
         bots.append(
             BotSpec(
                 id=item["id"],
@@ -80,7 +83,8 @@ def load_bots(path: Path | None = None) -> list[BotSpec]:
                 strategy=item["strategy"],
                 universe=[t.upper() for t in item.get("universe", [])],
                 timeframe=item.get("timeframe", "1d"),
-                enabled=bool(item.get("enabled", False)),
+                enabled=effective_enabled(DEFAULT_DB, item["id"], yaml_enabled),
+                yaml_enabled=yaml_enabled,
                 profile=item.get("profile"),
                 cluster=item.get("cluster"),
                 account=str(item.get("account") or "paper_main"),

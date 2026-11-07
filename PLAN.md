@@ -256,6 +256,34 @@ controladas, sin activar bots, sin órdenes, sin dinero real y sin tocar `.env`.
   contador DSR, holdout sellado y campeón/retador; auto-aplicación solo para
   reducir riesgo y con reversión.
 
+## Fase 11 — Modo operador (etapa 7)
+
+Objetivo: permitir acciones paper/demo desde la consola con armado por PIN,
+confirmación en dos pasos, guards equivalentes a la CLI y auditoría.
+
+- [x] **11.1 Armado, PIN y caducidad** — 2026-11-07
+  - Desarmado por defecto; PIN en keyring (`lab operator pin`), nunca en
+    `.env`, logs ni auditoría. Ventana configurable (15 min por defecto),
+    bloqueo tras N intentos y desarmado al reiniciar.
+- [x] **11.2 Acciones y guards** — 2026-11-07
+  - Ejecutar bot, orden paper/demo, cerrar, aplanar y activar/desactivar bots.
+  - Rechazo de `mode=live`, cuentas no paper/demo y MT5 sin `require_demo`.
+  - `evaluate_account`, límites efectivos, kill-switch, blackout e identidad
+    reutilizados; cierre/reducción nunca se bloquea.
+  - Preview con cuenta, símbolo, lado, qty, precio, SL, riesgo %, equity y
+    colchón; token de un solo uso de 60 s.
+- [x] **11.3 Runtime de bots y F13** — 2026-11-07
+  - `bot_runtime_state` + `bot_runtime_history`; `enabled` efectivo =
+    YAML AND runtime. No se edita `config/*.yaml`.
+  - F13 congelado/iniciado bloquea activar/modificar su bot; hash intacto.
+- [x] **11.4 Auditoría y superficie de escritura** — 2026-11-07
+  - `console_actions` con parámetros saneados y resultado; visible en Operador
+    y Registros. Sin PIN ni tokens.
+  - CSRF + Host/Origin + `WRITE_ROUTES` + `X-Operator-Client`; sin endpoints
+    de live, copy trading, EAs o ejecución de código.
+- [x] **11.5 Tests y documentación** — 2026-11-07
+  - `pytest tests/test_operator.py -q` → 11 passed; suite completa y README 6f.
+
 ---
 
 ## Registro de evidencias
@@ -297,4 +325,5 @@ controladas, sin activar bots, sin órdenes, sin dinero real y sin tocar `.env`.
 | 2026-11-07 | E5 intradía | `lab mt5 status` → offset unknown + mercado cerrado; sin descarga |
 | 2026-11-07 | E6 documentación | README 6d y Fase 9; tabla por perfil en Research; `ruff` + doctor |
 | 2026-11-07 | 10.1 Diario | `pytest tests/test_journal.py -q` → 7 passed; `lab journal` → sin datos; README 6e |
+| 2026-11-07 | 11 Modo operador | `pytest tests/test_operator.py -q` → 11 passed; 2 pasos/PIN/keyring/auditoría; README 6f |
 |  |  |  |

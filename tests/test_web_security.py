@@ -154,6 +154,10 @@ def test_rutas_de_escritura_son_lista_blanca(server) -> None:
         "/api/bots/propose",
         "/api/fund/limits",
         "/api/fund/killswitch",
+        "/api/operator/arm",
+        "/api/operator/disarm",
+        "/api/operator/preview",
+        "/api/operator/execute",
     }
     for route in web.WRITE_ROUTES:
         lowered = route.lower()
@@ -164,9 +168,6 @@ def test_rutas_de_escritura_son_lista_blanca(server) -> None:
 def test_consola_no_puede_activar_bots_ni_enviar_ordenes() -> None:
     source = inspect.getsource(web.DashboardHandler)
     for forbidden in (
-        "set_enabled",
-        "enabled =",
-        "enabled=",
         "place_order",
         "submit_order",
         "send_order",
