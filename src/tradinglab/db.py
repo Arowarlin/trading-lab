@@ -228,6 +228,17 @@ CREATE TABLE IF NOT EXISTS macro_events (
     fetched_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS calendar_fetches (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source TEXT NOT NULL,
+    fetched_at TEXT NOT NULL,
+    window_start TEXT,
+    window_end TEXT,
+    status TEXT NOT NULL,
+    events_count INTEGER NOT NULL,
+    message TEXT
+);
+
 CREATE INDEX IF NOT EXISTS idx_alerts_ts ON alerts(ts);
 CREATE INDEX IF NOT EXISTS idx_reconciliation_ts ON reconciliation(ts);
 CREATE INDEX IF NOT EXISTS idx_signals_ts ON signals(ts);

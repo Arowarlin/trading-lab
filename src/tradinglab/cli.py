@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import sys
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import pandas as pd
@@ -33,6 +33,12 @@ from .f13 import signal_check as f13_signal_check
 from .f13 import status as f13_status
 from .indicators import atr as atr_indicator
 from .instruments import get_instrument, list_instruments
+from .intel.calendar import (
+    CalendarStatus,
+    DbCalendarProvider,
+    add_calendar_event,
+    calendar_block_for_settings,
+)
 from .intel.news import fetch_rss, news_count, recent_news, store_news
 from .killswitch import allows_order
 from .killswitch import ensure as ensure_killswitch
@@ -460,6 +466,17 @@ def run(
     if ks.active:
         console.print("[yellow]Kill switch activo: se permite reducir/cerrar.[/yellow]")
 
+    blackout = calendar_block_for_settings(DEFAULT_DB, settings)
+    if delta > 0 and blackout.blocked:
+        console.print(
+            Panel(
+                f"BLACKOUT DE CALENDARIO: {blackout.reason}\n"
+                "Solo se permiten cierres o reducciones de posición.",
+                style="bold red",
+            )
+        )
+        raise typer.Exit(1)
+
     console.print(
         Panel(
             f"{ticker.upper()} · {strategy}\n"
@@ -685,6 +702,16 @@ def agent_run(
         raise typer.Exit(1)
     if ks.active:
         console.print("[yellow]Kill switch activo: se permite reducir/cerrar.[/yellow]")
+    blackout = calendar_block_for_settings(DEFAULT_DB, settings)
+    if delta > 0 and blackout.blocked:
+        console.print(
+            Panel(
+                f"BLACKOUT DE CALENDARIO: {blackout.reason}\n"
+                "Solo se permiten cierres o reducciones de posición.",
+                style="bold red",
+            )
+        )
+        raise typer.Exit(1)
     console.print(
         f"Precio {price:,.2f} · ATR14 {atr_value:,.2f} · posición {held:g} → objetivo {desired} · delta {delta:+d}"
     )
@@ -1459,6 +1486,58 @@ def intel_status_cmd() -> None:
     console.print(
         "[dim]Pendiente Fase 4: scoring FinBERT, calendario macro y blackout en el guard.[/dim]"
     )
+
+
+@intel_app.command("event")
+def intel_event_cmd(
+    event: str = typer.Argument(..., help="Ej. FOMC"),
+    at: str = typer.Option(..., "--at", help="ISO UTC, ej. 2026-11-07T19:00:00+00:00"),
+    importance: str = typer.Option("high", "--importance", help="low|medium|high"),
+) -> None:
+    """Añade un evento macro manual (fixture operativo). No activa nada."""
+    try:
+        when = datetime.fromisoformat(at)
+    except ValueError:
+        console.print("[red]Fecha inválida; usa ISO 8601 con zona.[/red]")
+        raise typer.Exit(2)
+    add_calendar_event(DEFAULT_DB, event=event, ts_utc=when, importance=importance)
+    console.print(f"[green]Evento añadido[/green] {event} · {when.isoformat()} · {importance}")
+
+
+@intel_app.command("calendar")
+def intel_calendar_cmd(
+    hours_before: int = typer.Option(24, "--hours-before"),
+    hours_after: int = typer.Option(168, "--hours-after"),
+) -> None:
+    """Muestra el estado del calendario y los eventos próximos."""
+    now = datetime.now(timezone.utc)
+    provider = DbCalendarProvider(DEFAULT_DB)
+    result = provider.fetch(now - timedelta(hours=hours_before), now + timedelta(hours=hours_after))
+    t = Table(title="Calendario macro")
+    t.add_column("Campo", style="bold")
+    t.add_column("Valor", overflow="fold")
+    t.add_row("Estado", result.status.value)
+    t.add_row("Mensaje", result.message or "—")
+    t.add_row("Eventos", str(len(result.events)))
+    console.print(t)
+    if result.events:
+        events = Table(title="Eventos")
+        events.add_column("Hora UTC")
+        events.add_column("Evento", overflow="fold")
+        events.add_column("Importancia")
+        events.add_column("Fuente")
+        for item in result.events:
+            events.add_row(
+                item.ts_utc.isoformat(),
+                item.event,
+                item.importance,
+                item.source,
+            )
+        console.print(events)
+    if result.status != CalendarStatus.OK:
+        console.print(
+            "[yellow]Sin datos fiables: el blackout bloqueará aperturas si está activado.[/yellow]"
+        )
 
 
 @decisions_app.command("update")

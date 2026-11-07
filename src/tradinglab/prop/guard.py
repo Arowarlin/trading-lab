@@ -120,6 +120,8 @@ class PropGuard:
         risk_per_lot: float = 0.0,
         closing: bool = False,
         new_position: bool = True,
+        blocked_by_calendar: bool = False,
+        calendar_reason: str = "",
     ) -> GuardReport:
         rules = self.rules
         daily_floor, max_floor = self.floors(state)
@@ -186,6 +188,13 @@ class PropGuard:
 
         if target_reached:
             return report(False, "block", "objetivo de beneficio alcanzado: no abrir más riesgo")
+
+        if blocked_by_calendar:
+            return report(
+                False,
+                "block",
+                f"blackout de calendario: {calendar_reason or 'evento macro pendiente'}",
+            )
 
         if remaining <= 0.25 * rules.effective_daily_limit_usd:
             warnings.append("colchón bajo: menos del 25% del límite diario disponible")

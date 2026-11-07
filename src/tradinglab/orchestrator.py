@@ -13,6 +13,7 @@ from .config import DEFAULT_DB, ROOT, Settings
 from .data import fetch
 from .db import connect, utcnow
 from .indicators import atr
+from .intel.calendar import calendar_block_for_settings
 from .killswitch import allows_order
 from .killswitch import ensure as ensure_killswitch
 from .risk import check_order, size_position
@@ -114,6 +115,7 @@ def run_bot(
         current=snap["equity"],
         tz=settings.timezone,
     )
+    blackout = calendar_block_for_settings(DEFAULT_DB, settings)
 
     for ticker in spec.universe:
         try:
@@ -176,6 +178,17 @@ def run_bot(
             send_alert(
                 "killswitch_block",
                 f"{spec.id}/{ticker}: {ks.reason}",
+                severity="warning",
+            )
+            continue
+
+        if delta > 0 and blackout.blocked:
+            action.status = "bloqueado"
+            action.detail = f"calendario: {blackout.reason}"
+            actions.append(action)
+            send_alert(
+                "calendar_block",
+                f"{spec.id}/{ticker}: {blackout.reason}",
                 severity="warning",
             )
             continue
