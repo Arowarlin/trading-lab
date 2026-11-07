@@ -84,18 +84,24 @@ class WalkForwardResult:
         min_stability: float = 0.3,
         min_folds: int = 3,
     ) -> str:
+        """Devuelve `ok` o `fallido`.
+
+        `fallido` incluye muestra insuficiente y cualquier umbral no superado.
+        Los umbrales son deliberadamente fijos; no se relajan para fabricar
+        propuestas.
+        """
         if self.n_folds < min_folds:
-            return "insuficiente"
+            return "fallido"
         if self.stitched_sharpe <= min_stitched_sharpe:
-            return "debil"
+            return "fallido"
         if self.frac_positive < min_frac_positive:
-            return "debil"
+            return "fallido"
         if self.efficiency < min_efficiency:
-            return "debil"
+            return "fallido"
         if self.median_rank_pct < min_rank_pct:
-            return "debil"
+            return "fallido"
         if self.stability < min_stability:
-            return "debil"
+            return "fallido"
         return "ok"
 
 

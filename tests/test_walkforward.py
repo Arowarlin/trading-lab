@@ -29,7 +29,13 @@ def test_walk_forward_edge_passes():
 def test_walk_forward_noise_does_not_pass():
     # Muchas variantes sin edge: la seleccionada cambia de fold a fold.
     result = walk_forward(_noise(n=16, seed=3), train_len=504, test_len=126)
-    assert result.verdict() != "ok"
+    assert result.verdict() == "fallido"
+
+
+def test_walk_forward_insufficient_folds_returns_fallido():
+    result = walk_forward(_noise(t=700), train_len=504, test_len=126)
+    assert result.n_folds < 3
+    assert result.verdict() == "fallido"
 
 
 def test_walk_forward_fields_and_folds():
@@ -71,7 +77,7 @@ def test_walk_forward_zero_variance_is_weak():
     r = np.zeros((1400, 3))
     result = walk_forward(r, train_len=504, test_len=126)
     assert result.stitched_sharpe == 0.0
-    assert result.verdict() != "ok"
+    assert result.verdict() == "fallido"
 
 
 def _years_series():

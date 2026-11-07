@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
+import pytest
 
 import tradinglab.research as research
 from tradinglab.backtest import BacktestResult
@@ -46,6 +47,54 @@ def test_pbo_cscv_detecta_consistencia():
     assert 0.0 <= result.pbo <= 1.0
     assert result.n_variants == 6
     assert result.verdict() == "ok"
+
+
+def test_pbo_payload_cuenta_variantes_planas():
+    idx = pd.bdate_range("2020-01-01", periods=1600)
+    rng = np.random.default_rng(21)
+    series = {
+        "flat": pd.Series(0.0, index=idx),
+        "noise": pd.Series(rng.normal(0, 0.01, len(idx)), index=idx),
+        "edge": pd.Series(rng.normal(0.0015, 0.01, len(idx)), index=idx),
+    }
+    cfg = research.ResearchConfig(pbo_max_combinations=300)
+    payload = research._pbo_payload(series, cfg, scope="test")
+    assert payload is not None
+    assert payload["flat_variants"] == 1
+    assert payload["n_variants_nonflat"] == 2
+    assert payload["pbo_excluding_flat"] is not None
+    assert 0.0 <= payload["pbo_excluding_flat"] <= 1.0
+
+
+def test_regimenes_incluyen_drawdown_buy_hold():
+    payload = {"years": {"2018": {"max_drawdown": -0.10}}}
+    enriched = research._with_benchmark_regimes(
+        payload,
+        {"2018": {"max_drawdown": -0.20, "total_return": 0.05}},
+    )
+    assert enriched["years"]["2018"]["buy_hold_max_drawdown"] == pytest.approx(-0.20)
+    assert enriched["years"]["2018"]["buy_hold_total_return"] == pytest.approx(0.05)
+
+
+def test_dsr_n_trials_crece_con_activos(monkeypatch):
+    _fake_research_world(monkeypatch, with_edge=True)
+    base = dict(
+        strategies=["trend"],
+        paths=5,
+        horizon=10,
+        block_size=1,
+        pbo_max_combinations=200,
+        exposures=[1.0],
+    )
+    one = research.run_research(
+        research.ResearchConfig(symbols=["A"], **base), ftmo(100_000), cache_dir="unused"
+    )
+    two = research.run_research(
+        research.ResearchConfig(symbols=["A", "B"], **base), ftmo(100_000), cache_dir="unused"
+    )
+    assert one["dsr_n_trials"] == len(one["results"]) == 4
+    assert two["dsr_n_trials"] == len(two["results"]) == 8
+    assert two["dsr_n_trials"] == 2 * one["dsr_n_trials"]
 
 
 def _frame(n: int = 400, seed: int = 3) -> pd.DataFrame:
@@ -167,12 +216,14 @@ def test_run_research_edge_passes_pbo_walkforward_and_regime(monkeypatch):
     assert report["pbo"] is not None and report["pbo"]["pbo"] <= 0.30
     assert report["walk_forward"] is not None
     assert report["walk_forward"]["verdict"] == "ok"
+    assert report["dsr_n_trials"] == len(report["results"])
     assert len(report["proposals"]) == 1
     proposal = report["proposals"][0]
     assert proposal["params"] == edge_params
     assert proposal["regime_gate"]["passed"] is True
     assert proposal["enabled"] is False
     assert proposal["validation_failures"] == []
+    assert proposal["dsr_n_trials"] == report["dsr_n_trials"]
 
 
 def test_run_research_ranks_and_never_enables(monkeypatch):
@@ -292,6 +343,8 @@ def test_write_outputs_creates_files(tmp_path, monkeypatch):
     assert "Ranking" in md
     assert "## Propuestas" in md
     assert "PBO (CSCV)" in md
+    assert "Drawdown por régimen" in md
+    assert "DSR: n_trials" in md
 
 
 def test_near_misses_are_listed_but_not_actionable(monkeypatch):

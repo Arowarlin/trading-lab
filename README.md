@@ -625,6 +625,48 @@ el motivo; las que tienen pocas operaciones también, sin activarse. **Ninguna
 propuesta se activa sola**: van con `enabled: false` y hay que revisarlas,
 añadirlas a `config/bots.yaml` y volver a simular con datos intradía.
 
+### Umbrales del walk-forward
+
+`WalkForwardResult.verdict()` devuelve **solo `ok` o `fallido`**. `fallido`
+incluye muestra insuficiente y cualquier criterio no superado. Los umbrales
+son fijos y **no se relajan para obtener propuestas**:
+
+| Criterio | Umbral |
+|---|---:|
+| Folds válidos | ≥ 3 |
+| Sharpe stitched (OOS concatenado) | > 0,00 |
+| Fracción de folds con Sharpe OOS > 0 | ≥ 50% |
+| Eficiencia mediana OOS/IS | ≥ 0,30 |
+| Rank percentil mediano de la variante elegida | ≥ 50% |
+| Estabilidad entre folds consecutivos | ≥ 30% |
+
+En el barrido actual el fold que falla es **estabilidad: 17% < 30%**; por eso
+el veredicto es `fallido`, no por el Sharpe ni por la eficiencia.
+
+### DSR y número de pruebas
+
+El DSR usa `n_trials = len(results)`, es decir,
+**activos × estrategias × parámetros × exposiciones**. Con el barrido completo
+son **192 pruebas**; si se añade un activo o una estrategia, crece de forma
+proporcional. Se guarda en `latest.json` como `dsr_n_trials` y
+`dsr_trial_sr_std`, y cada resultado conserva los mismos campos.
+
+### PBO y variantes planas
+
+El PBO se calcula sobre retornos diarios. Una columna con desviación típica
+diaria ≤ `1e-10` se marca como **plana**. En EURUSD=X hay **0 de 16 variantes
+planas** (la menor std es 0,00168), así que el PBO de 96,0% **no está
+distorsionado por varianza cero**. El PBO recalculado excluyendo planas es
+también 96,0%; se guarda como `pbo_excluding_flat` y es **solo informativo**.
+No cambia el criterio de propuesta.
+
+### Regímenes frente a buy & hold
+
+`latest.md` incluye una tabla de **drawdown por régimen** que compara la
+variante con comprar y mantener el mismo activo en 2018/2020/2022. Es
+**informativo** y no forma parte del `regime_gate`; el gate sigue exigiendo
+datos y retorno positivo en los tres regímenes.
+
 Salida real (2026-11-07, FTMO 100k 2-step, horizonte 120 días, 192 resultados
 = 96 variantes únicas × 2 escalas):
 
@@ -632,14 +674,16 @@ Salida real (2026-11-07, FTMO 100k 2-step, horizonte 120 días, 192 resultados
   filtros antiguos y nuevos a la vez.
 - **PBO CSCV global 24,8% (ok).** Por activo: QQQ 7,5%, SPY 14,4% e IWM 26,3%
   son aceptables; **GLD 40,9%, TLT 46,0% y EURUSD=X 96,0% están sobreajustados**
-  y sus candidatos quedan bloqueados aunque pasen DSR.
-- **Walk-forward global: `debil`.** 19 folds, Sharpe stitched 0,55, 63% de folds
-  positivos, eficiencia 0,49, rank mediano 59% y estabilidad 17% (las variantes
-  elegidas cambian demasiado entre folds).
+  y sus candidatos quedan bloqueados aunque pasen DSR. EURUSD=X no tiene
+  variantes planas (0/16).
+- **Walk-forward global: `fallido`.** 19 folds, Sharpe stitched 0,55, 63% de
+  folds positivos, eficiencia 0,49, rank mediano 59% y **estabilidad 17%** (las
+  variantes elegidas cambian demasiado entre folds). Falla solo la estabilidad.
+- **DSR:** `n_trials = 192`, σ(Sharpe) de las pruebas guardada en
+  `latest.json`. El DSR elimina los 18 candidatos que antes pasaban: eran
+  variantes correlacionadas de `trend`, no 18 edges independientes.
 - **Régimen:** el mejor candidato (SPY `trend` fast=20 slow=200, 0.5×) tiene DSR
   59,3%, pero 2022 cae **-11,2%** y el gate lo bloquea.
-- El DSR elimina los 18 candidatos que antes pasaban: eran variantes
-  correlacionadas de `trend`, no 18 edges independientes.
 - Mejor DSR: QQQ `trend` fast=20 slow=100, 0.5× → DSR 92,5%, pero solo 18
   trades y 20,4% de breach; no cumple muestra/riesgo.
 - `trend-ls` y `meanrev` no superan a `trend` en esta muestra.
@@ -724,8 +768,9 @@ Restaurar en un PC nuevo:
 4. `lab doctor`.
 
 > **Backups antiguos:** dos zips de `F:\TradingLabBackups` (`20261106_202735` y
-> `20261106_204317`) todavía contienen `.env`. No se han borrado porque la regla
-> del proyecto exige confirmación. Los zips nuevos ya no lo incluyen.
+> `20261106_204317`) todavía contienen `.env` (verificado 2026-11-07: 1 entrada
+> cada uno). **No se han borrado** porque la regla del proyecto exige
+> confirmación. Los zips nuevos ya no lo incluyen.
 >
 > **F: es local.** Si se pierde el PC, se pierde la copia. Mantén una segunda
 > copia cifrada en un disco externo. Evaluación restic/Kopia y recomendación en

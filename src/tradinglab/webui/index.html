@@ -1098,7 +1098,7 @@ function updatePills() {
   if (statusResearch) {
     const verdict = research?.walk_forward?.verdict || "—";
     statusResearch.textContent = research?.pbo ? `PBO ${pct(research.pbo.pbo, 1)} · WF ${verdict}` : "—";
-    statusResearch.className = verdict === "ok" ? "ok" : verdict === "debil" || verdict === "insuficiente" ? "warn" : "";
+    statusResearch.className = verdict === "ok" ? "ok" : verdict === "fallido" ? "warn" : "";
   }
   const git = S.overview?.git;
   const statusGit = $("#status-git");
@@ -2274,18 +2274,19 @@ function renderResearch() {
 
   const cfg = r.config || {};
   $("#research-meta").textContent = cfg.symbols
-    ? `${cfg.symbols.join(", ")} · ${cfg.paths || 0} paths · OOS ${pct(cfg.holdout_fraction || 0, 0)} · DSR ≥ ${pct(cfg.min_dsr || 0.9, 0)} · PBO ≤ ${pct(cfg.max_pbo || 0.3, 0)} · WF ${wf.verdict || "—"}`
+    ? `${cfg.symbols.join(", ")} · ${cfg.paths || 0} paths · OOS ${pct(cfg.holdout_fraction || 0, 0)} · DSR ≥ ${pct(cfg.min_dsr || 0.9, 0)} (n=${r.dsr_n_trials || 0}) · PBO ≤ ${pct(cfg.max_pbo || 0.3, 0)} · WF ${wf.verdict || "—"}`
     : "";
 
   const pboRows = [];
   if (pbo.pbo !== undefined && pbo.pbo !== null) pboRows.push(["Global", pbo]);
   Object.entries(r.pbo_by_symbol || {}).sort(([a], [b]) => a.localeCompare(b)).forEach(([symbol, payload]) => pboRows.push([symbol, payload]));
   const maxPbo = cfg.max_pbo || 0.3;
-  $("#research-pbo").innerHTML = pboRows.length ? pboRows.map(([scope, payload]) => {
+  const flatTotal = pboRows.reduce((acc, [, payload]) => acc + (payload.flat_variants || 0), 0);
+  $("#research-pbo").innerHTML = (pboRows.length ? pboRows.map(([scope, payload]) => {
     const value = Number(payload.pbo || 0);
     const cls = value <= maxPbo ? "" : value <= 0.5 ? "warn" : "bad";
     return `<div class="pbo-row"><span>${esc(scope)}</span><div class="pbo-track"><div class="pbo-fill ${cls}" style="width:${Math.min(100, value * 100)}%"></div></div><span class="num">${pct(value, 1)}</span></div>`;
-  }).join("") : `<div class="empty">PBO no disponible.</div>`;
+  }).join("") : `<div class="empty">PBO no disponible.</div>`) + `<div class="note">Variantes planas (std diaria ≤ 1e-10): <b>${flatTotal}</b>. El PBO sin planas está en latest.json y es solo informativo.</div>`;
   $("#research-wf-meta").textContent = wf.verdict ? `veredicto ${wf.verdict}` : "no disponible";
   $("#research-wf").innerHTML = wf.verdict ? `
     <div class="metric-grid">
@@ -2354,7 +2355,7 @@ function showResearchDetail(row) {
   const failures = row.validation_failures || [];
   const years = ["2018", "2020", "2022"].map((year) => {
     const st = regimes[year] || {};
-    return `<tr><td>${year}</td><td>${num(st.n, 0)}</td><td>${heat(st.total_return)}</td><td>${num(st.sharpe, 2)}</td><td>${pct(st.max_drawdown, 1)}</td></tr>`;
+    return `<tr><td>${year}</td><td>${num(st.n, 0)}</td><td>${heat(st.total_return)}</td><td>${num(st.sharpe, 2)}</td><td class="${st.max_drawdown < (st.buy_hold_max_drawdown || 0) ? "trend-up" : "trend-down"}">${pct(st.max_drawdown, 1)}</td><td>${pct(st.buy_hold_max_drawdown, 1)}</td></tr>`;
   }).join("");
   openModal(`${row.symbol} · ${row.strategy}`, `
     <div class="detail-hero">
@@ -2380,8 +2381,8 @@ function showResearchDetail(row) {
       <span class="k">Nota</span><span>${esc(row.note || "—")}</span>
     </div>
     <h3 style="font-size:13px;margin:0 0 6px">Regímenes</h3>
-    <div class="table-wrap"><table><thead><tr><th>Año</th><th class="num">n</th><th class="num">Retorno</th><th class="num">Sharpe</th><th class="num">MaxDD</th></tr></thead><tbody>${years}</tbody></table></div>
-    <div class="note">${gate.passed ? "Gate de regímenes aprobado." : `Gate bloqueado: ${esc((gate.reasons || []).join("; ") || "sin datos suficientes")}.`}</div>
+    <div class="table-wrap"><table><thead><tr><th>Año</th><th class="num">n</th><th class="num">Retorno</th><th class="num">Sharpe</th><th class="num">MaxDD</th><th class="num">B&amp;H DD</th></tr></thead><tbody>${years}</tbody></table></div>
+    <div class="note">${gate.passed ? "Gate de regímenes aprobado." : `Gate bloqueado: ${esc((gate.reasons || []).join("; ") || "sin datos suficientes")}.`} El drawdown de buy&hold es informativo y no entra en el gate.</div>
     ${failures.length ? `<h3 style="font-size:13px;margin:14px 0 6px">Motivos de bloqueo</h3>${listItems(failures)}` : ""}
   `);
 }

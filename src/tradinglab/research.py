@@ -115,6 +115,18 @@ def _year_returns(returns) -> dict[str, float]:
     return out
 
 
+def _with_benchmark_regimes(
+    regime_payload: dict,
+    benchmark_years: dict[str, dict],
+) -> dict:
+    """Añade drawdown/retorno de buy&hold a cada régimen (informativo)."""
+    for year, stats in (regime_payload.get("years") or {}).items():
+        benchmark = benchmark_years.get(str(year)) or {}
+        stats["buy_hold_max_drawdown"] = benchmark.get("max_drawdown")
+        stats["buy_hold_total_return"] = benchmark.get("total_return")
+    return regime_payload
+
+
 def _aligned_returns(
     series_by_variant: dict[str, pd.Series],
 ) -> tuple[np.ndarray, list[str]] | None:
@@ -166,6 +178,35 @@ def _pbo_payload(
     payload["verdict"] = result.verdict(cfg.max_pbo)
     payload["scope"] = scope
     payload["max_pbo"] = cfg.max_pbo
+    # Diagnóstico informativo: variantes con retornos casi constantes.
+    # No altera el PBO ni el criterio de propuesta.
+    stds = np.std(matrix, axis=0, ddof=1)
+    flat_threshold = 1e-10
+    flat_mask = stds <= flat_threshold
+    flat_count = int(np.sum(flat_mask))
+    nonflat_count = int(matrix.shape[1] - flat_count)
+    payload["flat_variants"] = flat_count
+    payload["flat_std_threshold"] = flat_threshold
+    payload["n_variants_nonflat"] = nonflat_count
+    payload["pbo_excluding_flat"] = result.pbo
+    payload["verdict_excluding_flat"] = result.verdict(cfg.max_pbo)
+    if flat_count and nonflat_count >= 2:
+        try:
+            nonflat = cscv_pbo(
+                matrix[:, ~flat_mask],
+                n_slices=cfg.pbo_slices,
+                max_combinations=cfg.pbo_max_combinations,
+                seed=cfg.pbo_seed,
+            )
+            payload["pbo_excluding_flat"] = nonflat.pbo
+            payload["verdict_excluding_flat"] = nonflat.verdict(cfg.max_pbo)
+            payload["n_combinations_excluding_flat"] = nonflat.n_combinations
+        except ValueError:
+            payload["pbo_excluding_flat"] = None
+            payload["verdict_excluding_flat"] = None
+    elif nonflat_count < 2:
+        payload["pbo_excluding_flat"] = None
+        payload["verdict_excluding_flat"] = None
     return payload
 
 
@@ -240,6 +281,14 @@ def run_research(cfg: ResearchConfig, rules: PropRules, cache_dir: str | Path) -
             errors.append({"symbol": symbol, "error": f"histórico insuficiente ({len(df)} barras)"})
             continue
 
+        bh_returns = df["close"].astype(float).pct_change().fillna(0.0)
+        bh_regime = regime_report(
+            bh_returns,
+            years=cfg.regime_years,
+            min_obs=cfg.regime_min_obs,
+        )
+        bh_regime_years = bh_regime.to_dict().get("years") or {}
+
         for strategy in cfg.strategies:
             for params in _combos(strategy):
                 try:
@@ -278,6 +327,9 @@ def run_research(cfg: ResearchConfig, rules: PropRules, cache_dir: str | Path) -
                     min_obs=cfg.regime_min_obs,
                 )
                 regime_check = regime_gate(regime, min_return=cfg.regime_min_return)
+                regime_payload = _with_benchmark_regimes(
+                    regime.to_dict(), bh_regime_years
+                )
                 variant_key = f"{strategy}|{json.dumps(params, sort_keys=True)}"
                 daily_returns[f"{symbol}|{variant_key}"] = bt.returns
                 daily_returns_by_symbol[symbol][variant_key] = bt.returns
@@ -349,7 +401,7 @@ def run_research(cfg: ResearchConfig, rules: PropRules, cache_dir: str | Path) -
                             "wf_positive_folds": sum(1 for x in wf_returns if x > 0),
                             "wf_min_return": min(wf_returns) if wf_returns else None,
                             "wf_median_return": statistics.median(wf_returns) if wf_returns else None,
-                            "regime_report": regime.to_dict(),
+                            "regime_report": regime_payload,
                             "regime_gate": regime_check.to_dict(),
                             "year_returns": year_returns,
                             "score": _score(pass_rate, breach_rate, sharpe),
@@ -371,6 +423,7 @@ def run_research(cfg: ResearchConfig, rules: PropRules, cache_dir: str | Path) -
 
     sr_values = [r["sharpe"] for r in results if r.get("sample_days", 0) >= 3]
     sr_std = statistics.pstdev(sr_values) if len(sr_values) > 1 else 0.0
+    n_trials = len(results)
     for r in results:
         r["dsr"] = deflated_sharpe(
             r["sharpe"],
@@ -378,8 +431,10 @@ def run_research(cfg: ResearchConfig, rules: PropRules, cache_dir: str | Path) -
             float(r.get("skew", 0.0)),
             float(r.get("kurtosis", 3.0)),
             sr_std,
-            len(results),
+            n_trials,
         )
+        r["dsr_n_trials"] = n_trials
+        r["dsr_trial_sr_std"] = sr_std
 
     pbo_by_symbol: dict[str, dict] = {}
     for symbol, series_by_variant in daily_returns_by_symbol.items():
@@ -485,6 +540,8 @@ def run_research(cfg: ResearchConfig, rules: PropRules, cache_dir: str | Path) -
             "num_trades": r["num_trades"],
             "family_median_pass": r["family_median_pass"],
             "dsr": r.get("dsr"),
+            "dsr_n_trials": r.get("dsr_n_trials"),
+            "dsr_trial_sr_std": r.get("dsr_trial_sr_std"),
             "wf_positive_folds": r.get("wf_positive_folds"),
             "wf_folds": cfg.wf_folds,
             "pbo_symbol": pbo_by_symbol.get(r["symbol"], {}).get("pbo"),
@@ -512,6 +569,8 @@ def run_research(cfg: ResearchConfig, rules: PropRules, cache_dir: str | Path) -
         "pbo_by_symbol": pbo_by_symbol,
         "walk_forward": wf_payload,
         "walk_forward_ok": wf_ok,
+        "dsr_n_trials": n_trials,
+        "dsr_trial_sr_std": sr_std,
         "config": {
             "symbols": cfg.symbols,
             "strategies": cfg.strategies,
@@ -607,6 +666,8 @@ def render_markdown(report: dict, top: int = 25) -> str:
         f"- Walk-forward clásico: {cfg.get('wf_folds', 4)} bloques",
         pbo_line,
         wf_line,
+        f"- DSR: n_trials = {report.get('dsr_n_trials', 0):,} · "
+        f"σ(Sharpe de las pruebas) = {report.get('dsr_trial_sr_std', 0):.4f}",
         "",
         warning,
         "",
@@ -657,6 +718,34 @@ def render_markdown(report: dict, top: int = 25) -> str:
             f"{pct_opt(returns['2022'])} | {gate_text(r)} | {reasons} |"
         )
 
+    lines += [
+        "",
+        "## Drawdown por régimen (top 5, informativo)",
+        "",
+        "| # | Activo | Estrategia | 2018 DD | 2018 B&H | 2020 DD | 2020 B&H | 2022 DD | 2022 B&H |",
+        "|---|---|---|---|---|---|---|---|---|",
+    ]
+    for i, r in enumerate(report["results"][:5], 1):
+        stats = (r.get("regime_report") or {}).get("years") or {}
+        values = []
+        for year in ("2018", "2020", "2022"):
+            item = stats.get(year) or {}
+            values.extend(
+                [
+                    pct_opt(item.get("max_drawdown")),
+                    pct_opt(item.get("buy_hold_max_drawdown")),
+                ]
+            )
+        lines.append(
+            f"| {i} | {r['symbol']} | {r['strategy']} | " + " | ".join(values) + " |"
+        )
+    lines += [
+        "",
+        "> DD = max drawdown de la variante; B&H = max drawdown de comprar y mantener "
+        "el mismo activo en el mismo régimen. Es solo informativo y **no** forma "
+        "parte del gate de propuesta.",
+    ]
+
     if wf:
         lines += [
             "",
@@ -684,13 +773,15 @@ def render_markdown(report: dict, top: int = 25) -> str:
             "",
             "## Sobreajuste (CSCV)",
             "",
-            "| Ámbito | PBO | Veredicto | Variantes | Bloques | Combinaciones | Filas |",
-            "|---|---|---|---|---|---|---|",
+            "| Ámbito | PBO | Veredicto | Variantes | Planas | PBO sin planas | Bloques | Combinaciones | Filas |",
+            "|---|---|---|---|---|---|---|---|---|",
         ]
         for scope, payload in pbo_rows:
+            nonflat_pbo = payload.get("pbo_excluding_flat")
             lines.append(
                 f"| {scope} | {pct(payload['pbo'])} | {payload.get('verdict', '—')} | "
-                f"{payload.get('n_variants', 0)} | {payload.get('n_slices', 0)} | "
+                f"{payload.get('n_variants', 0)} | {payload.get('flat_variants', 0)} | "
+                f"{pct_opt(nonflat_pbo)} | {payload.get('n_slices', 0)} | "
                 f"{payload.get('n_combinations', 0):,} | {payload.get('rows_used', 0):,} |"
             )
         lines += [
@@ -699,6 +790,11 @@ def render_markdown(report: dict, top: int = 25) -> str:
             f"{cfg.get('max_pbo', 0.30):.0%} se considera aceptable; cerca del 50% "
             "elegir la mejor variante es esencialmente azar. Sin PBO calculable no "
             "se proponen bots.",
+            "",
+            "> **Diagnóstico de variantes planas:** se cuenta como plana una columna "
+            "con desviación típica diaria ≤ 1e-10. El PBO sin planas es solo "
+            "informativo: no cambia el criterio de propuesta. Si no hay planas, "
+            "coincide con el PBO normal.",
             "",
             "> **Nota metodológica:** con ~11 años de datos diarios el PBO de una "
             "sola muestra es ruidoso (en ruido puro puede variar aproximadamente "

@@ -108,9 +108,12 @@ Reglas de trabajo:
   - Sin PBO calculable no se proponen bots.
 - [x] **3.2 Walk-forward y regímenes** — 2026-11-07
   - Walk-forward global con train 504 / test 126, Sharpe stitched, fracción de
-    folds positivos, eficiencia, rank mediano y estabilidad; veredicto `ok`.
+    folds positivos, eficiencia, rank mediano y estabilidad; `verdict()` devuelve
+    `ok`/`fallido` con umbrales fijos documentados en README.
   - `regime_report`/`regime_gate` por variante para 2018/2020/2022; un régimen
-    sin datos no aprueba. El gate bloquea propuestas, nunca cierres.
+    sin datos no aprueba. Drawdown vs buy&hold es informativo.
+  - DSR guarda `dsr_n_trials` y `dsr_trial_sr_std`; PBO guarda diagnóstico de
+    variantes planas y PBO sin planas (informativo).
 - [x] **3.3 Monte Carlo block bootstrap** — ya existía y research usa
   `block_size=5`; documentado.
 - [ ] **3.4 Optuna** para explorar parámetros con validación walk-forward.
@@ -195,8 +198,9 @@ Reglas de trabajo:
 | 2026-11-07 | 3.1b CSCV | `pytest tests/test_validation.py tests/test_research.py -q`; PBO global 24,8% |
 | 2026-11-07 | 0–2 walk-forward/guard | `pytest -q` → 188 passed; `lab doctor` OK salvo Finnhub/ProjectX |
 | 2026-11-07 | 3 decisions/CI/Topstep | `pytest -q` → 188 passed; CI Windows con markers; preset inactivo |
-| 2026-11-07 | 6 cierre | `lab research` → 0 propuestas; PBO 24,8% ok; WF global `debil`; panel HTTP OK |
+| 2026-11-07 | 6 cierre | `lab research` → 0 propuestas; PBO 24,8% ok; WF global `fallido`; panel HTTP OK |
 | 2026-11-07 | consola v2 | `pytest -q` → 192 passed; panel 8433: market=12, calendar=empty, repos=3 |
+| 2026-11-07 | revisión WF/PBO/DSR | `pytest -q` → 197 passed; PBO EURUSD planas 0/16; WF fallido por estabilidad; 2 zips con `.env` intactos |
 | 2026-11-07 | 4.4/4.6/11b | `pytest tests/test_calendar.py tests/test_session.py -q` |
 | 2026-11-07 | SEC/CSV/decisions | `pytest tests/test_sec.py tests/test_decisions.py -q` |
 |  |  |  |
