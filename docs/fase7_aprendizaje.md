@@ -1,6 +1,20 @@
-# Fase 7 — Aprendizaje controlado (evaluación)
+# Fase 7 — Aprendizaje controlado
 
-Fecha: 2026-11-07. **No se implementa todavía.**
+Fecha: 2026-11-07. **7.1/7.2 implementados; 7.3 parcial.**
+
+## Modelos pequeños (7.2)
+
+Implementado sin añadir dependencias: ridge determinista en numpy.
+
+- Features: retornos 1/5/20, volatilidad 20, SMA20/50 y rango 20.
+- Reentrenamiento walk-forward con ventanas móviles; train pasado, test posterior.
+- `model_registry` guarda features, ventanas, métricas, coeficientes, hash,
+  versión y estado; `model_registry_history` audita promociones/rollbacks.
+- Todo modelo nace `challenger`; promover/rollback exige confirmación y **no
+  activa bots ni cambia `enabled`**.
+- `lab models train|list|show|promote|rollback|compare|qlib`.
+- Qlib solo se comprueba en `.venv-qlib`; no se instala en `.venv`.
+- Challenger SPY v1 registrado el 2026-11-07 sin promoción.
 
 ## Lecciones
 

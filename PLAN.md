@@ -193,8 +193,17 @@ Reglas de trabajo:
 
 - [ ] **7.1 Lecciones** semanales en `lessons` con estado `proposed` y aprobación
   humana en el panel.
-- [ ] **7.2 Reentrenamiento walk-forward** (LightGBM u otro), `model_registry`,
-  campeón/retador y evaluación de Qlib en venv aparte.
+- [x] **7.2 Reentrenamiento walk-forward** — 2026-11-07
+  - Ridge determinista en numpy (sin dependencias nuevas) con features de
+    precio/volatilidad/rango y ventanas móviles sin lookahead.
+  - `model_registry` + `model_registry_history`: versión, métricas, features,
+    coeficientes, hash y estado.
+  - Challenger por defecto; promoción/rollback manual y confirmada. No activa
+    bots ni cambia `enabled`.
+  - CLI `lab models ...`, API `/api/models` y panel Aprendizaje.
+  - Qlib: solo se comprueba `.venv-qlib`; no se añaden dependencias.
+  - Evidencia: `pytest tests/test_models.py -q` → 3 passed; suite completa
+    320 passed; challenger SPY v1 registrado sin promoción.
 - [ ] **7.3 Límites**: versionado, capital máximo por agente y rollback.
   - Evaluación en `docs/fase7_aprendizaje.md`.
 
@@ -428,7 +437,7 @@ sin romper vistas ni añadir dependencias.
 | 2026-11-07 | E6 documentación | README 6d y Fase 9; tabla por perfil en Research; `ruff` + doctor |
 | 2026-11-07 | 10.1 Diario | `pytest tests/test_journal.py -q` → 7 passed; `lab journal` → sin datos; README 6e |
 | 2026-11-07 | 11 Modo operador | `pytest tests/test_operator.py -q` → 11 passed; 2 pasos/PIN/keyring/auditoría; README 6f |
-| 2026-11-07 | 12 Shell consola | `pytest tests/test_console_shell.py -q` → 3 passed; `pytest -q` → 317 passed; 6 secciones, 15 vistas, dashboard; README 6g |
+| 2026-11-07 | 12 Shell consola | `pytest tests/test_console_shell.py -q` → 3 passed; `pytest -q` → 320 passed; 6 secciones, 15 vistas, dashboard; README 6g |
 | 2026-11-07 | 10.2 Multiverse | `pytest tests/test_multiverse.py -q` → 7 passed; `pytest -q` → 279 passed; 1.000 permutaciones, seed 42, Diario + Run Detail |
 | 2026-11-07 | 10.3 Deriva | `pytest tests/test_drift.py -q` → 5 passed; `pytest -q` → 284 passed; IC bootstrap, mínimo 20, slippage, Bots + `lab drift` |
 | 2026-11-07 | 10.4 Salud/TWR | `pytest tests/test_health.py -q` → 5 passed; `pytest -q` → 289 passed; score 0-100, flujos y TWR en Fondo |
@@ -438,4 +447,5 @@ sin romper vistas ni añadir dependencias.
 | 2026-11-07 | 6.4 Catálogo | `pytest tests/test_instruments.py -q` → 9 passed; `pytest -q` → 307 passed; fuente/sesión/TZ, CLI/API/Mercado |
 | 2026-11-07 | 6.5 Agentes mercado | `pytest tests/test_market_agents.py -q` → 5 passed; `pytest -q` → 312 passed; routing, coordinador, CLI/API/Agentes |
 | 2026-11-07 | 6.6 Pilotos mercado | `pytest tests/test_market_pilots.py -q` → 4 passed; `pytest -q` → 317 passed; un mercado, gate aperturas, CLI/API/Agentes |
+| 2026-11-07 | 7.2 Modelos/registry | `pytest tests/test_models.py -q` → 3 passed; `pytest -q` → 320 passed; walk-forward, challenger, promote/rollback, Qlib status |
 |  |  |  |

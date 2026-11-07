@@ -871,7 +871,7 @@ stdlib y `127.0.0.1`. Se conservan todas las pestañas, rutas, CSRF, Host/Origin
 y la lista blanca `WRITE_ROUTES`.
 
 Evidencia: `pytest tests/test_console_shell.py -q` → **3 passed**; suite completa
-**317 passed**; cubre las seis secciones, las 15 vistas actuales, los
+**320 passed**; cubre las seis secciones, las 15 vistas actuales, los
 componentes del dashboard y la ausencia de URLs externas/CDNs.
 
 ---
@@ -1091,6 +1091,27 @@ mercado puede abrir posiciones.
 
 Evidencia: `pytest tests/test_market_pilots.py -q` → **4 passed**; suite completa
 **317 passed**; `ruff` limpio; `lab doctor` OK con avisos conocidos.
+
+---
+
+## 6q. Reentrenamiento walk-forward y registry (7.2)
+
+Modelo base **ridge determinista en numpy**, sin dependencias nuevas:
+
+- Features: retornos 1/5/20, volatilidad 20, distancia a SMA20/SMA50 y rango 20.
+- Reentrenamiento **walk-forward** con ventanas móviles; cada fold entrena con
+  pasado y evalúa solo el tramo posterior. Sin lookahead.
+- `model_registry` guarda versión, features, ventanas, métricas, coeficientes,
+  hash, estado y autor. `model_registry_history` audita promociones/rollbacks.
+- Todo modelo nace **challenger**; promover o hacer rollback exige confirmación.
+  **No activa bots ni cambia `enabled`**.
+- CLI: `lab models train|list|show|promote|rollback|compare|qlib`.
+- API `/api/models` y panel **Aprendizaje → Model registry**.
+- Qlib se comprueba en `.venv-qlib`; no se instala ni se añade a `.venv`.
+
+Estado real: challenger SPY v1 registrado (`hash b61f4e53…`), sin promoción ni
+activación. Evidencia: `pytest tests/test_models.py -q` → **3 passed**; suite
+completa **320 passed**; `ruff` limpio; `lab doctor` OK con avisos conocidos.
 
 ---
 

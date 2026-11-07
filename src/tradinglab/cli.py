@@ -85,6 +85,7 @@ operator_app = typer.Typer(
 lessons_app = typer.Typer(no_args_is_help=True, help="Aprendizaje controlado: lecciones y holdout.")
 reports_app = typer.Typer(no_args_is_help=True, help="Reportes CSV/HTML con validación y vista previa.")
 markets_app = typer.Typer(no_args_is_help=True, help="Agentes por mercado y coordinador determinista.")
+models_app = typer.Typer(no_args_is_help=True, help="Modelos walk-forward, registry y campeón/retador.")
 intel_app = typer.Typer(no_args_is_help=True, help="Información continua: RSS, saneado y estado.")
 sec_app = typer.Typer(no_args_is_help=True, help="SEC EDGAR: CIK, filings y company facts.")
 app.add_typer(mt5_app, name="mt5")
@@ -100,6 +101,7 @@ app.add_typer(operator_app, name="operator")
 app.add_typer(lessons_app, name="lessons")
 app.add_typer(reports_app, name="reports")
 app.add_typer(markets_app, name="markets")
+app.add_typer(models_app, name="models")
 app.add_typer(intel_app, name="intel")
 app.add_typer(sec_app, name="sec")
 console = Console()
@@ -2767,6 +2769,181 @@ def markets_pilot_clear_cmd(
         console.print(f"[red]{exc}[/red]")
         raise typer.Exit(2) from exc
     console.print("[green]Pilotos limpiados[/green] · bots/F13 sin cambios")
+
+
+@models_app.command("train")
+def models_train_cmd(
+    symbol: str = typer.Argument(...),
+    start: str = typer.Option("2015-01-01", "--start"),
+    end: str = typer.Option(None, "--end"),
+    train_days: int = typer.Option(504, "--train-days"),
+    test_days: int = typer.Option(126, "--test-days"),
+    step: int = typer.Option(126, "--step"),
+    alpha: float = typer.Option(1.0, "--alpha"),
+) -> None:
+    """Entrena walk-forward y registra un challenger (no activa bots)."""
+    from .models import train_walk_forward
+
+    settings = get_settings()
+    end = end or _today()
+    try:
+        frame = data_mod.fetch(symbol.upper(), start, end, settings.data.cache_dir)
+        result = train_walk_forward(
+            frame,
+            symbol=symbol,
+            db_path=DEFAULT_DB,
+            train_days=train_days,
+            test_days=test_days,
+            step=step,
+            alpha=alpha,
+            created_by="cli",
+        )
+    except Exception as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2) from exc
+    m = result["metrics"]
+    t = Table(title=f"Modelo walk-forward · {result['symbol']}")
+    for col in ("Fold", "Train", "Test", "Retorno", "Sharpe", "MaxDD", "Trades"):
+        t.add_column(col, justify="left" if col in {"Train", "Test"} else "right")
+    for index, fold in enumerate(result["folds"], 1):
+        fm = fold["metrics"]
+        t.add_row(
+            str(index),
+            f"{fold['train_start']} → {fold['train_end']}",
+            f"{fold['test_start']} → {fold['test_end']}",
+            f"{fm['total_return']:.2%}" if fm["total_return"] is not None else "sin datos",
+            f"{fm['sharpe']:.2f}" if fm["sharpe"] is not None else "sin datos",
+            f"{fm['max_drawdown']:.2%}" if fm["max_drawdown"] is not None else "sin datos",
+            str(fm["trades"]),
+        )
+    console.print(t)
+    console.print(
+        f"[green]Challenger #{result['registry_id']}[/green] · hash {result['model']['hash']} · "
+        f"fold {m['folds'] if 'folds' in m else result['folds']} · "
+        f"retorno {m['total_return']:.2%} · Sharpe {m['sharpe']:.2f}"
+    )
+
+
+@models_app.command("list")
+def models_list_cmd(symbol: str = typer.Option(None, "--symbol")) -> None:
+    """Lista modelos registrados."""
+    from .models import list_models
+
+    rows = list_models(DEFAULT_DB, symbol)
+    t = Table(title="Model registry")
+    for col in ("ID", "Símbolo", "Versión", "Estado", "Sharpe", "Retorno", "MaxDD", "Hash"):
+        t.add_column(col, justify="left" if col in {"Símbolo", "Estado", "Hash"} else "right")
+    for row in rows:
+        m = row.get("metrics") or {}
+        t.add_row(
+            str(row["id"]),
+            row["symbol"],
+            str(row["version"]),
+            row["status"],
+            f"{m['sharpe']:.2f}" if m.get("sharpe") is not None else "sin datos",
+            f"{m['total_return']:.2%}" if m.get("total_return") is not None else "sin datos",
+            f"{m['max_drawdown']:.2%}" if m.get("max_drawdown") is not None else "sin datos",
+            row["hash"],
+        )
+    console.print(t)
+
+
+@models_app.command("show")
+def models_show_cmd(model_id: int = typer.Argument(...)) -> None:
+    """Muestra un modelo."""
+    from .models import get_model
+
+    try:
+        row = get_model(DEFAULT_DB, model_id)
+    except ValueError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2) from exc
+    t = Table(title=f"Modelo #{model_id}")
+    for key, value in row.items():
+        if key in {"metrics", "coefficients", "features"}:
+            value = json.dumps(value, ensure_ascii=False)
+        t.add_row(str(key), str(value or ""))
+    console.print(t)
+
+
+@models_app.command("promote")
+def models_promote_cmd(
+    model_id: int = typer.Argument(...),
+    confirm: bool = typer.Option(False, "--confirm"),
+) -> None:
+    """Promueve un challenger; no activa bots."""
+    from .models import promote_model
+
+    try:
+        result = promote_model(DEFAULT_DB, model_id, confirm=confirm, by="humano")
+    except ValueError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2) from exc
+    console.print(
+        f"[green]Modelo #{model_id} campeón[/green] · anterior "
+        f"{result['previous_id'] or 'ninguno'} · bots sin cambios"
+    )
+
+
+@models_app.command("rollback")
+def models_rollback_cmd(
+    symbol: str = typer.Argument(...),
+    confirm: bool = typer.Option(False, "--confirm"),
+) -> None:
+    """Restaura el campeón anterior; no activa bots."""
+    from .models import rollback_model
+
+    try:
+        result = rollback_model(DEFAULT_DB, symbol, confirm=confirm, by="humano")
+    except ValueError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2) from exc
+    console.print(
+        f"[green]Rollback {symbol.upper()}[/green] · restaurado #{result['restored_id']} · "
+        "bots sin cambios"
+    )
+
+
+@models_app.command("compare")
+def models_compare_cmd(symbol: str = typer.Argument(...)) -> None:
+    """Compara campeón y último challenger."""
+    from .models import compare_models
+
+    result = compare_models(DEFAULT_DB, symbol)
+    t = Table(title=f"Campeón/retador · {symbol.upper()}")
+    t.add_column("Rol")
+    t.add_column("ID")
+    t.add_column("Versión")
+    t.add_column("Sharpe")
+    t.add_column("Retorno")
+    for role in ("champion", "challenger"):
+        row = result[role]
+        if row is None:
+            t.add_row(role, "Sin datos", "", "", "")
+            continue
+        m = row.get("metrics") or {}
+        t.add_row(
+            role,
+            str(row["id"]),
+            str(row["version"]),
+            f"{m['sharpe']:.2f}" if m.get("sharpe") is not None else "sin datos",
+            f"{m['total_return']:.2%}" if m.get("total_return") is not None else "sin datos",
+        )
+    console.print(t)
+    console.print(f"[dim]{result['note']}[/dim]")
+
+
+@models_app.command("qlib")
+def models_qlib_cmd() -> None:
+    """Comprueba si existe el venv separado de Qlib."""
+    from .models import qlib_status
+
+    status = qlib_status()
+    console.print(
+        f"Qlib disponible: {'sí' if status['available'] else 'no'} · "
+        f"{status['path']}"
+    )
+    console.print(f"[dim]{status['note']}[/dim]")
 
 
 @operator_app.command("pin")

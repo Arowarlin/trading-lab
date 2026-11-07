@@ -54,6 +54,8 @@ def test_dashboard_tiene_kpis_balance_performers_y_calendario() -> None:
         "resumeFundPause",
         'id="view-learning"',
         'id="learning-list"',
+        'id="model-registry"',
+        "renderModels",
         'id="reports-list"',
         'id="report-preview"',
         'id="market-catalog"',

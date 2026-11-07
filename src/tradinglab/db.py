@@ -335,6 +335,35 @@ CREATE TABLE IF NOT EXISTS learning_holdout (
     sealed_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS model_registry (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts TEXT NOT NULL,
+    name TEXT NOT NULL,
+    version INTEGER NOT NULL,
+    kind TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    features TEXT NOT NULL,
+    train_start TEXT,
+    train_end TEXT,
+    test_start TEXT,
+    test_end TEXT,
+    metrics TEXT NOT NULL,
+    coefficients TEXT NOT NULL,
+    hash TEXT NOT NULL,
+    status TEXT NOT NULL,
+    created_by TEXT
+);
+
+CREATE TABLE IF NOT EXISTS model_registry_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts TEXT NOT NULL,
+    model_id INTEGER,
+    symbol TEXT NOT NULL,
+    action TEXT NOT NULL,
+    actor TEXT NOT NULL,
+    details TEXT
+);
+
 CREATE INDEX IF NOT EXISTS idx_lesson_tests_lesson ON lesson_tests(lesson_id);
 CREATE INDEX IF NOT EXISTS idx_account_cash_flows_account
     ON account_cash_flows(account_id, ts);

@@ -426,7 +426,7 @@ def test_servidor_http_responde(tmp_path: Path) -> None:
         assert overview["account"]["equity"] == pytest.approx(100_000.0)
         assert "market" in overview and "calendar" in overview and "repos" in overview
 
-        for path in ("/api/market", "/api/calendar", "/api/decisions", "/api/decisions/compare", "/api/repos", "/api/research/horizons", "/api/research/intraday", "/api/research/clusters", "/api/research/portfolio", "/api/research/costs", "/api/instruments", "/api/markets"):
+        for path in ("/api/market", "/api/calendar", "/api/decisions", "/api/decisions/compare", "/api/repos", "/api/research/horizons", "/api/research/intraday", "/api/research/clusters", "/api/research/portfolio", "/api/research/costs", "/api/instruments", "/api/markets", "/api/models"):
             with urllib.request.urlopen(f"{base}{path}", timeout=5) as response:
                 payload = json.load(response)
             assert isinstance(payload, dict)
@@ -434,6 +434,8 @@ def test_servidor_http_responde(tmp_path: Path) -> None:
                 assert payload["pilots"]["count"] >= 3
             if path == "/api/instruments":
                 assert payload["validation"]["ok"] is True
+            if path == "/api/models":
+                assert "qlib" in payload
 
         with urllib.request.urlopen(
             f"{base}/api/research/detail?artifact=artifacts/test.parquet", timeout=5

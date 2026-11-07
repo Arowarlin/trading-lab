@@ -1312,6 +1312,11 @@
         <div class="panel-head"><h2>Lecciones y retadores</h2><span class="muted tiny" id="learning-meta"></span></div>
         <div id="learning-list"></div>
       </div>
+      <div class="panel" style="margin-top:14px">
+        <div class="panel-head"><h2>Model registry</h2><span class="muted tiny" id="model-meta"></span></div>
+        <div id="model-registry"></div>
+        <div class="muted tiny" style="margin-top:8px">Challenger por defecto; promoción/rollback manual. Qlib se evalúa en `.venv-qlib`, nunca en `.venv`.</div>
+      </div>
     </section>
 
     <!-- =============================================================== RIESGO -->
@@ -1422,6 +1427,7 @@ const S = {
   operatorPreview: null,
   drift: null,
   learning: null,
+  models: null,
   reports: [],
   instruments: null,
   markets: null,
@@ -3363,12 +3369,77 @@ async function executeOperator() {
 
 /* --------------------------------------------------------------- aprendizaje */
 async function loadLearning() {
+  const [learningResult, modelsResult] = await Promise.allSettled([
+    getJSON("/api/learning"),
+    getJSON("/api/models"),
+  ]);
+  if (learningResult.status === "fulfilled") S.learning = learningResult.value;
+  if (modelsResult.status === "fulfilled") S.models = modelsResult.value;
+  renderLearning();
+  renderModels();
+}
+
+function renderModels() {
+  const host = $("#model-registry");
+  if (!host) return;
+  const payload = S.models;
+  if (!payload) {
+    host.innerHTML = `<div class="empty">Sin datos de modelos.</div>`;
+    return;
+  }
+  const qlib = payload.qlib || {};
+  if ($("#model-meta")) {
+    $("#model-meta").textContent = `${(payload.models || []).length} modelos · Qlib ${qlib.available ? "disponible" : "no instalado"}`;
+  }
+  const rows = (payload.models || []).map((model) => {
+    const metrics = model.metrics || {};
+    const status = model.status === "champion"
+      ? `<span class="badge ok">champion</span>`
+      : model.status === "retired"
+        ? `<span class="badge">retired</span>`
+        : `<span class="badge warn">challenger</span>`;
+    const buttons = [];
+    if (model.status === "challenger") {
+      buttons.push(`<button class="btn small primary" data-model-action="promote" data-model-id="${model.id}">Promover</button>`);
+    }
+    if (model.status === "champion") {
+      buttons.push(`<button class="btn small ghost" data-model-action="rollback" data-model-symbol="${esc(model.symbol)}">Rollback</button>`);
+    }
+    return [
+      `<b>#${model.id}</b><div class="muted tiny">${esc(model.name)}</div>`,
+      `<b>${esc(model.symbol)}</b>`,
+      `${esc(model.kind)} · v${model.version}`,
+      status,
+      metrics.sharpe == null ? "Sin datos" : num(metrics.sharpe, 2),
+      metrics.total_return == null ? "Sin datos" : pct(metrics.total_return, 1),
+      metrics.max_drawdown == null ? "Sin datos" : pct(metrics.max_drawdown, 1),
+      `<span class="mono tiny">${esc(model.hash || "Sin datos")}</span>`,
+      buttons.join(" ") || `<span class="muted">—</span>`,
+    ];
+  });
+  host.innerHTML = grid(
+    [{ label: "ID" }, { label: "Símbolo" }, { label: "Tipo" }, { label: "Estado" }, { label: "Sharpe", num: true }, { label: "Retorno", num: true }, { label: "MaxDD", num: true }, { label: "Hash" }, { label: "Acción" }],
+    rows,
+    { empty: "Sin datos: entrena con lab models train." }
+  );
+  $$("[data-model-action]").forEach((button) => {
+    button.addEventListener("click", () => modelAction(button.dataset.modelAction, button.dataset.modelId, button.dataset.modelSymbol));
+  });
+}
+
+async function modelAction(action, id, symbol) {
+  if (!window.confirm(action === "promote" ? "¿Promover este challenger? No activa bots." : `¿Rollback del campeón de ${symbol}?`)) return;
+  const body = action === "promote" ? { id: Number(id), confirm: true } : { symbol, confirm: true };
   try {
-    S.learning = await getJSON("/api/learning");
-    renderLearning();
+    await getJSON(`/api/models/${action}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    toast(action === "promote" ? "Modelo promovido." : "Rollback aplicado.");
+    await loadLearning();
   } catch (error) {
-    const host = $("#learning-list");
-    if (host) host.innerHTML = `<div class="empty">No se pudo leer aprendizaje: ${esc(error.message)}</div>`;
+    toast(error.message, true);
   }
 }
 

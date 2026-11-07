@@ -79,6 +79,7 @@ from .learning import (
 )
 from .market_agents import market_payload
 from .market_pilots import pilot_status
+from .models import promote_model, registry_payload, rollback_model
 from .operator import OperatorError, OperatorService
 from .orchestrator import load_bots
 from .profiles import load_profiles
@@ -109,6 +110,8 @@ WRITE_ROUTES = (
     "/api/learning/reject",
     "/api/learning/apply",
     "/api/learning/revert",
+    "/api/models/promote",
+    "/api/models/rollback",
     "/api/operator/arm",
     "/api/operator/disarm",
     "/api/operator/preview",
@@ -2368,6 +2371,8 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 self._json(self.server.data.operator.status())
             elif path == "/api/learning":
                 self._json(self.server.data.learning())
+            elif path == "/api/models":
+                self._json(registry_payload(self.server.data.db_path))
             elif path == "/api/reports":
                 self._json({"files": list_exports()})
             elif path == "/api/reports/preview":
@@ -2608,6 +2613,38 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 else:
                     self.server.data.cache.clear()
                     self._json({"ok": True, "lesson": row})
+            elif path == "/api/models/promote":
+                model_id = int(body.get("id") or 0)
+                try:
+                    result = promote_model(
+                        self.server.data.db_path,
+                        model_id,
+                        confirm=bool(body.get("confirm")),
+                        by="humano",
+                    )
+                except ValueError as exc:
+                    self._error(403, str(exc))
+                else:
+                    self._audit_learning("model_promote", model_id, "campeón")
+                    self.server.data.cache.clear()
+                    self._json({"ok": True, **result})
+            elif path == "/api/models/rollback":
+                symbol = str(body.get("symbol") or "").strip().upper()
+                try:
+                    result = rollback_model(
+                        self.server.data.db_path,
+                        symbol,
+                        confirm=bool(body.get("confirm")),
+                        by="humano",
+                    )
+                except ValueError as exc:
+                    self._error(403, str(exc))
+                else:
+                    self._audit_learning(
+                        "model_rollback", int(result.get("restored_id") or 0), "rollback"
+                    )
+                    self.server.data.cache.clear()
+                    self._json({"ok": True, **result})
             elif path == "/api/operator/arm":
                 try:
                     state = self.server.data.operator.arm(

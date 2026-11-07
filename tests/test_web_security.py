@@ -159,6 +159,8 @@ def test_rutas_de_escritura_son_lista_blanca(server) -> None:
         "/api/learning/reject",
         "/api/learning/apply",
         "/api/learning/revert",
+        "/api/models/promote",
+        "/api/models/rollback",
         "/api/operator/arm",
         "/api/operator/disarm",
         "/api/operator/preview",
