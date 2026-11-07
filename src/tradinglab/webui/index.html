@@ -126,6 +126,9 @@
   .account-kpis > div { border-bottom: 1px solid var(--border-soft); padding: 5px 0; }
   .account-kpis span { display: block; color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .07em; }
   .account-kpis b { display: block; font-size: 17px; font-variant-numeric: tabular-nums; margin-top: 2px; }
+  .fund-field { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--muted); }
+  .fund-field small { font-size: 10px; color: var(--muted); }
+  .fund-field .input { text-transform: none; }
 
   .grid-2 { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr); gap: 14px; margin-bottom: 14px; }
   .grid-2.equal { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -691,6 +694,7 @@
       <button class="nav-btn active" data-view="overview"><span class="ico">◈</span> Resumen</button>
       <button class="nav-btn" data-view="market"><span class="ico">▥</span> Mercado</button>
       <button class="nav-btn" data-view="accounts"><span class="ico">▤</span> Cuentas</button>
+      <button class="nav-btn" data-view="fund"><span class="ico">◉</span> Fondo</button>
       <button class="nav-btn" data-view="bots"><span class="ico">⚙</span> Bots</button>
       <div class="nav-label">Investigar</div>
       <button class="nav-btn" data-view="research"><span class="ico">⌁</span> Research</button>
@@ -883,6 +887,64 @@
         y TopstepX. Ninguna cuenta real está conectada.
       </div>
       <div class="grid-2 equal" id="accounts-grid"></div>
+    </section>
+
+    <!-- ================================================================ FONDO -->
+    <section class="view" id="view-fund">
+      <div class="note" style="margin:0 0 14px">
+        <strong>Límites del fondo.</strong> El límite de la firma (<code>prop.yaml</code>) es solo lectura;
+        el propio se edita aquí y el efectivo es el menor de ambos. Apretar es inmediato.
+        Aflojar exige confirmación y aplica el siguiente día hábil. Con F13 congelado o iniciado
+        solo se permite apretar. Cerrar o reducir nunca se bloquea.
+      </div>
+      <div class="stats" id="fund-summary"></div>
+      <div id="fund-alerts"></div>
+      <div class="grid-2 equal" id="fund-accounts"></div>
+
+      <div class="panel" style="margin:14px 0">
+        <div class="panel-head"><h2>Editar límites propios</h2><span class="muted tiny">nunca modifica prop.yaml</span></div>
+        <div class="action-bar" style="margin:0 0 12px">
+          <select class="input" id="fund-account" style="min-width:240px"></select>
+          <span class="muted tiny">Cuenta a editar</span>
+        </div>
+        <div class="grid-2 equal" id="fund-editor"></div>
+        <div class="action-bar" style="margin-top:12px">
+          <button class="btn primary" id="fund-save">Guardar límites</button>
+          <span class="muted tiny" id="fund-editor-hint">Los porcentajes se escriben como fracción (0.05 = 5%).</span>
+        </div>
+        <div id="fund-form-alert"></div>
+      </div>
+
+      <div class="grid-2 equal">
+        <div class="panel">
+          <div class="panel-head"><h2>Kill-switch global</h2><span id="fund-ks-badge"></span></div>
+          <div id="fund-killswitch"></div>
+          <div class="action-bar" style="margin-top:12px">
+            <button class="btn" id="fund-ks-activate" style="border-color:#7a2b2b;color:#ffb3ad">Activar</button>
+            <button class="btn ghost" id="fund-ks-reset">Reset</button>
+          </div>
+          <div class="muted tiny" style="margin-top:8px">Solo bloquea aperturas; cierres y reducciones siguen permitidos. El reset exige confirmación.</div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h2>Exposición agregada</h2><span class="muted tiny">solo datos reportados</span></div>
+          <div id="fund-exposure"></div>
+        </div>
+      </div>
+
+      <div class="panel" style="margin:14px 0">
+        <div class="panel-head"><h2>Capital por bolsillo</h2><span class="muted tiny">asignación estática</span></div>
+        <div id="fund-pockets"></div>
+      </div>
+
+      <div class="panel" style="margin:14px 0">
+        <div class="panel-head"><h2>Clústeres de correlación</h2><span class="muted tiny">presupuesto de bots activos</span></div>
+        <div id="fund-clusters"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2>Historial de límites</h2><span class="muted tiny" id="fund-history-title"></span></div>
+        <div id="fund-history"></div>
+      </div>
     </section>
 
     <!-- =============================================================== BOTS -->
@@ -1101,6 +1163,7 @@ const S = {
   overview: null,
   risk: null,
   accounts: [],
+  fund: null,
   market: null,
   calendar: null,
   decisions: null,
@@ -1117,6 +1180,7 @@ const S = {
   commandItems: [],
   commandFiltered: [],
   commandIndex: 0,
+  fundEditorAccount: null,
   build: null,
 };
 
@@ -1125,6 +1189,7 @@ const TITLES = {
   market: ["Mercado", "Watchlist desde caché local, breadth y calendario macro"],
   sala: ["Sala", "TradingAgents en su oficina: estados, runs y decisiones"],
   accounts: ["Cuentas", "Paper, Alpaca, MT5 y futuros"],
+  fund: ["Fondo", "Límites por cuenta, bolsillos, clústeres y kill-switch"],
   bots: ["Bots", "Catálogo, estado y últimas señales"],
   agents: ["Agentes", "TradingAgents lite/deep y sus decisiones"],
   research: ["Research", "PBO, walk-forward, regímenes y propuestas"],
@@ -1283,7 +1348,10 @@ async function getJSON(url, options) {
     CSRF_TOKEN = "";
     return getJSON(url, Object.assign({}, options || {}, { _csrfRetry: true }));
   }
-  if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`);
+  if (!response.ok) {
+    const detail = body.error || (Array.isArray(body.errors) ? body.errors.join(" · ") : "");
+    throw new Error(detail || `HTTP ${response.status}`);
+  }
   return body;
 }
 
@@ -1303,6 +1371,7 @@ function switchView(view, updateHash = true) {
   if (updateHash) history.replaceState(null, "", "#" + view);
   if (view === "overview") requestAnimationFrame(drawEquity);
   if (view === "market") renderMarket();
+  if (view === "fund") renderFund();
   if (view === "decisions") renderDecisions();
   if (view === "repos") renderRepos();
   if (view === "sala") renderSala();
@@ -1330,10 +1399,11 @@ async function loadAll(manual = false) {
   const button = $("#refresh-btn");
   button.disabled = true;
   $("#refresh-label").textContent = "Actualizando…";
-  const [overviewResult, riskResult, accountsResult] = await Promise.allSettled([
+  const [overviewResult, riskResult, accountsResult, fundResult] = await Promise.allSettled([
     getJSON("/api/overview"),
     getJSON("/api/risk"),
     getJSON("/api/accounts"),
+    getJSON("/api/fund"),
   ]);
   if (overviewResult.status === "fulfilled") {
     const newBuild = overviewResult.value?.meta?.build;
@@ -1364,6 +1434,10 @@ async function loadAll(manual = false) {
   if (accountsResult.status === "fulfilled") {
     S.accounts = accountsResult.value.accounts || [];
     renderAccounts();
+  }
+  if (fundResult.status === "fulfilled") {
+    S.fund = fundResult.value;
+    renderFund();
   }
   if (overviewResult.status === "rejected" && riskResult.status === "rejected") {
     toast("No se pudo conectar con el panel: " + overviewResult.reason.message, true);
@@ -1948,6 +2022,289 @@ function renderAccounts() {
       ${a.trade_allowed != null ? `<div class="muted tiny" style="margin-top:4px">Algo Trading: ${a.trade_allowed ? "ON" : "OFF"}</div>` : ""}
     </div>`;
   }).join("");
+}
+
+/* ------------------------------------------------------------------- fondo */
+function fundLimitText(meta, value) {
+  if (value === null || value === undefined || !isFinite(value)) return "—";
+  return meta.kind === "pct" ? pct(value, 2) : num(value, 0);
+}
+
+function fundHistoryText(field, value, meta) {
+  if (value === null || value === undefined || !isFinite(value)) return "—";
+  return meta && meta.kind === "pct" ? pct(value, 2) : num(value, 4);
+}
+
+function renderFund() {
+  const fund = S.fund;
+  if (!fund) return;
+  const accounts = fund.accounts || [];
+  const ks = fund.killswitch || {};
+  const exposure = fund.exposure || {};
+  const capital = accounts.reduce((sum, a) => sum + Number(a.account_size || 0), 0);
+  $("#fund-summary").innerHTML = [
+    { label: "Cuentas", value: num(accounts.length, 0) },
+    { label: "Capital asignado", value: money(capital) },
+    { label: "Equity conocido", value: money(exposure.equity_known_usd) },
+    { label: "Exposición conocida", value: money(exposure.known_notional_usd) },
+    { label: "Kill-switch", value: ks.active ? "ACTIVO" : "inactivo", cls: ks.active ? "neg" : "pos" },
+  ].map((s) => `<div class="stat"><div class="label">${esc(s.label)}</div><div class="value ${s.cls || ""}">${s.value}</div></div>`).join("");
+
+  const alerts = [];
+  if (ks.active) {
+    alerts.push(`<div class="alert red"><b>Kill-switch global activo:</b> ${esc(ks.reason || "sin motivo")}${ks.triggered_at ? ` · ${dateTime(ks.triggered_at)}` : ""}. Las aperturas están bloqueadas en todas las cuentas.</div>`);
+  }
+  (fund.clusters || []).filter((c) => c.over_budget).forEach((c) => {
+    alerts.push(`<div class="alert red"><b>Clúster por encima del presupuesto:</b> ${esc(c.account)} · ${esc(c.cluster)} reserva ${money(c.reserved_usd)} de ${money(c.budget_usd)}.</div>`);
+  });
+  const pending = [];
+  accounts.forEach((a) => (a.pending || []).forEach((p) => pending.push(`${a.id}: ${p.field} → ${p.new_value} (desde ${dateTime(p.effective_from)})`)));
+  if (pending.length) alerts.push(`<div class="alert"><b>Aflojamientos pendientes</b> (aplican el siguiente día hábil):<ul class="list-tight">${pending.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>`);
+  $("#fund-alerts").innerHTML = alerts.join("");
+
+  const select = $("#fund-account");
+  if (select) {
+    const current = select.value;
+    select.innerHTML = accounts.map((a) => `<option value="${esc(a.id)}">${esc(a.name)}</option>`).join("");
+    if (accounts.some((a) => a.id === current)) select.value = current;
+  }
+
+  $("#fund-accounts").innerHTML = accounts.map(accountFundCard).join("");
+  renderFundEditor();
+  renderFundHistory();
+  renderFundPockets();
+  renderFundClusters();
+  renderFundKillswitch();
+  renderFundExposure();
+}
+
+function accountFundCard(a) {
+  const meta = S.fund?.limit_meta || [];
+  const rows = meta.map((m) => {
+    const firm = a.firm_limits ? a.firm_limits[m.field] : null;
+    const own = a.own_limits ? a.own_limits[m.field] : null;
+    const effective = a.effective_limits ? a.effective_limits[m.field] : null;
+    return [
+      esc(m.label),
+      firm === null || firm === undefined ? `<span class="muted">—</span>` : fundLimitText(m, firm),
+      fundLimitText(m, own),
+      `<b>${fundLimitText(m, effective)}</b>`,
+    ];
+  });
+  const use = a.usage || {};
+  const typeTag = a.type === "fondeo" ? `<span class="badge warn">fondeo</span>` : `<span class="badge paper">capital propio</span>`;
+  const pendTag = (a.pending || []).length ? `<span class="badge warn">${(a.pending || []).length} pendiente(s)</span>` : "";
+  const usageLine = use.available
+    ? `<div class="muted tiny">Equity ${money(use.equity)} · inicio del día ${money(use.day_start_equity)} (${esc(use.source || "")}) · usado ${pct(use.daily_used_pct, 1)} del diario · colchón ${money(use.daily_cushion_usd)} · drawdown usado ${pct(use.drawdown_used_pct, 1)} · colchón ${money(use.drawdown_cushion_usd)}</div>`
+    : `<div class="muted tiny">Uso del día: ${esc(use.reason || "sin datos")} · límite diario ${money(use.daily_limit_usd)}</div>`;
+  return `<div class="panel account-card">
+    <div class="panel-head"><h2>${esc(a.name)}</h2><span style="display:flex;gap:5px;flex-wrap:wrap">${typeTag}${pendTag}</span></div>
+    <div class="muted tiny">${esc(a.id)} · ${esc(a.broker)} · ${esc(a.status)}${a.firm ? ` · ${esc(a.firm)} ${esc(a.phase || "")}` : ""} · bolsillo ${esc(a.pocket_label || a.pocket)}</div>
+    <div class="account-kpis">
+      <div><span>Tamaño</span><b>${money(a.account_size)}</b></div>
+      <div><span>Equity</span><b>${money(use.equity)}</b></div>
+      <div><span>Colchón diario</span><b>${money(use.daily_cushion_usd)}</b></div>
+    </div>
+    ${usageLine}
+    ${grid(
+      [{ label: "Límite" }, { label: "Firma", num: true }, { label: "Propio", num: true }, { label: "Efectivo", num: true }],
+      rows,
+      { empty: "Sin límites." }
+    )}
+  </div>`;
+}
+
+function renderFundEditor(force = false) {
+  const fund = S.fund;
+  if (!fund) return;
+  const select = $("#fund-account");
+  if (!select) return;
+  const id = select.value || (fund.accounts[0] || {}).id;
+  if (!force && id === S.fundEditorAccount && $("#fund-editor").children.length) return;
+  const account = (fund.accounts || []).find((a) => a.id === id);
+  if (!account) {
+    $("#fund-editor").innerHTML = `<div class="empty">Sin cuentas configuradas.</div>`;
+    return;
+  }
+  S.fundEditorAccount = id;
+  $("#fund-editor").innerHTML = (fund.limit_meta || []).map((m) => {
+    const own = account.own_limits ? account.own_limits[m.field] : null;
+    const firm = account.firm_limits ? account.firm_limits[m.field] : null;
+    const effective = account.effective_limits ? account.effective_limits[m.field] : null;
+    const value = m.kind === "pct" ? Number(own).toFixed(4) : String(Math.round(Number(own)));
+    return `<label class="fund-field">
+      <span>${esc(m.label)}</span>
+      <input class="input" data-fund-field="${m.field}" value="${value}" inputmode="decimal">
+      <small>firma: ${fundLimitText(m, firm)} · efectivo: ${fundLimitText(m, effective)}</small>
+    </label>`;
+  }).join("");
+  $("#fund-form-alert").innerHTML = "";
+  $("#fund-editor-hint").textContent = `Editando ${account.name}: los porcentajes son fracción (0.05 = 5%).`;
+}
+
+function renderFundHistory() {
+  const fund = S.fund;
+  if (!fund) return;
+  const id = $("#fund-account") ? $("#fund-account").value : "";
+  const account = (fund.accounts || []).find((a) => a.id === id) || (fund.accounts || [])[0];
+  const metaByField = {};
+  (fund.limit_meta || []).forEach((m) => { metaByField[m.field] = m; });
+  $("#fund-history-title").textContent = account ? account.name : "";
+  const rows = account
+    ? (account.history || []).map((h) => [
+        esc(dateTime(h.ts)),
+        esc(h.field),
+        fundHistoryText(h.field, h.old_value, metaByField[h.field]),
+        fundHistoryText(h.field, h.new_value, metaByField[h.field]),
+        esc(h.origin),
+        `${esc(dateTime(h.effective_from))}${h.pending ? ` <span class="badge warn">pendiente</span>` : ""}`,
+      ])
+    : [];
+  $("#fund-history").innerHTML = grid(
+    [{ label: "Fecha" }, { label: "Campo" }, { label: "Antes", num: true }, { label: "Después", num: true }, { label: "Origen" }, { label: "Efectivo desde" }],
+    rows,
+    { empty: "Sin cambios registrados para esta cuenta." }
+  );
+}
+
+function renderFundPockets() {
+  const pockets = S.fund?.pockets || [];
+  const rows = pockets.map((p) => [
+    `<b>${esc(p.label)}</b>`,
+    money(p.capital),
+    pct(p.pct, 1),
+    p.equity !== null && p.equity !== undefined ? money(p.equity) : `<span class="muted">—</span>`,
+    esc((p.accounts || []).join(", ")),
+  ]);
+  $("#fund-pockets").innerHTML = grid(
+    [{ label: "Bolsillo" }, { label: "Capital", num: true }, { label: "Peso", num: true }, { label: "Equity conocido", num: true }, { label: "Cuentas", wrap: true }],
+    rows,
+    { empty: "Sin capital asignado." }
+  );
+}
+
+function renderFundClusters() {
+  const clusters = S.fund?.clusters || [];
+  const rows = clusters.map((c) => [
+    esc(c.account),
+    `<b>${esc(c.cluster)}</b>`,
+    esc((c.bots || []).join(", ")),
+    money(c.reserved_usd),
+    money(c.budget_usd),
+    c.over_budget ? `<span class="badge bad">${pct(c.used_pct, 0)} · excedido</span>` : `<span class="badge ok">${pct(c.used_pct, 0)}</span>`,
+  ]);
+  $("#fund-clusters").innerHTML = grid(
+    [{ label: "Cuenta" }, { label: "Clúster" }, { label: "Bots", wrap: true }, { label: "Reservado", num: true }, { label: "Presupuesto", num: true }, { label: "Uso", num: true }],
+    rows,
+    { empty: "No hay bots activos asignados a clústeres." }
+  );
+}
+
+function renderFundKillswitch() {
+  const ks = S.fund?.killswitch || {};
+  $("#fund-ks-badge").innerHTML = ks.active
+    ? `<span class="badge bad">ACTIVO</span>`
+    : `<span class="badge ok">inactivo</span>`;
+  $("#fund-killswitch").innerHTML = `<div class="account-kpis">
+    <div><span>Estado</span><b class="${ks.active ? "neg" : "pos"}">${ks.active ? "bloqueando aperturas" : "operativo"}</b></div>
+    <div><span>Motivo</span><b style="font-size:12px">${esc(ks.reason || "—")}</b></div>
+    <div><span>Activado</span><b style="font-size:12px">${esc(dateTime(ks.triggered_at))}</b></div>
+  </div>`;
+}
+
+function renderFundExposure() {
+  const exposure = S.fund?.exposure || {};
+  $("#fund-exposure").innerHTML = `<div class="account-kpis">
+    <div><span>Notional conocido</span><b>${money(exposure.known_notional_usd)}</b></div>
+    <div><span>Posiciones</span><b>${num(exposure.open_positions, 0)}</b></div>
+    <div><span>Equity reportado</span><b>${money(exposure.equity_known_usd)}</b></div>
+  </div>
+  <div class="muted tiny">${esc(exposure.note || "Sin datos de exposición.")}</div>
+  <div class="muted tiny" style="margin-top:4px">Cuentas que reportan: ${esc((exposure.accounts_reporting || []).join(", ") || "ninguna")}</div>`;
+}
+
+async function refreshFund() {
+  try {
+    S.fund = await getJSON("/api/fund");
+    renderFund();
+  } catch (error) {
+    toast("No se pudo actualizar el fondo: " + error.message, true);
+  }
+}
+
+async function saveFundLimits() {
+  const fund = S.fund;
+  if (!fund) return;
+  const id = $("#fund-account").value;
+  const account = (fund.accounts || []).find((a) => a.id === id);
+  if (!account) return;
+  const changes = {};
+  let problem = "";
+  $$("#fund-editor [data-fund-field]").forEach((input) => {
+    const field = input.dataset.fundField;
+    const meta = (fund.limit_meta || []).find((m) => m.field === field) || { field, label: field, kind: "pct" };
+    const raw = String(input.value || "").trim().replace(",", ".");
+    const value = Number(raw);
+    if (!raw || !isFinite(value)) {
+      problem = `${meta.label}: valor no válido`;
+      return;
+    }
+    if (meta.kind === "pct" && (value < 0 || value > 1)) {
+      problem = `${meta.label}: debe estar entre 0 y 1 (0.05 = 5%)`;
+      return;
+    }
+    if (meta.kind === "int" && (value < 0 || !Number.isInteger(value))) {
+      problem = `${meta.label}: debe ser un entero >= 0`;
+      return;
+    }
+    changes[field] = value;
+  });
+  if (problem) {
+    $("#fund-form-alert").innerHTML = `<div class="alert red">${esc(problem)}</div>`;
+    return;
+  }
+  const loosening = Object.entries(changes).filter(([field, value]) => value > Number(account.own_limits[field] || 0) + 1e-12);
+  if (loosening.length) {
+    const detail = loosening.map(([field, value]) => `${field} → ${value}`).join(", ");
+    if (!window.confirm(`Vas a aflojar límites (${detail}). Se aplicarán desde el siguiente día hábil. ¿Confirmar?`)) return;
+  }
+  const button = $("#fund-save");
+  button.disabled = true;
+  button.textContent = "Guardando…";
+  try {
+    const result = await getJSON("/api/fund/limits", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ account: id, changes, confirm: loosening.length > 0 }),
+    });
+    toast("Límites guardados." + (result.pending ? " Aflojamiento pendiente hasta el siguiente día hábil." : ""));
+    await refreshFund();
+    renderFundEditor(true);
+  } catch (error) {
+    $("#fund-form-alert").innerHTML = `<div class="alert red">${esc(error.message)}</div>`;
+  } finally {
+    button.disabled = false;
+    button.textContent = "Guardar límites";
+  }
+}
+
+async function fundKillswitch(action) {
+  const activate = action === "activate";
+  const question = activate
+    ? "¿Activar el kill-switch global? Bloqueará aperturas en todas las cuentas; los cierres seguirán permitidos."
+    : "¿Resetear el kill-switch global? Hazlo solo tras revisar el estado de las cuentas.";
+  if (!window.confirm(question)) return;
+  try {
+    await getJSON("/api/fund/killswitch", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, confirm: true }),
+    });
+    toast(activate ? "Kill-switch activado." : "Kill-switch reseteado.");
+    await refreshFund();
+  } catch (error) {
+    toast(error.message, true);
+  }
 }
 
 /* ------------------------------------------------------------------- bots */
@@ -3278,6 +3635,14 @@ function init() {
   $("#agent-ticker").addEventListener("keydown", (event) => { if (event.key === "Enter") startAction("agent"); });
   $("#evaluate-bots").addEventListener("click", evaluateBots);
   $("#propose-bot").addEventListener("click", proposeBot);
+  $("#fund-account").addEventListener("change", () => {
+    S.fundEditorAccount = null;
+    renderFundEditor(true);
+    renderFundHistory();
+  });
+  $("#fund-save").addEventListener("click", saveFundLimits);
+  $("#fund-ks-activate").addEventListener("click", () => fundKillswitch("activate"));
+  $("#fund-ks-reset").addEventListener("click", () => fundKillswitch("reset"));
   $("#decisions-compare").addEventListener("click", loadDecisionCompare);
   $("#reload-logs").addEventListener("click", () => { S.selectedLog = null; loadAll(true); });
   $("#modal-close").addEventListener("click", closeModal);

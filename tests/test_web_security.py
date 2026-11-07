@@ -147,6 +147,8 @@ def test_rutas_de_escritura_son_lista_blanca(server) -> None:
         "/api/bots/archive",
         "/api/bots/restore",
         "/api/bots/propose",
+        "/api/fund/limits",
+        "/api/fund/killswitch",
     }
     for route in web.WRITE_ROUTES:
         lowered = route.lower()

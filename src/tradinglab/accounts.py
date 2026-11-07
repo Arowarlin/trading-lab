@@ -126,8 +126,11 @@ def init_limits(db_path: str | Path) -> None:
 
 
 def _latest_rows(db_path: str | Path, account_id: str, now: datetime) -> dict[str, dict]:
-    init_limits(db_path)
-    with connect(db_path) as con:
+    path = Path(db_path)
+    if not path.exists():
+        return {}
+    init_limits(path)
+    with connect(path) as con:
         rows = con.execute(
             "SELECT * FROM account_limit_history WHERE account_id = ? "
             "AND effective_from <= ? ORDER BY id",
@@ -318,8 +321,11 @@ def set_limits(
 
 
 def history(db_path: str | Path, account_id: str, limit: int = 100) -> list[dict]:
-    init_limits(db_path)
-    with connect(db_path) as con:
+    path = Path(db_path)
+    if not path.exists():
+        return []
+    init_limits(path)
+    with connect(path) as con:
         rows = con.execute(
             "SELECT * FROM account_limit_history WHERE account_id = ? "
             "ORDER BY id DESC LIMIT ?",

@@ -191,9 +191,34 @@ def reset(db_path: str | Path, *, confirm: bool) -> KillSwitchState:
     return load_state(db_path)
 
 
+def activate(
+    db_path: str | Path,
+    *,
+    reason: str = "activación manual desde la consola",
+    confirm: bool = False,
+) -> KillSwitchState:
+    """Activa el kill-switch global; nunca lo desactiva."""
+    if not confirm:
+        raise ValueError("activar el kill-switch requiere confirmación explícita")
+    init_db(db_path)
+    with connect(db_path) as con:
+        con.execute(
+            "INSERT OR REPLACE INTO killswitch"
+            "(id, active, reason, triggered_at, reset_at, equity, peak, day_start) "
+            "VALUES(1, 1, ?, ?, NULL, NULL, NULL, NULL)",
+            (reason[:240], utcnow()),
+        )
+    try:
+        send_alert("killswitch_active", reason, severity="critical", db_path=db_path)
+    except Exception:
+        pass
+    return load_state(db_path)
+
+
 __all__ = [
     "KillSwitchEvaluation",
     "KillSwitchState",
+    "activate",
     "allows_order",
     "ensure",
     "evaluate",

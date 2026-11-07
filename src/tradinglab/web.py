@@ -37,6 +37,16 @@ import httpx
 import pandas as pd
 
 from . import __version__
+from .accounts import (
+    effective_limits,
+    firm_limits,
+    load_accounts,
+    own_limits,
+    set_limits,
+)
+from .accounts import (
+    history as limit_history,
+)
 from .alerts import AlertConfig, last_alerts, last_heartbeat
 from .botlab import (
     archive_bot,
@@ -47,8 +57,11 @@ from .botlab import (
     restore_bot,
 )
 from .config import DEFAULT_DB, ROOT, Settings, get_settings
+from .killswitch import activate as activate_killswitch
 from .killswitch import load_state as load_killswitch
+from .killswitch import reset as reset_killswitch
 from .orchestrator import load_bots
+from .profiles import load_profiles
 from .prop import AccountState, PropGuard, PropRules, from_yaml, ftmo
 from .reconciliation import last_reconciliation
 
@@ -66,6 +79,20 @@ WRITE_ROUTES = (
     "/api/bots/archive",
     "/api/bots/restore",
     "/api/bots/propose",
+    "/api/fund/limits",
+    "/api/fund/killswitch",
+)
+POCKET_LABELS = {
+    "swing_equity": "Swing acciones/ETF",
+    "intraday_fx": "Forex/CFD",
+    "intraday_futures": "Futuros",
+}
+LIMIT_META = (
+    {"field": "daily_loss_pct", "label": "Pérdida diaria", "kind": "pct"},
+    {"field": "max_drawdown_pct", "label": "Drawdown máximo", "kind": "pct"},
+    {"field": "per_trade_risk_pct", "label": "Riesgo por operación", "kind": "pct"},
+    {"field": "max_open_risk_pct", "label": "Riesgo abierto máximo", "kind": "pct"},
+    {"field": "max_trades_per_day", "label": "Operaciones máximas/día", "kind": "int"},
 )
 
 
@@ -615,6 +642,329 @@ class LabData:
             }
         )
         return out
+
+    # ------------------------------------------------------------- fondo
+
+    def fund(self) -> dict:
+        """Vista del fondo: límites por cuenta, uso, bolsillos y clústeres."""
+        return self.cache.get("fund", 5.0, self._fund)
+
+    def _fund(self) -> dict:
+        definitions = load_accounts()
+        now = datetime.now(UTC)
+        accounts_info = (
+            {item["id"]: item for item in self.accounts()} if self.external else {}
+        )
+        rows: list[dict] = []
+        for account in definitions.values():
+            firm = firm_limits(account)
+            own = own_limits(self.db_path, account)
+            effective = effective_limits(self.db_path, account)
+            source_id = {
+                "internal": "paper",
+                "paper": "paper",
+                "alpaca": "alpaca",
+                "mt5": "mt5",
+                "projectx": "projectx",
+            }.get(account.platform, account.platform)
+            usage = self._fund_usage(account, effective, accounts_info.get(source_id))
+            history = []
+            for row in limit_history(self.db_path, account.id, 20):
+                item = _json_safe(row)
+                item["pending"] = str(row["effective_from"]) > now.isoformat()
+                history.append(item)
+            rows.append(
+                {
+                    "id": account.id,
+                    "name": account.name,
+                    "type": account.type,
+                    "broker": account.broker,
+                    "platform": account.platform,
+                    "status": account.status,
+                    "firm": account.firm,
+                    "phase": account.phase,
+                    "pocket": account.pocket,
+                    "pocket_label": POCKET_LABELS.get(account.pocket, account.pocket),
+                    "account_size": account.account_size,
+                    "firm_limits": firm,
+                    "own_limits": _json_safe(asdict(own)),
+                    "effective_limits": _json_safe(asdict(effective)),
+                    "usage": usage,
+                    "history": history,
+                    "pending": [item for item in history if item["pending"]],
+                }
+            )
+
+        total_capital = sum(row["account_size"] for row in rows)
+        pocket_rows = []
+        for pocket in list(POCKET_LABELS) + sorted(
+            {row["pocket"] for row in rows} - set(POCKET_LABELS)
+        ):
+            members = [row for row in rows if row["pocket"] == pocket]
+            if not members:
+                continue
+            capital = sum(row["account_size"] for row in members)
+            equity_values = [
+                row["usage"]["equity"]
+                for row in members
+                if row["usage"].get("equity") is not None
+            ]
+            pocket_rows.append(
+                {
+                    "pocket": pocket,
+                    "label": POCKET_LABELS.get(pocket, pocket),
+                    "capital": capital,
+                    "pct": (capital / total_capital) if total_capital else 0.0,
+                    "equity": sum(equity_values) if equity_values else None,
+                    "accounts": [row["id"] for row in members],
+                }
+            )
+
+        return {
+            "generated_at": _now(),
+            "limit_meta": [dict(item) for item in LIMIT_META],
+            "accounts": rows,
+            "pockets": pocket_rows,
+            "clusters": self._fund_clusters(definitions),
+            "exposure": self._fund_exposure(accounts_info),
+            "killswitch": self.killswitch_status(),
+        }
+
+    def _fund_usage(
+        self,
+        account,
+        effective,
+        broker_info: dict | None,
+    ) -> dict:
+        size = float(account.account_size)
+        daily_limit = size * float(effective.daily_loss_pct)
+        max_limit = size * float(effective.max_drawdown_pct)
+        out = {
+            "available": False,
+            "source": None,
+            "equity": None,
+            "day_start_equity": None,
+            "daily_loss_usd": None,
+            "daily_limit_usd": round(daily_limit, 2),
+            "daily_used_pct": None,
+            "daily_cushion_usd": None,
+            "peak_equity": None,
+            "drawdown_limit_usd": round(max_limit, 2),
+            "drawdown_used_pct": None,
+            "drawdown_cushion_usd": None,
+            "as_of": None,
+            "reason": "sin fuente de equity para esta cuenta",
+        }
+
+        if account.id == "paper_main":
+            paper = self.account()
+            curve = paper.get("equity_curve") or []
+            if curve:
+                try:
+                    from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+                    try:
+                        tz = ZoneInfo(self.settings.timezone)
+                    except ZoneInfoNotFoundError:
+                        tz = UTC
+                    points: list[tuple[datetime, float]] = []
+                    for point in curve:
+                        stamp = datetime.fromisoformat(str(point["ts"]))
+                        points.append((stamp.astimezone(tz), float(point["equity"])))
+                    current = points[-1][1]
+                    peak = max(value for _, value in points)
+                    today = datetime.now(tz).date()
+                    today_points = [value for stamp, value in points if stamp.date() == today]
+                    day_start = today_points[0] if today_points else current
+                    self._fill_usage(
+                        out,
+                        equity=current,
+                        day_start=day_start,
+                        peak=peak,
+                        daily_limit=daily_limit,
+                        max_limit=max_limit,
+                        source="sqlite",
+                        as_of=str(curve[-1]["ts"]),
+                    )
+                    return out
+                except (ValueError, TypeError, KeyError):
+                    pass
+            if paper.get("equity") is not None:
+                out["equity"] = float(paper["equity"])
+            out["reason"] = "sin historial de equity todavía"
+            return out
+
+        if account.id == "ftmo_demo" and self.external:
+            risk = self.risk()
+            prop = risk.get("prop") or {}
+            rules = risk.get("rules") or {}
+            mt5 = risk.get("mt5") or {}
+            if prop.get("source") == "mt5" and prop.get("daily_used_pct") is not None:
+                equity = (mt5.get("account") or {}).get("equity")
+                firm_daily = float(rules.get("daily_limit_usd") or 0.0)
+                firm_max = float(rules.get("max_loss_usd") or 0.0)
+                if equity is not None and firm_daily > 0:
+                    used_daily = float(prop["daily_used_pct"])
+                    used_max = float(prop.get("max_used_pct") or 0.0)
+                    day_start = float(equity) + used_daily * firm_daily
+                    peak = (
+                        float(equity) + used_max * firm_max
+                        if firm_max > 0
+                        else None
+                    )
+                    self._fill_usage(
+                        out,
+                        equity=float(equity),
+                        day_start=day_start,
+                        peak=peak,
+                        daily_limit=daily_limit,
+                        max_limit=max_limit,
+                        source="mt5",
+                        as_of=str(prop.get("generated_at") or _now()),
+                    )
+                    return out
+            out["reason"] = "MT5 no disponible; no se inventa el uso del día"
+            return out
+
+        equity = (broker_info or {}).get("equity")
+        if equity is not None:
+            out["equity"] = float(equity)
+            out["reason"] = "sin base diaria por cuenta; solo equity actual"
+        return out
+
+    @staticmethod
+    def _fill_usage(
+        out: dict,
+        *,
+        equity: float,
+        day_start: float,
+        peak: float | None,
+        daily_limit: float,
+        max_limit: float,
+        source: str,
+        as_of: str,
+    ) -> None:
+        daily_loss = max(0.0, float(day_start) - float(equity))
+        max_loss_used = (
+            max(0.0, float(peak) - float(equity)) if peak is not None else None
+        )
+        out.update(
+            {
+                "available": True,
+                "source": source,
+                "equity": round(float(equity), 2),
+                "day_start_equity": round(float(day_start), 2),
+                "daily_loss_usd": round(daily_loss, 2),
+                "daily_limit_usd": round(daily_limit, 2),
+                "daily_used_pct": (
+                    round(daily_loss / daily_limit, 6) if daily_limit > 0 else None
+                ),
+                "daily_cushion_usd": round(max(0.0, daily_limit - daily_loss), 2),
+                "peak_equity": round(float(peak), 2) if peak is not None else None,
+                "drawdown_limit_usd": round(max_limit, 2),
+                "drawdown_used_pct": (
+                    round(max_loss_used / max_limit, 6)
+                    if max_loss_used is not None and max_limit > 0
+                    else None
+                ),
+                "drawdown_cushion_usd": (
+                    round(max(0.0, max_limit - max_loss_used), 2)
+                    if max_loss_used is not None
+                    else None
+                ),
+                "as_of": as_of,
+                "reason": None,
+            }
+        )
+
+    def _fund_clusters(self, definitions: dict) -> list[dict]:
+        try:
+            profiles = load_profiles()
+            bots = load_bots()
+        except Exception:
+            return []
+        groups: dict[tuple[str, str], dict] = {}
+        for spec in bots:
+            if spec.archived or not spec.enabled:
+                continue
+            account = definitions.get(spec.account)
+            profile = profiles.get(spec.profile or "")
+            if account is None or profile is None:
+                continue
+            limits = effective_limits(self.db_path, account)
+            risk_pct = min(float(profile.max_risk_pct), float(limits.per_trade_risk_pct))
+            key = (account.id, spec.cluster or "sin_cluster")
+            group = groups.setdefault(
+                key,
+                {
+                    "account": account.id,
+                    "cluster": spec.cluster or "sin_cluster",
+                    "bots": [],
+                    "reserved_usd": 0.0,
+                    "budget_pct": float(profile.max_cluster_risk_pct),
+                    "account_size": float(account.account_size),
+                },
+            )
+            group["reserved_usd"] += float(account.account_size) * risk_pct
+            group["budget_pct"] = min(
+                group["budget_pct"], float(profile.max_cluster_risk_pct)
+            )
+            group["bots"].append(spec.id)
+        rows = []
+        for group in groups.values():
+            budget = group["account_size"] * group["budget_pct"]
+            reserved = group["reserved_usd"]
+            rows.append(
+                {
+                    "account": group["account"],
+                    "cluster": group["cluster"],
+                    "bots": group["bots"],
+                    "reserved_usd": round(reserved, 2),
+                    "budget_usd": round(budget, 2),
+                    "budget_pct": group["budget_pct"],
+                    "used_pct": (reserved / budget) if budget > 0 else None,
+                    "over_budget": reserved > budget + 1e-9,
+                }
+            )
+        rows.sort(key=lambda row: (not row["over_budget"], row["account"], row["cluster"]))
+        return rows
+
+    def _fund_exposure(self, accounts_info: dict) -> dict:
+        known = 0.0
+        positions = 0
+        reporting: set[str] = set()
+        equity_total = 0.0
+        equity_seen = False
+        for info in accounts_info.values():
+            if info.get("equity") is not None:
+                equity_total += float(info["equity"])
+                equity_seen = True
+            for position in info.get("positions") or []:
+                value = position.get("value")
+                if value is None:
+                    continue
+                known += abs(float(value))
+                positions += 1
+                reporting.add(str(info.get("id")))
+        if "paper" not in accounts_info:
+            paper = self.account()
+            if paper.get("equity") is not None:
+                equity_total += float(paper["equity"])
+                equity_seen = True
+            for position in paper.get("positions") or []:
+                known += abs(float(position.get("value") or 0.0))
+                positions += 1
+                reporting.add("paper_main")
+        return {
+            "known_notional_usd": round(known, 2),
+            "open_positions": positions,
+            "accounts_reporting": sorted(reporting),
+            "equity_known_usd": round(equity_total, 2) if equity_seen else None,
+            "note": (
+                "Notional absoluto de las posiciones que reportan valor; "
+                "MT5 no publica notional por posición y no se estima."
+            ),
+        }
 
     def _llm_status(self) -> dict:
         if not self.external:
@@ -1627,6 +1977,8 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 self._json(self.server.data.repo_audit())
             elif path == "/api/accounts":
                 self._json({"accounts": self.server.data.accounts()})
+            elif path == "/api/fund":
+                self._json(self.server.data.fund())
             elif path == "/api/bots":
                 self._json({"bots": self.server.data.bots()})
             elif path == "/api/action":
@@ -1700,6 +2052,48 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     description=str(body.get("description") or ""),
                 )
                 self._json({"bot": asdict(spec)}, status=201)
+            elif path == "/api/fund/limits":
+                changes = body.get("changes")
+                if not isinstance(changes, dict) or not changes:
+                    self._error(400, "Falta changes")
+                else:
+                    result = set_limits(
+                        self.server.data.db_path,
+                        account_id=str(body.get("account") or "").strip(),
+                        changes=changes,
+                        origin="console",
+                        confirm=bool(body.get("confirm")),
+                    )
+                    if result["ok"]:
+                        self.server.data.cache.clear()
+                        self._json(result)
+                    else:
+                        self._json(result, status=400)
+            elif path == "/api/fund/killswitch":
+                action = str(body.get("action") or "").strip()
+                try:
+                    if action == "activate":
+                        state = activate_killswitch(
+                            self.server.data.db_path,
+                            reason=str(
+                                body.get("reason")
+                                or "activación manual desde la consola"
+                            ),
+                            confirm=bool(body.get("confirm")),
+                        )
+                    elif action == "reset":
+                        state = reset_killswitch(
+                            self.server.data.db_path,
+                            confirm=bool(body.get("confirm")),
+                        )
+                    else:
+                        self._error(400, "action debe ser activate o reset")
+                        return
+                except ValueError as exc:
+                    self._error(400, str(exc))
+                    return
+                self.server.data.cache.clear()
+                self._json({"ok": True, "state": _json_safe(asdict(state))})
             else:
                 self._error(404, "Ruta no encontrada")
         except Exception as exc:

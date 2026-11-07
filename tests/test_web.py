@@ -39,6 +39,9 @@ def test_index_disponible() -> None:
     assert "research-clusters" in text
     assert "research-portfolio" in text
     assert "research-costs" in text
+    assert "view-fund" in text
+    assert "fund-save" in text
+    assert "fund-killswitch" in text
 
 
 def test_account_lee_sqlite(tmp_path: Path) -> None:
