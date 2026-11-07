@@ -2652,8 +2652,8 @@ def research_cmd(
     min_dsr: float = typer.Option(0.90, "--min-dsr", help="Deflated Sharpe Ratio mínimo"),
     wf_folds: int = typer.Option(4, "--wf-folds", help="Bloques walk-forward"),
     min_wf_positive: int = typer.Option(2, "--min-wf-positive", help="Bloques positivos mínimos"),
-    pbo_blocks: int = typer.Option(8, "--pbo-blocks", help="Bloques para PBO/CSCV"),
-    max_pbo: float = typer.Option(0.50, "--max-pbo", help="PBO máximo para proponer"),
+    pbo_slices: int = typer.Option(16, "--pbo-slices", help="Bloques CSCV (par, >= 4)"),
+    max_pbo: float = typer.Option(0.30, "--max-pbo", help="PBO máximo (global y por activo)"),
     max_breach: float = typer.Option(0.15, "--max-breach", help="Revienta máximo para proponer"),
     holdout: float = typer.Option(0.30, "--holdout", help="Fracción final reservada a validación"),
     min_trades: int = typer.Option(20, "--min-trades"),
@@ -2687,7 +2687,7 @@ def research_cmd(
         min_dsr=min_dsr,
         wf_folds=wf_folds,
         min_wf_positive=min_wf_positive,
-        pbo_blocks=pbo_blocks,
+        pbo_slices=pbo_slices,
         max_pbo=max_pbo,
         holdout_fraction=holdout,
         exposures=[float(x) for x in exposures.split(",") if x.strip()],
@@ -2697,6 +2697,9 @@ def research_cmd(
     unknown = [s for s in cfg.strategies if s not in STRATEGIES]
     if unknown:
         console.print(f"[red]Estrategias desconocidas:[/red] {', '.join(unknown)}")
+        raise typer.Exit(2)
+    if cfg.pbo_slices < 4 or cfg.pbo_slices % 2:
+        console.print("[red]--pbo-slices debe ser par y >= 4[/red]")
         raise typer.Exit(2)
 
     console.print(
@@ -2751,6 +2754,16 @@ def research_cmd(
             f"{r['score']:,.3f}",
         )
     console.print(table)
+
+    pbo = report.get("pbo")
+    if pbo:
+        console.print(
+            f"PBO CSCV: [bold]{pbo['pbo']:.1%}[/bold] · {pbo.get('verdict', '—')} · "
+            f"{pbo.get('n_variants', 0)} variantes · {pbo.get('n_slices', 0)} bloques · "
+            f"{pbo.get('n_combinations', 0):,} combinaciones"
+        )
+    else:
+        console.print("[yellow]PBO CSCV no disponible: muestra insuficiente.[/yellow]")
 
     n = len(report["proposals"])
     if n:

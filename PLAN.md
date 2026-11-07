@@ -100,14 +100,21 @@ Reglas de trabajo:
   - Deflated Sharpe Ratio implementado y usado como criterio (>=90%).
   - Resultado: 0 propuestas de 192 variantes; los 18 candidatos previos no
     sobreviven al ajuste por múltiples pruebas.
-- [ ] **3.1b PBO (CSCV)** — pendiente; requiere retornos por bloque y
-  combinaciones train/test.
-- [ ] **3.2 Walk-forward** en lugar de un único 70/30 + reporte por régimen.
+- [x] **3.1b PBO (CSCV)** — 2026-11-07
+  - `tradinglab.validation.cscv_pbo` con 16 bloques contiguos → 12.870
+    combinaciones train/test sobre retornos diarios alineados por fecha.
+  - PBO global 24,8% (ok); por activo: QQQ 7,5%, SPY 14,4%, IWM 26,3% (ok);
+    GLD 40,9%, TLT 46,0% y EURUSD=X 96,0% (sobreajustados).
+  - Sin PBO calculable no se proponen bots.
+- [x] **3.2 Walk-forward y regímenes** — 2026-11-07
+  - 4 bloques walk-forward, criterio de ≥2 bloques positivos; retornos por
+    régimen 2018/2020/2022 en el reporte.
 - [x] **3.3 Monte Carlo block bootstrap** — ya existía y research usa
   `block_size=5`; documentado.
 - [ ] **3.4 Optuna** para explorar parámetros con validación walk-forward.
 - [ ] **3.5 QuantStats** para el HTML de cada propuesta frente a SPY.
-- [ ] **3.6 Criterio**: research completo con datos sintéticos y semilla fija.
+- [x] **3.6 Criterio**: research completo con datos sintéticos en tests
+  (`tests/test_research.py`) y barrido real con PBO/walk-forward/DSR.
 
 ## Fase 4 — Capa de información continua
 
@@ -178,7 +185,8 @@ Reglas de trabajo:
 | 2026-11-07 | 5.1–5.3/5.5 | `pytest tests/test_decisions.py -q` → 2 passed |
 | 2026-11-07 | 4.3/4.4 | `lab intel fetch` → 5 noticias; `pytest tests/test_intel.py -q` → 5 passed |
 | 2026-11-07 | 0.3 / final | `pytest -q` → 129 passed; CI 66f2e8f verde |
-| 2026-11-07 | 3.1/3.1b/3.2 | `pytest tests/test_research.py -q`; PBO 16%, WF 4 bloques |
+| 2026-11-07 | 3.1/3.1b/3.2 | `pytest tests/test_research.py -q`; PBO 16% (simplificado), WF 4 bloques |
+| 2026-11-07 | 3.1b CSCV | `pytest tests/test_validation.py tests/test_research.py -q`; PBO global 24,8% |
 | 2026-11-07 | 4.4/4.6/11b | `pytest tests/test_calendar.py tests/test_session.py -q` |
 | 2026-11-07 | SEC/CSV/decisions | `pytest tests/test_sec.py tests/test_decisions.py -q` |
 |  |  |  |

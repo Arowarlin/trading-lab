@@ -11,12 +11,14 @@ from pathlib import Path
 from statistics import NormalDist
 
 import numpy as np
+import pandas as pd
 
 from . import data as data_mod
 from .backtest import run as run_backtest
 from .prop.rules import PropRules
 from .prop.simulator import monte_carlo
 from .strategies import STRATEGIES
+from .validation import cscv_pbo, returns_matrix
 
 # Rejillas deliberadamente pequeñas: el objetivo es encontrar candidatos
 # robustos, no hacer fuerza bruta sobre miles de combinaciones (sobreajuste).
@@ -53,8 +55,11 @@ class ResearchConfig:
     min_dsr: float = 0.90
     wf_folds: int = 4
     min_wf_positive: int = 2
-    pbo_blocks: int = 8
-    max_pbo: float = 0.50
+    # CSCV: 16 bloques -> 12.870 combinaciones. Se puede muestrear para tests.
+    pbo_slices: int = 16
+    pbo_max_combinations: int | None = None
+    pbo_seed: int = 0
+    max_pbo: float = 0.30
     max_breach: float = 0.15
     holdout_fraction: float = 0.30
     exposures: list[float] = field(default_factory=lambda: [1.0, 0.5])
@@ -104,53 +109,52 @@ def _year_returns(returns) -> dict[str, float]:
     return out
 
 
-def pbo_cscv(block_returns: dict[str, list[float]], *, max_combinations: int = 5_000) -> dict | None:
-    """Probability of Backtest Overfitting (CSCV simplificado).
+def _aligned_returns(
+    series_by_variant: dict[str, pd.Series],
+) -> tuple[np.ndarray, list[str]] | None:
+    """Alinea series diarias por fecha y devuelve una matriz (T, N).
 
-    `block_returns[variant]` son retornos por bloque contiguo. Para cada
-    combinación train/test se elige el mejor en train y se mide su rango en
-    test; PBO es la fracción de veces que queda por debajo de la mediana.
+    La intersección de fechas evita rellenar huecos con ceros: un día sin dato
+    no es un día de retorno cero. Si no quedan al menos dos filas, no hay PBO.
     """
-    if len(block_returns) < 2:
+    if len(series_by_variant) < 2:
         return None
-    lengths = {len(v) for v in block_returns.values()}
-    if len(lengths) != 1:
-        return None
-    blocks = next(iter(lengths))
-    if blocks % 2:
-        blocks -= 1
-    if blocks < 4:
-        return None
-
-    names = list(block_returns)
-    values = {name: block_returns[name][:blocks] for name in names}
-    combinations = list(itertools.combinations(range(blocks), blocks // 2))
-    if len(combinations) > max_combinations:
-        combinations = combinations[:max_combinations]
-
-    overfit = 0
-    for train in combinations:
-        test = tuple(i for i in range(blocks) if i not in train)
-        train_scores = {
-            name: statistics.mean(values[name][i] for i in train) for name in names
-        }
-        best = max(names, key=lambda name: train_scores[name])
-        test_scores = {
-            name: statistics.mean(values[name][i] for i in test) for name in names
-        }
-        ordered = sorted(test_scores.values())
-        rank = sum(1 for value in ordered if value < test_scores[best]) / max(
-            1, len(ordered) - 1
-        )
-        if rank < 0.5:
-            overfit += 1
-
-    return {
-        "pbo": overfit / len(combinations),
-        "combinations": len(combinations),
-        "blocks": blocks,
-        "variants": len(names),
+    cleaned = {
+        name: series.astype(float).replace([np.inf, -np.inf], np.nan)
+        for name, series in series_by_variant.items()
     }
+    frame = pd.concat(cleaned, axis=1, join="inner").dropna()
+    if len(frame) < 2:
+        return None
+    return returns_matrix({name: frame[name].to_numpy(dtype=float) for name in frame.columns})
+
+
+def _pbo_payload(
+    series_by_variant: dict[str, pd.Series],
+    cfg: ResearchConfig,
+    *,
+    scope: str,
+) -> dict | None:
+    """Calcula CSCV/PBO y devuelve un dict serializable, o None si no aplica."""
+    aligned = _aligned_returns(series_by_variant)
+    if aligned is None:
+        return None
+    matrix, _names = aligned
+    try:
+        result = cscv_pbo(
+            matrix,
+            n_slices=cfg.pbo_slices,
+            max_combinations=cfg.pbo_max_combinations,
+            seed=cfg.pbo_seed,
+        )
+    except ValueError:
+        # Muestra insuficiente o columnas inválidas: no se inventa un PBO.
+        return None
+    payload = result.to_dict()
+    payload["verdict"] = result.verdict(cfg.max_pbo)
+    payload["scope"] = scope
+    payload["max_pbo"] = cfg.max_pbo
+    return payload
 
 
 def deflated_sharpe(
@@ -185,6 +189,10 @@ def run_research(cfg: ResearchConfig, rules: PropRules, cache_dir: str | Path) -
     end = cfg.end or datetime.now(timezone.utc).date().isoformat()
     results: list[dict] = []
     errors: list[dict] = []
+    # Retornos diarios netos por variante (sin escalar por exposición: el
+    # Sharpe es invariante a la escala). No se serializan en el reporte.
+    daily_returns: dict[str, pd.Series] = {}
+    daily_returns_by_symbol: dict[str, dict[str, pd.Series]] = defaultdict(dict)
 
     for symbol in cfg.symbols:
         try:
@@ -226,10 +234,12 @@ def run_research(cfg: ResearchConfig, rules: PropRules, cache_dir: str | Path) -
                 skew = float(returns.skew()) if len(returns) > 2 else 0.0
                 kurtosis = float(returns.kurt()) + 3.0 if len(returns) > 3 else 3.0
                 sample_days = len(returns)
-                blocks = _block_metrics(returns, cfg.pbo_blocks)
                 walk_forward = _block_metrics(returns, cfg.wf_folds)
                 wf_returns = [b["return"] for b in walk_forward]
                 year_returns = _year_returns(returns)
+                variant_key = f"{strategy}|{json.dumps(params, sort_keys=True)}"
+                daily_returns[f"{symbol}|{variant_key}"] = bt.returns
+                daily_returns_by_symbol[symbol][variant_key] = bt.returns
                 split = max(1, int(len(bt.returns) * (1.0 - cfg.holdout_fraction)))
                 oos_returns = bt.returns.iloc[split:]
                 oos_start = (
@@ -294,7 +304,6 @@ def run_research(cfg: ResearchConfig, rules: PropRules, cache_dir: str | Path) -
                             "sample_days": sample_days,
                             "skew": skew,
                             "kurtosis": kurtosis,
-                            "block_returns": [b["return"] for b in blocks],
                             "walk_forward": walk_forward,
                             "wf_positive_folds": sum(1 for x in wf_returns if x > 0),
                             "wf_min_return": min(wf_returns) if wf_returns else None,
@@ -329,15 +338,17 @@ def run_research(cfg: ResearchConfig, rules: PropRules, cache_dir: str | Path) -
             len(results),
         )
 
-    block_map = {
-        f"{r['symbol']}|{r['strategy']}|{r['exposure']:g}|{json.dumps(r['params'], sort_keys=True)}": r[
-            "block_returns"
-        ]
-        for r in results
-        if r.get("block_returns")
+    pbo_by_symbol: dict[str, dict] = {}
+    for symbol, series_by_variant in daily_returns_by_symbol.items():
+        payload = _pbo_payload(series_by_variant, cfg, scope=symbol)
+        if payload is not None:
+            pbo_by_symbol[symbol] = payload
+    pbo = _pbo_payload(daily_returns, cfg, scope="global")
+    # Sin PBO calculable no se proponen bots: el sobreajuste no está validado.
+    pbo_ok = pbo is not None and pbo["pbo"] <= cfg.max_pbo
+    pbo_symbol_ok = {
+        symbol: payload["pbo"] <= cfg.max_pbo for symbol, payload in pbo_by_symbol.items()
     }
-    pbo = pbo_cscv(block_map)
-    pbo_ok = pbo is None or pbo["pbo"] <= cfg.max_pbo
 
     def core_eligible(r: dict) -> bool:
         return (
@@ -349,6 +360,7 @@ def run_research(cfg: ResearchConfig, rules: PropRules, cache_dir: str | Path) -
             and (r.get("dsr") is not None and r["dsr"] >= cfg.min_dsr)
             and r.get("wf_positive_folds", 0) >= cfg.min_wf_positive
             and pbo_ok
+            and pbo_symbol_ok.get(r["symbol"], pbo_ok)
         )
 
     proposals = [r for r in results if core_eligible(r) and r["num_trades"] >= cfg.min_trades]
@@ -379,6 +391,7 @@ def run_research(cfg: ResearchConfig, rules: PropRules, cache_dir: str | Path) -
             "dsr": r.get("dsr"),
             "wf_positive_folds": r.get("wf_positive_folds"),
             "wf_folds": cfg.wf_folds,
+            "pbo_symbol": pbo_by_symbol.get(r["symbol"], {}).get("pbo"),
             "year_returns": r.get("year_returns") or {},
             "max_drawdown": r["max_drawdown"],
             "sharpe": r["sharpe"],
@@ -392,6 +405,7 @@ def run_research(cfg: ResearchConfig, rules: PropRules, cache_dir: str | Path) -
         "rules": rules.describe(),
         "pbo": pbo,
         "pbo_ok": pbo_ok,
+        "pbo_by_symbol": pbo_by_symbol,
         "config": {
             "symbols": cfg.symbols,
             "strategies": cfg.strategies,
@@ -407,7 +421,9 @@ def run_research(cfg: ResearchConfig, rules: PropRules, cache_dir: str | Path) -
             "min_dsr": cfg.min_dsr,
             "wf_folds": cfg.wf_folds,
             "min_wf_positive": cfg.min_wf_positive,
-            "pbo_blocks": cfg.pbo_blocks,
+            "pbo_slices": cfg.pbo_slices,
+            "pbo_max_combinations": cfg.pbo_max_combinations,
+            "pbo_seed": cfg.pbo_seed,
             "max_pbo": cfg.max_pbo,
             "max_breach": cfg.max_breach,
             "holdout_fraction": cfg.holdout_fraction,
@@ -450,6 +466,14 @@ def render_markdown(report: dict, top: int = 25) -> str:
         f"el tramo reservado ({oos_range}) puede caer en un régimen favorable y dar "
         "tasas muy altas que no se repetirán en otro mercado."
     )
+    pbo = report.get("pbo")
+    pbo_line = (
+        f"- PBO (CSCV): {pbo['pbo']:.1%} · veredicto {pbo.get('verdict', '—')} · "
+        f"{pbo.get('n_variants', 0)} variantes · {pbo.get('n_slices', 0)} bloques · "
+        f"{pbo.get('n_combinations', 0):,} combinaciones"
+        if pbo
+        else "- PBO (CSCV): no disponible (muestra insuficiente o <2 variantes)"
+    )
     lines = [
         "# Investigación de estrategias",
         "",
@@ -463,10 +487,8 @@ def render_markdown(report: dict, top: int = 25) -> str:
         f"- Validación out-of-sample: último {cfg['holdout_fraction']:.0%} de la muestra",
         f"- Ventana OOS: {oos_range}",
         f"- Variantes evaluadas: {report['candidates']}",
-        f"- Walk-forward: {cfg.get('wf_folds', 4)} bloques · PBO "
-        f"{report.get('pbo', {}).get('pbo', 0):.0%}"
-        if report.get("pbo")
-        else f"- Walk-forward: {cfg.get('wf_folds', 4)} bloques · PBO —",
+        f"- Walk-forward: {cfg.get('wf_folds', 4)} bloques",
+        pbo_line,
         "",
         warning,
         "",
@@ -507,6 +529,33 @@ def render_markdown(report: dict, top: int = 25) -> str:
             f"{pct_opt(years.get('2022'))} |"
         )
 
+    pbo_rows = []
+    if pbo:
+        pbo_rows.append(("Global", pbo))
+    for symbol, payload in sorted(report.get("pbo_by_symbol", {}).items()):
+        pbo_rows.append((symbol, payload))
+    if pbo_rows:
+        lines += [
+            "",
+            "## Sobreajuste (CSCV)",
+            "",
+            "| Ámbito | PBO | Veredicto | Variantes | Bloques | Combinaciones | Filas |",
+            "|---|---|---|---|---|---|---|",
+        ]
+        for scope, payload in pbo_rows:
+            lines.append(
+                f"| {scope} | {pct(payload['pbo'])} | {payload.get('verdict', '—')} | "
+                f"{payload.get('n_variants', 0)} | {payload.get('n_slices', 0)} | "
+                f"{payload.get('n_combinations', 0):,} | {payload.get('rows_used', 0):,} |"
+            )
+        lines += [
+            "",
+            "> PBO ≤ "
+            f"{cfg.get('max_pbo', 0.30):.0%} se considera aceptable; cerca del 50% "
+            "elegir la mejor variante es esencialmente azar. Sin PBO calculable no "
+            "se proponen bots.",
+        ]
+
     lines += [
         "",
         "## Propuestas",
@@ -515,7 +564,8 @@ def render_markdown(report: dict, top: int = 25) -> str:
         f"OOS ≥ {cfg['min_oos_pass']:.0%}, Sharpe > 0, trades ≥ {cfg['min_trades']}, "
         f"DSR ≥ {cfg.get('min_dsr', 0.90):.0%}, WF positivos ≥ "
         f"{cfg.get('min_wf_positive', 2)}/{cfg.get('wf_folds', 4)}, PBO ≤ "
-        f"{cfg.get('max_pbo', 0.50):.0%} y mediana de la familia ≥ {cfg['min_pass']:.0%}.",
+        f"{cfg.get('max_pbo', 0.30):.0%} (global y por activo) y mediana de la "
+        f"familia ≥ {cfg['min_pass']:.0%}.",
         "",
     ]
     if report["proposals"]:

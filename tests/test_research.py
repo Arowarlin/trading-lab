@@ -35,18 +35,15 @@ def test_walk_forward_y_regimenes():
 
 
 def test_pbo_cscv_detecta_consistencia():
-    from tradinglab.research import pbo_cscv
+    from tradinglab.validation import cscv_pbo
 
-    blocks = {
-        "bueno": [0.04, 0.05, 0.04, 0.05, 0.04, 0.05, 0.04, 0.05],
-        "medio": [0.02, 0.01, 0.02, 0.01, 0.02, 0.01, 0.02, 0.01],
-        "malo": [-0.01, -0.02, -0.01, -0.02, -0.01, -0.02, -0.01, -0.02],
-    }
-    result = pbo_cscv(blocks)
-    assert result is not None
-    assert 0.0 <= result["pbo"] <= 1.0
-    assert result["variants"] == 3
-    assert pbo_cscv({"solo": [0.1, 0.2, 0.3, 0.4]}) is None
+    rng = np.random.default_rng(11)
+    returns = rng.normal(0, 0.01, size=(1600, 6))
+    returns[:, 2] += 0.001  # edge persistente
+    result = cscv_pbo(returns, n_slices=16, max_combinations=1_000, seed=0)
+    assert 0.0 <= result.pbo <= 1.0
+    assert result.n_variants == 6
+    assert result.verdict() == "ok"
 
 
 def _frame(n: int = 400, seed: int = 3) -> pd.DataFrame:
@@ -80,6 +77,7 @@ def test_run_research_ranks_and_never_enables(monkeypatch):
         min_pass=0.0,
         max_breach=1.0,
         min_trades=0,
+        pbo_max_combinations=500,
         exposures=[1.0],
     )
     report = research.run_research(cfg, ftmo(100_000), cache_dir="unused")
@@ -88,6 +86,11 @@ def test_run_research_ranks_and_never_enables(monkeypatch):
     assert len(report["results"]) == 4
     assert report["results"][0]["score"] >= report["results"][1]["score"]
     assert all("family_median_pass" in r for r in report["results"])
+    assert report["pbo"] is not None
+    assert report["pbo"]["n_slices"] == cfg.pbo_slices
+    assert report["pbo"]["n_variants"] == 4
+    assert report["pbo"]["verdict"] in {"ok", "sobreajustado"}
+    assert report["pbo_by_symbol"]["TEST"]["n_slices"] == cfg.pbo_slices
     assert all(p["enabled"] is False for p in report["proposals"])
     assert all(p["status"] == "proposed" for p in report["proposals"])
     assert all("oos_pass_rate" in p for p in report["proposals"])
@@ -107,12 +110,41 @@ def test_run_research_survives_bad_symbol(monkeypatch):
         horizon=10,
         block_size=1,
         min_trades=0,
+        pbo_max_combinations=500,
         exposures=[1.0],
     )
     report = research.run_research(cfg, ftmo(100_000), cache_dir="unused")
 
     assert any(e["symbol"] == "BAD" for e in report["errors"])
     assert report["candidates"] == 4
+
+
+def test_pbo_alto_bloquea_propuestas(monkeypatch):
+    monkeypatch.setattr(research.data_mod, "fetch", lambda *a, **k: _frame())
+    cfg = research.ResearchConfig(
+        symbols=["TEST"],
+        strategies=["trend"],
+        paths=50,
+        horizon=10,
+        block_size=1,
+        min_pass=0.0,
+        max_breach=1.0,
+        min_trades=0,
+        min_oos_pass=0.0,
+        min_dsr=0.0,
+        min_wf_positive=0,
+        max_pbo=0.0,
+        pbo_max_combinations=500,
+        exposures=[1.0],
+    )
+    report = research.run_research(cfg, ftmo(100_000), cache_dir="unused")
+
+    assert report["pbo"]["pbo"] > 0.0
+    assert report["pbo_ok"] is False
+    assert report["proposals"] == []
+    md = research.render_markdown(report)
+    assert "## Sobreajuste (CSCV)" in md
+    assert "sobreajustado" in md
 
 
 def test_write_outputs_creates_files(tmp_path, monkeypatch):
@@ -130,6 +162,7 @@ def test_write_outputs_creates_files(tmp_path, monkeypatch):
         min_dsr=0.0,
         min_wf_positive=0,
         max_pbo=1.0,
+        pbo_max_combinations=500,
     )
     report = research.run_research(cfg, ftmo(100_000), cache_dir="unused")
     files = research.write_outputs(report, tmp_path)
@@ -160,6 +193,7 @@ def test_near_misses_are_listed_but_not_actionable(monkeypatch):
         min_dsr=0.0,
         min_wf_positive=0,
         max_pbo=1.0,
+        pbo_max_combinations=500,
         exposures=[1.0],
     )
     report = research.run_research(cfg, ftmo(100_000), cache_dir="unused")
@@ -199,3 +233,4 @@ def test_render_markdown_handles_no_results():
     }
     md = research.render_markdown(report)
     assert "Ningún candidato" in md
+    assert "PBO (CSCV): no disponible" in md

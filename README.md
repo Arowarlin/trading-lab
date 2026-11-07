@@ -581,22 +581,30 @@ Qué hace:
    **block bootstrap** con bloques de 5 días);
 3. puntúa `pasa − revienta` con el Sharpe como desempate;
 4. reserva el último 30% de la muestra para validación OOS;
-5. calcula el **Deflated Sharpe Ratio (DSR)** para descontar las 192 variantes
-   probadas;
+5. calcula el **Deflated Sharpe Ratio (DSR)**, un **walk-forward de 4 bloques**
+   y el **PBO/CSCV** sobre una matriz de retornos diarios alineada por fecha
+   (16 bloques contiguos → 12.870 combinaciones train/test);
 6. escribe `reports/research/latest.md`, `latest.json` y `proposals.{md,json}`.
 
 Criterios de propuesta: pasa ≥ 35%, revienta ≤ 15%, OOS ≥ 25%, Sharpe > 0,
-≥ 20 trades, **DSR ≥ 90%** y **mediana de la familia de parámetros ≥ 35%**
-(evita proponer un pico aislado). Las variantes que cumplen todo salvo el mínimo
-de operaciones aparecen en **“casi propuestas”**, sin activarse: sirven para
-vigilarlas, no para operar. **Ninguna propuesta se activa sola**: van con
+≥ 20 trades, **DSR ≥ 90%**, **WF positivos ≥ 2/4**, **PBO ≤ 30% global y por
+activo** y **mediana de la familia de parámetros ≥ 35%** (evita proponer un
+pico aislado). Si el PBO no se puede calcular (muestra insuficiente o menos de
+2 variantes), **no se propone nada**. Las variantes que cumplen todo salvo el
+mínimo de operaciones aparecen en **“casi propuestas”**, sin activarse: sirven
+para vigilarlas, no para operar. **Ninguna propuesta se activa sola**: van con
 `enabled: false` y hay que revisarlas, añadirlas a `config/bots.yaml` y volver a
 simular con datos intradía.
 
-Salida real (2026-11-07, FTMO 100k 2-step, horizonte 120 días, 192 variantes):
+Salida real (2026-11-07, FTMO 100k 2-step, horizonte 120 días, 192 resultados
+= 96 variantes únicas × 2 escalas):
 
-- **0 propuestas.** El DSR elimina los 18 candidatos que antes pasaban: eran
-  variantes correlacionadas de `trend`, no 18 edges independientes.
+- **0 propuestas.**
+- **PBO CSCV global 24,8% (ok).** Por activo: QQQ 7,5%, SPY 14,4% e IWM 26,3%
+  son aceptables; **GLD 40,9%, TLT 46,0% y EURUSD=X 96,0% están sobreajustados**
+  y sus candidatos quedan bloqueados aunque pasen DSR.
+- El DSR elimina los 18 candidatos que antes pasaban: eran variantes
+  correlacionadas de `trend`, no 18 edges independientes.
 - Mejor DSR: QQQ `trend` fast=20 slow=100, 0.5× → DSR 92,5%, pero solo 18
   trades y 20,4% de breach; no cumple muestra/riesgo.
 - Mejor ranking: SPY `trend` fast=20 slow=200, 0.5× → DSR 59,3%; no alcanza
@@ -604,8 +612,9 @@ Salida real (2026-11-07, FTMO 100k 2-step, horizonte 120 días, 192 variantes):
 - `trend-ls` y `meanrev` no superan a `trend` en esta muestra.
 
 Decisión: se mantiene `min_trades=20` y no se propone nada hasta que un
-candidato pase DSR con muestra suficiente. **PBO/CSCV y walk-forward quedan
-pendientes** (Fase 3); el DSR ya corrige parte del sesgo de múltiples pruebas.
+candidato pase DSR, walk-forward y PBO con muestra suficiente. El PBO
+reemplaza al cálculo simplificado por bloques (16% entonces); ahora usa
+retornos diarios alineados y 12.870 combinaciones CSCV.
 
 Advertencias: elegir el mejor de cientos de variantes sesga el resultado al
 alza; OOS es un filtro mínimo, no una garantía. La muestra 2015-2026 (y su
