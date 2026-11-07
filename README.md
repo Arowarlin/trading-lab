@@ -143,6 +143,7 @@ cd E:\trading-lab
 # Información continua (solo lectura, sin ejecución)
 .\.venv\Scripts\lab.exe intel fetch
 .\.venv\Scripts\lab.exe intel status
+.\.venv\Scripts\lab.exe intel fred --days 90
 .\.venv\Scripts\lab.exe intel calendar
 .\.venv\Scripts\lab.exe intel event FOMC --at 2026-12-09T19:00:00+00:00
 
@@ -240,6 +241,8 @@ Unregister-ScheduledTask -TaskName "TradingLab-Web" -Confirm:$false
   auditoría de `pixel-hedge-fund` (sin licencia; solo inspiración),
   `company-pixel-office` (MIT; idea de roster) y `FinRobot` (Apache-2.0;
   principio de cálculo determinista + narración LLM).
+- [`docs/fred_calendar.md`](docs/fred_calendar.md): verificación de FRED,
+  release IDs de CPI/NFP, fechas futuras, limitación de hora y fallback stale.
 - [`docs/auditoria-repos-2026-11-07.md`](docs/auditoria-repos-2026-11-07.md):
   auditoría de AutoHedge (MIT), Vibe-Trading (MIT) y FinceptTerminal (AGPL-3.0);
   qué se adoptó en la consola y qué se descartó por licencia o riesgo.
@@ -311,19 +314,52 @@ herramientas de ejecución en esta capa** y todo el texto entra como
 ```powershell
 .\.venv\Scripts\lab.exe intel fetch
 .\.venv\Scripts\lab.exe intel status
+.\.venv\Scripts\lab.exe intel fred --days 90
+.\.venv\Scripts\lab.exe intel calendar
 ```
 
 - `news_items`: URL, fuente, hora UTC, hash, título/resumen recortados.
-- `news_scores` y `macro_events`: esquema creado; scoring FinBERT, FRED y
-  calendario macro quedan pendientes.
+- `news_scores`: esquema creado; scoring con Qwen pendiente.
+- `macro_events`: FRED + eventos manuales. El guard usa `news_blackout_min`
+  sobre esta tabla.
 - **Decisión FinBERT:** no se incorpora por ahora. `ProsusAI/finbert` tiene
   licencia **CC-BY-NC-SA 4.0** (no comercial); el análisis inicial de noticias
   se hará con Qwen. No se descarga ningún modelo nuevo.
 - `wrap_untrusted()` delimita el texto y ordena al LLM no seguir instrucciones
   contenidas; hay test de prompt injection.
 - Tarea **`TradingLab-Intel`** a las 07:10; logs en `logs/intel/`.
-- Pendiente Fase 4: scoring barato, OpenBB/FRED, reintentos por fuente. El
-  blackout de noticias ya está integrado en el guard (`news_blackout_min`).
+
+### FRED y calendario macro
+
+`lab intel fred` sincroniza CPI y Employment Situation (NFP) desde FRED y
+guarda los eventos en `macro_events` con impacto `high`:
+
+- La clave se lee de keyring/.env (`FRED_API_KEY`); **nunca se imprime**.
+- Los `release_id` se descubren por nombre con `/fred/releases`; no están
+  inventados. Observado el **2026-11-07**:
+  - **CPI = 10**
+  - **Employment Situation (NFP) = 50**
+- Las fechas se leen con `/fred/release/dates` y
+  `include_release_dates_with_no_data=true`.
+  - **Con** el flag aparecen fechas futuras: CPI 2026-11-10 y 2026-12-10;
+    NFP 2026-12-04 (observado el 2026-11-07).
+  - **Sin** el flag, FRED devuelve solo fechas históricas: desaparecen las
+    programadas futuras. Por eso el flag es obligatorio.
+  - FRED devuelve **solo fecha**, no hora. Para el guard se usa la convención
+    operativa **08:30 America/New_York** (hora habitual de estos releases);
+    es una convención documentada, no un campo de FRED.
+- Caché local en `data/cache/fred/` (12 h), rate limit de 0,6 s entre
+  peticiones (100/min, por debajo de las 120/min de FRED) y deduplicación en
+  `macro_events`.
+- Si FRED falla, se usan los eventos guardados y se devuelve estado `stale`.
+  Si no hay guardados, también es `stale` con 0 eventos: **nunca se interpreta
+  como “sin eventos”**.
+- **FOMC sigue siendo manual**: se copia del calendario oficial de la Reserva
+  Federal (<https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm>) y
+  se inserta con `lab intel event FOMC --at ...`.
+
+- Pendiente Fase 4: scoring barato, OpenBB, reintentos por fuente y proveedor
+  de noticias alternativo.
 
 ---
 
@@ -612,7 +648,22 @@ Qué hace:
    diarios alineada por fecha (16 bloques contiguos → 12.870 combinaciones
    train/test). Además calcula `regime_report`/`regime_gate` por variante para
    2018, 2020 y 2022;
-6. escribe `reports/research/latest.md`, `latest.json` y `proposals.{md,json}`.
+6. escribe `reports/research/latest.md`, `latest.json` y `proposals.{md,json}`;
+7. guarda en `reports/research/artifacts/<hash>.parquet` la curva de **equity**
+   de cada variante y la de **buy&hold** del mismo activo. El JSON incluye
+   `artifact` y `artifact_rows`, pero **no cambia ningún criterio**.
+
+### Run Detail en el panel
+
+Al hacer clic en una fila de Research se abre el detalle de la variante con:
+
+- curva de equity de la variante frente a buy&hold;
+- curva de drawdown de ambas;
+- retorno total, max drawdown, Sharpe y número de operaciones;
+- PBO, walk-forward, regímenes y motivos de bloqueo.
+
+Las gráficas son SVG propio del panel, sin librerías ni CDNs. Si el artefacto
+no existe o está vacío, el panel muestra **“sin datos”** y no inventa curvas.
 
 Criterios de propuesta: pasa ≥ 35%, revienta ≤ 15%, OOS ≥ 25%, Sharpe > 0,
 ≥ 20 trades, **DSR ≥ 90%**, **WF positivos ≥ 2/4**, **PBO ≤ 30% global y por

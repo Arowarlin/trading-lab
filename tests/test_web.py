@@ -263,8 +263,41 @@ def test_repo_audit_licencias(tmp_path: Path) -> None:
     assert licenses["fincept-terminal"] == "AGPL-3.0"
 
 
+def test_research_detail_lee_artefacto(tmp_path: Path) -> None:
+    artifacts = tmp_path / "reports" / "research" / "artifacts"
+    artifacts.mkdir(parents=True)
+    idx = pd.bdate_range("2026-01-01", periods=20)
+    pd.DataFrame(
+        {
+            "equity": [100.0, 102.0, 101.0, 105.0] + [105.0] * 16,
+            "buy_hold": [100.0, 101.0, 100.0, 103.0] + [103.0] * 16,
+        },
+        index=idx,
+    ).to_parquet(artifacts / "test.parquet")
+    data = _data(tmp_path).research_detail("artifacts/test.parquet")
+    assert data["ok"] is True
+    assert data["rows"] == 20
+    assert len(data["points"]) == 20
+    assert data["stats"]["total_return"] == pytest.approx(0.05)
+    assert data["stats"]["buy_hold_total_return"] == pytest.approx(0.03)
+    assert data["stats"]["max_drawdown"] < 0
+    assert data["points"][-1]["equity"] == pytest.approx(105.0)
+
+    with pytest.raises(ValueError):
+        _data(tmp_path).research_detail("../secret.parquet")
+    with pytest.raises(FileNotFoundError):
+        _data(tmp_path).research_detail("artifacts/missing.parquet")
+
+
 @pytest.mark.network
 def test_servidor_http_responde(tmp_path: Path) -> None:
+    artifacts = tmp_path / "reports" / "research" / "artifacts"
+    artifacts.mkdir(parents=True)
+    idx = pd.bdate_range("2026-01-01", periods=5)
+    pd.DataFrame(
+        {"equity": [100, 101, 102, 103, 104], "buy_hold": [100, 100, 101, 102, 103]},
+        index=idx,
+    ).to_parquet(artifacts / "test.parquet")
     data = _data(tmp_path)
     server = web.DashboardServer(("127.0.0.1", 0), data)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -285,6 +318,14 @@ def test_servidor_http_responde(tmp_path: Path) -> None:
             with urllib.request.urlopen(f"{base}{path}", timeout=5) as response:
                 payload = json.load(response)
             assert isinstance(payload, dict)
+
+        with urllib.request.urlopen(
+            f"{base}/api/research/detail?artifact=artifacts/test.parquet", timeout=5
+        ) as response:
+            detail = json.load(response)
+        assert detail["ok"] is True
+        assert len(detail["points"]) == 5
+        assert detail["stats"]["total_return"] == pytest.approx(0.04)
 
         with urllib.request.urlopen(f"{base}/", timeout=5) as response:
             html = response.read().decode("utf-8")

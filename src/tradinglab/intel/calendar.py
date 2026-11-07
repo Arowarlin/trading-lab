@@ -136,27 +136,36 @@ class CsvCalendarProvider:
 
 
 class DbCalendarProvider:
-    """Lee macro_events y el último estado de calendar_fetches."""
+    """Lee macro_events y el último estado de calendar_fetches.
+
+    Si `source` es None, usa el último fetch de cualquier proveedor (FRED,
+    manual, etc.) para que un fallo de FRED no quede oculto.
+    """
 
     def __init__(
         self,
         db_path: str | Path,
         *,
-        source: str = "manual",
+        source: str | None = None,
         max_age_hours: float = 48.0,
     ) -> None:
         self.db_path = Path(db_path)
         self.source = source
         self.max_age_hours = max_age_hours
-        self.name = f"db:{source}"
+        self.name = f"db:{source or 'latest'}"
 
     def fetch(self, start: datetime, end: datetime) -> CalendarResult:
         init_db(self.db_path)
         with connect(self.db_path) as con:
-            fetch = con.execute(
-                "SELECT * FROM calendar_fetches WHERE source = ? ORDER BY id DESC LIMIT 1",
-                (self.source,),
-            ).fetchone()
+            if self.source is None:
+                fetch = con.execute(
+                    "SELECT * FROM calendar_fetches ORDER BY id DESC LIMIT 1"
+                ).fetchone()
+            else:
+                fetch = con.execute(
+                    "SELECT * FROM calendar_fetches WHERE source = ? ORDER BY id DESC LIMIT 1",
+                    (self.source,),
+                ).fetchone()
             rows = con.execute(
                 "SELECT event, ts_utc, importance, source FROM macro_events "
                 "WHERE ts_utc >= ? AND ts_utc <= ? ORDER BY ts_utc",
@@ -349,7 +358,7 @@ def calendar_block_for_settings(
     settings: Settings,
     *,
     now: datetime | None = None,
-    source: str = "manual",
+    source: str | None = None,
     provider: CalendarProvider | None = None,
 ) -> BlackoutResult:
     """Atajo para el orquestador/CLI; admite inyectar otro proveedor (Finnhub)."""

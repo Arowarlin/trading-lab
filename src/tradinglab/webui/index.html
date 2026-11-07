@@ -371,6 +371,14 @@
   .imp-high { color: #ffb3ad; } .imp-medium { color: #e3b341; } .imp-low { color: #7ee787; }
   .spark { width: 104px; height: 28px; display: block; overflow: visible; }
   .spark.detail-spark { width: 100%; height: 120px; }
+  .run-chart { border: 1px solid var(--border-soft); background: var(--panel-2); border-radius: 9px; padding: 10px 10px 6px; margin-bottom: 10px; }
+  .run-chart svg { width: 100%; height: auto; display: block; }
+  .chart-legend { display: flex; gap: 14px; flex-wrap: wrap; color: var(--muted); font-size: 10.5px; padding: 2px 4px 6px; }
+  .chart-legend i { display: inline-block; width: 10px; height: 2px; vertical-align: middle; margin-right: 5px; }
+  .chart-axis { stroke: #2a3644; stroke-width: 1; }
+  .chart-grid { stroke: #1b2530; stroke-width: 1; }
+  .chart-label { fill: #6f7d8d; font-size: 8px; font-family: var(--mono); }
+  .chart-note { color: var(--muted); font-size: 10.5px; padding: 0 4px 4px; }
   .spark polyline { vector-effect: non-scaling-stroke; }
   .quote { font-family: var(--mono); font-size: 12.5px; }
   .trend-up { color: #7ee787; } .trend-down { color: #ffb3ad; } .trend-mixed { color: #e3b341; }
@@ -941,6 +949,33 @@ function sparkline(values, w = 104, h = 28) {
   const up = values[values.length - 1] >= values[0];
   const color = up ? "#3fb950" : "#f85149";
   return `<svg class="spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true"><polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.6"/></svg>`;
+}
+function lineChart(series, opts = {}) {
+  const width = opts.width || 680, height = opts.height || 170;
+  const pad = { l: 52, r: 12, t: 12, b: 20 };
+  const innerW = width - pad.l - pad.r, innerH = height - pad.t - pad.b;
+  const all = series.flatMap((s) => s.values).filter((v) => isFinite(v));
+  if (!all.length) return `<div class="empty">sin datos</div>`;
+  let min = Math.min(...all), max = Math.max(...all);
+  if (opts.zero) { min = Math.min(min, 0); max = Math.max(max, 0); }
+  if (max === min) { max += 1; min -= 1; }
+  const span = max - min;
+  const xAt = (i, n) => pad.l + (n <= 1 ? 0 : (i / (n - 1)) * innerW);
+  const yAt = (v) => pad.t + innerH - ((v - min) / span) * innerH;
+  const grid = [0, 0.25, 0.5, 0.75, 1].map((f) => {
+    const y = pad.t + innerH * f;
+    const value = max - span * f;
+    return `<line class="chart-grid" x1="${pad.l}" y1="${y.toFixed(1)}" x2="${width - pad.r}" y2="${y.toFixed(1)}"/><text class="chart-label" x="4" y="${(y + 3).toFixed(1)}">${opts.percent ? (value * 100).toFixed(1) + "%" : num(value, 0)}</text>`;
+  }).join("");
+  const paths = series.map((s) => {
+    const n = s.values.length;
+    const points = s.values.map((v, i) => `${xAt(i, n).toFixed(1)},${yAt(v).toFixed(1)}`).join(" ");
+    return `<polyline points="${points}" fill="none" stroke="${s.color}" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round"/>`;
+  }).join("");
+  const labels = opts.labels || [];
+  const xLabels = labels.length ? `<text class="chart-label" x="${pad.l}" y="${height - 4}">${esc(labels[0])}</text><text class="chart-label" x="${width - pad.r}" y="${height - 4}" text-anchor="end">${esc(labels[labels.length - 1])}</text>` : "";
+  const legend = series.map((s) => `<span><i style="background:${s.color}"></i>${esc(s.name)}</span>`).join("");
+  return `<div class="run-chart"><div class="chart-legend">${legend}</div><svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${esc(opts.title || "gráfica")}"><line class="chart-axis" x1="${pad.l}" y1="${pad.t}" x2="${pad.l}" y2="${height - pad.b}"/><line class="chart-axis" x1="${pad.l}" y1="${height - pad.b}" x2="${width - pad.r}" y2="${height - pad.b}"/>${grid}${paths}${xLabels}</svg>${opts.caption ? `<div class="chart-note">${esc(opts.caption)}</div>` : ""}</div>`;
 }
 function heat(value) {
   if (value === null || value === undefined || !isFinite(value)) return `<span class="heat flat">—</span>`;
@@ -2380,11 +2415,67 @@ function showResearchDetail(row) {
       <span class="k">Estado</span><span><span class="tag yellow">${esc(row.status || "—")}</span> · enabled: false</span>
       <span class="k">Nota</span><span>${esc(row.note || "—")}</span>
     </div>
+    <div class="panel" style="margin-bottom:12px;padding:12px">
+      <div class="panel-head"><h2 style="font-size:13px">Run Detail · equity vs buy&hold</h2><span class="muted tiny" id="run-detail-status">cargando…</span></div>
+      <div id="run-detail-equity"><div class="empty">Cargando artefacto…</div></div>
+      <div id="run-detail-drawdown"></div>
+      <div id="run-detail-stats"></div>
+    </div>
     <h3 style="font-size:13px;margin:0 0 6px">Regímenes</h3>
     <div class="table-wrap"><table><thead><tr><th>Año</th><th class="num">n</th><th class="num">Retorno</th><th class="num">Sharpe</th><th class="num">MaxDD</th><th class="num">B&amp;H DD</th></tr></thead><tbody>${years}</tbody></table></div>
     <div class="note">${gate.passed ? "Gate de regímenes aprobado." : `Gate bloqueado: ${esc((gate.reasons || []).join("; ") || "sin datos suficientes")}.`} El drawdown de buy&hold es informativo y no entra en el gate.</div>
     ${failures.length ? `<h3 style="font-size:13px;margin:14px 0 6px">Motivos de bloqueo</h3>${listItems(failures)}` : ""}
   `);
+  loadRunDetail(row);
+}
+
+async function loadRunDetail(row) {
+  const equityBox = $("#run-detail-equity");
+  const drawdownBox = $("#run-detail-drawdown");
+  const statsBox = $("#run-detail-stats");
+  const status = $("#run-detail-status");
+  if (!row.artifact) {
+    if (equityBox) equityBox.innerHTML = `<div class="empty">sin datos</div>`;
+    if (drawdownBox) drawdownBox.innerHTML = "";
+    if (statsBox) statsBox.innerHTML = "";
+    if (status) status.textContent = "sin datos";
+    return;
+  }
+  if (status) status.textContent = "cargando…";
+  try {
+    const data = await getJSON(`/api/research/detail?artifact=${encodeURIComponent(row.artifact)}`);
+    if (!data.ok || !data.points || !data.points.length) throw new Error("sin datos");
+    const labels = data.points.map((p) => p.ts.slice(0, 10));
+    if (equityBox) {
+      equityBox.innerHTML = lineChart([
+        { name: "Variante", values: data.points.map((p) => p.equity), color: "#58a6ff" },
+        { name: "Buy & hold", values: data.points.map((p) => p.buy_hold), color: "#8b98a8" },
+      ], { labels, title: "Equity vs buy&hold", caption: `curva 1× · ${data.rows} barras · ${row.exposure}× reportado` });
+    }
+    if (drawdownBox) {
+      drawdownBox.innerHTML = lineChart([
+        { name: "Variante", values: data.points.map((p) => p.drawdown), color: "#f85149" },
+        { name: "Buy & hold", values: data.points.map((p) => p.buy_hold_drawdown), color: "#8b98a8" },
+      ], { labels, percent: true, zero: true, title: "Drawdown vs buy&hold", caption: "drawdown desde el máximo previo" });
+    }
+    const s = data.stats || {};
+    if (statsBox) {
+      statsBox.innerHTML = `<div class="metric-grid" style="margin-top:8px">
+        <div class="metric"><div class="l">Retorno total</div><div class="v">${pct(s.total_return, 2)}</div></div>
+        <div class="metric"><div class="l">MaxDD</div><div class="v">${pct(s.max_drawdown, 2)}</div></div>
+        <div class="metric"><div class="l">Sharpe (artefacto)</div><div class="v">${num(s.sharpe, 2)}</div></div>
+        <div class="metric"><div class="l">B&H retorno</div><div class="v">${pct(s.buy_hold_total_return, 2)}</div></div>
+        <div class="metric"><div class="l">B&H MaxDD</div><div class="v">${pct(s.buy_hold_max_drawdown, 2)}</div></div>
+        <div class="metric"><div class="l">Trades (reporte)</div><div class="v">${num(row.num_trades, 0)}</div></div>
+      </div>`;
+    }
+    if (status) status.textContent = `artefacto · ${data.rows} barras`;
+  } catch (error) {
+    if (equityBox) equityBox.innerHTML = `<div class="empty">sin datos</div>`;
+    if (drawdownBox) drawdownBox.innerHTML = "";
+    if (statsBox) statsBox.innerHTML = "";
+    if (status) status.textContent = "sin datos";
+  }
 }
 
 /* ------------------------------------------------------------------- risk */

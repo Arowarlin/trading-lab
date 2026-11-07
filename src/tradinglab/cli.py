@@ -42,6 +42,7 @@ from .intel.calendar import (
     calendar_block_for_settings,
     rules_from_settings,
 )
+from .intel.fred import FredCalendarProvider
 from .intel.news import fetch_rss, news_count, recent_news, store_news
 from .intel.sec import SecClient
 from .killswitch import allows_order
@@ -1692,8 +1693,55 @@ def intel_status_cmd() -> None:
             t.add_row(str(row["source"]), str(row["published_at"] or "")[:19], str(row["title"]))
         console.print(t)
     console.print(
-        "[dim]Pendiente Fase 4: scoring FinBERT, calendario macro y blackout en el guard.[/dim]"
+        "[dim]Calendario macro: FRED con `lab intel fred`; FOMC manual con `lab intel event`.[/dim]"
     )
+
+
+@intel_app.command("fred")
+def intel_fred_cmd(
+    days: int = typer.Option(90, "--days", help="Ventana de días hacia delante"),
+) -> None:
+    """Sincroniza CPI/NFP desde FRED a macro_events. Solo lectura externa."""
+    settings = get_settings()
+    provider = FredCalendarProvider(
+        DEFAULT_DB,
+        cache_dir=settings.data.cache_dir / "fred",
+    )
+    now = datetime.now(timezone.utc)
+    try:
+        result = provider.fetch(now, now + timedelta(days=max(1, days)))
+    finally:
+        provider.close()
+
+    t = Table(title="FRED · calendario macro")
+    t.add_column("Campo", style="bold")
+    t.add_column("Valor", overflow="fold")
+    t.add_row("Estado", result.status.value)
+    t.add_row("Mensaje", result.message or "—")
+    t.add_row("Eventos", str(len(result.events)))
+    console.print(t)
+    if result.events:
+        events = Table(title="Eventos FRED")
+        events.add_column("Hora UTC")
+        events.add_column("Evento")
+        events.add_column("Importancia")
+        events.add_column("Fuente")
+        for item in result.events[:30]:
+            events.add_row(
+                item.ts_utc.isoformat(),
+                item.event,
+                item.importance,
+                item.source,
+            )
+        console.print(events)
+    if result.status == CalendarStatus.UNCONFIGURED:
+        console.print("[red]Falta FRED_API_KEY; no se ha consultado FRED.[/red]")
+        raise typer.Exit(1)
+    if result.status != CalendarStatus.OK:
+        console.print(
+            "[yellow]FRED no disponible: se usan los eventos guardados. "
+            "El guard bloqueará aperturas si no hay datos fiables.[/yellow]"
+        )
 
 
 @intel_app.command("event")
@@ -2794,13 +2842,18 @@ def research_cmd(
         )
     )
 
+    out_dir = Path(out) if out else ROOT / "reports" / "research"
     with Progress(
         SpinnerColumn(), TextColumn("[progress.description]{task.description}"), console=console
     ) as progress:
         progress.add_task("Descargando datos, backtest y Monte Carlo...", total=None)
-        report = run_research(cfg, rules, settings.data.cache_dir)
+        report = run_research(
+            cfg,
+            rules,
+            settings.data.cache_dir,
+            artifacts_dir=out_dir / "artifacts",
+        )
 
-    out_dir = Path(out) if out else ROOT / "reports" / "research"
     files = write_outputs(report, out_dir)
 
     if not report["results"]:

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import math
 import os
 import re
 import sqlite3
@@ -947,7 +948,68 @@ class LabData:
             "pbo_by_symbol": latest.get("pbo_by_symbol") or {},
             "walk_forward": latest.get("walk_forward"),
             "walk_forward_ok": latest.get("walk_forward_ok"),
+            "dsr_n_trials": latest.get("dsr_n_trials"),
+            "dsr_trial_sr_std": latest.get("dsr_trial_sr_std"),
             "errors": latest.get("errors") or [],
+        }
+
+    def research_detail(self, artifact: str) -> dict:
+        """Curva de equity/drawdown de una variante frente a buy&hold.
+
+        Solo lee parquet locales generados por `lab research`; si falta el
+        artefacto o no es válido, lanza FileNotFoundError/ValueError.
+        """
+        root = self.research_dir.resolve()
+        rel = str(artifact or "").strip().replace("\\", "/")
+        if not rel or not rel.endswith(".parquet") or ".." in Path(rel).parts:
+            raise ValueError("artefacto inválido")
+        path = (root / rel).resolve()
+        if not path.is_relative_to(root) or not path.is_file():
+            raise FileNotFoundError(f"sin datos para {rel}")
+        frame = pd.read_parquet(path)
+        if "equity" not in frame.columns or "buy_hold" not in frame.columns:
+            raise ValueError("artefacto sin equity/buy_hold")
+        data = frame[["equity", "buy_hold"]].apply(pd.to_numeric, errors="coerce").dropna()
+        if data.empty:
+            raise ValueError("artefacto sin datos")
+        data = data.sort_index()
+        equity = data["equity"].astype(float)
+        buy_hold = data["buy_hold"].astype(float)
+        eq_dd = equity / equity.cummax() - 1.0
+        bh_dd = buy_hold / buy_hold.cummax() - 1.0
+        returns = equity.pct_change().dropna()
+        std = float(returns.std(ddof=1)) if len(returns) > 1 else 0.0
+        sharpe = (
+            float(returns.mean() / std * math.sqrt(252)) if std > 0 else 0.0
+        )
+        step = max(1, len(data) // 400)
+        indexes = list(range(0, len(data), step))
+        if indexes[-1] != len(data) - 1:
+            indexes.append(len(data) - 1)
+        points = []
+        for i in indexes:
+            ts = data.index[i]
+            points.append(
+                {
+                    "ts": ts.isoformat() if hasattr(ts, "isoformat") else str(ts),
+                    "equity": float(equity.iloc[i]),
+                    "buy_hold": float(buy_hold.iloc[i]),
+                    "drawdown": float(eq_dd.iloc[i]),
+                    "buy_hold_drawdown": float(bh_dd.iloc[i]),
+                }
+            )
+        return {
+            "ok": True,
+            "artifact": rel,
+            "rows": len(data),
+            "points": points,
+            "stats": {
+                "total_return": float(equity.iloc[-1] / equity.iloc[0] - 1.0),
+                "max_drawdown": float(eq_dd.min()),
+                "sharpe": sharpe,
+                "buy_hold_total_return": float(buy_hold.iloc[-1] / buy_hold.iloc[0] - 1.0),
+                "buy_hold_max_drawdown": float(bh_dd.min()),
+            },
         }
 
     # --------------------------------------------------------------- mercado
@@ -1449,6 +1511,14 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 self._json(self.server.data.market())
             elif path == "/api/calendar":
                 self._json(self.server.data.calendar())
+            elif path == "/api/research/detail":
+                artifact = (parse_qs(urlparse(self.path).query).get("artifact") or [""])[0]
+                try:
+                    self._json(self.server.data.research_detail(artifact))
+                except FileNotFoundError:
+                    self._json({"ok": False, "error": "sin datos"}, status=404)
+                except ValueError as exc:
+                    self._error(400, str(exc))
             elif path == "/api/decisions":
                 self._json(self.server.data.decisions())
             elif path == "/api/decisions/compare":

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import itertools
 import json
 import math
@@ -260,11 +261,24 @@ def deflated_sharpe(
     return float(nd.cdf(z))
 
 
-def run_research(cfg: ResearchConfig, rules: PropRules, cache_dir: str | Path) -> dict:
-    """Escanea activos × estrategias × parámetros y puntúa contra las reglas."""
+def run_research(
+    cfg: ResearchConfig,
+    rules: PropRules,
+    cache_dir: str | Path,
+    *,
+    artifacts_dir: str | Path | None = None,
+) -> dict:
+    """Escanea activos × estrategias × parámetros y puntúa contra las reglas.
+
+    Si `artifacts_dir` se indica, guarda la curva de equity de cada resultado
+    y la de buy&hold del mismo activo en parquet. No cambia ningún criterio.
+    """
     end = cfg.end or datetime.now(timezone.utc).date().isoformat()
     results: list[dict] = []
     errors: list[dict] = []
+    artifact_root = Path(artifacts_dir) if artifacts_dir is not None else None
+    if artifact_root is not None:
+        artifact_root.mkdir(parents=True, exist_ok=True)
     # Retornos diarios netos por variante (sin escalar por exposición: el
     # Sharpe es invariante a la escala). No se serializan en el reporte.
     daily_returns: dict[str, pd.Series] = {}
@@ -288,6 +302,8 @@ def run_research(cfg: ResearchConfig, rules: PropRules, cache_dir: str | Path) -
             min_obs=cfg.regime_min_obs,
         )
         bh_regime_years = bh_regime.to_dict().get("years") or {}
+        starting_cash = float(rules.account_size)
+        bh_equity = starting_cash * df["close"].astype(float) / float(df["close"].iloc[0])
 
         for strategy in cfg.strategies:
             for params in _combos(strategy):
@@ -373,6 +389,26 @@ def run_research(cfg: ResearchConfig, rules: PropRules, cache_dir: str | Path) -
 
                     pass_rate = float(mc["pass_rate"])
                     breach_rate = float(mc["breach_rate"])
+                    artifact_rel = None
+                    artifact_rows = None
+                    if artifact_root is not None:
+                        digest = hashlib.sha256(
+                            (
+                                f"{symbol}|{strategy}|{exposure:g}|"
+                                f"{json.dumps(params, sort_keys=True)}"
+                            ).encode("utf-8")
+                        ).hexdigest()[:16]
+                        artifact_rel = f"artifacts/{digest}.parquet"
+                        frame = pd.DataFrame(
+                            {
+                                "equity": bt.equity.astype(float),
+                                "buy_hold": bh_equity.reindex(bt.equity.index).astype(float),
+                            }
+                        ).dropna()
+                        if not frame.empty:
+                            frame.index.name = "ts"
+                            frame.to_parquet(artifact_root / f"{digest}.parquet")
+                            artifact_rows = len(frame)
                     results.append(
                         {
                             "symbol": symbol,
@@ -404,6 +440,8 @@ def run_research(cfg: ResearchConfig, rules: PropRules, cache_dir: str | Path) -
                             "regime_report": regime_payload,
                             "regime_gate": regime_check.to_dict(),
                             "year_returns": year_returns,
+                            "artifact": artifact_rel,
+                            "artifact_rows": artifact_rows,
                             "score": _score(pass_rate, breach_rate, sharpe),
                         }
                     )
@@ -554,6 +592,8 @@ def run_research(cfg: ResearchConfig, rules: PropRules, cache_dir: str | Path) -
             "regime_gate": r.get("regime_gate") or {},
             "validation_failures": validation_failures(r),
             "year_returns": r.get("year_returns") or {},
+            "artifact": r.get("artifact"),
+            "artifact_rows": r.get("artifact_rows"),
             "max_drawdown": r["max_drawdown"],
             "sharpe": r["sharpe"],
             "status": status,

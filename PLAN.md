@@ -123,8 +123,8 @@ Reglas de trabajo:
 
 ## Fase 4 — Capa de información continua
 
-- [ ] **4.1 Fuentes**: RSS Yahoo y SEC EDGAR operativos; FRED, calendario
-  Finnhub y OpenBB pendientes de conectar/verificar.
+- [ ] **4.1 Fuentes**: RSS Yahoo y SEC EDGAR operativos; FRED operativo para
+  CPI/NFP; Finnhub y OpenBB pendientes de conectar/verificar.
 - [ ] **4.2 Triaje barato**: FinBERT o modelo local pequeño; medir latencia/RAM.
   - Decisión 2026-11-07: **no usar FinBERT** (CC-BY-NC-SA 4.0, no comercial);
     usar Qwen inicialmente. No se descarga modelo nuevo.
@@ -201,6 +201,7 @@ Reglas de trabajo:
 | 2026-11-07 | 6 cierre | `lab research` → 0 propuestas; PBO 24,8% ok; WF global `fallido`; panel HTTP OK |
 | 2026-11-07 | consola v2 | `pytest -q` → 192 passed; panel 8433: market=12, calendar=empty, repos=3 |
 | 2026-11-07 | revisión WF/PBO/DSR | `pytest -q` → 197 passed; PBO EURUSD planas 0/16; WF fallido por estabilidad; 2 zips con `.env` intactos |
+| 2026-11-07 | Run Detail + FRED | `pytest -q` → 203 passed; 192 artefactos de equity; FRED CPI=10/NFP=50 con futuras 2026-11-10/12-10 y 12-04 |
 | 2026-11-07 | 4.4/4.6/11b | `pytest tests/test_calendar.py tests/test_session.py -q` |
 | 2026-11-07 | SEC/CSV/decisions | `pytest tests/test_sec.py tests/test_decisions.py -q` |
 |  |  |  |

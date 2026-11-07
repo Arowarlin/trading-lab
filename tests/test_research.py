@@ -195,7 +195,7 @@ def test_run_research_noise_has_no_proposals(monkeypatch):
     assert all(not (r.get("regime_gate") or {}).get("passed") for r in report["results"])
 
 
-def test_run_research_edge_passes_pbo_walkforward_and_regime(monkeypatch):
+def test_run_research_edge_passes_pbo_walkforward_and_regime(monkeypatch, tmp_path):
     edge_params = _fake_research_world(monkeypatch, with_edge=True)
     cfg = research.ResearchConfig(
         symbols=["TEST"],
@@ -211,7 +211,12 @@ def test_run_research_edge_passes_pbo_walkforward_and_regime(monkeypatch):
         wf_test_len=126,
         exposures=[1.0],
     )
-    report = research.run_research(cfg, ftmo(100_000), cache_dir="unused")
+    report = research.run_research(
+        cfg,
+        ftmo(100_000),
+        cache_dir="unused",
+        artifacts_dir=tmp_path / "artifacts",
+    )
 
     assert report["pbo"] is not None and report["pbo"]["pbo"] <= 0.30
     assert report["walk_forward"] is not None
@@ -224,6 +229,12 @@ def test_run_research_edge_passes_pbo_walkforward_and_regime(monkeypatch):
     assert proposal["enabled"] is False
     assert proposal["validation_failures"] == []
     assert proposal["dsr_n_trials"] == report["dsr_n_trials"]
+    assert proposal["artifact"] and proposal["artifact"].endswith(".parquet")
+    artifact = tmp_path / "artifacts" / Path(proposal["artifact"]).name
+    assert artifact.exists()
+    frame = pd.read_parquet(artifact)
+    assert {"equity", "buy_hold"} <= set(frame.columns)
+    assert 0 < len(frame) <= 400  # el df sintético solo cubre 2019-2020
 
 
 def test_run_research_ranks_and_never_enables(monkeypatch):
