@@ -728,6 +728,22 @@ operador ni datos. Inventario base en `docs/ui_inventory.json` y test
   Capturas de las 15 pestañas en `reports/ui/stage3` y diff en
   `reports/ui/stage3_diff.json`.
 
+### Etapa 4 — Accesibilidad, responsive y refresco
+
+- [x] **Accesibilidad**
+  - Contraste AA, `:focus-visible` con anillo cian, enlace “Saltar al
+    contenido” y `aria-current="page"` en la pestaña activa.
+  - Barra lateral navegable con flechas/Home/End; Ctrl+K intacto.
+- [x] **Responsive y rendimiento**
+  - Layout a 390 px sin desbordamiento horizontal; HUD y acciones se envuelven.
+  - Refresco de 8 s con huella del payload y re-render solo si cambió; sin
+    mutaciones de `#kpis` en 9,5 s de observación CDP.
+  - Sala pixel conserva `#office-floor`, `renderSala()` y su comportamiento.
+- Evidencia: `pytest tests/test_console_shell.py -q` → 8 passed; suite completa
+  **413 passed**; `ruff` limpio; `lab doctor` OK. Capturas de las 15 pestañas
+  en `reports/ui/stage4`, móvil en `reports/ui/stage4/overview_mobile.png` y
+  diff en `reports/ui/stage4_diff.json`; Ctrl+K y flechas verificados por CDP.
+
 ---
 
 ## Registro de evidencias
@@ -803,4 +819,5 @@ operador ni datos. Inventario base en `docs/ui_inventory.json` y test
 | 2026-11-08 | UI v3 Etapa 1 | `pytest tests/test_console_shell.py -q` -> 5 passed; `pytest -q` -> 410 passed; tokens grafito/cian, HUD fijo, borde de operador armado, inventario UI congelado |
 | 2026-11-08 | UI v3 Etapa 2 | `pytest tests/test_console_shell.py -q` -> 6 passed; `pytest -q` -> 411 passed; KPIs delta/sparkline, gauges de colchon/DD/salud, chips con icono, densidad persistida, skeletons y reduced-motion |
 | 2026-11-08 | UI v3 Etapa 3 | `pytest tests/test_console_shell.py -q` -> 7 passed; `pytest -q` -> 412 passed; equity SVG con cruz/marcas/bandas, heatmaps PnL y correlacion, sin curvas inventadas |
+| 2026-11-08 | UI v3 Etapa 4 | `pytest tests/test_console_shell.py -q` -> 8 passed; `pytest -q` -> 413 passed; foco visible, skip-link, aria-current, flechas, Ctrl+K, responsive 390px y refresco 8s sin re-render |
 |  |  |  |

@@ -926,6 +926,19 @@ temporal de la DB y 40 snapshots: línea, marcas y cruz visibles; `data/lab.db`
 real no se tocó. Capturas de las 15 pestañas en `reports/ui/stage3` y diff en
 `reports/ui/stage3_diff.json`.
 
+**Etapa 4 · Accesibilidad y rendimiento.** Contraste AA, `:focus-visible`
+visible, enlace **Saltar al contenido**, `aria-current` en la pestaña activa y
+navegación de la barra lateral con flechas/Home/End. **Ctrl+K** sigue intacto.
+El refresco de 8 s compara una huella del payload (sin `generated_at`) y solo
+re-renderiza la vista si cambió; en la prueba CDP no hubo mutaciones de `#kpis`
+en 9,5 s. Responsive verificado a 390 px sin desbordamiento horizontal. La Sala
+pixel conserva `#office-floor`, `renderSala()` y su comportamiento.
+
+Evidencia: `pytest tests/test_console_shell.py -q` → **8 passed**; suite completa
+**413 passed**; `ruff` limpio; `lab doctor` OK. Capturas de las 15 pestañas en
+`reports/ui/stage4`, móvil en `reports/ui/stage4/overview_mobile.png` y diff en
+`reports/ui/stage4_diff.json`. Ctrl+K y flechas verificados con Chrome CDP.
+
 ---
 
 ## 6h. Multiverse por operación (10.2)

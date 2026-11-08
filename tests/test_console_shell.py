@@ -188,6 +188,28 @@ def test_graficas_svg_y_mapas_de_calor_presentes() -> None:
     assert "getContext(\"2d\")" not in text
 
 
+def test_accesibilidad_y_refresco_estable() -> None:
+    text = INDEX.read_text(encoding="utf-8")
+    for marker in (
+        'class="skip-link"',
+        'id="main-content"',
+        "aria-current",
+        "ArrowDown",
+        "ArrowUp",
+        ":focus-visible",
+        "fingerprint(",
+        "overviewChanged",
+        "S.fp",
+        'id="office-floor"',
+        "function renderSala()",
+        'event.key.toLowerCase() === "k"',
+        "prefers-reduced-motion",
+    ):
+        assert marker in text, marker
+    assert "@media (max-width: 1180px)" in text
+    assert "@media (max-width: 760px)" in text
+
+
 def test_hud_barra_operativa_presente() -> None:
     text = INDEX.read_text(encoding="utf-8")
     for marker in (

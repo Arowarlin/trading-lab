@@ -879,7 +879,7 @@
     .hud-right { margin-left: 0; }
   }
   @media (max-width: 760px) {
-    .hud { position: static; margin: -24px -28px 14px; padding: 8px 14px; }
+    .hud { position: static; margin: -18px -14px 14px; padding: 8px 14px; }
     .hud-brand { display: none; }
     .hud-left, .hud-right { width: 100%; }
     .hud-right { margin-left: 0; }
@@ -1033,9 +1033,67 @@
     .equity-svg { height: 230px; }
     .corr-grid { min-width: 560px; }
   }
+
+  /* ------------------------------------------------ accesibilidad v3 */
+  .skip-link {
+    position: fixed;
+    left: 12px;
+    top: -48px;
+    z-index: 10000;
+    padding: 8px 12px;
+    border: 1px solid var(--accent);
+    border-radius: var(--radius-sm);
+    background: #0b1219;
+    color: var(--accent);
+    font: 600 12px var(--mono);
+    transition: top .15s ease;
+  }
+  .skip-link:focus { top: 10px; }
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  .nav-btn:focus-visible {
+    outline-offset: -2px;
+    box-shadow: inset 2px 0 0 var(--accent);
+  }
+  .nav-btn[aria-current="page"] { color: var(--text); }
+  .btn:focus-visible, .input:focus-visible, .chip:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  .table-wrap:focus-within { border-color: rgba(76,201,240,.42); }
+  .kpi-no-spark { color: #8299ad; }
+  .muted, .small, .tiny { color: #9aacbd; }
+  .statusbar { color: #8498aa; }
+
+  @media (max-width: 1180px) {
+    .grid-2, .grid-2.equal { grid-template-columns: 1fr; }
+    .topbar { flex-direction: column; }
+    .top-actions { justify-content: flex-start; }
+    .chart-legend { gap: 10px; }
+  }
+  @media (max-width: 760px) {
+    .kpis { grid-template-columns: 1fr; }
+    .chart-legend { gap: 8px; font-size: 10px; }
+    .top-actions { gap: 6px; }
+    .statusbar { gap: 8px; }
+    .statusbar span { white-space: normal; }
+    .corr-grid { min-width: 500px; }
+  }
+  @media (max-width: 520px) {
+    .hud-chip { font-size: 8.5px; padding: 4px 7px; }
+    .hud .badge { font-size: 8.5px; }
+    .top-actions .btn { padding: 6px 9px; font-size: 11.5px; }
+    .gauge-card { flex-direction: column; text-align: center; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .skip-link, .gauge-fill, .balance-seg { transition: none !important; }
+  }
 </style>
 </head>
 <body>
+<a class="skip-link" href="#main-content">Saltar al contenido</a>
 <div class="app">
   <aside class="sidebar">
     <div class="brand">
@@ -1076,7 +1134,7 @@
     <div class="sidebar-footer">Modo paper/demo · Operador con PIN y confirmación · sin live.<br>Sin CDNs, sin frameworks, solo 127.0.0.1.</div>
   </aside>
 
-  <main>
+  <main id="main-content" tabindex="-1">
     <div class="hud" id="hud" role="status" aria-live="polite" aria-label="Estado operativo">
       <div class="hud-left">
         <span class="hud-brand">TradingLab · consola local</span>
@@ -1821,6 +1879,7 @@ const S = {
   commandIndex: 0,
   fundEditorAccount: null,
   build: null,
+  fp: {},
 };
 
 const TITLES = {
@@ -1855,6 +1914,14 @@ function setHTML(target, html) {
   node.__lastHtml = html;
   node.innerHTML = html;
   return true;
+}
+
+function fingerprint(value) {
+  try {
+    return JSON.stringify(value, (key, item) => (key === "generated_at" ? undefined : item));
+  } catch (_) {
+    return String(Math.random());
+  }
 }
 
 function money(v) { return v === null || v === undefined || !isFinite(v) ? "—" : fmtUSD.format(Number(v)); }
@@ -2051,13 +2118,36 @@ function initDensity() {
 }
 
 function bindNav() {
-  $$("#nav .nav-btn").forEach((btn) => btn.addEventListener("click", () => switchView(btn.dataset.view)));
+  const nav = $("#nav");
+  const buttons = $$("#nav .nav-btn");
+  buttons.forEach((btn) => btn.addEventListener("click", () => switchView(btn.dataset.view)));
+  const active = buttons.find((btn) => btn.classList.contains("active"));
+  if (active) active.setAttribute("aria-current", "page");
+  if (!nav) return;
+  nav.addEventListener("keydown", (event) => {
+    const current = buttons.indexOf(document.activeElement);
+    if (current < 0) return;
+    let next = null;
+    if (event.key === "ArrowDown") next = (current + 1) % buttons.length;
+    else if (event.key === "ArrowUp") next = (current - 1 + buttons.length) % buttons.length;
+    else if (event.key === "Home") next = 0;
+    else if (event.key === "End") next = buttons.length - 1;
+    if (next !== null) {
+      event.preventDefault();
+      buttons[next].focus();
+    }
+  });
 }
 
 function switchView(view, updateHash = true) {
   if (!TITLES[view]) view = "overview";
   S.view = view;
-  $$("#nav .nav-btn").forEach((b) => b.classList.toggle("active", b.dataset.view === view));
+  $$("#nav .nav-btn").forEach((b) => {
+    const active = b.dataset.view === view;
+    b.classList.toggle("active", active);
+    if (active) b.setAttribute("aria-current", "page");
+    else b.removeAttribute("aria-current");
+  });
   $$(".view").forEach((section) => section.classList.toggle("active", section.id === `view-${view}`));
   const [title, sub] = TITLES[view] || ["TradingLab", ""];
   $("#page-title").textContent = title;
@@ -2216,50 +2306,83 @@ async function loadAll(manual = false) {
       return;
     }
     S.build = newBuild || S.build;
+    const overviewKey = fingerprint(overviewResult.value);
+    const overviewChanged = overviewKey !== S.fp.overview;
+    S.fp.overview = overviewKey;
     S.overview = overviewResult.value;
     S.market = S.overview.market || null;
     S.calendar = S.overview.calendar || null;
     S.decisions = S.overview.decisions || null;
     S.repos = S.overview.repos || null;
-    renderOverview();
-    renderMarket();
-    renderDecisions();
-    renderRepos();
-    renderBots();
-    renderAgents();
-    renderSala();
-    renderResearch();
-    renderLogs();
+    if (overviewChanged) {
+      renderOverview();
+      renderMarket();
+      renderDecisions();
+      renderRepos();
+      renderBots();
+      renderAgents();
+      renderSala();
+      renderResearch();
+      renderLogs();
+    }
   }
   if (riskResult.status === "fulfilled") {
     S.risk = riskResult.value;
-    renderRisk();
+    const riskKey = fingerprint(riskResult.value);
+    if (riskKey !== S.fp.risk) {
+      S.fp.risk = riskKey;
+      renderRisk();
+    }
   }
   if (accountsResult.status === "fulfilled") {
     S.accounts = accountsResult.value.accounts || [];
-    renderAccounts();
+    const accountsKey = fingerprint(accountsResult.value);
+    if (accountsKey !== S.fp.accounts) {
+      S.fp.accounts = accountsKey;
+      renderAccounts();
+    }
   }
   if (fundResult.status === "fulfilled") {
     S.fund = fundResult.value;
-    renderFund();
-    renderRiskGauges();
-    if (S.overview) renderBalanceDistribution();
+    const fundKey = fingerprint(fundResult.value);
+    if (fundKey !== S.fp.fund) {
+      S.fp.fund = fundKey;
+      renderFund();
+      renderRiskGauges();
+      if (S.overview) renderBalanceDistribution();
+    }
   }
   if (operatorResult.status === "fulfilled") {
     S.operator = operatorResult.value;
-    renderOperator();
+    const operatorKey = fingerprint(operatorResult.value);
+    if (operatorKey !== S.fp.operator) {
+      S.fp.operator = operatorKey;
+      renderOperator();
+    }
   }
   if (driftResult.status === "fulfilled") {
     S.drift = driftResult.value;
-    renderBotsDrift();
+    const driftKey = fingerprint(driftResult.value);
+    if (driftKey !== S.fp.drift) {
+      S.fp.drift = driftKey;
+      renderBotsDrift();
+    }
   }
   if (instrumentsResult.status === "fulfilled") {
     S.instruments = instrumentsResult.value;
-    renderMarketCatalog();
+    const instrumentsKey = fingerprint(instrumentsResult.value);
+    if (instrumentsKey !== S.fp.instruments) {
+      S.fp.instruments = instrumentsKey;
+      renderMarketCatalog();
+    }
   }
   if (marketsResult.status === "fulfilled") {
     S.markets = marketsResult.value;
-    renderMarketAgents();
+    const marketsKey = fingerprint(marketsResult.value);
+    if (marketsKey !== S.fp.markets) {
+      S.fp.markets = marketsKey;
+      renderMarketAgents();
+    }
   }
   if (S.view === "journal") loadJournal();
   if (S.view === "learning") loadLearning();
@@ -2316,6 +2439,8 @@ function updatePills() {
   }
   const statusGenerated = $("#status-generated");
   if (statusGenerated) statusGenerated.textContent = S.overview?.generated_at ? dateTime(S.overview.generated_at) : "—";
+  const generatedAt = $("#generated-at");
+  if (generatedAt) generatedAt.textContent = "actualizado " + ago(S.overview?.generated_at);
 
   const llm = S.overview?.llm;
   if (llm) {
