@@ -911,6 +911,21 @@ Evidencia: `pytest tests/test_console_shell.py -q` → **6 passed**; suite compl
 **411 passed**; `ruff` limpio; `lab doctor` OK. Capturas de las 15 pestañas en
 `reports/ui/stage2` y diff en `reports/ui/stage2_diff.json`.
 
+**Etapa 3 · Gráficas SVG.** La curva de equity usa SVG propio con área
+degradada cian, cruz de lectura, marcas de operaciones reales y bandas de
+régimen si el payload las trae. Si no hay bandas históricas, la leyenda dice
+**Sin datos de régimen histórico** y no se dibuja nada inventado. El PnL diario
+y la correlación entre bots son mapas de calor con escala divergente
+ámbar/cian apta para daltónicos; la correlación resalta los pares por encima
+del umbral. Fuentes: `overview.account.equity_curve`, `overview.account.orders`,
+`overview.regime` y `overview.research.horizons.correlations`.
+
+Evidencia: `pytest tests/test_console_shell.py -q` → **7 passed**; suite completa
+**412 passed**; `ruff` limpio; `lab doctor` OK. Smoke del SVG con una copia
+temporal de la DB y 40 snapshots: línea, marcas y cruz visibles; `data/lab.db`
+real no se tocó. Capturas de las 15 pestañas en `reports/ui/stage3` y diff en
+`reports/ui/stage3_diff.json`.
+
 ---
 
 ## 6h. Multiverse por operación (10.2)

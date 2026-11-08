@@ -710,6 +710,24 @@ operador ni datos. Inventario base en `docs/ui_inventory.json` y test
   **411 passed**; `ruff` limpio; `lab doctor` OK. Capturas de las 15 pestañas
   en `reports/ui/stage2` y diff en `reports/ui/stage2_diff.json`.
 
+### Etapa 3 — Gráficas SVG y mapas de calor
+
+- [x] **Equity SVG**
+  - Área degradada cian, línea, ejes, último valor y cruz de lectura.
+  - Marcas de operaciones reales desde `account.orders`; si no hay órdenes en
+    el rango, no se dibujan.
+  - Bandas de régimen desde `overview.regime.bands`/`regime_bands`; sin datos →
+    “Sin datos de régimen histórico”, sin curvas inventadas.
+- [x] **Mapas de calor**
+  - PnL diario con intensidad relativa al mes y escala divergente ámbar/cian.
+  - Correlación entre bots desde `research.horizons.correlations`, con umbral
+    resaltado y etiquetas cortas.
+- Evidencia: `pytest tests/test_console_shell.py -q` → 7 passed; suite completa
+  **412 passed**; `ruff` limpio; `lab doctor` OK. Smoke SVG con copia temporal
+  de DB y 40 snapshots: línea, marcas y cruz; `data/lab.db` real intacto.
+  Capturas de las 15 pestañas en `reports/ui/stage3` y diff en
+  `reports/ui/stage3_diff.json`.
+
 ---
 
 ## Registro de evidencias
@@ -784,4 +802,5 @@ operador ni datos. Inventario base en `docs/ui_inventory.json` y test
 | 2026-11-08 | Bloque Etapa 3 | `pytest tests/test_f13.py -q` -> 16 passed; `pytest -q` -> 408 passed; `lab f13 report` en reports/f13/ (ciclos, reconciliaciones, slippage, tamano, hash, alerta lunes), solo lectura |
 | 2026-11-08 | UI v3 Etapa 1 | `pytest tests/test_console_shell.py -q` -> 5 passed; `pytest -q` -> 410 passed; tokens grafito/cian, HUD fijo, borde de operador armado, inventario UI congelado |
 | 2026-11-08 | UI v3 Etapa 2 | `pytest tests/test_console_shell.py -q` -> 6 passed; `pytest -q` -> 411 passed; KPIs delta/sparkline, gauges de colchon/DD/salud, chips con icono, densidad persistida, skeletons y reduced-motion |
+| 2026-11-08 | UI v3 Etapa 3 | `pytest tests/test_console_shell.py -q` -> 7 passed; `pytest -q` -> 412 passed; equity SVG con cruz/marcas/bandas, heatmaps PnL y correlacion, sin curvas inventadas |
 |  |  |  |

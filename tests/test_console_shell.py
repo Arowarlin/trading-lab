@@ -162,6 +162,32 @@ def test_componentes_v3_presentes() -> None:
         assert marker in text, marker
 
 
+def test_graficas_svg_y_mapas_de_calor_presentes() -> None:
+    text = INDEX.read_text(encoding="utf-8")
+    assert re.search(r'<svg[^>]*id="equity-canvas"', text)
+    assert "<canvas" not in text
+    for marker in (
+        'id="corr-heatmap"',
+        'id="corr-meta"',
+        'id="equity-regime-note"',
+        "renderCorrelationHeatmap",
+        "renderPnlCalendar",
+        "equity-band",
+        "equity-trade",
+        "equity-cross",
+        "equity-fill",
+        "rgba(76,201,240",
+        "rgba(246,196,83",
+        "Sin datos de régimen histórico",
+        "heat-scale",
+        "left.x - right.x",
+        "equity-regime-note",
+    ):
+        assert marker in text, marker
+    assert "ctx.createLinearGradient" not in text
+    assert "getContext(\"2d\")" not in text
+
+
 def test_hud_barra_operativa_presente() -> None:
     text = INDEX.read_text(encoding="utf-8")
     for marker in (

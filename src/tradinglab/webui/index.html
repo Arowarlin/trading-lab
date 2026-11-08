@@ -988,6 +988,51 @@
     .gauge-card { flex-direction: row; flex-wrap: wrap; justify-content: center; text-align: left; }
     .gauge-note { min-height: 0; }
   }
+
+  /* ------------------------------------------------ gráficas v3 */
+  .equity-svg { width: 100%; height: 276px; display: block; border-radius: 8px; overflow: visible; }
+  .equity-grid { stroke: rgba(139,152,168,.13); stroke-width: 1; }
+  .equity-base { stroke: rgba(139,152,168,.28); stroke-width: 1; stroke-dasharray: 4 4; }
+  .equity-axis { fill: #73808f; font: 9.5px var(--mono); font-variant-numeric: tabular-nums; }
+  .equity-line { fill: none; stroke: var(--accent); stroke-width: 2.2; stroke-linejoin: round; stroke-linecap: round; }
+  .equity-area { fill: url(#equity-fill); }
+  .equity-band { opacity: .65; }
+  .equity-trade { fill: #0a0e14; stroke: #e8f1f8; stroke-width: 1.4; }
+  .equity-trade.buy { stroke: var(--positive); }
+  .equity-trade.sell { stroke: var(--negative); }
+  .equity-cross { stroke: rgba(201,213,226,.48); stroke-width: 1; stroke-dasharray: 3 4; }
+  .equity-cross-dot { fill: var(--accent); stroke: #0a0e14; stroke-width: 2; }
+  .equity-tip { fill: #0f1822; stroke: #2a3a4c; }
+  .equity-tip-text { fill: var(--text); font: 600 13px var(--mono); font-variant-numeric: tabular-nums; }
+  .equity-tip-sub { fill: var(--muted); font: 9.5px var(--mono); }
+  .chart-legend { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; margin-top: 9px; color: var(--muted); font-size: 10.5px; }
+  .chart-legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend-line { width: 14px; height: 2px; background: var(--accent); display: inline-block; }
+  .legend-dot { width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid #e8f1f8; display: inline-block; }
+  .legend-band { width: 14px; height: 8px; background: rgba(76,201,240,.18); display: inline-block; }
+  .heatmap-wrap { overflow-x: auto; }
+  .corr-grid { display: grid; gap: 3px; min-width: 680px; }
+  .corr-cell {
+    min-height: 30px;
+    display: grid;
+    place-items: center;
+    border: 1px solid rgba(26,37,49,.9);
+    border-radius: 4px;
+    color: #e8f1f8;
+    font-family: var(--mono);
+    font-size: 9.5px;
+    font-variant-numeric: tabular-nums;
+  }
+  .corr-cell.diag { color: #7f93a6; background: #111a24; }
+  .corr-cell.hot { box-shadow: inset 0 0 0 1px rgba(246,196,83,.72); }
+  .corr-label { color: var(--muted); font-size: 9px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 2px 3px; }
+  .heat-legend { display: flex; align-items: center; gap: 8px; margin-top: 10px; color: var(--muted); font-size: 10px; flex-wrap: wrap; }
+  .heat-scale { flex: 1; max-width: 260px; height: 6px; border-radius: 3px; background: linear-gradient(90deg, #f6c453, #2a3441 50%, #4cc9f0); }
+  .corr-scale { max-width: 180px; }
+  @media (max-width: 700px) {
+    .equity-svg { height: 230px; }
+    .corr-grid { min-width: 560px; }
+  }
 </style>
 </head>
 <body>
@@ -1112,6 +1157,23 @@
           </div>
         </div>
         <div id="pnl-calendar"></div>
+        <div class="heat-legend" aria-hidden="true">
+          <span>Pérdida</span>
+          <span class="heat-scale pnl-scale"></span>
+          <span>Ganancia</span>
+          <span class="muted tiny">intensidad = |PnL| relativo al mes</span>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-bottom:14px">
+        <div class="panel-head"><h2>Correlación entre bots</h2><span class="muted tiny" id="corr-meta">—</span></div>
+        <div id="corr-heatmap" class="heatmap-wrap" aria-busy="true"><div class="empty">Sin datos</div></div>
+        <div class="heat-legend" aria-hidden="true">
+          <span>−1</span>
+          <span class="heat-scale corr-scale"></span>
+          <span>+1</span>
+          <span class="muted tiny">ámbar = |corr| &gt; umbral</span>
+        </div>
       </div>
 
       <div class="grid-2 equal">
@@ -1141,7 +1203,7 @@
             </div>
           </div>
           <div class="chart-wrap">
-            <canvas id="equity-canvas"></canvas>
+            <svg id="equity-canvas" class="equity-svg" role="img" aria-label="Curva de equity con bandas de régimen y marcas de operaciones"></svg>
             <div class="chart-tooltip" id="chart-tooltip"></div>
             <div class="chart-loading" id="chart-loading">Esperando datos…</div>
             <div class="chart-empty" id="chart-empty" hidden>
@@ -1149,6 +1211,12 @@
               <b>Sin historial de equity todavía</b>
               <span>La cuenta paper aún no tiene snapshots suficientes. La curva aparecerá tras el primer ciclo; mientras tanto puedes ver la curva de research en <strong>Research → Run Detail</strong>.</span>
             </div>
+          </div>
+          <div class="chart-legend">
+            <span><i class="legend-line"></i>Equity</span>
+            <span><i class="legend-dot"></i>Operación</span>
+            <span><i class="legend-band"></i>Régimen</span>
+            <span class="muted tiny" id="equity-regime-note">Sin datos de régimen histórico</span>
           </div>
         </div>
         <div class="panel">
@@ -2359,6 +2427,8 @@ function renderPnlCalendar() {
   const offset = (first.getDay() + 6) % 7; // lunes = 0
   const totalDays = new Date(year, month, 0).getDate();
   const today = localDayKey(new Date());
+  const values = Array.from(S.pnlData.pnl.values()).filter((value) => isFinite(value));
+  const maxAbs = Math.max(1, ...values.map((value) => Math.abs(value)));
   const cells = [];
   ["L", "M", "X", "J", "V", "S", "D"].forEach((day) => {
     cells.push(`<div class="pnl-weekday">${day}</div>`);
@@ -2371,10 +2441,58 @@ function renderPnlCalendar() {
     const value = S.pnlData.pnl.get(key);
     const cls = value === undefined ? "" : value > 0 ? "pos" : value < 0 ? "neg" : "";
     const isToday = key === today ? " today" : "";
-    const text = value === undefined ? "—" : signedMoneyShort(value);
-    cells.push(`<div class="pnl-day ${cls}${isToday}" title="${key}${value === undefined ? " · Sin datos" : " · " + money(value)}"><span class="d">${day}</span><span class="v">${text}</span></div>`);
+    const text = value === undefined ? "-" : signedMoneyShort(value);
+    const intensity = value === undefined ? 0 : Math.min(0.5, 0.08 + (Math.abs(value) / maxAbs) * 0.42);
+    const style = value > 0
+      ? `background:rgba(76,201,240,${intensity.toFixed(2)});border-color:rgba(76,201,240,.36)`
+      : value < 0
+        ? `background:rgba(246,196,83,${intensity.toFixed(2)});border-color:rgba(246,196,83,.42)`
+        : "";
+    cells.push(`<div class="pnl-day ${cls}${isToday}" style="${style}" title="${key}${value === undefined ? " · Sin datos" : " · " + money(value)}"><span class="d">${day}</span><span class="v">${text}</span></div>`);
   }
-  host.innerHTML = `<div class="pnl-calendar">${cells.join("")}</div>`;
+  setHTML(host, `<div class="pnl-calendar">${cells.join("")}</div>`);
+}
+
+function renderCorrelationHeatmap() {
+  const host = $("#corr-heatmap");
+  if (!host) return;
+  const corr = S.overview?.research?.horizons?.correlations;
+  const labels = corr?.labels || [];
+  const matrix = corr?.matrix || [];
+  const threshold = Number(corr?.threshold ?? 0.7);
+  const meta = $("#corr-meta");
+  if (!labels.length || !matrix.length) {
+    setHTML(host, `<div class="empty">Sin datos. Ejecuta <code>lab research-horizons</code>.</div>`);
+    host.setAttribute("aria-busy", "false");
+    if (meta) meta.textContent = "Sin datos";
+    return;
+  }
+  const short = labels.map((label) => {
+    const match = String(label).match(/^#(\d+)\s+(.+)$/);
+    return match ? `#${match[1]} ${match[2].split(" ")[0]}` : String(label).split(" ").slice(0, 2).join(" ");
+  });
+  const columns = `86px repeat(${labels.length}, minmax(34px, 1fr))`;
+  const head = `<div class="corr-label"></div>` + labels.map((label, index) =>
+    `<div class="corr-label" title="${esc(label)}" style="text-align:center">${esc(short[index])}</div>`
+  ).join("");
+  const rows = matrix.map((row, rowIndex) => {
+    const cells = row.map((value, colIndex) => {
+      const number = Number(value);
+      const diagonal = rowIndex === colIndex;
+      const hot = !diagonal && Math.abs(number) > threshold;
+      const alpha = Math.min(0.55, 0.08 + Math.abs(number) * 0.5);
+      const background = diagonal
+        ? "#111a24"
+        : number >= 0
+          ? `rgba(76,201,240,${alpha.toFixed(2)})`
+          : `rgba(246,196,83,${alpha.toFixed(2)})`;
+      return `<div class="corr-cell ${diagonal ? "diag" : ""} ${hot ? "hot" : ""}" style="background:${background}" title="${esc(labels[rowIndex])} × ${esc(labels[colIndex])}: ${num(number, 2)}">${diagonal ? "" : num(number, 2)}</div>`;
+    }).join("");
+    return `<div class="corr-label" title="${esc(labels[rowIndex])}">${esc(short[rowIndex])}</div>${cells}`;
+  }).join("");
+  setHTML(host, `<div class="corr-grid" style="grid-template-columns:${columns}">${head}${rows}</div>`);
+  host.setAttribute("aria-busy", "false");
+  if (meta) meta.textContent = `${labels.length} bots · umbral ${pct(threshold, 0)}`;
 }
 
 function renderBalanceDistribution() {
@@ -2858,6 +2976,7 @@ function renderOverview() {
   renderBalanceDistribution();
   renderTopPerformers();
   renderPnlCalendar();
+  renderCorrelationHeatmap();
   renderRiskGauges();
   requestAnimationFrame(drawEquity);
 }
@@ -2954,40 +3073,32 @@ function renderLiveFeed(o) {
 
 /* ------------------------------------------------------------------ chart */
 function drawEquity() {
-  const canvas = $("#equity-canvas");
-  if (!canvas || !constantView()) return;
-  const all = (S.overview?.account?.equity_curve || []).map((p) => ({
-    x: new Date(p.ts).getTime(),
-    y: Number(p.equity),
-  }));
+  const svg = $("#equity-canvas");
+  if (!svg || !constantView()) return;
+  const all = (S.overview?.account?.equity_curve || []).map((point) => ({
+    x: new Date(point.ts).getTime(),
+    y: Number(point.equity),
+  })).filter((point) => isFinite(point.x) && isFinite(point.y))
+    .sort((left, right) => left.x - right.x);
   const days = { "1M": 30, "3M": 90, "6M": 180, "1Y": 365, ALL: null }[S.chartRange] ?? null;
   let points = all;
   if (days && all.length) {
     const cutoff = all[all.length - 1].x - days * 86_400_000;
-    points = all.filter((p) => p.x >= cutoff);
+    points = all.filter((point) => point.x >= cutoff);
   }
-
-  const rect = canvas.getBoundingClientRect();
-  if (!rect.width) return;
-  const dpr = window.devicePixelRatio || 1;
-  canvas.width = Math.floor(rect.width * dpr);
-  canvas.height = Math.floor(276 * dpr);
-  const ctx = canvas.getContext("2d");
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  ctx.clearRect(0, 0, rect.width, 276);
   S.chartPoints = [];
   S.chartGeom = null;
-
   if (points.length < 2) {
     S.chartHover = null;
-    $("#chart-tooltip").style.display = "none";
+    const tip = $("#chart-tooltip");
+    if (tip) tip.style.display = "none";
     const empty = $("#chart-empty");
     if (empty) {
       empty.hidden = false;
       empty.classList.add("show");
     }
-    canvas.style.display = "none";
-    ctx.clearRect(0, 0, rect.width, 276);
+    svg.style.display = "none";
+    svg.innerHTML = "";
     return;
   }
   const empty = $("#chart-empty");
@@ -2995,133 +3106,117 @@ function drawEquity() {
     empty.hidden = true;
     empty.classList.remove("show");
   }
-  canvas.style.display = "block";
+  svg.style.display = "block";
+  const wrap = svg.closest(".chart-wrap");
+  const measured = wrap ? wrap.getBoundingClientRect().width : svg.getBoundingClientRect().width;
+  if (!measured) return;
 
   const maxPoints = 500;
   let data = points;
   if (points.length > maxPoints) {
     const step = Math.ceil(points.length / maxPoints);
-    data = points.filter((_, i) => i % step === 0 || i === points.length - 1);
+    data = points.filter((_, index) => index % step === 0 || index === points.length - 1);
   }
 
+  const width = Math.max(320, measured);
+  const height = 276;
   const padL = 58, padR = 16, padT = 16, padB = 30;
-  const width = rect.width - padL - padR;
-  const height = 276 - padT - padB;
-  let lo = Math.min(...data.map((p) => p.y));
-  let hi = Math.max(...data.map((p) => p.y));
+  const innerW = width - padL - padR;
+  const innerH = height - padT - padB;
+  let lo = Math.min(...data.map((point) => point.y));
+  let hi = Math.max(...data.map((point) => point.y));
   const span = (hi - lo) || Math.max(hi * 0.001, 1);
   lo -= span * 0.08;
   hi += span * 0.08;
-  const minX = data[0].x, maxX = data[data.length - 1].x || minX + 1;
-  const x = (v) => padL + ((v - minX) / Math.max(1, maxX - minX)) * width;
-  const y = (v) => padT + ((hi - v) / (hi - lo)) * height;
-
+  const minX = data[0].x;
+  const maxX = data[data.length - 1].x || minX + 1;
+  const x = (value) => padL + ((value - minX) / Math.max(1, maxX - minX)) * innerW;
+  const y = (value) => padT + ((hi - value) / (hi - lo)) * innerH;
   S.chartPoints = data;
   S.chartHover = S.chartHover != null && S.chartHover < data.length ? S.chartHover : null;
-  S.chartGeom = { padL, padR, padT, padB, width, height, minX, maxX, lo, hi, x, y };
+  S.chartGeom = { padL, padR, padT, padB, width, height, innerW, innerH, minX, maxX, lo, hi, x, y };
 
-  // grid horizontal
-  ctx.strokeStyle = "rgba(139,152,168,.12)";
-  ctx.lineWidth = 1;
-  ctx.font = "10px -apple-system, Segoe UI, sans-serif";
-  ctx.fillStyle = "#73808f";
-  ctx.textAlign = "right";
-  for (let i = 0; i <= 4; i++) {
-    const value = lo + ((hi - lo) * i) / 4;
+  const grid = [];
+  for (let index = 0; index <= 4; index += 1) {
+    const value = lo + ((hi - lo) * index) / 4;
     const yy = y(value);
-    ctx.beginPath();
-    ctx.moveTo(padL, yy);
-    ctx.lineTo(rect.width - padR, yy);
-    ctx.stroke();
-    ctx.fillText(fmtInt.format(value), padL - 8, yy + 3);
+    grid.push(`<line class="equity-grid" x1="${padL}" y1="${yy.toFixed(1)}" x2="${(width - padR).toFixed(1)}" y2="${yy.toFixed(1)}"></line>`);
+    grid.push(`<text class="equity-axis" x="${padL - 8}" y="${(yy + 3).toFixed(1)}" text-anchor="end">${esc(fmtInt.format(value))}</text>`);
   }
 
-  // línea base (primer valor)
-  ctx.setLineDash([4, 4]);
-  ctx.strokeStyle = "rgba(139,152,168,.25)";
-  ctx.beginPath();
-  ctx.moveTo(padL, y(data[0].y));
-  ctx.lineTo(rect.width - padR, y(data[0].y));
-  ctx.stroke();
-  ctx.setLineDash([]);
+  const linePath = data.map((point, index) => `${index ? "L" : "M"}${x(point.x).toFixed(1)} ${y(point.y).toFixed(1)}`).join(" ");
+  const areaPath = `M${x(data[0].x).toFixed(1)} ${(padT + innerH).toFixed(1)} ${data.map((point) => `L${x(point.x).toFixed(1)} ${y(point.y).toFixed(1)}`).join(" ")} L${x(data[data.length - 1].x).toFixed(1)} ${(padT + innerH).toFixed(1)} Z`;
 
-  const positive = data[data.length - 1].y >= data[0].y;
-  const color = positive ? "#3fb950" : "#f85149";
+  const regime = S.overview?.regime || {};
+  const rawBands = regime.bands || regime.regime_bands || [];
+  const bands = (Array.isArray(rawBands) ? rawBands : []).map((band, index) => {
+    const start = new Date(band.start || band.from || band.ts_start).getTime();
+    const end = new Date(band.end || band.to || band.ts_end).getTime();
+    if (!isFinite(start) || !isFinite(end) || end < minX || start > maxX) return "";
+    const left = x(Math.max(minX, start));
+    const right = x(Math.min(maxX, end));
+    const label = band.label || band.regime || `R${index + 1}`;
+    const color = band.color
+      || (label === "trend_up" ? "rgba(76,201,240,.10)" : label === "trend_down" ? "rgba(255,138,138,.08)" : "rgba(147,166,184,.07)");
+    return `<rect class="equity-band" x="${left.toFixed(1)}" y="${padT}" width="${Math.max(2, right - left).toFixed(1)}" height="${innerH}" fill="${color}"><title>${esc(label)}</title></rect>`;
+  }).join("");
+  const regimeNote = $("#equity-regime-note");
+  if (regimeNote) {
+    regimeNote.textContent = bands
+      ? "Bandas de r?gimen informativas"
+      : regime.current?.label
+        ? `R?gimen actual ${regime.current.label} ? sin serie hist?rica`
+        : "Sin datos de r?gimen hist?rico";
+  }
 
-  // área
-  const gradient = ctx.createLinearGradient(0, padT, 0, padT + height);
-  gradient.addColorStop(0, positive ? "rgba(63,185,80,.24)" : "rgba(248,81,73,.24)");
-  gradient.addColorStop(1, "rgba(63,185,80,0)");
-  ctx.beginPath();
-  ctx.moveTo(x(data[0].x), padT + height);
-  data.forEach((p) => ctx.lineTo(x(p.x), y(p.y)));
-  ctx.lineTo(x(data[data.length - 1].x), padT + height);
-  ctx.closePath();
-  ctx.fillStyle = gradient;
-  ctx.fill();
+  const orders = (S.overview?.account?.orders || []).filter((order) => order?.ts);
+  const marks = orders.slice(-200).map((order) => {
+    const stamp = new Date(order.ts).getTime();
+    if (!isFinite(stamp) || stamp < minX || stamp > maxX || !data.length) return "";
+    let nearest = data[0];
+    let distance = Infinity;
+    data.forEach((point) => {
+      const delta = Math.abs(point.x - stamp);
+      if (delta < distance) {
+        distance = delta;
+        nearest = point;
+      }
+    });
+    if (distance > 7 * 86_400_000) return "";
+    const side = String(order.side || "").toLowerCase() === "sell" ? "sell" : "buy";
+    return `<circle class="equity-trade ${side}" cx="${x(nearest.x).toFixed(1)}" cy="${y(nearest.y).toFixed(1)}" r="4"><title>${esc(`${order.side || ""} ${order.ticker || ""} ? ${dateTime(order.ts)}`)}</title></circle>`;
+  }).join("");
 
-  // línea
-  ctx.beginPath();
-  data.forEach((p, i) => {
-    if (i === 0) ctx.moveTo(x(p.x), y(p.y));
-    else ctx.lineTo(x(p.x), y(p.y));
-  });
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 2;
-  ctx.lineJoin = "round";
-  ctx.stroke();
-
-  // último punto
-  const last = data[data.length - 1];
-  ctx.beginPath();
-  ctx.arc(x(last.x), y(last.y), 3.2, 0, Math.PI * 2);
-  ctx.fillStyle = color;
-  ctx.fill();
-  ctx.beginPath();
-  ctx.arc(x(last.x), y(last.y), 6.5, 0, Math.PI * 2);
-  ctx.fillStyle = positive ? "rgba(63,185,80,.18)" : "rgba(248,81,73,.18)";
-  ctx.fill();
-
-  // etiqueta último valor
-  ctx.textAlign = "left";
-  ctx.font = "600 11px -apple-system, Segoe UI, sans-serif";
-  ctx.fillStyle = "#c9d5e2";
-  const label = money(last.y);
-  const labelWidth = ctx.measureText(label).width;
-  let lx = x(last.x) + 9;
-  if (lx + labelWidth > rect.width - padR) lx = x(last.x) - labelWidth - 9;
-  ctx.fillText(label, lx, Math.max(12, y(last.y) - 10));
-
-  // fechas del eje X
-  ctx.font = "9.5px -apple-system, Segoe UI, sans-serif";
-  ctx.fillStyle = "#73808f";
-  ctx.textAlign = "left";
-  ctx.fillText(new Date(minX).toLocaleDateString("es-ES", { day: "2-digit", month: "short" }), padL, 270);
-  ctx.textAlign = "right";
-  ctx.fillText(new Date(maxX).toLocaleDateString("es-ES", { day: "2-digit", month: "short" }), rect.width - padR, 270);
-
-  // crosshair + punto hover
+  let cross = "";
   if (S.chartHover != null) {
-    const hp = data[S.chartHover];
-    if (hp) {
-      ctx.setLineDash([3, 3]);
-      ctx.strokeStyle = "rgba(201,213,226,.35)";
-      ctx.beginPath();
-      ctx.moveTo(x(hp.x), padT);
-      ctx.lineTo(x(hp.x), padT + height);
-      ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.beginPath();
-      ctx.arc(x(hp.x), y(hp.y), 4, 0, Math.PI * 2);
-      ctx.fillStyle = "#e6edf3";
-      ctx.fill();
-      ctx.beginPath();
-      ctx.arc(x(hp.x), y(hp.y), 7, 0, Math.PI * 2);
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 2;
-      ctx.stroke();
+    const hover = data[S.chartHover];
+    if (hover) {
+      const hx = x(hover.x);
+      const hy = y(hover.y);
+      cross = `<line class="equity-cross" x1="${hx.toFixed(1)}" y1="${padT}" x2="${hx.toFixed(1)}" y2="${(padT + innerH).toFixed(1)}"></line>
+        <circle class="equity-cross-dot" cx="${hx.toFixed(1)}" cy="${hy.toFixed(1)}" r="4.5"></circle>`;
     }
   }
+
+  const last = data[data.length - 1];
+  const labelX = Math.min(width - padR, x(last.x) + 9);
+  const lastPoint = `<circle class="equity-cross-dot" cx="${x(last.x).toFixed(1)}" cy="${y(last.y).toFixed(1)}" r="3.2"></circle>
+    <text class="equity-axis" x="${labelX.toFixed(1)}" y="${Math.max(12, y(last.y) - 10).toFixed(1)}">${esc(money(last.y))}</text>`;
+
+  svg.setAttribute("viewBox", `0 0 ${width.toFixed(1)} ${height}`);
+  svg.setAttribute("width", "100%");
+  svg.setAttribute("height", String(height));
+  svg.innerHTML = `<defs><linearGradient id="equity-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4cc9f0" stop-opacity=".30"></stop><stop offset="1" stop-color="#4cc9f0" stop-opacity="0"></stop></linearGradient></defs>
+    ${bands}
+    ${grid.join("")}
+    <line class="equity-base" x1="${padL}" y1="${y(data[0].y).toFixed(1)}" x2="${(width - padR).toFixed(1)}" y2="${y(data[0].y).toFixed(1)}"></line>
+    <path class="equity-area" d="${areaPath}"></path>
+    <path class="equity-line" d="${linePath}"></path>
+    ${marks}
+    ${lastPoint}
+    ${cross}
+    <text class="equity-axis" x="${padL}" y="${height - 6}" text-anchor="start">${esc(new Date(minX).toLocaleDateString("es-ES", { day: "2-digit", month: "short" }))}</text>
+    <text class="equity-axis" x="${(width - padR).toFixed(1)}" y="${height - 6}" text-anchor="end">${esc(new Date(maxX).toLocaleDateString("es-ES", { day: "2-digit", month: "short" }))}</text>`;
 }
 
 function bindChart() {
@@ -3164,6 +3259,9 @@ function bindChart() {
     drawEquity();
   });
   canvas.addEventListener("mouseleave", clearChartHover);
+  window.addEventListener("resize", () => {
+    if (constantView()) requestAnimationFrame(drawEquity);
+  });
 }
 
 function clearChartHover() {
