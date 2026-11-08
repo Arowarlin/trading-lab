@@ -403,6 +403,98 @@ def research_trials(db_path: str | Path, settings: Settings | None = None) -> in
     return count_tests(db_path, settings)
 
 
+def _default_draft(settings: Settings, db_path: str | Path, evidence: str) -> str:
+    from .llm import LLMClient
+
+    client = LLMClient(settings.llm, db_path)
+    return client.chat(
+        [
+            {
+                "role": "system",
+                "content": (
+                    "Eres un analista cuantitativo. Redacta una hipótesis breve "
+                    "y falsable usando SOLO la evidencia numérica. No inventes "
+                    "datos, no prometas rentabilidad y no propongas activar bots. "
+                    "Máximo 400 caracteres."
+                ),
+            },
+            {"role": "user", "content": evidence},
+        ],
+        purpose="lesson_weekly",
+        temperature=0.2,
+        max_tokens=220,
+    ).strip()
+
+
+def weekly_lessons(
+    db_path: str | Path,
+    settings: Settings | None = None,
+    *,
+    min_sample: int = 30,
+    limit: int = 3,
+    draft_fn=None,
+) -> dict:
+    """Genera propuestas semanales desde decision_outcomes; no aprueba nada.
+
+    Qwen solo redacta. Si el LLM falla o no hay muestra suficiente, no se crea
+    ninguna lección y se devuelve el motivo (Sin datos).
+    """
+    from .decisions import report as decisions_report
+
+    settings = settings or Settings()
+    reports = [
+        row
+        for row in decisions_report(db_path, min_sample=min_sample)
+        if not row.get("insufficient") and row.get("mean_20d") is not None
+    ]
+    if not reports:
+        return {
+            "ok": True,
+            "created": [],
+            "reason": f"Sin datos: ninguna calificación alcanza n>={min_sample}",
+        }
+    reports.sort(key=lambda row: row["mean_20d"], reverse=True)
+    existing = {row["hypothesis"] for row in list_lessons(db_path, settings=settings)}
+    created = []
+    skipped = []
+    for row in reports[: max(1, int(limit))]:
+        evidence = (
+            f"rating={row['rating']} n={row['n']} "
+            f"mean_20d={row['mean_20d']:.4%} hit_20d={row.get('hit_rate_20d'):.2%} "
+            f"mean_5d={row.get('mean_5d')} hit_5d={row.get('hit_rate_5d')} "
+            f"p_value={row.get('p_value')}"
+        )
+        try:
+            draft = (draft_fn or (lambda text: _default_draft(settings, db_path, text)))(evidence)
+        except Exception as exc:
+            skipped.append({"rating": row["rating"], "reason": f"Sin datos: LLM {exc}"})
+            continue
+        hypothesis = str(draft or "").strip()[:2000]
+        if not hypothesis:
+            skipped.append({"rating": row["rating"], "reason": "Sin datos: draft vacío"})
+            continue
+        if hypothesis in existing:
+            skipped.append({"rating": row["rating"], "reason": "duplicada"})
+            continue
+        lesson = create_lesson(
+            db_path,
+            hypothesis=hypothesis,
+            evidence=evidence,
+            author="qwen",
+            kind="lesson",
+            settings=settings,
+        )
+        created.append(lesson)
+        existing.add(hypothesis)
+    return {
+        "ok": True,
+        "created": created,
+        "skipped": skipped,
+        "reason": None if created else "Sin datos: no se crearon propuestas",
+        "min_sample": min_sample,
+    }
+
+
 __all__ = [
     "AUTHORS",
     "STATUSES",
@@ -419,4 +511,5 @@ __all__ = [
     "reject",
     "research_trials",
     "revert_lesson",
+    "weekly_lessons",
 ]

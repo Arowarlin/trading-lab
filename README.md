@@ -871,7 +871,7 @@ stdlib y `127.0.0.1`. Se conservan todas las pestañas, rutas, CSRF, Host/Origin
 y la lista blanca `WRITE_ROUTES`.
 
 Evidencia: `pytest tests/test_console_shell.py -q` → **3 passed**; suite completa
-**325 passed**; cubre las seis secciones, las 15 vistas actuales, los
+**327 passed**; cubre las seis secciones, las 15 vistas actuales, los
 componentes del dashboard y la ausencia de URLs externas/CDNs.
 
 ---
@@ -1150,6 +1150,21 @@ lab bots capital
 
 Evidencia: `pytest tests/test_limit_versions.py -q` → **3 passed**; suite
 completa **325 passed**; `ruff` limpio; `lab doctor` OK con avisos conocidos.
+
+---
+
+## 6t. Job semanal de lecciones (7.1)
+
+- Analiza `decision_outcomes` con `return_20d`; solo opina si n≥30 por rating.
+- **Qwen solo redacta** la hipótesis; la evidencia numérica se guarda aparte.
+- Crea lecciones en estado **`proposed`**; no aprueba, no aplica y no activa
+  bots. Si no hay muestra o el LLM falla: **Sin datos**, sin propuestas.
+- Deduplica por texto de hipótesis para no repetir la misma lección.
+- CLI `lab lessons weekly`; script `scripts/lessons_weekly.ps1` (no registrado).
+- El panel **Aprendizaje** sigue siendo el único sitio de aprobación humana.
+
+Evidencia: `pytest tests/test_learning.py -q` → **8 passed**; suite completa
+**327 passed**; `ruff` limpio; `lab doctor` OK con avisos conocidos.
 
 ---
 

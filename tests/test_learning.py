@@ -11,7 +11,7 @@ import pytest
 from tradinglab import web
 from tradinglab.accounts import history, load_accounts, own_limits
 from tradinglab.config import Settings
-from tradinglab.db import init_db
+from tradinglab.db import connect, init_db, utcnow
 from tradinglab.learning import (
     apply_lesson,
     approve,
@@ -22,6 +22,7 @@ from tradinglab.learning import (
     record_test,
     reject,
     revert_lesson,
+    weekly_lessons,
 )
 from tradinglab.orchestrator import load_bots
 
@@ -182,8 +183,7 @@ def test_web_learning_aprobar_y_aplicar(tmp_path: Path) -> None:
     db = tmp_path / "lab.db"
     init_db(db)
     settings = Settings()
-    lesson = create_lesson(
-        db,
+    lesson = create_lesson(        db,
         hypothesis="reducir por panel",
         evidence="test",
         author="humano",
@@ -236,3 +236,65 @@ def test_web_learning_aprobar_y_aplicar(tmp_path: Path) -> None:
         server.server_close()
         thread.join(timeout=2)
 
+
+def _seed_outcomes(db: Path) -> None:
+    with connect(db) as con:
+        for rating, ret in (("Buy", 0.08), ("Sell", -0.05)):
+            month = 1 if rating == "Buy" else 2
+            for index in range(30):
+                con.execute(
+                    "INSERT INTO decision_outcomes"
+                    "(ts, ticker, decision_date, mode, rating, confidence, return_20d) "
+                    "VALUES(?,?,?,?,?,?,?)",
+                    (
+                        utcnow(),
+                        "SPY",
+                        f"2026-{month:02d}-{index + 1:02d}",
+                        "lite",
+                        rating,
+                        0.7,
+                        ret,
+                    ),
+                )
+
+
+def test_weekly_lessons_qwen_solo_redacta(tmp_path: Path) -> None:
+    db = tmp_path / "lab.db"
+    init_db(db)
+    _seed_outcomes(db)
+    settings = Settings()
+    result = weekly_lessons(
+        db,
+        settings,
+        min_sample=30,
+        draft_fn=lambda evidence: "Hipótesis semanal desde " + evidence[:40],
+    )
+    assert result["created"]
+    assert all(lesson["author"] == "qwen" for lesson in result["created"])
+    assert all(lesson["status"] == "proposed" for lesson in result["created"])
+    assert all(not lesson.get("applied_at") for lesson in result["created"])
+    again = weekly_lessons(
+        db,
+        settings,
+        min_sample=30,
+        draft_fn=lambda evidence: result["created"][0]["hypothesis"],
+    )
+    assert again["created"] == [] or len(again["created"]) < len(result["created"])
+
+
+def test_weekly_lessons_sin_muestra_o_llm(tmp_path: Path) -> None:
+    db = tmp_path / "lab.db"
+    init_db(db)
+    empty = weekly_lessons(db, Settings(), min_sample=30, draft_fn=lambda _: "x")
+    assert empty["created"] == []
+    assert "Sin datos" in empty["reason"]
+    _seed_outcomes(db)
+    failed = weekly_lessons(
+        db,
+        Settings(),
+        min_sample=30,
+        draft_fn=lambda _: (_ for _ in ()).throw(RuntimeError("LLM caído")),
+    )
+    assert failed["created"] == []
+    assert failed["skipped"]
+    assert "Sin datos" in failed["reason"]

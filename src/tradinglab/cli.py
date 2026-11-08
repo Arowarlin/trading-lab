@@ -3065,6 +3065,31 @@ def bots_capital_set_cmd(
     )
 
 
+@lessons_app.command("weekly")
+def lessons_weekly_cmd(
+    min_sample: int = typer.Option(30, "--min-sample"),
+    limit: int = typer.Option(3, "--limit"),
+) -> None:
+    """Job semanal: Qwen redacta propuestas desde decision_outcomes."""
+    from .learning import weekly_lessons
+
+    result = weekly_lessons(
+        DEFAULT_DB,
+        get_settings(),
+        min_sample=min_sample,
+        limit=limit,
+    )
+    for lesson in result["created"]:
+        console.print(
+            f"[green]Lección #{lesson['id']}[/green] · proposed · "
+            f"{lesson['hypothesis'][:120]}"
+        )
+    if result.get("reason"):
+        console.print(f"[yellow]{result['reason']}[/yellow]")
+    for row in result.get("skipped") or []:
+        console.print(f"[dim]{row['rating']}: {row['reason']}[/dim]")
+
+
 @operator_app.command("pin")
 def operator_pin_cmd() -> None:
     """Configura el PIN del modo operador en el keyring (nunca en .env)."""

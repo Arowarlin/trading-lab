@@ -191,8 +191,14 @@ Reglas de trabajo:
 
 ## Fase 7 — Aprendizaje controlado
 
-- [ ] **7.1 Lecciones** semanales en `lessons` con estado `proposed` y aprobación
-  humana en el panel.
+- [x] **7.1 Lecciones semanales** — 2026-11-07
+  - Job sobre `decision_outcomes` con n≥30; Qwen solo redacta, evidencia
+    numérica aparte y estado `proposed`.
+  - Sin muestra/LLM: **Sin datos**, no crea propuestas. Deduplica hipótesis.
+  - CLI `lab lessons weekly` y script `scripts/lessons_weekly.ps1` (sin registrar).
+  - Aprobación exclusivamente humana en el panel Aprendizaje.
+  - Evidencia: `pytest tests/test_learning.py -q` → 8 passed; suite completa
+    327 passed.
 - [x] **7.2 Reentrenamiento walk-forward** — 2026-11-07
   - Ridge determinista en numpy (sin dependencias nuevas) con features de
     precio/volatilidad/rango y ventanas móviles sin lookahead.
@@ -449,7 +455,7 @@ sin romper vistas ni añadir dependencias.
 | 2026-11-07 | E6 documentación | README 6d y Fase 9; tabla por perfil en Research; `ruff` + doctor |
 | 2026-11-07 | 10.1 Diario | `pytest tests/test_journal.py -q` → 7 passed; `lab journal` → sin datos; README 6e |
 | 2026-11-07 | 11 Modo operador | `pytest tests/test_operator.py -q` → 11 passed; 2 pasos/PIN/keyring/auditoría; README 6f |
-| 2026-11-07 | 12 Shell consola | `pytest tests/test_console_shell.py -q` → 3 passed; `pytest -q` → 325 passed; 6 secciones, 15 vistas, dashboard; README 6g |
+| 2026-11-07 | 12 Shell consola | `pytest tests/test_console_shell.py -q` → 3 passed; `pytest -q` → 327 passed; 6 secciones, 15 vistas, dashboard; README 6g |
 | 2026-11-07 | 10.2 Multiverse | `pytest tests/test_multiverse.py -q` → 7 passed; `pytest -q` → 279 passed; 1.000 permutaciones, seed 42, Diario + Run Detail |
 | 2026-11-07 | 10.3 Deriva | `pytest tests/test_drift.py -q` → 5 passed; `pytest -q` → 284 passed; IC bootstrap, mínimo 20, slippage, Bots + `lab drift` |
 | 2026-11-07 | 10.4 Salud/TWR | `pytest tests/test_health.py -q` → 5 passed; `pytest -q` → 289 passed; score 0-100, flujos y TWR en Fondo |
@@ -462,4 +468,5 @@ sin romper vistas ni añadir dependencias.
 | 2026-11-07 | 7.2 Modelos/registry | `pytest tests/test_models.py -q` → 3 passed; `pytest -q` → 320 passed; walk-forward, challenger, promote/rollback, Qlib status |
 | 2026-11-07 | 8 Cierre motor | `pytest tests/test_engine_decision.py -q` → 2 passed; `pytest -q` → 322 passed; sin Nautilus/databento/IBKR |
 | 2026-11-07 | 7.3 Versiones/capital | `pytest tests/test_limit_versions.py -q` → 3 passed; `pytest -q` → 325 passed; snapshot/rollback y capital por bot |
+| 2026-11-07 | 7.1 Lecciones semanales | `pytest tests/test_learning.py -q` → 8 passed; `pytest -q` → 327 passed; Qwen solo redacta, proposed, Sin datos |
 |  |  |  |

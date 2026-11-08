@@ -23,6 +23,14 @@ Implementado sin añadir dependencias: ridge determinista en numpy.
 - `bot_capital_limits` + historial; el orquestador recorta el tamaño por el
   capital máximo del bot.
 
+## Job semanal (7.1)
+
+- `lab lessons weekly`: analiza `decision_outcomes` con n≥30.
+- Qwen solo redacta la hipótesis; evidencia numérica aparte; estado `proposed`.
+- Sin muestra/LLM: **Sin datos** y no crea lecciones.
+- Aprobación humana exclusiva en el panel Aprendizaje.
+- Script `scripts/lessons_weekly.ps1` listo pero no registrado.
+
 ## Lecciones
 
 - Un job semanal revisará `decision_outcomes` y propondrá textos breves con
