@@ -26,6 +26,7 @@ from .decisions import compare as decisions_compare
 from .decisions import record_decision, update_outcomes
 from .decisions import report as decisions_report
 from .execution import get_broker, get_mt5_broker, get_projectx_broker
+from .f13 import activate as f13_activate
 from .f13 import config_check as f13_config_check
 from .f13 import execution_metrics as f13_execution
 from .f13 import freeze as f13_freeze
@@ -1625,6 +1626,58 @@ def f13_freeze_cmd(
         f"[green]F13 congelado[/green] · bot={row['bot']} · hash={row['config_hash'][:16]}…"
     )
     console.print("[yellow]El bot sigue enabled:false; la activación requiere tu aprobación.[/yellow]")
+
+
+@f13_app.command("activate")
+def f13_activate_cmd(
+    bot: str = typer.Option("qqq-trend-f13", "--bot"),
+    yes: bool = typer.Option(False, "--yes", help="No pedir confirmación"),
+) -> None:
+    """Activa el bot F13 en paper y re-congela el hash. No live."""
+    init_db(DEFAULT_DB)
+    row = f13_status(DEFAULT_DB)
+    if not row:
+        console.print("[yellow]F13 no iniciado. Ejecuta `lab f13 freeze` primero.[/yellow]")
+        raise typer.Exit(2)
+    settings = get_settings()
+    if settings.mode == "live":
+        console.print("[red]F13 no se activa en live.[/red]")
+        raise typer.Exit(2)
+    check = f13_config_check(DEFAULT_DB)
+    if not check["ok"]:
+        console.print("[red]Hash de configuración distinto al congelado.[/red]")
+        console.print(
+            f"[dim]frozen={check['frozen'][:16]}… current={check['current'][:16]}…[/dim]"
+        )
+        raise typer.Exit(2)
+    specs = {spec.id: spec for spec in load_bots()}
+    spec = specs.get(bot)
+    if spec is None:
+        console.print(f"[red]Bot no encontrado:[/red] {bot}")
+        raise typer.Exit(2)
+    if spec.enabled:
+        console.print(f"[yellow]{bot} ya está enabled:true.[/yellow]")
+        raise typer.Exit(1)
+    if not yes:
+        console.print(
+            "Vas a activar F13 en [bold]paper[/bold]: el bot pasará a enabled:true "
+            "y el hash se re-congelará con la nueva configuración. No live."
+        )
+        if not typer.confirm(f"¿Activar {bot} desde {row['start_date']}?"):
+            raise typer.Exit(1)
+    try:
+        activated = f13_activate(DEFAULT_DB, bot=bot, settings=settings)
+    except ValueError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2) from exc
+    console.print(
+        f"[green]F13 activado en paper[/green] · bot={activated['bot']} · "
+        f"hash={activated['config_hash'][:16]}… · start={activated['start_date']}"
+    )
+    console.print("[yellow]No live. No se envían órdenes en esta activación.[/yellow]")
+    console.print(
+        "[dim]Registra la tarea con scripts/register_f13_task.ps1; no se registra sola.[/dim]"
+    )
 
 
 @f13_app.command("report")

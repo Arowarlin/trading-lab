@@ -876,7 +876,7 @@ stdlib y `127.0.0.1`. Se conservan todas las pestañas, rutas, CSRF, Host/Origin
 y la lista blanca `WRITE_ROUTES`.
 
 Evidencia: `pytest tests/test_console_shell.py -q` → **3 passed**; suite completa
-**357 passed**; cubre las seis secciones, las 15 vistas actuales, los
+**362 passed**; cubre las seis secciones, las 15 vistas actuales, los
 componentes del dashboard y la ausencia de URLs externas/CDNs.
 
 ---
@@ -1169,7 +1169,7 @@ completa **325 passed**; `ruff` limpio; `lab doctor` OK con avisos conocidos.
 - El panel **Aprendizaje** sigue siendo el único sitio de aprobación humana.
 
 Evidencia: `pytest tests/test_learning.py -q` → **8 passed**; suite completa
-**357 passed**; `ruff` limpio; `lab doctor` OK con avisos conocidos.
+**362 passed**; `ruff` limpio; `lab doctor` OK con avisos conocidos.
 
 ---
 
@@ -1563,6 +1563,7 @@ se revisa. F13 nunca pasa a dinero real.
 ```powershell
 lab f13 status          # congelado + criterios
 lab f13 freeze          # congela hash/criterios; NO activa el bot
+lab f13 activate        # activa en paper y re-congela el hash; pide confirmación
 lab f13 report          # snapshot + F13 vs SPY vs backtest + slippage
 lab f13 signal-check    # señal viva vs recalculada
 lab f13 config-check    # hash congelado vs actual
@@ -1572,20 +1573,20 @@ lab f13 check           # paradas duras + alerta
 La activación del bot requiere aprobación humana explícita; `freeze` no cambia
 `enabled: false`.
 
-> **Pendiente antes de activar:** `freeze` exige `enabled:false`, la consola
-> bloquea activar el bot F13 y editar `bots.yaml` cambiaría el hash (parada
-> dura). Antes de arrancar hay que acordar el paso de activación; hoy no está
-> implementado y no se activa nada.
+> **Activación controlada:** `lab f13 activate` exige F13 congelado, hash OK,
+> `mode=paper` y el bot `enabled:false`. Edita **solo** la línea `enabled` de
+> `config/bots.yaml`, re-congela el hash con la nueva configuración y audita
+> `f13_activate`. No live y no envía órdenes al activar.
 
 ### Automatización F13 preparada (NO registrada)
 
 No existe ninguna tarea F13 registrada. Los scripts están listos para que los
 revises y decidas:
 
-- `scripts/f13_daily.ps1`: preflight (aborta si F13 sigue “no iniciado”;
-  hoy ya está congelado, pero el bot sigue `enabled: false` y la tarea no está
-  registrada), ejecuta `lab orchestrate --bot qqq-trend-f13` **sin `--dry-run`**,
-  después `lab reconcile` y `lab f13 check`. Cada paso queda en `logs/f13/`.
+- `scripts/f13_daily.ps1`: preflight (aborta si F13 sigue “no iniciado”),
+  ejecuta un **dry-run** para dejar evidencia del ciclo, después
+  `lab orchestrate --bot qqq-trend-f13` **sin `--dry-run`**, `lab reconcile` y
+  `lab f13 check`. Cada paso queda en `logs/f13/`.
 - `scripts/register_f13_task.ps1`: crea la tarea `TradingLab-F13` L-V a las
   **22:20 hora local de Praga** (después del cierre de EE. UU.). **No se ha
   ejecutado**.

@@ -71,6 +71,7 @@ def test_telegram_scripts_preparados_sin_registrar():
 def test_f13_scripts_preparados_sin_registrar():
     daily = (ROOT / "scripts" / "f13_daily.ps1").read_text(encoding="utf-8")
     assert "orchestrate" in daily and "qqq-trend-f13" in daily
+    assert "--dry-run" in daily
     assert "reconcile" in daily
     assert '"f13", "check"' in daily
     assert "no iniciado" in daily

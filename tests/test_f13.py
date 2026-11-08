@@ -7,6 +7,7 @@ import yaml
 from tradinglab.config import Settings
 from tradinglab.db import connect, init_db
 from tradinglab.f13 import (
+    activate,
     config_check,
     config_hash,
     execution_metrics,
@@ -17,6 +18,7 @@ from tradinglab.f13 import (
     status,
 )
 from tradinglab.orchestrator import BotSpec
+from tradinglab.runtime import get_bot_state
 
 
 class FakeBroker:
@@ -125,3 +127,154 @@ def test_signal_check_recalcula(monkeypatch, tmp_path):
     assert result["ok"]
     assert result["target"] == pytest.approx(1.0)
     assert result["match"] is None
+
+
+def _repo(tmp_path):
+    root = tmp_path / "repo"
+    config = root / "config"
+    config.mkdir(parents=True)
+    (config / "bots.yaml").write_text(
+        "bots:\n"
+        "  - id: other-bot\n"
+        "    enabled: false\n"
+        "  - id: qqq-trend-f13\n"
+        "    type: deterministic\n"
+        "    enabled: false  # pendiente\n"
+        "    params: {fast: 50, slow: 200, regime: 200}\n",
+        encoding="utf-8",
+    )
+    (config / "f13.yaml").write_text(
+        "criteria:\n  window_weeks: 8\n  min_cycles_pct: 0.95\n",
+        encoding="utf-8",
+    )
+    return root
+
+
+def test_activate_solo_cambia_su_bot_y_recongela(tmp_path) -> None:
+    root = _repo(tmp_path)
+    db = tmp_path / "lab.db"
+    freeze(
+        db,
+        bot="qqq-trend-f13",
+        symbol="QQQ",
+        start_date="2026-11-09",
+        root=root,
+    )
+    before = status(db)["config_hash"]
+    row = activate(
+        db,
+        bot="qqq-trend-f13",
+        root=root,
+        settings=Settings(mode="paper"),
+    )
+    assert row["config_hash"] != before
+    assert row["start_date"] == "2026-11-09"
+    assert config_check(db, root)["ok"] is True
+    data = yaml.safe_load((root / "config" / "bots.yaml").read_text(encoding="utf-8"))
+    bots = {item["id"]: item for item in data["bots"]}
+    assert bots["qqq-trend-f13"]["enabled"] is True
+    assert bots["other-bot"]["enabled"] is False
+    text = (root / "config" / "bots.yaml").read_text(encoding="utf-8")
+    assert "# pendiente" in text
+    state = get_bot_state(db, "qqq-trend-f13")
+    assert state is not None and state["enabled"] == 1
+
+
+def test_activate_rechaza_hash_cambiado(tmp_path) -> None:
+    root = _repo(tmp_path)
+    db = tmp_path / "lab.db"
+    freeze(
+        db,
+        bot="qqq-trend-f13",
+        symbol="QQQ",
+        start_date="2026-11-09",
+        root=root,
+    )
+    path = root / "config" / "bots.yaml"
+    path.write_text(path.read_text(encoding="utf-8") + "# cambio\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="hash"):
+        activate(
+            db,
+            bot="qqq-trend-f13",
+            root=root,
+            settings=Settings(mode="paper"),
+        )
+    assert "enabled: true" not in path.read_text(encoding="utf-8")
+
+
+def test_activate_rechaza_live(tmp_path) -> None:
+    root = _repo(tmp_path)
+    db = tmp_path / "lab.db"
+    freeze(
+        db,
+        bot="qqq-trend-f13",
+        symbol="QQQ",
+        start_date="2026-11-09",
+        root=root,
+    )
+    with pytest.raises(ValueError, match="live"):
+        activate(
+            db,
+            bot="qqq-trend-f13",
+            root=root,
+            settings=Settings(mode="live"),
+        )
+    data = yaml.safe_load((root / "config" / "bots.yaml").read_text(encoding="utf-8"))
+    assert next(item for item in data["bots"] if item["id"] == "qqq-trend-f13")[
+        "enabled"
+    ] is False
+
+
+def test_activate_rechaza_bot_ya_enabled(tmp_path) -> None:
+    root = _repo(tmp_path)
+    path = root / "config" / "bots.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace(
+            "    enabled: false  # pendiente",
+            "    enabled: true  # pendiente",
+        ),
+        encoding="utf-8",
+    )
+    db = tmp_path / "lab.db"
+    freeze(
+        db,
+        bot="qqq-trend-f13",
+        symbol="QQQ",
+        start_date="2026-11-09",
+        root=root,
+    )
+    with pytest.raises(ValueError, match="enabled"):
+        activate(
+            db,
+            bot="qqq-trend-f13",
+            root=root,
+            settings=Settings(mode="paper"),
+        )
+
+
+def test_activate_restaura_yaml_si_freeze_falla(tmp_path, monkeypatch) -> None:
+    root = _repo(tmp_path)
+    db = tmp_path / "lab.db"
+    freeze(
+        db,
+        bot="qqq-trend-f13",
+        symbol="QQQ",
+        start_date="2026-11-09",
+        root=root,
+    )
+    path = root / "config" / "bots.yaml"
+    original = path.read_text(encoding="utf-8")
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("fallo simulado")
+
+    monkeypatch.setattr("tradinglab.f13.freeze", boom)
+    with pytest.raises(RuntimeError):
+        activate(
+            db,
+            bot="qqq-trend-f13",
+            root=root,
+            settings=Settings(mode="paper"),
+        )
+    assert path.read_text(encoding="utf-8") == original
+    assert config_check(db, root)["ok"] is True

@@ -9,14 +9,16 @@ trades. Nada se activa solo.
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
+import re
 from datetime import date, timedelta
 from pathlib import Path
 
 import yaml
 
-from .config import DEFAULT_DB, ROOT, Settings
+from .config import DEFAULT_DB, ROOT, Settings, get_settings
 from .db import connect, init_db, utcnow
 
 DEFAULT_CRITERIA: dict = {
@@ -86,6 +88,139 @@ def freeze(
             (bot, symbol, start_date, digest, json.dumps(criteria, ensure_ascii=False), utcnow()),
         )
     return status(db_path) or {}
+
+
+def _set_bot_enabled(root: Path, bot: str, enabled: bool) -> None:
+    """Edita solo la línea enabled del bot, preservando el resto del YAML."""
+    path = root / "config" / "bots.yaml"
+    text = path.read_text(encoding="utf-8")
+    lines = text.splitlines(keepends=True)
+    start = None
+    for index, line in enumerate(lines):
+        if re.match(rf"^\s*-\s+id:\s*['\"]?{re.escape(bot)}['\"]?\s*$", line):
+            start = index
+            break
+    if start is None:
+        raise ValueError(f"Bot no encontrado en bots.yaml: {bot}")
+    end = len(lines)
+    for index in range(start + 1, len(lines)):
+        if re.match(r"^[^\s#]", lines[index]):
+            end = index
+            break
+        if re.match(r"^\s*-\s+id:\s*", lines[index]):
+            end = index
+            break
+    changed = False
+    for index in range(start, end):
+        match = re.match(
+            r"^(\s*)enabled:\s*(true|false)\s*(#.*)?$",
+            lines[index],
+            flags=re.IGNORECASE,
+        )
+        if not match:
+            continue
+        indent = match.group(1)
+        comment = match.group(3)
+        newline = "\n" if lines[index].endswith("\n") else ""
+        suffix = f" {comment.strip()}" if comment else ""
+        lines[index] = (
+            f"{indent}enabled: {'true' if enabled else 'false'}{suffix}{newline}"
+        )
+        changed = True
+        break
+    if not changed:
+        raise ValueError(f"No encuentro enabled: en el bloque de {bot}")
+    new_text = "".join(lines)
+    old_data = yaml.safe_load(text) or {}
+    new_data = yaml.safe_load(new_text) or {}
+    expected = copy.deepcopy(old_data)
+    for item in expected.get("bots", []):
+        if item.get("id") == bot:
+            item["enabled"] = bool(enabled)
+    if new_data != expected:
+        raise ValueError("La edición de bots.yaml cambió más de lo previsto.")
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(new_text, encoding="utf-8")
+    tmp.replace(path)
+
+
+def activate(
+    db_path: str | Path,
+    *,
+    bot: str,
+    root: Path = ROOT,
+    settings: Settings | None = None,
+) -> dict:
+    """Activa el bot F13 en paper y re-congela el hash. No live, no órdenes."""
+    init_db(db_path)
+    frozen = status(db_path)
+    if not frozen:
+        raise ValueError("F13 no está congelado.")
+    if str(frozen.get("bot")) != bot:
+        raise ValueError(
+            f"F13 está congelado para {frozen.get('bot')}, no para {bot}."
+        )
+    mode = (settings or get_settings()).mode
+    if mode != "paper":
+        raise ValueError("F13 solo se activa en paper; mode=live está bloqueado.")
+    check = config_check(db_path, root)
+    if not check["ok"]:
+        raise ValueError("El hash congelado no coincide con la configuración actual.")
+    bots_path = root / "config" / "bots.yaml"
+    if not bots_path.exists():
+        raise ValueError("No existe config/bots.yaml.")
+    original = bots_path.read_text(encoding="utf-8")
+    data = yaml.safe_load(original) or {}
+    spec = next(
+        (item for item in data.get("bots", []) if item.get("id") == bot),
+        None,
+    )
+    if spec is None:
+        raise ValueError(f"Bot no encontrado: {bot}")
+    if bool(spec.get("enabled")):
+        raise ValueError(f"{bot} ya está enabled:true.")
+
+    _set_bot_enabled(root, bot, True)
+    try:
+        row = freeze(
+            db_path,
+            bot=bot,
+            symbol=str(frozen.get("symbol") or "QQQ"),
+            start_date=str(frozen.get("start_date")),
+            root=root,
+        )
+    except Exception:
+        bots_path.write_text(original, encoding="utf-8")
+        raise
+
+    try:
+        from .runtime import set_bot_enabled
+
+        set_bot_enabled(
+            db_path,
+            bot=bot,
+            enabled=True,
+            yaml_enabled=True,
+            actor="f13-activate",
+            reason="activación F13 en paper",
+        )
+    except Exception:
+        pass
+    try:
+        from .runtime import record_console_action
+
+        record_console_action(
+            db_path,
+            action="f13_activate",
+            params={"bot": bot, "start_date": row.get("start_date")},
+            result="activado",
+            ok=True,
+            actor="cli",
+            detail="re-congelado con enabled:true; paper",
+        )
+    except Exception:
+        pass
+    return row
 
 
 def status(db_path: str | Path) -> dict | None:
@@ -257,6 +392,7 @@ def signal_check(
 
 __all__ = [
     "DEFAULT_CRITERIA",
+    "activate",
     "config_check",
     "config_hash",
     "execution_metrics",

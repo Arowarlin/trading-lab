@@ -44,6 +44,7 @@ if ($PreflightOnly) {
 }
 
 $codes = @()
+$codes += Run-Step "orchestrate dry-run" @("orchestrate", "--bot", "qqq-trend-f13", "--dry-run")
 $codes += Run-Step "orchestrate qqq-trend-f13" @("orchestrate", "--bot", "qqq-trend-f13")
 $codes += Run-Step "reconcile" @("reconcile")
 $codes += Run-Step "f13 check" @("f13", "check")
