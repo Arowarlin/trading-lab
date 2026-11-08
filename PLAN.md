@@ -92,14 +92,14 @@ Reglas de trabajo:
   - Evidencia: `pytest tests/test_f13.py -q` → 5 passed; `lab f13 check` no-op
     porque F13 no ha iniciado.
 - [x] **2.4 Presentar, congelar y esperar aprobación** — 2026-11-07
-  - F13 congelado el 2026-11-07 (hash `df8acdaa…`), inicio previsto
-    2026-11-09 y ventana de 8 semanas; `lab f13 config-check` OK.
-  - **Congelar no activa:** `qqq-trend-f13` sigue `enabled: false` y no hay
-    ninguna tarea F13 registrada. La activación exige aprobación humana
-    explícita y sigue siendo en paper.
+  - F13 congelado el 2026-11-07 y **activado en paper** el mismo día con
+    `lab f13 activate --yes`; inicio **2026-11-09**, ventana de 8 semanas y
+    hash re-congelado `54b42036…`; `lab f13 config-check` OK.
+  - `qqq-trend-f13` quedó `enabled: true`; `TradingLab-F13` está **Ready** con
+    próxima ejecución **2026-11-09 22:20**. Sin live ni órdenes en la
+    activación.
   - **Activación controlada:** `lab f13 activate` edita solo `enabled` del bot,
     re-congela el hash, exige `mode=paper` y audita `f13_activate`. No live.
-    Aprobada por el usuario el 2026-11-07.
 
 ## Fase 3 — Mejoras de lab research
 
@@ -552,4 +552,5 @@ activar bots/F13.
 | 2026-11-07 | Job diario + outcomes | `pytest tests/test_scripts.py -q` → 5 passed; `pytest -q` → 328 passed; `agents_daily.ps1` ejecuta `decisions update`; `ruff` limpio |
 | 2026-11-07 | 13 Telegram remoto | `pytest tests/test_telegram.py -q` → 23 passed; `pytest -q` → 352 passed; long polling, keyring, comandos, push/backup con `/confirm` y agente restringido; docs/telegram.md |
 | 2026-11-07 | Etapa 0 | `pytest tests/test_operator.py tests/test_telegram.py -q` → 41 passed; `pytest -q` → 357 passed; F13 falla→bloquea+audita, PIN 6-12 persistente, denies acotados, `/push` con diffstat |
+| 2026-11-07 | F13 activado | `lab f13 activate --yes` → hash `54b42036…`; `config-check` OK; bot `enabled:true`; `TradingLab-F13` Ready, próxima 2026-11-09 22:20; sin órdenes |
 |  |  |  |

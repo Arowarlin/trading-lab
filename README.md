@@ -1527,9 +1527,10 @@ servicios; `lab alerts test` envía una prueba. Nunca se imprimen tokens.
 
 ## 11c. F13: pilot operativo en paper
 
-**Estado: congelado, sin activar.** El bot elegido es `qqq-trend-f13`
-(`config/bots.yaml`, `enabled: false`). Congelado el **2026-11-07** con inicio
-previsto **2026-11-09** (hash `df8acdaa…`); la activación sigue siendo manual.
+**Estado: activo en paper.** El bot elegido es `qqq-trend-f13`
+(`config/bots.yaml`, `enabled: true`). Activado el **2026-11-07** con inicio
+**2026-11-09** (hash re-congelado `54b42036…`); sin live y sin órdenes en la
+activación. La aprobación fue humana y explícita.
 
 - QQQ, estrategia `trend`, `fast=50 slow=200 regime=200`, exposición **0.35**.
 - Evidencia de `lab research`: 21 trades, pasa 65,5%, revienta 7,2%,
@@ -1578,29 +1579,22 @@ La activación del bot requiere aprobación humana explícita; `freeze` no cambi
 > `config/bots.yaml`, re-congela el hash con la nueva configuración y audita
 > `f13_activate`. No live y no envía órdenes al activar.
 
-### Automatización F13 preparada (NO registrada)
+### Automatización F13 registrada
 
-No existe ninguna tarea F13 registrada. Los scripts están listos para que los
-revises y decidas:
+La tarea `TradingLab-F13` está registrada para **L-V 22:20 hora local de Praga**
+(después del cierre de EE. UU.), con próxima ejecución **2026-11-09 22:20**.
+Hoy está `Ready`, sin ejecutar todavía:
 
 - `scripts/f13_daily.ps1`: preflight (aborta si F13 sigue “no iniciado”),
   ejecuta un **dry-run** para dejar evidencia del ciclo, después
   `lab orchestrate --bot qqq-trend-f13` **sin `--dry-run`**, `lab reconcile` y
   `lab f13 check`. Cada paso queda en `logs/f13/`.
 - `scripts/register_f13_task.ps1`: crea la tarea `TradingLab-F13` L-V a las
-  **22:20 hora local de Praga** (después del cierre de EE. UU.). **No se ha
-  ejecutado**.
+  **22:20 hora local de Praga**. Ya ejecutado; no se registra desde el bot.
 
-Comando que ejecutarás tú cuando toque:
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File E:\trading-lab\scripts\register_f13_task.ps1
-```
-
-El script diario no envía órdenes mientras el bot siga `enabled: false`; el
-orquestador ignora bots deshabilitados. La activación real exige editar
-`config/bots.yaml` a mano y aprobación humana explícita. F13 ya está congelado;
-no hay ninguna tarea F13 registrada.
+El script diario solo opera en paper. El bot está `enabled: true`; las
+aperturas siguen pasando por kill-switch, calendario, sesión, guard y límites.
+No hay ninguna ruta a live.
 
 ---
 

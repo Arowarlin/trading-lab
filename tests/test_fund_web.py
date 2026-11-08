@@ -107,7 +107,8 @@ def test_fund_limites_bolsillos_y_clusters(tmp_path: Path) -> None:
     clusters = {row["cluster"]: row for row in payload["clusters"]}
     trend = clusters["trend_equity"]
     assert trend["account"] == "paper_main"
-    assert trend["reserved_usd"] == pytest.approx(500.0)
+    # trend-spy + qqq-trend-f13: dos bots equity activos en el clúster.
+    assert trend["reserved_usd"] == pytest.approx(1000.0)
     assert trend["budget_usd"] == pytest.approx(1000.0)
     assert trend["over_budget"] is False
     assert payload["exposure"]["note"]

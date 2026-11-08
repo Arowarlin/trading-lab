@@ -22,7 +22,7 @@ bots:
     strategy: trend
     universe: [QQQ]
     timeframe: 1d
-    enabled: false
+    enabled: true
     exposure: 0.35
     params: {fast: 50, slow: 200, regime: 200}
     description: "Candidato F13: pilot operativo en paper. enabled:false hasta aprobación humana."
