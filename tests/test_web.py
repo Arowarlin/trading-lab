@@ -7,6 +7,7 @@ import urllib.request
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -332,6 +333,31 @@ def test_build_id_cambia_con_ui(tmp_path: Path) -> None:
     first = compute_build_id(tmp_path)
     index.write_text("<html>dos</html>", encoding="utf-8")
     assert compute_build_id(tmp_path) != first
+
+
+def test_regime_payload(tmp_path: Path, monkeypatch) -> None:
+    from tradinglab import regimes
+
+    rows = 420
+    close = 100.0 + 0.2 * np.arange(rows)
+    frame = pd.DataFrame(
+        {
+            "open": close,
+            "high": close + 1.0,
+            "low": close - 1.0,
+            "close": close,
+            "volume": 1_000.0,
+        },
+        index=pd.bdate_range("2019-01-01", periods=rows),
+    )
+    monkeypatch.setattr(
+        regimes, "load_cached", lambda symbol, cache_dir: (frame, Path("qqq.parquet"))
+    )
+    payload = _data(tmp_path).regime("QQQ")
+    assert payload["status"] == "ok"
+    assert payload["current"]["label"] == "trend_up"
+    assert payload["proposed_selector"]["status"] == "proposed"
+    assert payload["proposed_selector"]["enabled"] is False
 
 
 def test_research_detail_lee_artefacto(tmp_path: Path) -> None:

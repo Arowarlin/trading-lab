@@ -876,7 +876,7 @@ stdlib y `127.0.0.1`. Se conservan todas las pestañas, rutas, CSRF, Host/Origin
 y la lista blanca `WRITE_ROUTES`.
 
 Evidencia: `pytest tests/test_console_shell.py -q` → **3 passed**; suite completa
-**379 passed**; cubre las seis secciones, las 15 vistas actuales, los
+**386 passed**; cubre las seis secciones, las 15 vistas actuales, los
 componentes del dashboard y la ausencia de URLs externas/CDNs.
 
 ---
@@ -1169,7 +1169,7 @@ completa **325 passed**; `ruff` limpio; `lab doctor` OK con avisos conocidos.
 - El panel **Aprendizaje** sigue siendo el único sitio de aprobación humana.
 
 Evidencia: `pytest tests/test_learning.py -q` → **8 passed**; suite completa
-**379 passed**; `ruff` limpio; `lab doctor` OK con avisos conocidos.
+**386 passed**; `ruff` limpio; `lab doctor` OK con avisos conocidos.
 
 ---
 
@@ -1692,7 +1692,32 @@ propuesta. Con **N < 30** se muestran con aviso de muestra insuficiente.
 
 Evidencia: `pytest tests/test_metrics.py tests/test_journal.py
 tests/test_engine.py tests/test_research.py -q` → **33 passed**; suite completa
-**379 passed**; `ruff` limpio; `lab doctor` OK. Sin dependencias nuevas.
+**386 passed**; `ruff` limpio; `lab doctor` OK. Sin dependencias nuevas.
+
+---
+
+## 11g. Régimen de mercado informativo
+
+`regimes.py` clasifica el mercado con reglas **causales** de tendencia y
+volatilidad; no usa datos futuros y no activa ni desactiva bots.
+
+- Etiquetas: `trend_up`, `trend_down`, `range`, `unknown` (warmup 200) y
+  volatilidad `low`/`high` frente a su mediana de 252 días.
+- Métricas: estabilidad de etiquetas, duración media, cambios, falsos cambios a
+  5 días y retraso de detección (referencia centrada solo para evaluación).
+- `lab regimes QQQ [--bot ...]` muestra el régimen actual, el rendimiento del
+  activo y, opcionalmente, el de un bot por régimen.
+- Dashboard: panel “Régimen de mercado” con etiqueta actual, volatilidad,
+  estabilidad, retraso y rendimiento por régimen.
+- Selector por régimen: **`proposed` / `enabled:false` / no aplicado**. No
+  cambia el estado de ningún bot.
+- GMM/HMM: evaluados (hmmlearn 0.3.3 y scikit-learn 1.9.1, BSD-3) pero **no
+  adoptados**: no están instalados y el clasificador por reglas es suficiente
+  para esta muestra. Sin dependencias nuevas.
+
+Estado actual QQQ (2026-11-06): `trend_down`, volatilidad `high`; selector
+propuesto `flat`. Evidencia: `pytest tests/test_regimes.py tests/test_web.py -q`
+→ **23 passed**; suite completa **386 passed**; `ruff` limpio; `lab doctor` OK.
 
 ---
 

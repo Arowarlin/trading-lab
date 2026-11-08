@@ -4241,6 +4241,117 @@ def prop_simulate(
     )
 
 
+@app.command("regimes")
+def regimes_cmd(
+    symbol: str = typer.Argument("SPY", help="Activo con caché local, p. ej. QQQ"),
+    timeframe: str = typer.Option("1d", "--timeframe"),
+    bot: str = typer.Option(None, "--bot", help="Bot para rendimiento por régimen"),
+    as_json: bool = typer.Option(False, "--json"),
+) -> None:
+    """Clasificador causal de régimen; informativo. No activa ni desactiva bots."""
+    from .regimes import bot_performance_by_regime, classify, load_cached, report
+
+    settings = get_settings()
+    df, path = load_cached(symbol, settings.data.cache_dir)
+    if df is None:
+        console.print(f"[yellow]Sin datos: no hay caché para {symbol}.[/yellow]")
+        raise typer.Exit(1)
+    payload = report(symbol, df, source=str(path) if path else None)
+
+    def fmt_pct(value):
+        return "Sin datos" if value is None else _fmt_pct(float(value))
+    if bot:
+        specs = {spec.id: spec for spec in load_bots()}
+        spec = specs.get(bot)
+        if spec is None:
+            console.print(f"[red]Bot no encontrado:[/red] {bot}")
+            raise typer.Exit(2)
+        if symbol.upper() not in {item.upper() for item in spec.universe}:
+            console.print(f"[red]{bot} no opera {symbol}.[/red]")
+            raise typer.Exit(2)
+        strategy = STRATEGIES.get(spec.strategy)
+        if strategy is None:
+            console.print(f"[red]Estrategia desconocida:[/red] {spec.strategy}")
+            raise typer.Exit(2)
+        signal = strategy(df, **spec.params)
+        bt = run_backtest(
+            df,
+            signal.target,
+            starting_cash=settings.starting_cash,
+            commission_bps=1.0,
+            slippage_bps=5.0,
+        )
+        labels = classify(df)["label"]
+        payload["bot"] = {
+            "id": spec.id,
+            "regime_stats": bot_performance_by_regime(bt.returns, labels),
+        }
+    if as_json:
+        console.print_json(data=payload)
+        return
+
+    if payload["status"] != "ok":
+        console.print(f"[yellow]{payload.get('reason', 'Sin datos')}[/yellow]")
+        return
+    current = payload["current"]
+    metrics = payload["metrics"]
+    table = Table(title=f"Régimen · {payload['symbol']} · {payload['as_of']}")
+    table.add_column("Campo", style="bold")
+    table.add_column("Valor")
+    table.add_row("Régimen", str(current["label"]))
+    table.add_row("Volatilidad", str(current["vol_state"]))
+    table.add_row("Vol anual", fmt_pct(current["vol"]))
+    table.add_row("Mediana vol", fmt_pct(current["vol_median"]))
+    table.add_row("Fuerza tendencia", fmt_pct(current["trend_strength"]))
+    table.add_row("Estabilidad", fmt_pct(metrics["stability_pct"]))
+    table.add_row("Duración media", f"{metrics['avg_duration_days']} días")
+    table.add_row("Cambios", str(metrics["changes"]))
+    table.add_row("Falsos cambios", fmt_pct(metrics["false_changes_pct"]))
+    table.add_row(
+        "Retraso detección",
+        f"{metrics['detection_delay']['mean_days']} días",
+    )
+    console.print(table)
+
+    stats = metrics["regime_stats"]
+    t = Table(title="Rendimiento por régimen")
+    for col in ("Régimen", "N", "Retorno", "Sharpe", "Vol", "MaxDD", "Acierto"):
+        t.add_column(col, justify="right" if col != "Régimen" else "left")
+    for row in stats:
+        t.add_row(
+            row["regime"],
+            str(row.get("n", 0)),
+            fmt_pct(row.get("total_return")),
+            f"{row['sharpe']:.2f}" if row.get("sharpe") is not None else "Sin datos",
+            fmt_pct(row.get("volatility")),
+            fmt_pct(row.get("max_drawdown")),
+            fmt_pct(row.get("hit_rate")),
+        )
+    console.print(t)
+
+    if payload.get("bot"):
+        t = Table(title=f"Bot {payload['bot']['id']} por régimen")
+        for col in ("Régimen", "N", "Retorno", "Sharpe", "Vol", "MaxDD", "Acierto"):
+            t.add_column(col, justify="right" if col != "Régimen" else "left")
+        for row in payload["bot"]["regime_stats"]:
+            t.add_row(
+                row["regime"],
+                str(row.get("n", 0)),
+                fmt_pct(row.get("total_return")),
+                f"{row['sharpe']:.2f}" if row.get("sharpe") is not None else "Sin datos",
+                fmt_pct(row.get("volatility")),
+                fmt_pct(row.get("max_drawdown")),
+                fmt_pct(row.get("hit_rate")),
+            )
+        console.print(t)
+
+    selector = payload.get("proposed_selector") or {}
+    console.print(
+        f"[yellow]Selector propuesto:[/yellow] {selector.get('bot', 'flat')} · "
+        "status=proposed · enabled:false · no se aplica."
+    )
+
+
 @app.command("datacheck")
 def datacheck_cmd(
     symbol: str = typer.Argument(..., help="Símbolo, p. ej. SPY o EURUSD=X"),

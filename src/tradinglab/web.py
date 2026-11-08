@@ -395,6 +395,7 @@ class LabData:
             "dryruns": self.dryruns(limit=10),
             "bots": self.bots(),
             "research": self.research(limit=15),
+            "regime": self.regime("QQQ"),
             "market": self.market(),
             "calendar": self.calendar(),
             "decisions": self.decisions(),
@@ -1506,6 +1507,32 @@ class LabData:
         return out
 
     # --------------------------------------------------------------- research
+
+    def regime(self, symbol: str = "QQQ") -> dict:
+        """Régimen causal del activo; informativo y cacheado 5 minutos."""
+        key = f"regime:{symbol.upper()}"
+        return self.cache.get(
+            key,
+            300.0,
+            lambda: self._regime_payload(symbol),
+        )
+
+    def _regime_payload(self, symbol: str) -> dict:
+        from .regimes import load_cached, report
+
+        df, path = load_cached(symbol, self.settings.data.cache_dir)
+        if df is None:
+            return {
+                "symbol": symbol.upper(),
+                "status": "Sin datos",
+                "reason": "sin caché local para régimen",
+                "current": None,
+                "metrics": None,
+                "selector": [],
+                "proposed_selector": None,
+                "source": str(path) if path else None,
+            }
+        return report(symbol, df, source=str(path) if path else None)
 
     def research(self, limit: int = 15) -> dict:
         latest = _read_json(self.research_dir / "latest.json", {}) or {}

@@ -527,6 +527,25 @@ limpio; `lab doctor` OK. Sin dependencias nuevas.
   tests/test_engine.py tests/test_research.py -q` → 33 passed; `pytest -q` →
   379 passed; `ruff` limpio; `lab doctor` OK. Sin dependencias nuevas.
 
+## Etapa 3 — Régimen informativo (2026-11-07)
+
+- [x] **Clasificador causal por reglas**
+  - Tendencia (SMA200 + pendiente SMA50) y volatilidad (20d vs mediana 252d).
+  - Etiquetas `trend_up`/`trend_down`/`range`/`unknown`; sin futuro.
+  - Test truncado vs completo.
+- [x] **Métricas de régimen**
+  - Estabilidad, duración media, cambios, falsos cambios y retraso de
+    detección (referencia centrada solo para evaluación).
+  - Rendimiento por régimen para el activo y para un bot (`--bot`).
+- [x] **Dashboard y selector**
+  - Panel “Régimen de mercado” en el Dashboard con el régimen actual de QQQ.
+  - Selector por régimen `proposed`, `enabled:false`, no aplicado.
+- [x] **GMM/HMM**
+  - hmmlearn 0.3.3 y scikit-learn 1.9.1 (BSD-3) evaluados, no adoptados;
+    sin dependencias nuevas. Documentado en `docs/regimes.md`.
+- Evidencia: `pytest tests/test_regimes.py tests/test_web.py -q` → 23 passed;
+  `pytest -q` → 386 passed; `ruff` limpio; `lab doctor` OK.
+
 ---
 
 ## Registro de evidencias
@@ -591,4 +610,5 @@ limpio; `lab doctor` OK. Sin dependencias nuevas.
 | 2026-11-07 | F13 activado | `lab f13 activate --yes` → hash `54b42036…`; `config-check` OK; bot `enabled:true`; `TradingLab-F13` Ready, próxima 2026-11-09 22:20; backup `trading-lab_20261107_223737.zip` PASS |
 | 2026-11-07 | Etapa 1 | `pytest tests/test_datacheck.py tests/test_lookahead.py tests/test_research.py -q` → 30 passed; `pytest -q` → 375 passed; datacheck ok/aviso/falla, gate research, UI Research/Run Detail |
 | 2026-11-07 | Etapa 2 | `pytest tests/test_metrics.py tests/test_journal.py tests/test_engine.py tests/test_research.py -q` → 33 passed; `pytest -q` → 379 passed; SQN/Recovery/ruina informativos, N<30 aviso |
+| 2026-11-07 | Etapa 3 | `pytest tests/test_regimes.py tests/test_web.py -q` → 23 passed; `pytest -q` → 386 passed; régimen causal, Dashboard y selector proposed; GMM/HMM no adoptado |
 |  |  |  |

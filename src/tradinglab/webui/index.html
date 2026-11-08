@@ -794,6 +794,11 @@
       <div id="global-alert"></div>
       <div class="kpis" id="kpis"></div>
 
+      <div class="panel" style="margin-bottom:14px">
+        <div class="panel-head"><h2>Régimen de mercado</h2><span class="muted tiny" id="regime-meta"></span></div>
+        <div id="dashboard-regime"></div>
+      </div>
+
       <div class="grid-2 equal" style="margin-bottom:14px">
         <div class="panel">
           <div class="panel-head"><h2>Distribución de balance</h2><span class="muted tiny">cash vs posiciones</span></div>
@@ -2001,6 +2006,53 @@ function renderTopPerformers() {
   );
 }
 
+function renderRegime(regime) {
+  const host = $("#dashboard-regime");
+  const meta = $("#regime-meta");
+  if (!host) return;
+  if (!regime || regime.status !== "ok" || !regime.current) {
+    host.innerHTML = `<div class="empty">Sin datos: ${esc(regime?.reason || "caché insuficiente")}</div>`;
+    if (meta) meta.textContent = regime?.symbol || "Sin datos";
+    return;
+  }
+  const cur = regime.current;
+  const m = regime.metrics || {};
+  const delay = m.detection_delay || {};
+  const tag = cur.label === "trend_up" ? "green" : cur.label === "trend_down" ? "red" : "yellow";
+  if (meta) {
+    meta.textContent = `${regime.symbol} · ${regime.as_of} · vol ${cur.vol_state === "high" ? "alta" : "baja"}`;
+  }
+  const stats = (m.regime_stats || []).filter((row) => row.n > 0);
+  host.innerHTML = `
+    <div class="detail-hero">
+      <div><div class="big"><span class="tag ${tag}">${esc(cur.label)}</span></div><div class="sub">${esc(regime.as_of)}</div></div>
+      <div><div class="sub">Vol anual</div><div class="big">${pct(cur.vol, 1)}</div></div>
+      <div><div class="sub">Mediana vol</div><div class="big">${pct(cur.vol_median, 1)}</div></div>
+      <div><div class="sub">Fuerza tendencia</div><div class="big">${pct(cur.trend_strength, 2)}</div></div>
+    </div>
+    <div class="metric-grid" style="margin-bottom:10px">
+      <div class="metric"><div class="l">Estabilidad</div><div class="v">${pct(m.stability_pct, 1)}</div></div>
+      <div class="metric"><div class="l">Duración media</div><div class="v">${num(m.avg_duration_days, 1)} d</div></div>
+      <div class="metric"><div class="l">Cambios</div><div class="v">${num(m.changes, 0)}</div></div>
+      <div class="metric"><div class="l">Falsos cambios</div><div class="v">${pct(m.false_changes_pct, 1)}</div></div>
+      <div class="metric"><div class="l">Retraso detección</div><div class="v">${num(delay.mean_days, 1)} d</div></div>
+    </div>
+    <div class="note">Selector propuesto: <b>${esc(regime.proposed_selector?.bot || "flat")}</b> · <span class="tag yellow">proposed</span> · no se aplica. No activa ni desactiva bots.</div>
+    ${grid(
+      [{ label: "Régimen" }, { label: "N", num: true }, { label: "Retorno", num: true }, { label: "Sharpe", num: true }, { label: "MaxDD", num: true }, { label: "Acierto", num: true }],
+      stats.map((row) => [
+        esc(row.regime),
+        num(row.n, 0),
+        pct(row.total_return, 1),
+        num(row.sharpe, 2),
+        pct(row.max_drawdown, 1),
+        pct(row.hit_rate, 1),
+      ]),
+      { empty: "Sin datos por régimen." }
+    )}
+  `;
+}
+
 function renderOverview() {
   const o = S.overview;
   if (!o) return;
@@ -2010,6 +2062,7 @@ function renderOverview() {
   S.pnlData = computeDailyPnl();
   ensurePnlMonth();
   const monthly = monthlyPnlInfo();
+  renderRegime(o.regime);
 
   const alertBox = $("#global-alert");
   if (alertBox) {
