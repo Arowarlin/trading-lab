@@ -693,6 +693,23 @@ operador ni datos. Inventario base en `docs/ui_inventory.json` y test
   pestañas en `reports/ui/before` y `reports/ui/stage1`, con diff por pestaña
   en `reports/ui/stage1_diff.json` (reportes ignorados por git).
 
+### Etapa 2 — Componentes
+
+- [x] **KPIs y gauges**
+  - Delta y mini-sparkline con series reales de equity/retorno/PnL/drawdown;
+    sin historial → “sin serie”.
+  - Gauges de colchón diario, colchón de drawdown y salud de cuenta con marca
+    de límite; datos de `fund.accounts[].usage` y `fund.health`.
+- [x] **Chips, tablas y estados**
+  - Chips con icono además de color.
+  - Cabecera de tabla fija y densidad cómoda/compacta persistida en
+    `localStorage` con `try/catch`.
+  - Skeletons iniciales, pulso de refresco y transición de número; desactivados
+    con `prefers-reduced-motion`.
+- Evidencia: `pytest tests/test_console_shell.py -q` → 6 passed; suite completa
+  **411 passed**; `ruff` limpio; `lab doctor` OK. Capturas de las 15 pestañas
+  en `reports/ui/stage2` y diff en `reports/ui/stage2_diff.json`.
+
 ---
 
 ## Registro de evidencias
@@ -766,4 +783,5 @@ operador ni datos. Inventario base en `docs/ui_inventory.json` y test
 | 2026-11-08 | Bloque Etapa 2 | `pytest tests/test_docs.py -q` -> 4 passed; `pytest -q` -> 408 passed; README F13 activo en paper + test de coherencia con bots.yaml |
 | 2026-11-08 | Bloque Etapa 3 | `pytest tests/test_f13.py -q` -> 16 passed; `pytest -q` -> 408 passed; `lab f13 report` en reports/f13/ (ciclos, reconciliaciones, slippage, tamano, hash, alerta lunes), solo lectura |
 | 2026-11-08 | UI v3 Etapa 1 | `pytest tests/test_console_shell.py -q` -> 5 passed; `pytest -q` -> 410 passed; tokens grafito/cian, HUD fijo, borde de operador armado, inventario UI congelado |
+| 2026-11-08 | UI v3 Etapa 2 | `pytest tests/test_console_shell.py -q` -> 6 passed; `pytest -q` -> 411 passed; KPIs delta/sparkline, gauges de colchon/DD/salud, chips con icono, densidad persistida, skeletons y reduced-motion |
 |  |  |  |

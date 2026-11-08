@@ -884,6 +884,110 @@
     .hud-left, .hud-right { width: 100%; }
     .hud-right { margin-left: 0; }
   }
+
+  /* ------------------------------------------------ componentes v3 */
+  .kpis { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
+  .kpi .value { font-size: clamp(18px, 1.6vw, 23px); }
+  .kpi { display: flex; flex-direction: column; gap: 4px; }
+  .kpi-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; min-height: 24px; }
+  .delta {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 7px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: rgba(10, 16, 23, .7);
+    font-family: var(--mono);
+    font-size: 10px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .delta.pos { color: var(--positive); border-color: rgba(61,220,151,.32); background: rgba(61,220,151,.08); }
+  .delta.neg { color: var(--negative); border-color: rgba(255,138,138,.34); background: rgba(255,138,138,.08); }
+  .delta.warn { color: var(--yellow); border-color: rgba(246,196,83,.34); background: rgba(246,196,83,.08); }
+  .delta.flat { color: var(--muted); }
+  .kpi-no-spark { font-size: 9.5px; color: #64798c; letter-spacing: .08em; text-transform: uppercase; }
+  .kpi .spark { width: 92px; height: 24px; }
+  .num-changed { animation: numIn .34s ease-out; }
+  @keyframes numIn { from { color: var(--accent); opacity: .55; transform: translateY(-1px); } to { opacity: 1; transform: none; } }
+
+  .gauges { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+  .gauge-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius);
+    background: rgba(8, 14, 21, .55);
+    padding: 12px 10px 10px;
+    min-width: 0;
+    text-align: center;
+  }
+  .gauge-svg { width: 132px; max-width: 100%; height: auto; overflow: visible; }
+  .gauge-track { fill: none; stroke: #1a2531; stroke-width: 9; stroke-linecap: round; }
+  .gauge-fill { fill: none; stroke-width: 9; stroke-linecap: round; transition: stroke-dasharray .35s ease; }
+  .gauge-limit { stroke: #dceaf6; stroke-width: 1.5; stroke-dasharray: 2 2; opacity: .8; }
+  .gauge-value { fill: var(--text); font-family: var(--mono); font-size: 17px; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .gauge-label { color: #dceaf6; font-size: 11.5px; font-weight: 650; letter-spacing: .02em; }
+  .gauge-note { color: var(--muted); font-size: 10px; line-height: 1.4; min-height: 28px; }
+  .gauge-status { font-family: var(--mono); font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase; }
+  .gauge-status.ok { color: var(--green); }
+  .gauge-status.warn { color: var(--yellow); }
+  .gauge-status.bad { color: var(--red); }
+
+  .tag.green::before { content: "✓ "; font-weight: 700; }
+  .tag.red::before { content: "✕ "; font-weight: 700; }
+  .tag.yellow::before { content: "▲ "; font-weight: 700; }
+  .tag.blue::before { content: "● "; }
+  .tag.purple::before { content: "◆ "; }
+  .badge.ok::before { content: "✓ "; }
+  .badge.warn::before { content: "▲ "; }
+  .badge.bad::before { content: "✕ "; }
+
+  body.density-compact th, body.density-compact td { padding: 3px 8px; font-size: 11.3px; }
+  body.density-compact .table-wrap { border-radius: 7px; }
+  body.density-compact .panel { padding: 13px 14px; }
+  body.density-compact .sys-row { padding: 5px 4px; }
+
+  .skeleton {
+    background: linear-gradient(90deg, #101923 25%, #182432 37%, #101923 63%);
+    background-size: 400% 100%;
+    animation: skeleton 1.35s ease infinite;
+    border-radius: 6px;
+  }
+  @keyframes skeleton { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+  .skeleton-card { pointer-events: none; }
+  .sk-label { height: 9px; width: 44%; margin: 2px 0 4px; }
+  .sk-value { height: 25px; width: 68%; margin: 8px 0 6px; }
+  .sk-hint { height: 9px; width: 56%; }
+  .sk-gauge { height: 64px; width: 116px; max-width: 100%; margin: 2px auto 8px; }
+
+  .pulse-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--accent);
+    opacity: .35;
+    display: inline-block;
+    margin-right: 7px;
+    flex: 0 0 7px;
+  }
+  .btn.loading .pulse-dot { opacity: 1; animation: pulseDot .9s ease-in-out infinite; }
+  @keyframes pulseDot { 0%, 100% { transform: scale(.8); opacity: .45; } 50% { transform: scale(1.35); opacity: 1; } }
+
+  @media (prefers-reduced-motion: reduce) {
+    .skeleton, .btn.loading .pulse-dot, .num-changed, .ticker-track, .live-dot, .view {
+      animation: none !important;
+    }
+    .gauge-fill, .btn, .nav-btn, .chart-ranges button { transition: none !important; }
+  }
+  @media (max-width: 900px) {
+    .gauges { grid-template-columns: 1fr; }
+    .gauge-card { flex-direction: row; flex-wrap: wrap; justify-content: center; text-align: left; }
+    .gauge-note { min-height: 0; }
+  }
 </style>
 </head>
 <body>
@@ -951,7 +1055,8 @@
         <button class="btn cmd-btn" id="cmd-open" title="Buscar o navegar (Ctrl+K)"><span class="kbd">Ctrl K</span> Buscar</button>
         <span class="badge" id="broker-badge">broker</span>
         <span class="action-pill" id="action-pill">Sin acciones</span>
-        <button class="btn" id="refresh-btn"><span id="refresh-label">Actualizar</span></button>
+        <button class="btn small ghost" id="density-toggle" title="Densidad de tablas" aria-pressed="false"><span id="density-label">Compacta</span></button>
+        <button class="btn" id="refresh-btn"><span class="pulse-dot" id="refresh-pulse" aria-hidden="true"></span><span id="refresh-label">Actualizar</span></button>
       </div>
     </header>
 
@@ -962,7 +1067,24 @@
     <!-- ============================================================ RESUMEN -->
     <section class="view active" id="view-overview">
       <div id="global-alert"></div>
-      <div class="kpis" id="kpis"></div>
+      <div class="kpis" id="kpis" aria-busy="true">
+        <div class="kpi skeleton-card"><div class="skeleton sk-label"></div><div class="skeleton sk-value"></div><div class="skeleton sk-hint"></div></div>
+        <div class="kpi skeleton-card"><div class="skeleton sk-label"></div><div class="skeleton sk-value"></div><div class="skeleton sk-hint"></div></div>
+        <div class="kpi skeleton-card"><div class="skeleton sk-label"></div><div class="skeleton sk-value"></div><div class="skeleton sk-hint"></div></div>
+        <div class="kpi skeleton-card"><div class="skeleton sk-label"></div><div class="skeleton sk-value"></div><div class="skeleton sk-hint"></div></div>
+        <div class="kpi skeleton-card"><div class="skeleton sk-label"></div><div class="skeleton sk-value"></div><div class="skeleton sk-hint"></div></div>
+        <div class="kpi skeleton-card"><div class="skeleton sk-label"></div><div class="skeleton sk-value"></div><div class="skeleton sk-hint"></div></div>
+        <div class="kpi skeleton-card"><div class="skeleton sk-label"></div><div class="skeleton sk-value"></div><div class="skeleton sk-hint"></div></div>
+      </div>
+
+      <div class="panel" style="margin-bottom:14px">
+        <div class="panel-head"><h2>Colchones de riesgo</h2><span class="muted tiny" id="risk-gauges-meta">cargando…</span></div>
+        <div class="gauges" id="risk-gauges" aria-busy="true">
+          <div class="gauge-card skeleton-card"><div class="skeleton sk-gauge"></div><div class="skeleton sk-label"></div><div class="skeleton sk-hint"></div></div>
+          <div class="gauge-card skeleton-card"><div class="skeleton sk-gauge"></div><div class="skeleton sk-label"></div><div class="skeleton sk-hint"></div></div>
+          <div class="gauge-card skeleton-card"><div class="skeleton sk-gauge"></div><div class="skeleton sk-label"></div><div class="skeleton sk-hint"></div></div>
+        </div>
+      </div>
 
       <div class="panel" style="margin-bottom:14px">
         <div class="panel-head"><h2>Régimen de mercado</h2><span class="muted tiny" id="regime-meta"></span></div>
@@ -1658,6 +1780,15 @@ const fmtInt = new Intl.NumberFormat("es-ES", { maximumFractionDigits: 0 });
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 
+function setHTML(target, html) {
+  const node = typeof target === "string" ? $(target) : target;
+  if (!node) return false;
+  if (node.__lastHtml === html) return false;
+  node.__lastHtml = html;
+  node.innerHTML = html;
+  return true;
+}
+
 function money(v) { return v === null || v === undefined || !isFinite(v) ? "—" : fmtUSD.format(Number(v)); }
 function num(v, d = 2) { return v === null || v === undefined || !isFinite(v) ? "—" : Number(v).toLocaleString("es-ES", { maximumFractionDigits: d }); }
 function pct(v, d = 1) { return v === null || v === undefined || !isFinite(v) ? "—" : (Number(v) * 100).toFixed(d) + "%"; }
@@ -1702,7 +1833,7 @@ function paramsText(params) {
   return Object.entries(params).map(([k, v]) => `${k}=${v}`).join(" ");
 }
 function ratioText(v) { return v === null || v === undefined ? "—" : (Number(v) * 100).toFixed(1) + "%"; }
-function sparkline(values, w = 104, h = 28) {
+function sparkline(values, w = 104, h = 28, color) {
   if (!Array.isArray(values) || values.length < 2) return `<span class="muted tiny">—</span>`;
   const min = Math.min(...values), max = Math.max(...values);
   const span = (max - min) || 1;
@@ -1712,8 +1843,8 @@ function sparkline(values, w = 104, h = 28) {
     return `${x.toFixed(1)},${y.toFixed(1)}`;
   }).join(" ");
   const up = values[values.length - 1] >= values[0];
-  const color = up ? "#3fb950" : "#f85149";
-  return `<svg class="spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true"><polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.6"/></svg>`;
+  const stroke = color || (up ? "#3ddc97" : "#ff8a8a");
+  return `<svg class="spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true"><polyline points="${pts}" fill="none" stroke="${stroke}" stroke-width="1.6"/></svg>`;
 }
 function lineChart(series, opts = {}) {
   const width = opts.width || 680, height = opts.height || 170;
@@ -1825,6 +1956,30 @@ function applySidebarCollapsed(collapsed, persist = true) {
   if (persist) {
     try { localStorage.setItem("tl.sidebar.collapsed", collapsed ? "1" : "0"); } catch (_) { /* sin almacenamiento */ }
   }
+}
+
+const DENSITY_KEY = "tl.table.density";
+function applyDensity(compact, persist = true) {
+  document.body.classList.toggle("density-compact", Boolean(compact));
+  const button = $("#density-toggle");
+  if (button) {
+    button.setAttribute("aria-pressed", compact ? "true" : "false");
+    button.title = compact ? "Densidad compacta; pulsa para cómoda" : "Densidad cómoda; pulsa para compacta";
+  }
+  const label = $("#density-label");
+  if (label) label.textContent = compact ? "Cómoda" : "Compacta";
+  if (persist) {
+    try { localStorage.setItem(DENSITY_KEY, compact ? "compact" : "comfortable"); } catch (_) { /* sin almacenamiento */ }
+  }
+}
+
+function initDensity() {
+  let compact = false;
+  try { compact = localStorage.getItem(DENSITY_KEY) === "compact"; } catch (_) { compact = false; }
+  applyDensity(compact, false);
+  $("#density-toggle")?.addEventListener("click", () => {
+    applyDensity(!document.body.classList.contains("density-compact"));
+  });
 }
 
 function bindNav() {
@@ -1974,6 +2129,7 @@ function updateHud() {
 async function loadAll(manual = false) {
   const button = $("#refresh-btn");
   button.disabled = true;
+  button.classList.add("loading");
   $("#refresh-label").textContent = "Actualizando…";
   const [overviewResult, riskResult, accountsResult, fundResult, operatorResult, driftResult, instrumentsResult, marketsResult] = await Promise.allSettled([
     getJSON("/api/overview"),
@@ -2018,6 +2174,7 @@ async function loadAll(manual = false) {
   if (fundResult.status === "fulfilled") {
     S.fund = fundResult.value;
     renderFund();
+    renderRiskGauges();
     if (S.overview) renderBalanceDistribution();
   }
   if (operatorResult.status === "fulfilled") {
@@ -2046,6 +2203,7 @@ async function loadAll(manual = false) {
   }
   updatePills();
   button.disabled = false;
+  button.classList.remove("loading");
   $("#refresh-label").textContent = "Actualizar";
 }
 
@@ -2323,6 +2481,153 @@ function renderRegime(regime) {
   `;
 }
 
+function kpiCardHtml(card) {
+  const tone = card.tone || "flat";
+  const arrow = tone === "pos" ? "▲" : tone === "neg" ? "▼" : "■";
+  const delta = card.delta
+    ? `<span class="delta ${tone}" title="${esc(card.deltaTitle || card.delta)}"><span aria-hidden="true">${arrow}</span>${esc(card.delta)}</span>`
+    : `<span class="kpi-no-spark">sin delta</span>`;
+  const spark = Array.isArray(card.spark) && card.spark.length > 1
+    ? sparkline(card.spark, 92, 24, card.sparkColor)
+    : `<span class="kpi-no-spark">sin serie</span>`;
+  return `<div class="kpi" data-kpi="${esc(card.key)}">
+    <div class="label">${esc(card.label)}</div>
+    <div class="value ${card.cls || ""}">${esc(card.value)}</div>
+    <div class="kpi-row">${delta}${spark}</div>
+    <div class="hint">${esc(card.hint || "")}</div>
+  </div>`;
+}
+
+function renderKpis(cards) {
+  const host = $("#kpis");
+  if (!host) return;
+  const signature = cards.map((card) => card.key).join("|");
+  if (host.dataset.signature !== signature) {
+    host.dataset.signature = signature;
+    host.innerHTML = cards.map(kpiCardHtml).join("");
+    cards.forEach((card, index) => {
+      const node = host.children[index];
+      if (node) node.dataset.sig = JSON.stringify(card);
+    });
+    host.setAttribute("aria-busy", "false");
+    return;
+  }
+  cards.forEach((card, index) => {
+    const node = host.children[index];
+    if (!node) return;
+    const next = JSON.stringify(card);
+    if (node.dataset.sig === next) return;
+    const before = node.querySelector(".value")?.textContent;
+    node.innerHTML = kpiCardHtml(card);
+    node.dataset.sig = next;
+    const value = node.querySelector(".value");
+    if (before && before !== card.value && value) {
+      value.classList.add("num-changed");
+    }
+  });
+  host.setAttribute("aria-busy", "false");
+}
+
+function gaugeArcPoint(pct, radius = 46) {
+  const value = Math.max(0, Math.min(1, Number(pct) || 0));
+  const angle = Math.PI - value * Math.PI;
+  return [58 + radius * Math.cos(angle), 62 - radius * Math.sin(angle)];
+}
+
+function gaugeCardHtml(item) {
+  if (!item.available) {
+    return `<article class="gauge-card" data-gauge="${esc(item.key)}">
+      <svg class="gauge-svg" viewBox="0 0 116 78" role="img" aria-label="${esc(item.label)}: sin datos">
+        <path class="gauge-track" d="M 12 62 A 46 46 0 0 1 104 62" pathLength="100"></path>
+        <text class="gauge-value" x="58" y="55" text-anchor="middle">—</text>
+      </svg>
+      <div class="gauge-label">${esc(item.label)}</div>
+      <div class="gauge-note">Sin datos</div>
+      <div class="gauge-status">SIN DATOS</div>
+    </article>`;
+  }
+  const used = Math.max(0, Math.min(1, Number(item.used) || 0));
+  const color = item.tone === "ok" ? "#3ddc97" : item.tone === "warn" ? "#f6c453" : "#ff8a8a";
+  const marker = item.markerPct === undefined ? 1 : item.markerPct;
+  const [ix, iy] = gaugeArcPoint(marker, 40);
+  const [ox, oy] = gaugeArcPoint(marker, 51);
+  return `<article class="gauge-card" data-gauge="${esc(item.key)}">
+    <svg class="gauge-svg" viewBox="0 0 116 78" role="img" aria-label="${esc(item.aria)}">
+      <path class="gauge-track" d="M 12 62 A 46 46 0 0 1 104 62" pathLength="100"></path>
+      <path class="gauge-fill" d="M 12 62 A 46 46 0 0 1 104 62" pathLength="100" stroke="${color}" stroke-dasharray="${(used * 100).toFixed(1)} 100"></path>
+      <line class="gauge-limit" x1="${ix.toFixed(1)}" y1="${iy.toFixed(1)}" x2="${ox.toFixed(1)}" y2="${oy.toFixed(1)}"></line>
+      <text class="gauge-value" x="58" y="55" text-anchor="middle">${esc(item.value)}</text>
+    </svg>
+    <div class="gauge-label">${esc(item.label)}</div>
+    <div class="gauge-note">${esc(item.note)}</div>
+    <div class="gauge-status ${item.tone}">${esc(item.status)}</div>
+  </article>`;
+}
+
+function renderRiskGauges() {
+  const host = $("#risk-gauges");
+  if (!host) return;
+  const accounts = S.fund?.accounts || [];
+  const account = accounts.find((item) => item.id === "paper_main")
+    || accounts.find((item) => item.usage?.available);
+  const usage = account?.usage || {};
+  const limits = account?.effective_limits || {};
+  const dailyUsed = Number(usage.daily_used_pct);
+  const drawdownUsed = Number(usage.drawdown_used_pct);
+  const health = Number(S.fund?.health?.score);
+  const coverage = Number(S.fund?.health?.coverage);
+  const riskTone = (value) => value >= 0.8 ? "bad" : value >= 0.5 ? "warn" : "ok";
+  const riskStatus = (value) => value >= 0.8 ? "AL LÍMITE" : value >= 0.5 ? "VIGILAR" : "HOLGADO";
+  const healthTone = health >= 80 ? "ok" : health >= 60 ? "warn" : "bad";
+  const healthStatus = health >= 80 ? "SALUDABLE" : health >= 60 ? "VIGILAR" : "BAJA";
+  const items = [
+    {
+      key: "daily",
+      label: "Colchón diario",
+      available: isFinite(dailyUsed) && isFinite(Number(limits.daily_loss_pct)),
+      used: dailyUsed,
+      markerPct: 1,
+      value: `${Math.max(0, (1 - dailyUsed) * 100).toFixed(0)}%`,
+      note: `uso ${pct(dailyUsed, 1)} · límite ${pct(limits.daily_loss_pct, 1)}`,
+      tone: riskTone(dailyUsed),
+      status: riskStatus(dailyUsed),
+      aria: `Colchón diario: ${Math.max(0, (1 - dailyUsed) * 100).toFixed(0)} por ciento; uso ${pct(dailyUsed, 1)} del límite ${pct(limits.daily_loss_pct, 1)}`,
+    },
+    {
+      key: "drawdown",
+      label: "Colchón de drawdown",
+      available: isFinite(drawdownUsed) && isFinite(Number(limits.max_drawdown_pct)),
+      used: drawdownUsed,
+      markerPct: 1,
+      value: `${Math.max(0, (1 - drawdownUsed) * 100).toFixed(0)}%`,
+      note: `uso ${pct(drawdownUsed, 1)} · límite ${pct(limits.max_drawdown_pct, 1)}`,
+      tone: riskTone(drawdownUsed),
+      status: riskStatus(drawdownUsed),
+      aria: `Colchón de drawdown: ${Math.max(0, (1 - drawdownUsed) * 100).toFixed(0)} por ciento; uso ${pct(drawdownUsed, 1)} del límite ${pct(limits.max_drawdown_pct, 1)}`,
+    },
+    {
+      key: "health",
+      label: "Salud de cuenta",
+      available: isFinite(health) && health >= 0,
+      used: health / 100,
+      markerPct: 0.8,
+      value: `${num(health, 0)} / 100`,
+      note: `objetivo 80 · cobertura ${pct(coverage, 0)}`,
+      tone: healthTone,
+      status: healthStatus,
+      aria: `Salud de cuenta: ${num(health, 0)} sobre 100; objetivo 80; cobertura ${pct(coverage, 0)}`,
+    },
+  ];
+  host.setAttribute("aria-busy", "false");
+  setHTML(host, items.map(gaugeCardHtml).join(""));
+  const meta = $("#risk-gauges-meta");
+  if (meta) {
+    meta.textContent = account
+      ? `${account.id} · ${dateTime(usage.as_of)}`
+      : "Sin datos de Fondo";
+  }
+}
+
 function renderOverview() {
   const o = S.overview;
   if (!o) return;
@@ -2341,30 +2646,94 @@ function renderOverview() {
       : "";
   }
 
+  const curve = (a.equity_curve || [])
+    .slice()
+    .sort((left, right) => new Date(left.ts) - new Date(right.ts));
+  const equitySeries = curve.map((point) => Number(point.equity)).filter((value) => isFinite(value));
+  const returnSeries = equitySeries.length
+    ? equitySeries.map((value) => value / equitySeries[0] - 1)
+    : [];
+  const drawdownSeries = [];
+  let peak = -Infinity;
+  equitySeries.forEach((value) => {
+    peak = Math.max(peak, value);
+    drawdownSeries.push(peak > 0 ? value / peak - 1 : 0);
+  });
+  const pnlSeries = Array.from((S.pnlData?.pnl || new Map()).values()).slice(-40);
+  const returnTone = a.return_pct >= 0 ? "pos" : "neg";
   const cards = [
-    { label: "Equity", value: money(a.equity), hint: `inicio ${money(meta.starting_cash)}`, cls: "" },
-    { label: "Cash", value: money(a.cash), hint: "efectivo disponible" },
-    { label: "Posiciones", value: money(a.positions_value), hint: `${a.positions.length} abiertas` },
-    { label: "Retorno", value: pct(a.return_pct, 2), hint: "vs. capital inicial", cls: a.return_pct >= 0 ? "pos" : "neg" },
     {
+      key: "equity",
+      label: "Equity",
+      value: money(a.equity),
+      hint: `inicio ${money(meta.starting_cash)}`,
+      delta: pct(a.return_pct, 2),
+      tone: returnTone,
+      deltaTitle: "retorno desde el capital inicial",
+      spark: equitySeries.slice(-40),
+      sparkColor: "#4cc9f0",
+    },
+    {
+      key: "cash",
+      label: "Cash",
+      value: money(a.cash),
+      hint: "efectivo disponible",
+      delta: "",
+      spark: [],
+    },
+    {
+      key: "positions",
+      label: "Posiciones",
+      value: money(a.positions_value),
+      hint: `${a.positions.length} abiertas`,
+      delta: `${a.positions.length} abiertas`,
+      tone: "flat",
+      spark: [],
+    },
+    {
+      key: "return",
+      label: "Retorno",
+      value: pct(a.return_pct, 2),
+      hint: "vs. capital inicial",
+      cls: returnTone === "pos" ? "pos" : "neg",
+      delta: pct(a.return_pct, 2),
+      tone: returnTone,
+      spark: returnSeries.slice(-40),
+      sparkColor: returnTone === "pos" ? "#3ddc97" : "#ff8a8a",
+    },
+    {
+      key: "pnl-month",
       label: "PnL del mes",
       value: monthly.total === null ? "Sin datos" : money(monthly.total),
       hint: monthly.total === null ? "sin cierres diarios" : `${monthly.count} días · ${monthly.label}`,
       cls: monthly.total === null ? "" : monthly.total >= 0 ? "pos" : "neg",
+      delta: monthly.total === null ? "" : money(monthly.total),
+      tone: monthly.total === null ? "flat" : monthly.total >= 0 ? "pos" : "neg",
+      spark: pnlSeries,
+      sparkColor: monthly.total !== null && monthly.total < 0 ? "#ff8a8a" : "#3ddc97",
     },
-    { label: "Max drawdown", value: pct(a.drawdown_pct, 2), hint: "pico → actual", cls: a.drawdown_pct < 0 ? "neg" : "" },
     {
+      key: "drawdown",
+      label: "Max drawdown",
+      value: pct(a.drawdown_pct, 2),
+      hint: "pico → actual",
+      cls: a.drawdown_pct < 0 ? "neg" : "",
+      delta: pct(a.drawdown_pct, 2),
+      tone: a.drawdown_pct < 0 ? "neg" : "flat",
+      spark: drawdownSeries.slice(-40),
+      sparkColor: "#ff8a8a",
+    },
+    {
+      key: "llm",
       label: "Llamadas LLM",
       value: fmtInt.format(a.llm_calls.count),
-      hint: a.llm_calls.count ? `media ${num(a.llm_calls.avg_latency_s, 1)} s · ok ${a.llm_calls.ok}/${a.llm_calls.count}` : "sin llamadas",
+      hint: a.llm_calls.count ? `media ${num(a.llm_calls.avg_latency_s, 1)} s` : "sin llamadas",
+      delta: a.llm_calls.count ? `ok ${a.llm_calls.ok}/${a.llm_calls.count}` : "",
+      tone: a.llm_calls.count ? (a.llm_calls.ok === a.llm_calls.count ? "pos" : "warn") : "flat",
+      spark: [],
     },
   ];
-  $("#kpis").innerHTML = cards.map((c) => `
-    <div class="kpi">
-      <div class="label">${esc(c.label)}</div>
-      <div class="value ${c.cls || ""}">${c.value}</div>
-      <div class="hint">${esc(c.hint || "")}</div>
-    </div>`).join("");
+  renderKpis(cards);
 
   $("#generated-at").textContent = "actualizado " + ago(o.generated_at);
   $("#equity-caption").textContent = a.equity_curve.length
@@ -2489,6 +2858,7 @@ function renderOverview() {
   renderBalanceDistribution();
   renderTopPerformers();
   renderPnlCalendar();
+  renderRiskGauges();
   requestAnimationFrame(drawEquity);
 }
 
@@ -5432,6 +5802,7 @@ function init() {
   } catch (_) {
     applySidebarCollapsed(false, false);
   }
+  initDensity();
   $("#sidebar-toggle").addEventListener("click", () => {
     const app = document.querySelector(".app");
     applySidebarCollapsed(!app.classList.contains("sidebar-collapsed"));

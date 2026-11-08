@@ -130,6 +130,38 @@ def test_inventario_ui_base_sigue_completo() -> None:
     assert api_calls == set(inventory["api_calls"])
 
 
+def test_componentes_v3_presentes() -> None:
+    text = INDEX.read_text(encoding="utf-8")
+    for marker in (
+        'id="risk-gauges"',
+        'id="risk-gauges-meta"',
+        'id="density-toggle"',
+        'id="density-label"',
+        'id="refresh-pulse"',
+        "renderRiskGauges",
+        "renderKpis",
+        "kpi-row",
+        "gauge-svg",
+        "gauge-limit",
+        "skeleton",
+        "num-changed",
+        "DENSITY_KEY",
+        'try { localStorage.setItem(DENSITY_KEY',
+        "tl.table.density",
+        "prefers-reduced-motion",
+    ):
+        assert marker in text, marker
+    for marker in (
+        "body.density-compact",
+        ".gauge-fill",
+        ".skeleton",
+        ".delta.pos",
+        ".delta.neg",
+        ".tag.green::before",
+    ):
+        assert marker in text, marker
+
+
 def test_hud_barra_operativa_presente() -> None:
     text = INDEX.read_text(encoding="utf-8")
     for marker in (

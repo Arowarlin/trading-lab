@@ -897,6 +897,20 @@ id o llamada. Capturas Chrome de las 15 pestañas antes/después en
 Evidencia: `pytest tests/test_console_shell.py -q` → **5 passed**; suite completa
 **410 passed**; `ruff` limpio; `lab doctor` OK.
 
+**Etapa 2 · Componentes.** Tarjetas KPI con delta y mini-sparkline de series
+reales (equity, retorno, PnL y drawdown; “sin serie” cuando el payload no
+trae historial). Gauges de colchón diario, colchón de drawdown y salud de
+cuenta, con la marca del límite y los datos de `fund.accounts[].usage` y
+`fund.health`; sin datos → **Sin datos**. Chips de estado con icono además de
+color. Tablas con cabecera fija y densidad cómoda/compacta persistida en
+`localStorage` con `try/catch`. Skeletons iniciales, punto de pulso al
+refrescar y transición corta al cambiar un número; todo desactivado con
+`prefers-reduced-motion`.
+
+Evidencia: `pytest tests/test_console_shell.py -q` → **6 passed**; suite completa
+**411 passed**; `ruff` limpio; `lab doctor` OK. Capturas de las 15 pestañas en
+`reports/ui/stage2` y diff en `reports/ui/stage2_diff.json`.
+
 ---
 
 ## 6h. Multiverse por operación (10.2)
