@@ -91,8 +91,12 @@ Reglas de trabajo:
   - Slippage real vs señal y error de tamaño; paradas duras con alerta.
   - Evidencia: `pytest tests/test_f13.py -q` → 5 passed; `lab f13 check` no-op
     porque F13 no ha iniciado.
-- [x] **2.4 Presentar y esperar aprobación** — pendiente de respuesta del usuario
-  - No se ha activado el paper. `qqq-trend-f13` sigue `enabled: false`.
+- [x] **2.4 Presentar, congelar y esperar aprobación** — 2026-11-07
+  - F13 congelado el 2026-11-07 (hash `df8acdaa…`), inicio previsto
+    2026-11-09 y ventana de 8 semanas; `lab f13 config-check` OK.
+  - **Congelar no activa:** `qqq-trend-f13` sigue `enabled: false` y no hay
+    ninguna tarea F13 registrada. La activación exige aprobación humana
+    explícita y sigue siendo en paper.
 
 ## Fase 3 — Mejoras de lab research
 
@@ -219,6 +223,14 @@ Reglas de trabajo:
   - CLI `lab fund snapshot|versions|rollback` y `lab bots capital|capital-set`.
   - Evidencia: `pytest tests/test_limit_versions.py -q` → 3 passed; suite
     completa 325 passed.
+- [ ] **7.4 Acumular 20-30 días de decisiones reales** — en curso
+  - No se puede backfillar: `run_lite_agent --date` solo etiqueta la fecha y el
+    contexto usa datos hasta hoy. La muestra debe crecer a diario.
+  - El job `TradingLab-Agents` (L-V) ejecuta SPY/QQQ/NVDA en modo lite y luego
+    `lab decisions update` para rellenar retornos 1/5/20d.
+  - Inicio: 2026-11-07 con 3 decisiones (SPY/QQQ/NVDA, todas Hold) y 0 retornos.
+  - Cierre: tras 20-30 días, `lab decisions report`, `lab lessons weekly` y
+    revisión de deriva/DSR con datos reales. Sin conclusiones antes.
 
 ## Fase 8 — Motor de eventos (opcional)
 
@@ -469,4 +481,7 @@ sin romper vistas ni añadir dependencias.
 | 2026-11-07 | 8 Cierre motor | `pytest tests/test_engine_decision.py -q` → 2 passed; `pytest -q` → 322 passed; sin Nautilus/databento/IBKR |
 | 2026-11-07 | 7.3 Versiones/capital | `pytest tests/test_limit_versions.py -q` → 3 passed; `pytest -q` → 325 passed; snapshot/rollback y capital por bot |
 | 2026-11-07 | 7.1 Lecciones semanales | `pytest tests/test_learning.py -q` → 8 passed; `pytest -q` → 327 passed; Qwen solo redacta, proposed, Sin datos |
+| 2026-11-07 | F13 congelado | `lab f13 freeze --yes --start 2026-11-09`; hash `df8acdaa…`; `config-check` OK; bot `enabled: false`; sin tarea F13 |
+| 2026-11-07 | Datos aprendizaje | Job `TradingLab-Agents` + `decisions update`; 3 decisiones SPY/QQQ/NVDA del 2026-11-07; 0 retornos 1/5/20d; ventana 20-30 días |
+| 2026-11-07 | Job diario + outcomes | `pytest tests/test_scripts.py -q` → 5 passed; `pytest -q` → 328 passed; `agents_daily.ps1` ejecuta `decisions update`; `ruff` limpio |
 |  |  |  |

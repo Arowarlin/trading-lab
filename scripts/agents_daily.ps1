@@ -18,6 +18,11 @@ foreach ($ticker in $tickers) {
     if ($LASTEXITCODE -ne 0) { $failed += $ticker }
 }
 
+# Rellena retornos 1/5/20d de decisiones antiguas con la misma cadencia diaria.
+Add-Content -Path $log -Value "=== decisions update $(Get-Date -Format o) ==="
+& ".\.venv\Scripts\lab.exe" decisions update *>> $log
+if ($LASTEXITCODE -ne 0) { $failed += "decisions-update" }
+
 if ($failed.Count -gt 0) {
     & ".\.venv\Scripts\lab.exe" alerts send agents_failed -m ("Fallaron: " + ($failed -join ", ")) --severity warning *>> $log
     exit 1

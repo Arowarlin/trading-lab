@@ -871,7 +871,7 @@ stdlib y `127.0.0.1`. Se conservan todas las pestañas, rutas, CSRF, Host/Origin
 y la lista blanca `WRITE_ROUTES`.
 
 Evidencia: `pytest tests/test_console_shell.py -q` → **3 passed**; suite completa
-**327 passed**; cubre las seis secciones, las 15 vistas actuales, los
+**328 passed**; cubre las seis secciones, las 15 vistas actuales, los
 componentes del dashboard y la ausencia de URLs externas/CDNs.
 
 ---
@@ -1164,7 +1164,7 @@ completa **325 passed**; `ruff` limpio; `lab doctor` OK con avisos conocidos.
 - El panel **Aprendizaje** sigue siendo el único sitio de aprobación humana.
 
 Evidencia: `pytest tests/test_learning.py -q` → **8 passed**; suite completa
-**327 passed**; `ruff` limpio; `lab doctor` OK con avisos conocidos.
+**328 passed**; `ruff` limpio; `lab doctor` OK con avisos conocidos.
 
 ---
 
@@ -1522,8 +1522,9 @@ servicios; `lab alerts test` envía una prueba. Nunca se imprimen tokens.
 
 ## 11c. F13: pilot operativo en paper
 
-**Estado: no iniciado.** El bot elegido es `qqq-trend-f13`
-(`config/bots.yaml`, `enabled: false`):
+**Estado: congelado, sin activar.** El bot elegido es `qqq-trend-f13`
+(`config/bots.yaml`, `enabled: false`). Congelado el **2026-11-07** con inicio
+previsto **2026-11-09** (hash `df8acdaa…`); la activación sigue siendo manual.
 
 - QQQ, estrategia `trend`, `fast=50 slow=200 regime=200`, exposición **0.35**.
 - Evidencia de `lab research`: 21 trades, pasa 65,5%, revienta 7,2%,
@@ -1555,7 +1556,7 @@ o ≥20 trades antes de opinar sobre edge. Si falla una parada dura, se detiene 
 se revisa. F13 nunca pasa a dinero real.
 
 ```powershell
-lab f13 status          # no iniciado + criterios
+lab f13 status          # congelado + criterios
 lab f13 freeze          # congela hash/criterios; NO activa el bot
 lab f13 report          # snapshot + F13 vs SPY vs backtest + slippage
 lab f13 signal-check    # señal viva vs recalculada
@@ -1586,8 +1587,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File E:\trading-lab\scripts\r
 
 El script diario no envía órdenes mientras el bot siga `enabled: false`; el
 orquestador ignora bots deshabilitados. La activación real exige editar
-`config/bots.yaml` a mano. `lab f13 status` debe seguir mostrando “no iniciado”
-hasta que tú ejecutes `freeze`.
+`config/bots.yaml` a mano y aprobación humana explícita. F13 ya está congelado;
+no hay ninguna tarea F13 registrada.
 
 ---
 

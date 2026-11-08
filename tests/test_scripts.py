@@ -48,6 +48,13 @@ def test_open_console_y_acceso_directo():
     assert marker.encode("utf-8") in blob or marker.encode("utf-16-le") in blob
 
 
+def test_agents_daily_incluye_decisions_update():
+    script = (ROOT / "scripts" / "agents_daily.ps1").read_text(encoding="utf-8")
+    assert "decisions update" in script
+    assert "orchestrate" not in script.lower()
+    assert "--execute" not in script.lower()
+
+
 def test_f13_scripts_preparados_sin_registrar():
     daily = (ROOT / "scripts" / "f13_daily.ps1").read_text(encoding="utf-8")
     assert "orchestrate" in daily and "qqq-trend-f13" in daily
