@@ -48,6 +48,7 @@ $codes += Run-Step "orchestrate dry-run" @("orchestrate", "--bot", "qqq-trend-f1
 $codes += Run-Step "orchestrate qqq-trend-f13" @("orchestrate", "--bot", "qqq-trend-f13")
 $codes += Run-Step "reconcile" @("reconcile")
 $codes += Run-Step "f13 check" @("f13", "check")
+$codes += Run-Step "f13 report" @("f13", "report")
 
 $failed = @($codes | Where-Object { $_ -ne 0 })
 if ($failed.Count -gt 0) {

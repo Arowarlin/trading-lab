@@ -877,7 +877,7 @@ stdlib y `127.0.0.1`. Se conservan todas las pestañas, rutas, CSRF, Host/Origin
 y la lista blanca `WRITE_ROUTES`.
 
 Evidencia: `pytest tests/test_console_shell.py -q` → **3 passed**; suite completa
-**403 passed**; cubre las seis secciones, las 15 vistas actuales, los
+**408 passed**; cubre las seis secciones, las 15 vistas actuales, los
 componentes del dashboard y la ausencia de URLs externas/CDNs.
 
 ---
@@ -1171,7 +1171,7 @@ completa **325 passed**; `ruff` limpio; `lab doctor` OK con avisos conocidos.
 - El panel **Aprendizaje** sigue siendo el único sitio de aprobación humana.
 
 Evidencia: `pytest tests/test_learning.py -q` → **8 passed**; suite completa
-**403 passed**; `ruff` limpio; `lab doctor` OK con avisos conocidos.
+**408 passed**; `ruff` limpio; `lab doctor` OK con avisos conocidos.
 
 ---
 
@@ -1572,7 +1572,7 @@ se revisa. F13 nunca pasa a dinero real.
 lab f13 status          # activo + criterios
 lab f13 freeze          # congela hash/criterios; NO activa el bot
 lab f13 activate        # activa en paper y re-congela el hash; pide confirmación
-lab f13 report          # snapshot + F13 vs SPY vs backtest + slippage
+lab f13 report          # reporte diario en reports/f13/ (solo lectura)
 lab f13 signal-check    # señal viva vs recalculada
 lab f13 config-check    # hash congelado vs actual
 lab f13 check           # paradas duras + alerta
@@ -1580,6 +1580,15 @@ lab f13 check           # paradas duras + alerta
 
 La activación del bot requiere aprobación humana explícita; `freeze` no activa
 el bot. `activate` es el paso controlado y ya se ejecutó.
+
+`lab f13 report` genera `reports/f13/YYYY-MM-DD.json`, su versión Markdown y
+`latest.json`/`latest.md`. Resume **ciclos ejecutados** (un ciclo por fecha con
+dry-run), **reconciliaciones OK**, **slippage p50/p95**, **error de tamaño**,
+**hash congelado/actual** y los criterios de `config/f13.yaml`. Es **solo
+lectura**: no conecta al broker, no envía órdenes, no activa bots y no modifica
+SQLite. Si el último lunes esperado dentro de la ventana F13 no tiene ciclo,
+marca `f13_monday_missed` y envía la alerta; no hace falta esperar al chequeo
+de 72 h.
 
 > **Activación controlada:** `lab f13 activate` exige F13 congelado, hash OK,
 > `mode=paper` y que el bot aún no esté activo. Edita **solo** la línea
@@ -1594,8 +1603,9 @@ Hoy está `Ready`, sin ejecutar todavía:
 
 - `scripts/f13_daily.ps1`: preflight (aborta si F13 sigue “no iniciado”),
   ejecuta un **dry-run** para dejar evidencia del ciclo, después
-  `lab orchestrate --bot qqq-trend-f13` **sin `--dry-run`**, `lab reconcile` y
-  `lab f13 check`. Cada paso queda en `logs/f13/`.
+  `lab orchestrate --bot qqq-trend-f13` **sin `--dry-run`**, `lab reconcile`,
+  `lab f13 check` y `lab f13 report`. Cada paso queda en `logs/f13/`; el
+  reporte diario queda en `reports/f13/`.
 - `scripts/register_f13_task.ps1`: crea la tarea `TradingLab-F13` L-V a las
   **22:20 hora local de Praga**. Ya ejecutado; no se registra desde el bot.
 
@@ -1811,7 +1821,7 @@ Evidencia: `pytest tests/test_library.py -q` → **3 passed**; suite completa
   propuestas**. El gate funciona.
 
 Evidencia: `pytest tests/test_optimize.py tests/test_quantstats_report.py
-tests/test_learning.py -q` → **12 passed**; suite completa **403 passed**;
+tests/test_learning.py -q` → **12 passed**; suite completa **408 passed**;
 `ruff` limpio; `lab doctor` OK. Sin activar bots ni tocar `.env`.
 
 ---
@@ -1835,7 +1845,7 @@ extra al contador del DSR.
 Prueba real: primera lectura `SPY/trend` → **1 lectura / 1 configuración**;
 la repetición cacheada se cubre en tests. Evidencia:
 `pytest tests/test_learning.py tests/test_optimize.py tests/test_web.py -q` →
-**29 passed**; suite completa **403 passed**; `ruff` limpio; `lab doctor` OK.
+**29 passed**; suite completa **408 passed**; `ruff` limpio; `lab doctor` OK.
 
 ---
 

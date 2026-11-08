@@ -340,6 +340,405 @@ def execution_metrics(
     }
 
 
+def _business_days(start: date, end: date) -> list[date]:
+    if end < start:
+        return []
+    days: list[date] = []
+    current = start
+    while current <= end:
+        if current.weekday() < 5:
+            days.append(current)
+        current += timedelta(days=1)
+    return days
+
+
+def _dryrun_cycles(root: Path, start: date, end: date) -> dict[date, str]:
+    """Un ciclo por fecha con dry-run registrado (UTC, nombre del archivo)."""
+    folder = root / "data" / "dryrun"
+    if not folder.exists():
+        return {}
+    cycles: dict[date, str] = {}
+    for path in sorted(folder.glob("dryrun_*.json")):
+        match = re.match(
+            r"dryrun_(\d{4})(\d{2})(\d{2})_(\d{6})\.json$", path.name
+        )
+        if not match:
+            continue
+        try:
+            day = date(int(match.group(1)), int(match.group(2)), int(match.group(3)))
+        except ValueError:
+            continue
+        if start <= day <= end:
+            cycles[day] = path.name
+    return cycles
+
+
+def _previous_monday(day: date) -> date:
+    offset = day.weekday() if day.weekday() > 0 else 7
+    return day - timedelta(days=offset)
+
+
+def _frozen_criteria(frozen: dict, root: Path) -> dict:
+    raw = frozen.get("criteria")
+    if raw:
+        try:
+            data = json.loads(raw)
+            if isinstance(data, dict):
+                merged = dict(DEFAULT_CRITERIA)
+                merged.update(data)
+                return merged
+        except (TypeError, ValueError):
+            pass
+    return load_criteria(root)
+
+
+def _pct_or_dash(value: float | None) -> str:
+    return "—" if value is None else f"{value * 100:.1f}%"
+
+
+def _num_or_dash(value: float | None) -> str:
+    return "—" if value is None else f"{value:g}"
+
+
+def _render_daily_report(payload: dict) -> str:
+    criteria = payload.get("criteria") or {}
+    cycles = payload.get("cycles") or {}
+    recs = payload.get("reconciliations") or {}
+    slip = payload.get("slippage") or {}
+    size = payload.get("size") or {}
+    config = payload.get("config") or {}
+    lines = [
+        f"# F13 · reporte diario {payload.get('report_date')}",
+        "",
+        f"Generado: {payload.get('generated_at')} · solo lectura",
+    ]
+    if payload.get("status") == "not_started":
+        lines += [
+            "",
+            "F13 no iniciado. Criterios congelados/configurados:",
+            "",
+            "```json",
+            json.dumps(criteria, indent=2, ensure_ascii=False, sort_keys=True),
+            "```",
+            "",
+        ]
+        return "\n".join(lines)
+
+    monday = cycles.get("monday") or {}
+    missing = cycles.get("missing") or []
+    lines += [
+        "",
+        f"- Bot: `{payload.get('bot')}` · símbolo `{payload.get('symbol')}`",
+        f"- Inicio: {payload.get('start_date')}",
+        (
+            f"- Hash: `{config.get('short')}…` · "
+            f"{'OK' if config.get('ok') else 'CAMBIADO'}"
+        ),
+        "",
+        "## Criterios",
+        "",
+        "| Criterio | Valor |",
+        "|---|---|",
+        f"| Ciclos mínimos | {_pct_or_dash(criteria.get('min_cycles_pct'))} |",
+        (
+            "| Reconciliaciones OK | "
+            f"{_pct_or_dash(criteria.get('min_reconciliation_ok_pct'))} |"
+        ),
+        (
+            "| Slippage p50 / p95 | "
+            f"{_num_or_dash(criteria.get('max_slippage_bps_p50'))} / "
+            f"{_num_or_dash(criteria.get('max_slippage_bps_p95'))} bps |"
+        ),
+        (
+            "| Error de tamaño máx. | "
+            f"{_num_or_dash(criteria.get('max_size_error_shares'))} acciones |"
+        ),
+        "",
+        "## Ciclos",
+        "",
+        "| Campo | Valor |",
+        "|---|---|",
+        f"| Esperados (hasta ayer) | {cycles.get('expected', 0)} |",
+        f"| Ejecutados | {cycles.get('executed', 0)} |",
+        (
+            "| Cumplimiento | "
+            f"{_pct_or_dash(cycles.get('pct'))} · "
+            f"{'OK' if cycles.get('ok') else 'FALLO'} |"
+        ),
+        f"| Último ciclo | {cycles.get('last_cycle_at') or '—'} |",
+        f"| Ciclo de hoy | {'sí' if cycles.get('today') else 'no'} |",
+        (
+            "| Lunes | "
+            f"{monday.get('date') or '—'} · "
+            f"{'OK' if monday.get('ok') else 'FALTA'} |"
+        ),
+        f"| Fechas sin ciclo | {', '.join(missing) if missing else '—'} |",
+        "",
+        "## Reconciliaciones",
+        "",
+        "| Campo | Valor |",
+        "|---|---|",
+        f"| Total | {recs.get('count', 0)} |",
+        (
+            "| OK | "
+            f"{recs.get('ok_count', 0)} "
+            f"({_pct_or_dash(recs.get('ok_pct'))}) · "
+            f"{'OK' if recs.get('ok') else 'FALLO'} |"
+        ),
+    ]
+    last = recs.get("last") or {}
+    if last:
+        lines.append(
+            f"| Última | {last.get('ts')} · {last.get('status')} · "
+            f"{last.get('details') or 'sin diferencias'} |"
+        )
+    lines += [
+        "",
+        "## Slippage y tamaño",
+        "",
+        "| Campo | Valor |",
+        "|---|---|",
+        f"| Fills | {slip.get('fills', 0)} |",
+        (
+            "| Slippage p50 | "
+            f"{_num_or_dash(slip.get('p50_bps'))} bps · "
+            f"{'OK' if slip.get('ok') else 'FALLO'} |"
+        ),
+        f"| Slippage p95 | {_num_or_dash(slip.get('p95_bps'))} bps |",
+        (
+            "| Error tamaño máx. | "
+            f"{_num_or_dash(size.get('max_error_shares'))} · "
+            f"{'OK' if size.get('ok') else 'FALLO'} |"
+        ),
+        "",
+        "## Alertas",
+        "",
+    ]
+    alerts = payload.get("alerts") or []
+    if alerts:
+        lines += [
+            f"- `{alert.get('id')}`: {alert.get('message')}" for alert in alerts
+        ]
+    else:
+        lines.append("Sin alertas.")
+    lines += [
+        "",
+        "> Reporte de solo lectura: no envía órdenes, no activa bots y no "
+        "modifica el estado operativo.",
+        "",
+    ]
+    return "\n".join(lines)
+
+
+def _write_daily_report(out_dir: Path, payload: dict) -> dict:
+    out_dir.mkdir(parents=True, exist_ok=True)
+    day = str(payload["report_date"])
+    json_path = out_dir / f"{day}.json"
+    md_path = out_dir / f"{day}.md"
+    data = dict(payload)
+    data["files"] = {"json": str(json_path), "markdown": str(md_path)}
+    text = json.dumps(data, indent=2, ensure_ascii=False, sort_keys=True)
+    for path in (json_path, out_dir / "latest.json"):
+        path.write_text(text, encoding="utf-8")
+    markdown = _render_daily_report(data)
+    for path in (md_path, out_dir / "latest.md"):
+        path.write_text(markdown, encoding="utf-8")
+    return data
+
+
+def daily_report(
+    db_path: str | Path,
+    *,
+    root: Path = ROOT,
+    out_dir: str | Path | None = None,
+    today: date | None = None,
+) -> dict:
+    """Genera el reporte diario F13 en reports/f13/ sin operar.
+
+    Cuenta ciclos por dry-run, reconciliaciones, slippage, tamaño y hash.
+    Marca `monday_missing` si el último lunes esperado no tiene ciclo.
+    """
+    init_db(db_path)
+    report_day = today or date.today()
+    frozen = status(db_path)
+    out = Path(out_dir) if out_dir is not None else root / "reports" / "f13"
+    criteria = load_criteria(root)
+
+    if not frozen:
+        payload = {
+            "generated_at": utcnow(),
+            "report_date": report_day.isoformat(),
+            "status": "not_started",
+            "read_only": True,
+            "criteria": criteria,
+            "alerts": [],
+        }
+        return _write_daily_report(out, payload)
+
+    bot = str(frozen.get("bot") or "")
+    start = date.fromisoformat(str(frozen.get("start_date")))
+    criteria = _frozen_criteria(frozen, root)
+    check = config_check(db_path, root)
+    cycle_map = _dryrun_cycles(root, start, report_day)
+    expected_days = _business_days(start, report_day - timedelta(days=1))
+    executed_days = [day for day in expected_days if day in cycle_map]
+    missing_days = [day for day in expected_days if day not in cycle_map]
+    cycles_pct = len(executed_days) / len(expected_days) if expected_days else None
+    min_cycles_pct = float(criteria.get("min_cycles_pct", 0.95))
+    cycles_ok = cycles_pct is None or cycles_pct >= min_cycles_pct
+
+    last_file = max(cycle_map.values()) if cycle_map else None
+    last_cycle_at = None
+    if last_file:
+        match = re.match(
+            r"dryrun_(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})\.json$",
+            last_file,
+        )
+        if match:
+            last_cycle_at = (
+                f"{match.group(1)}-{match.group(2)}-{match.group(3)}T"
+                f"{match.group(4)}:{match.group(5)}:{match.group(6)}Z"
+            )
+
+    monday = _previous_monday(report_day)
+    monday_expected = monday.isoformat() if monday >= start else None
+    monday_ok = monday_expected is None or monday in cycle_map
+
+    with connect(db_path) as con:
+        rec_rows = con.execute(
+            "SELECT * FROM reconciliation WHERE ts >= ? ORDER BY id",
+            (f"{start.isoformat()}T00:00:00",),
+        ).fetchall()
+    rec_count = len(rec_rows)
+    rec_ok_count = sum(1 for row in rec_rows if row["status"] == "ok")
+    rec_pct = rec_ok_count / rec_count if rec_count else None
+    min_rec_pct = float(criteria.get("min_reconciliation_ok_pct", 0.95))
+    rec_ok = rec_pct is None or rec_pct >= min_rec_pct
+    rec_last = dict(rec_rows[-1]) if rec_rows else None
+
+    execution = execution_metrics(db_path, bot=bot, start_date=start.isoformat())
+    max_slippage_p50 = float(criteria.get("max_slippage_bps_p50", 10))
+    max_slippage_p95 = float(criteria.get("max_slippage_bps_p95", 25))
+    p50 = execution["slippage_p50_bps"]
+    p95 = execution["slippage_p95_bps"]
+    slippage_ok = execution["fills"] == 0 or (
+        (p50 if p50 is not None else 0.0) <= max_slippage_p50
+        and (p95 if p95 is not None else 0.0) <= max_slippage_p95
+    )
+    max_size_error = float(criteria.get("max_size_error_shares", 1))
+    size_error = float(execution["size_error_max"])
+    size_ok = size_error <= max_size_error
+
+    alerts: list[dict] = []
+    if not check["ok"]:
+        alerts.append(
+            {
+                "id": "f13_hash_changed",
+                "severity": "critical",
+                "message": "El hash actual no coincide con el congelado.",
+            }
+        )
+    if not cycles_ok:
+        alerts.append(
+            {
+                "id": "f13_cycles_low",
+                "severity": "warning",
+                "message": (
+                    f"Ciclos {len(executed_days)}/{len(expected_days)} "
+                    f"({_pct_or_dash(cycles_pct)}); mínimo {min_cycles_pct:.0%}."
+                ),
+            }
+        )
+    if not rec_ok:
+        alerts.append(
+            {
+                "id": "f13_reconciliation_low",
+                "severity": "error",
+                "message": (
+                    f"Reconciliaciones OK {rec_ok_count}/{rec_count} "
+                    f"({_pct_or_dash(rec_pct)}); mínimo {min_rec_pct:.0%}."
+                ),
+            }
+        )
+    if not slippage_ok:
+        alerts.append(
+            {
+                "id": "f13_slippage_high",
+                "severity": "warning",
+                "message": (
+                    f"Slippage p50={_num_or_dash(p50)} bps "
+                    f"p95={_num_or_dash(p95)} bps."
+                ),
+            }
+        )
+    if not size_ok:
+        alerts.append(
+            {
+                "id": "f13_size_error",
+                "severity": "error",
+                "message": (
+                    f"Error de tamaño {size_error:g} > {max_size_error:g}."
+                ),
+            }
+        )
+    if monday_expected is not None and not monday_ok:
+        alerts.append(
+            {
+                "id": "f13_monday_missed",
+                "severity": "error",
+                "message": f"Falta el ciclo del lunes {monday_expected}.",
+                "date": monday_expected,
+            }
+        )
+
+    payload = {
+        "generated_at": utcnow(),
+        "report_date": report_day.isoformat(),
+        "status": "ok" if not alerts else "warn",
+        "read_only": True,
+        "bot": bot,
+        "symbol": str(frozen.get("symbol") or ""),
+        "start_date": start.isoformat(),
+        "config": {
+            "hash": str(frozen.get("config_hash") or ""),
+            "frozen_hash": check.get("frozen"),
+            "current_hash": check.get("current"),
+            "short": str(check.get("frozen") or frozen.get("config_hash") or "")[:16],
+            "ok": bool(check["ok"]),
+        },
+        "criteria": criteria,
+        "cycles": {
+            "expected": len(expected_days),
+            "executed": len(executed_days),
+            "pct": cycles_pct,
+            "ok": cycles_ok,
+            "missing": [day.isoformat() for day in missing_days],
+            "last_cycle_at": last_cycle_at,
+            "today": report_day in cycle_map,
+            "monday": {"date": monday_expected, "ok": monday_ok},
+        },
+        "reconciliations": {
+            "count": rec_count,
+            "ok_count": rec_ok_count,
+            "ok_pct": rec_pct,
+            "ok": rec_ok,
+            "last": rec_last,
+        },
+        "slippage": {
+            "fills": execution["fills"],
+            "p50_bps": p50,
+            "p95_bps": p95,
+            "ok": slippage_ok,
+        },
+        "size": {
+            "max_error_shares": size_error,
+            "ok": size_ok,
+        },
+        "alerts": alerts,
+    }
+    return _write_daily_report(out, payload)
+
+
 def signal_check(
     settings: Settings,
     spec,
@@ -395,6 +794,7 @@ __all__ = [
     "activate",
     "config_check",
     "config_hash",
+    "daily_report",
     "execution_metrics",
     "freeze",
     "load_criteria",

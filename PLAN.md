@@ -637,8 +637,32 @@ limpio; `lab doctor` OK. Sin dependencias nuevas.
     `enabled: false` para `qqq-trend-f13` mientras `bots.yaml` lo tiene activo,
     si conserva “congelado, sin activar” o si la fila F13 no dice paper/activo.
 - Evidencia: `pytest tests/test_docs.py -q` → 4 passed; suite completa
-  **403 passed**; `ruff` limpio; `lab doctor` OK. Sin cambios de
+  **408 passed**; `ruff` limpio; `lab doctor` OK. Sin cambios de
   comportamiento ni dependencias nuevas.
+
+### Etapa 3 — Reporte diario F13 de la primera semana
+
+- [x] **`lab f13 report` de solo lectura**
+  - `f13.daily_report` escribe `reports/f13/YYYY-MM-DD.json`, su Markdown y
+    `latest.json`/`latest.md`; no conecta al broker, no envía órdenes, no
+    activa bots y no modifica tablas operativas.
+  - Ciclos: una fecha con `data/dryrun/dryrun_*.json`; compara ejecutados vs
+    días laborables esperados hasta ayer y aplica `min_cycles_pct`.
+  - Reconciliaciones: total, OK y porcentaje desde `reconciliation`, con
+    `min_reconciliation_ok_pct`; última fila incluida.
+  - Slippage p50/p95 y error de tamaño desde `orders`/`fills`/`signals`, con
+    `max_slippage_bps_p50`, `max_slippage_bps_p95` y
+    `max_size_error_shares`.
+  - Hash congelado vs actual y criterios congelados de F13 en el JSON/Markdown.
+  - Alerta `f13_monday_missed` si el último lunes esperado dentro de la ventana
+    F13 no tiene ciclo; no se alerta antes del lunes de inicio ni el mismo
+    lunes (el ciclo puede estar en curso).
+  - `scripts/f13_daily.ps1` añade `lab f13 report` tras `f13 check`.
+- Evidencia: `pytest tests/test_f13.py -q` → 16 passed; suite completa
+  **408 passed**; `ruff` limpio; `lab doctor` OK; sintaxis del `.ps1` OK;
+  `lab f13 report` real generó `reports/f13/2026-11-08.json` y `.md` con
+  hash `54b420360f17c75d…` OK, 0 ciclos/0 reconciliaciones (F13 empieza el
+  lunes) y sin alertas. Sin dependencias nuevas.
 
 ---
 
@@ -709,6 +733,7 @@ limpio; `lab doctor` OK. Sin dependencias nuevas.
 | 2026-11-07 | Etapa 5 | `pytest tests/test_instruments.py tests/test_data_normalize.py -q` -> 14 passed; `pytest -q` -> 393 passed; XAUUSD/GC separados, bid/ask conservados |
 | 2026-11-07 | Etapa 6 | `pytest tests/test_library.py -q` -> 3 passed; `pytest -q` -> 396 passed; 15 fichas originales, `lab library list|show` |
 | 2026-11-08 | Etapa 7 | `pytest tests/test_optimize.py tests/test_quantstats_report.py tests/test_learning.py -q` -> 12 passed; `pytest -q` -> 400 passed; Optuna 5.0.0/QuantStats 0.0.86; smoke PBO 80.3%, 0 propuestas |
-| 2026-11-08 | Bloque Etapa 1 | `pytest tests/test_learning.py tests/test_optimize.py tests/test_web.py -q` -> 29 passed; `pytest -q` -> 403 passed; holdout cache por hash, lecturas al DSR, UI/CLI |
-| 2026-11-08 | Bloque Etapa 2 | `pytest tests/test_docs.py -q` -> 4 passed; `pytest -q` -> 403 passed; README F13 activo en paper + test de coherencia con bots.yaml |
+| 2026-11-08 | Bloque Etapa 1 | `pytest tests/test_learning.py tests/test_optimize.py tests/test_web.py -q` -> 29 passed; `pytest -q` -> 408 passed; holdout cache por hash, lecturas al DSR, UI/CLI |
+| 2026-11-08 | Bloque Etapa 2 | `pytest tests/test_docs.py -q` -> 4 passed; `pytest -q` -> 408 passed; README F13 activo en paper + test de coherencia con bots.yaml |
+| 2026-11-08 | Bloque Etapa 3 | `pytest tests/test_f13.py -q` -> 16 passed; `pytest -q` -> 408 passed; `lab f13 report` en reports/f13/ (ciclos, reconciliaciones, slippage, tamano, hash, alerta lunes), solo lectura |
 |  |  |  |

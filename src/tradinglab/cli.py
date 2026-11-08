@@ -28,10 +28,10 @@ from .decisions import report as decisions_report
 from .execution import get_broker, get_mt5_broker, get_projectx_broker
 from .f13 import activate as f13_activate
 from .f13 import config_check as f13_config_check
+from .f13 import daily_report as f13_daily_report
 from .f13 import execution_metrics as f13_execution
 from .f13 import freeze as f13_freeze
 from .f13 import load_criteria as f13_criteria
-from .f13 import record_snapshot as f13_record
 from .f13 import signal_check as f13_signal_check
 from .f13 import status as f13_status
 from .indicators import atr as atr_indicator
@@ -1687,7 +1687,7 @@ def f13_activate_cmd(
 
 @f13_app.command("report")
 def f13_report_cmd() -> None:
-    """Registra un snapshot y muestra el estado de F13 frente a SPY."""
+    """Genera el reporte diario F13 en reports/f13/ (solo lectura)."""
     init_db(DEFAULT_DB)
     row = f13_status(DEFAULT_DB)
     if not row:
@@ -1695,71 +1695,60 @@ def f13_report_cmd() -> None:
         console.print_json(data=f13_criteria())
         return
 
-    settings = get_settings()
-    broker = get_broker(settings, DEFAULT_DB)
-    spy_close = None
-    spy_total = None
-    try:
-        spy = data_mod.fetch("SPY", row["start_date"], _today(), settings.data.cache_dir)
-        spy_close = float(spy["close"].iloc[-1])
-        spy_total = spy_close / float(spy["close"].iloc[0]) - 1.0
-    except Exception as exc:
-        console.print(f"[dim]No se pudo leer SPY: {exc}[/dim]")
+    report = f13_daily_report(DEFAULT_DB)
+    cycles = report["cycles"]
+    recs = report["reconciliations"]
+    slip = report["slippage"]
+    size = report["size"]
+    config = report["config"]
 
-    specs = {spec.id: spec for spec in load_bots()}
-    spec = specs.get(row["bot"])
-    backtest_metrics = None
-    if spec is not None:
-        try:
-            df = data_mod.fetch(
-                spec.universe[0], row["start_date"], _today(), settings.data.cache_dir
-            )
-            strategy = STRATEGIES[spec.strategy](df, **spec.params)
-            bt = run_backtest(
-                df,
-                strategy.target,
-                starting_cash=settings.starting_cash,
-                commission_bps=settings.execution.commission_bps,
-                slippage_bps=settings.execution.slippage_bps,
-                max_gross=spec.exposure,
-            )
-            backtest_metrics = bt.metrics
-        except Exception as exc:
-            console.print(f"[dim]No se pudo ejecutar el backtest de comparación: {exc}[/dim]")
-
-    snap = f13_record(DEFAULT_DB, broker, bot=row["bot"], spy_close=spy_close)
-    with connect(DEFAULT_DB) as con:
-        first = con.execute("SELECT equity, ts FROM f13_metrics ORDER BY id ASC LIMIT 1").fetchone()
-        count = con.execute("SELECT COUNT(*) AS n FROM f13_metrics").fetchone()["n"]
-        orders = con.execute(
-            "SELECT COUNT(*) AS n FROM orders WHERE bot = ?", (row["bot"],)
-        ).fetchone()["n"]
-
-    total = snap["equity"] / float(first["equity"]) - 1.0 if first and first["equity"] else 0.0
-    t = Table(title=f"F13 · {row['bot']} · desde {row['start_date']}")
+    t = Table(title=f"F13 · reporte diario · {report['report_date']}")
     t.add_column("Métrica", style="bold")
     t.add_column("Valor", justify="right")
-    t.add_row("Equity", f"{snap['equity']:,.2f}")
-    t.add_row("Retorno F13", _fmt_pct(total))
-    t.add_row("Drawdown actual", _fmt_pct(snap["drawdown"]))
-    if spy_total is not None:
-        t.add_row("Retorno SPY (mismo periodo)", _fmt_pct(spy_total))
-    if backtest_metrics:
-        t.add_row("Retorno backtest", _fmt_pct(float(backtest_metrics["total_return"])))
-        t.add_row("Sharpe backtest", f"{float(backtest_metrics['sharpe']):.2f}")
-        t.add_row("MaxDD backtest", _fmt_pct(float(backtest_metrics["max_drawdown"])))
-        t.add_row("Trades backtest", str(backtest_metrics["num_trades"]))
-    t.add_row("Snapshots", str(count))
-    t.add_row("Órdenes del bot", str(orders))
-    exec_metrics = f13_execution(DEFAULT_DB, bot=row["bot"], start_date=row["start_date"])
+    t.add_row("Estado", "OK" if report["status"] == "ok" else "CON AVISOS")
+    t.add_row("Hash", f"{config['short']}… · {'OK' if config['ok'] else 'CAMBIADO'}")
+    t.add_row(
+        "Ciclos",
+        f"{cycles['executed']}/{cycles['expected']} · "
+        f"{_fmt_pct(cycles['pct']) if cycles['pct'] is not None else '—'}",
+    )
+    t.add_row("Último ciclo", cycles.get("last_cycle_at") or "—")
+    monday = cycles.get("monday") or {}
+    t.add_row(
+        "Lunes",
+        f"{monday.get('date') or '—'} · {'OK' if monday.get('ok') else 'FALTA'}",
+    )
+    t.add_row(
+        "Reconciliaciones",
+        f"{recs['ok_count']}/{recs['count']} · "
+        f"{_fmt_pct(recs['ok_pct']) if recs['ok_pct'] is not None else '—'}",
+    )
+    t.add_row("Fills", str(slip["fills"]))
     t.add_row(
         "Slippage p50 / p95",
-        f"{_fmt_pct((exec_metrics['slippage_p50_bps'] or 0) / 10_000)} / "
-        f"{_fmt_pct((exec_metrics['slippage_p95_bps'] or 0) / 10_000)}",
+        f"{slip['p50_bps'] if slip['p50_bps'] is not None else '—'} / "
+        f"{slip['p95_bps'] if slip['p95_bps'] is not None else '—'} bps",
     )
-    t.add_row("Error tamaño máx.", f"{exec_metrics['size_error_max']:g}")
+    t.add_row("Error tamaño máx.", f"{size['max_error_shares']:g}")
     console.print(t)
-    console.print("[dim]F13 no cambia enabled; el pilot solo se activa con aprobación humana.[/dim]")
+    console.print(
+        f"[dim]JSON: {report['files']['json']} · MD: {report['files']['markdown']}[/dim]"
+    )
+    for alert in report.get("alerts") or []:
+        console.print(f"[yellow]{alert['id']}:[/yellow] {alert['message']}")
+    monday_alert = next(
+        (
+            alert
+            for alert in report.get("alerts") or []
+            if alert.get("id") == "f13_monday_missed"
+        ),
+        None,
+    )
+    if monday_alert:
+        send_alert("f13_monday_missed", monday_alert["message"], severity="error")
+    console.print(
+        "[dim]Solo lectura: no envía órdenes, no activa bots ni modifica SQLite.[/dim]"
+    )
 
 
 @f13_app.command("check")
