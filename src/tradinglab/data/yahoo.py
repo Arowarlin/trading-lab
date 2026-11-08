@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pandas as pd
@@ -31,4 +33,18 @@ def fetch(ticker: str, start: str, end: str, cache_dir: str | Path, refresh: boo
     if df.empty:
         raise RuntimeError(f"Datos vacíos para {ticker} tras normalizar")
     df.to_parquet(path)
+    metadata = {
+        "provider": "yahoo",
+        "ticker": ticker,
+        "start": start,
+        "end": end,
+        "adjusted": True,
+        "adjustment": "auto_adjust=True",
+        "timezone": "date-only",
+        "fetched_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+    }
+    path.with_suffix(".meta.json").write_text(
+        json.dumps(metadata, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
     return df

@@ -4241,6 +4241,48 @@ def prop_simulate(
     )
 
 
+@app.command("datacheck")
+def datacheck_cmd(
+    symbol: str = typer.Argument(..., help="Símbolo, p. ej. SPY o EURUSD=X"),
+    timeframe: str = typer.Option("1d", "--timeframe", help="1d, M15, H1..."),
+    cache_dir: str = typer.Option(None, "--cache-dir"),
+    as_json: bool = typer.Option(False, "--json", help="Salida JSON"),
+) -> None:
+    """Valida la caché parquet: huecos, duplicados, OHLC, TZ, ajuste y spread."""
+    from .datacheck import check_symbol
+
+    settings = get_settings()
+    result = check_symbol(
+        symbol,
+        cache_dir=Path(cache_dir) if cache_dir else settings.data.cache_dir,
+        timeframe=timeframe,
+    )
+    if as_json:
+        console.print_json(data=result)
+        raise typer.Exit(0 if result["status"] != "falla" else 1)
+
+    table = Table(title=f"Datacheck · {result['symbol']} · {result['timeframe']}")
+    table.add_column("Campo", style="bold")
+    table.add_column("Valor", overflow="fold")
+    table.add_row("Estado", result["status"])
+    table.add_row("Barras", str(result["rows"]))
+    table.add_row(
+        "Rango",
+        f"{result['start'] or 'Sin datos'} → {result['end'] or 'Sin datos'}",
+    )
+    table.add_row("Caché", result.get("cache_path") or "Sin datos")
+    if result.get("reasons"):
+        table.add_row("Motivos", "\n".join(result["reasons"]))
+    console.print(table)
+    for name, check in result.get("checks", {}).items():
+        color = {"ok": "green", "aviso": "yellow", "falla": "red"}.get(
+            check["status"], "dim"
+        )
+        console.print(f"[{color}]{check['status']}[/{color}] {name}: {check['reason']}")
+    if result["status"] == "falla":
+        raise typer.Exit(1)
+
+
 @app.command("research")
 def research_cmd(
     symbols: str = typer.Option(
@@ -4339,6 +4381,17 @@ def research_cmd(
         )
 
     files = write_outputs(report, out_dir)
+
+    datachecks = report.get("datachecks") or {}
+    if datachecks:
+        console.print(
+            "[dim]Datacheck: "
+            + ", ".join(
+                f"{symbol}={dc['status']}"
+                for symbol, dc in sorted(datachecks.items())
+            )
+            + "[/dim]"
+        )
 
     if not report["results"]:
         console.print("[red]Sin candidatos evaluados.[/red] Revisa los errores del reporte.")

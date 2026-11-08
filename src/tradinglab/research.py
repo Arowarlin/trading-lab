@@ -16,6 +16,7 @@ import pandas as pd
 
 from . import data as data_mod
 from .backtest import run as run_backtest
+from .datacheck import check_frame
 from .prop.rules import PropRules
 from .prop.simulator import monte_carlo
 from .strategies import STRATEGIES
@@ -277,6 +278,7 @@ def run_research(
     end = cfg.end or datetime.now(timezone.utc).date().isoformat()
     results: list[dict] = []
     errors: list[dict] = []
+    datachecks: dict[str, dict] = {}
     artifact_root = Path(artifacts_dir) if artifacts_dir is not None else None
     if artifact_root is not None:
         artifact_root.mkdir(parents=True, exist_ok=True)
@@ -294,6 +296,24 @@ def run_research(
 
         if len(df) < 260:
             errors.append({"symbol": symbol, "error": f"histórico insuficiente ({len(df)} barras)"})
+            continue
+
+        cache_file = data_mod.cache_path(cache_dir, symbol, cfg.start, end)
+        datacheck = check_frame(
+            df,
+            symbol,
+            timeframe="1d",
+            cache_path=str(cache_file),
+        )
+        datachecks[symbol] = datacheck
+        if datacheck["status"] == "falla":
+            errors.append(
+                {
+                    "symbol": symbol,
+                    "error": "datacheck falla: " + "; ".join(datacheck["reasons"]),
+                    "datacheck": datacheck,
+                }
+            )
             continue
 
         bh_returns = df["close"].astype(float).pct_change().fillna(0.0)
@@ -452,6 +472,7 @@ def run_research(
                             "regime_report": regime_payload,
                             "regime_gate": regime_check.to_dict(),
                             "year_returns": year_returns,
+                            "datacheck": datacheck,
                             "artifact": artifact_rel,
                             "artifact_rows": artifact_rows,
                             "score": _score(pass_rate, breach_rate, sharpe),
@@ -510,11 +531,17 @@ def run_research(
             and r["family_median_pass"] >= cfg.min_pass
             and (r.get("dsr") is not None and r["dsr"] >= cfg.min_dsr)
             and r.get("wf_positive_folds", 0) >= cfg.min_wf_positive
+            and (r.get("datacheck") or {}).get("status") != "falla"
         )
 
     def validation_failures(r: dict) -> list[str]:
-        """Motivos nuevos: PBO global/activo, walk-forward y regímenes."""
+        """Motivos nuevos: datacheck, PBO global/activo, walk-forward y regímenes."""
         failures: list[str] = []
+        datacheck = r.get("datacheck") or {}
+        if datacheck.get("status") == "falla":
+            failures.append(
+                "datacheck: " + "; ".join(datacheck.get("reasons") or ["falla"])
+            )
         if not pbo_ok:
             failures.append(
                 f"PBO global no disponible o > {cfg.max_pbo:.0%}"
@@ -609,6 +636,8 @@ def run_research(
             "max_drawdown": r["max_drawdown"],
             "sharpe": r["sharpe"],
             "status": status,
+            "datacheck_status": (r.get("datacheck") or {}).get("status"),
+            "datacheck_reasons": (r.get("datacheck") or {}).get("reasons") or [],
             "enabled": False,
             "note": note,
         }
@@ -657,6 +686,7 @@ def run_research(
             "family_stability": True,
         },
         "results": results,
+        "datachecks": datachecks,
         "proposals": [
             _public(
                 p,
@@ -730,6 +760,19 @@ def render_markdown(report: dict, top: int = 25) -> str:
         "| # | Activo | Estrategia | Parámetros | Escala | Sharpe | CAGR | MaxDD | Trades | Pasa | Revienta | Pasa OOS | Score | DSR | WF | Gate |",
         "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
+
+    datachecks = report.get("datachecks") or {}
+    if datachecks:
+        lines += [
+            "",
+            "## Calidad de datos",
+            "",
+            "| Activo | Estado | Motivo |",
+            "|---|---|---|",
+        ]
+        for symbol, dc in sorted(datachecks.items()):
+            reasons = "; ".join(dc.get("reasons") or []) or "sin avisos"
+            lines.append(f"| {symbol} | {dc.get('status', 'Sin datos')} | {reasons} |")
 
     def pct(x: float) -> str:
         return f"{x * 100:,.1f}%"
@@ -968,6 +1011,7 @@ def write_outputs(report: dict, out_dir: str | Path) -> dict[str, str]:
         "auto_enable": False,
         "pbo": report.get("pbo"),
         "walk_forward": report.get("walk_forward"),
+        "datachecks": report.get("datachecks", {}),
         "proposals": report["proposals"],
         "near_misses": report.get("near_misses", []),
     }

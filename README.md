@@ -876,7 +876,7 @@ stdlib y `127.0.0.1`. Se conservan todas las pestañas, rutas, CSRF, Host/Origin
 y la lista blanca `WRITE_ROUTES`.
 
 Evidencia: `pytest tests/test_console_shell.py -q` → **3 passed**; suite completa
-**362 passed**; cubre las seis secciones, las 15 vistas actuales, los
+**375 passed**; cubre las seis secciones, las 15 vistas actuales, los
 componentes del dashboard y la ausencia de URLs externas/CDNs.
 
 ---
@@ -1169,7 +1169,7 @@ completa **325 passed**; `ruff` limpio; `lab doctor` OK con avisos conocidos.
 - El panel **Aprendizaje** sigue siendo el único sitio de aprobación humana.
 
 Evidencia: `pytest tests/test_learning.py -q` → **8 passed**; suite completa
-**362 passed**; `ruff` limpio; `lab doctor` OK con avisos conocidos.
+**375 passed**; `ruff` limpio; `lab doctor` OK con avisos conocidos.
 
 ---
 
@@ -1636,6 +1636,38 @@ Start-ScheduledTask -TaskName TradingLab-Telegram
 ```
 
 Guía completa, seguridad y solución de problemas: `docs/telegram.md`.
+
+---
+
+## 11e. Calidad de datos y gate de research
+
+`lab datacheck <símbolo> [--timeframe]` valida la caché parquet **sin descargar
+ni inventar datos**: huecos de calendario, duplicados, barras fuera de orden,
+OHLC inconsistente, saltos extremos, zona horaria declarada, ajuste
+ajustado/no ajustado y presencia de `bid`/`ask`/`mid`/`spread`.
+
+- Resultado **ok / aviso / falla**, con motivos y fechas de ejemplo.
+- `aviso` no bloquea; **`falla` sí**: `lab research` no propone candidatos para
+  un activo que falla el datacheck.
+- El estado viaja en `latest.json`/`proposals.json` y se muestra en la pestaña
+  **Research** y en **Run Detail**.
+- Test de look-ahead: estrategias e indicadores se comparan en una serie
+  truncada contra la completa; la señal en `t` no puede cambiar.
+- No se añaden dependencias.
+
+```powershell
+lab datacheck SPY --timeframe 1d
+lab datacheck EURUSD=X --json
+lab research --symbols SPY --strategies trend
+```
+
+Estado real de la caché: SPY/QQQ `aviso` (3,6% de huecos de calendario por
+festivos y ajuste no declarado en cachés antiguas); EURUSD=X `falla` por 88
+barras OHLC inconsistentes y queda excluido de propuestas; GC aún **Sin datos**.
+
+Evidencia: `pytest tests/test_datacheck.py tests/test_lookahead.py
+tests/test_research.py -q` → **30 passed**; suite completa **375 passed**;
+`ruff` limpio; `lab doctor` OK.
 
 ---
 

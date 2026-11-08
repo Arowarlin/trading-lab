@@ -1523,6 +1523,7 @@ class LabData:
             "candidates": latest.get("candidates") or len(latest.get("results") or []),
             "results": (latest.get("results") or [])[:limit],
             "proposals": proposal_rows,
+            "datachecks": latest.get("datachecks") or proposals.get("datachecks") or {},
             "near_misses": latest.get("near_misses") or [],
             "pbo": latest.get("pbo"),
             "pbo_ok": latest.get("pbo_ok"),

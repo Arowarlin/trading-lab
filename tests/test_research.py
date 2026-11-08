@@ -268,6 +268,41 @@ def test_run_research_ranks_and_never_enables(monkeypatch):
     assert report["walk_forward"] is None  # 400 filas < 504+126
     assert all("regime_gate" in r for r in report["results"])
     assert all("regime_report" in r for r in report["results"])
+
+
+def test_datacheck_falla_bloquea_propuestas(monkeypatch):
+    _fake_research_world(monkeypatch, with_edge=True)
+    good = _frame(n=400)
+    bad = good.copy()
+    bad.loc[bad.index[5], "high"] = bad["low"].iloc[5] - 1.0
+
+    def fetch(symbol, *args, **kwargs):
+        return bad if symbol == "BAD" else good
+
+    monkeypatch.setattr(research.data_mod, "fetch", fetch)
+    cfg = research.ResearchConfig(
+        symbols=["GOOD", "BAD"],
+        strategies=["trend"],
+        paths=5,
+        horizon=10,
+        block_size=1,
+        pbo_max_combinations=200,
+        exposures=[1.0],
+    )
+    report = research.run_research(cfg, ftmo(100_000), cache_dir="unused")
+
+    assert report["datachecks"]["BAD"]["status"] == "falla"
+    assert report["datachecks"]["GOOD"]["status"] in {"ok", "aviso"}
+    assert report["candidates"] > 0
+    assert all(result["symbol"] != "BAD" for result in report["results"])
+    assert any(
+        error["symbol"] == "BAD" and "datacheck" in error["error"].lower()
+        for error in report["errors"]
+    )
+    assert not any(
+        row["symbol"] == "BAD"
+        for row in report["proposals"] + report["near_misses"]
+    )
     assert all(p["enabled"] is False for p in report["proposals"])
     assert all(p["status"] == "proposed" for p in report["proposals"])
     assert all("oos_pass_rate" in p for p in report["proposals"])

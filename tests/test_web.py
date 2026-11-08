@@ -176,6 +176,10 @@ def test_research_usa_ultimo_informe(tmp_path: Path) -> None:
                 ],
                 "proposals": [{"symbol": "QQQ", "enabled": False}],
                 "near_misses": [],
+                "datachecks": {
+                    "QQQ": {"status": "aviso", "reasons": ["ajuste no declarado"]},
+                    "SPY": {"status": "ok", "reasons": []},
+                },
                 "pbo": {"pbo": 0.2, "verdict": "ok"},
                 "walk_forward": {"verdict": "ok", "stitched_sharpe": 0.8},
             }
@@ -218,6 +222,8 @@ def test_research_usa_ultimo_informe(tmp_path: Path) -> None:
     assert report["candidates"] == 2
     assert len(report["results"]) == 1
     assert report["proposals"][0]["enabled"] is False
+    assert report["datachecks"]["QQQ"]["status"] == "aviso"
+    assert report["datachecks"]["SPY"]["status"] == "ok"
     assert report["pbo"]["verdict"] == "ok"
     assert report["walk_forward"]["verdict"] == "ok"
     assert report["horizons"]["top"] == 1

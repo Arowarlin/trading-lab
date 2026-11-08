@@ -491,6 +491,30 @@ Evidencia de la etapa: `pytest tests/test_operator.py tests/test_telegram.py -q`
 → 41 passed; `ruff` limpio; `lab doctor` OK. Sin tocar Telegram, sin push y sin
 activar bots/F13.
 
+## Etapa 1 — Calidad de datos (2026-11-07)
+
+- [x] **`datacheck.py` y CLI**
+  - `lab datacheck <símbolo> [--timeframe]` sobre parquet: huecos, duplicados,
+    orden, OHLC, saltos, TZ, ajuste y bid/ask/mid/spread.
+  - Resultado ok/aviso/falla con motivos y fechas.
+  - Metadatos de ajuste/TZ al escribir cachés nuevas de Yahoo.
+- [x] **Look-ahead**
+  - Test que compara estrategias e indicadores con serie truncada vs completa;
+    la señal en `t` no cambia al añadir datos posteriores.
+- [x] **Gate de research**
+  - Un activo con datacheck `falla` no genera resultados ni propuestas.
+  - `datachecks` viaja en `latest.json`/`proposals.json` y en cada propuesta.
+  - Panel Research y Run Detail muestran estado y motivos.
+  - No se relajan umbrales: el gate solo añade un bloqueo.
+- [x] **Datos reales**
+  - SPY/QQQ `aviso` (huecos de festivos y ajuste no declarado en cachés viejas).
+  - EURUSD=X `falla` (88 barras OHLC inconsistentes) y queda fuera de research.
+  - GC/`Sin datos` hasta la Etapa 5.
+
+Evidencia: `pytest tests/test_datacheck.py tests/test_lookahead.py
+tests/test_research.py -q` → 30 passed; `pytest -q` → 375 passed; `ruff`
+limpio; `lab doctor` OK. Sin dependencias nuevas.
+
 ---
 
 ## Registro de evidencias
@@ -553,4 +577,5 @@ activar bots/F13.
 | 2026-11-07 | 13 Telegram remoto | `pytest tests/test_telegram.py -q` → 23 passed; `pytest -q` → 352 passed; long polling, keyring, comandos, push/backup con `/confirm` y agente restringido; docs/telegram.md |
 | 2026-11-07 | Etapa 0 | `pytest tests/test_operator.py tests/test_telegram.py -q` → 41 passed; `pytest -q` → 357 passed; F13 falla→bloquea+audita, PIN 6-12 persistente, denies acotados, `/push` con diffstat |
 | 2026-11-07 | F13 activado | `lab f13 activate --yes` → hash `54b42036…`; `config-check` OK; bot `enabled:true`; `TradingLab-F13` Ready, próxima 2026-11-09 22:20; backup `trading-lab_20261107_223737.zip` PASS |
+| 2026-11-07 | Etapa 1 | `pytest tests/test_datacheck.py tests/test_lookahead.py tests/test_research.py -q` → 30 passed; `pytest -q` → 375 passed; datacheck ok/aviso/falla, gate research, UI Research/Run Detail |
 |  |  |  |

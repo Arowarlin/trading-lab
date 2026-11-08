@@ -1242,6 +1242,11 @@
     <section class="view" id="view-research">
       <div class="stats" id="research-stats"></div>
       <div class="panel" style="margin-bottom:14px">
+        <div class="panel-head"><h2>Calidad de datos</h2><span class="muted tiny" id="research-datacheck-meta"></span></div>
+        <div id="research-datacheck"></div>
+        <div class="note">Si un activo falla el datacheck, <code>lab research</code> no propone candidatos para él. Los avisos se muestran pero no relajan umbrales.</div>
+      </div>
+      <div class="panel" style="margin-bottom:14px">
         <div class="panel-head"><h2>Resultados por perfil</h2><span class="muted tiny">swing · forex/CFD · futuros</span></div>
         <div id="research-profiles"></div>
       </div>
@@ -4311,6 +4316,13 @@ function renderRepos() {
 }
 
 /* --------------------------------------------------------------- research */
+function datacheckTag(status) {
+  if (status === "ok") return `<span class="tag green">ok</span>`;
+  if (status === "aviso") return `<span class="tag yellow">aviso</span>`;
+  if (status === "falla") return `<span class="tag red">falla</span>`;
+  return `<span class="tag">Sin datos</span>`;
+}
+
 function renderResearch() {
   const r = S.overview?.research;
   if (!r) return;
@@ -4319,6 +4331,28 @@ function renderResearch() {
   const gateTag = (g) => g?.passed
     ? `<span class="tag green">ok</span>`
     : `<span class="tag red">no</span>`;
+  const dcEntries = Object.entries(r.datachecks || {}).sort(([a], [b]) => a.localeCompare(b));
+  const dcRows = dcEntries.map(([symbol, dc]) => [
+    `<b>${esc(symbol)}</b>`,
+    datacheckTag(dc.status),
+    num(dc.rows, 0),
+    `${esc(dc.start || "Sin datos")} → ${esc(dc.end || "Sin datos")}`,
+    `<span class="muted tiny">${esc((dc.reasons || []).join("; ") || "sin avisos")}</span>`,
+  ]);
+  const dcCount = (status) => dcEntries.filter(([, dc]) => dc.status === status).length;
+  const dcMeta = $("#research-datacheck-meta");
+  if (dcMeta) {
+    dcMeta.textContent = dcEntries.length
+      ? `${dcCount("ok")} ok · ${dcCount("aviso")} aviso · ${dcCount("falla")} falla`
+      : "sin datos";
+  }
+  const dcBox = $("#research-datacheck");
+  if (dcBox) {
+    dcBox.innerHTML = grid([
+      { label: "Activo" }, { label: "Estado" }, { label: "Barras", num: true },
+      { label: "Rango" }, { label: "Motivo", wrap: true },
+    ], dcRows, { empty: "Sin datos: ejecuta <code>lab datacheck &lt;símbolo&gt;</code>." });
+  }
   $("#research-stats").innerHTML = [
     { label: "Candidatos", value: fmtInt.format(r.candidates || 0) },
     { label: "Propuestas", value: fmtInt.format((r.proposals || []).length), cls: (r.proposals || []).length ? "warn" : "" },
@@ -4380,7 +4414,7 @@ function renderResearch() {
     <div class="note">Eficiencia = mediana Sharpe(OOS)/Sharpe(IS) por fold. Estabilidad = misma variante elegida entre folds. El veredicto global condiciona todas las propuestas.</div>` : `<div class="empty">Walk-forward no disponible: muestra insuficiente.</div>`;
 
   const top = (r.results || []).map((row, i) => [
-    String(i + 1), `<b>${esc(row.symbol)}</b>`, esc(row.strategy), `<span class="muted tiny">${esc(paramsText(row.params))}</span>`,
+    String(i + 1), `<b>${esc(row.symbol)}</b> ${datacheckTag(r.datachecks?.[row.symbol]?.status)}`, esc(row.strategy), `<span class="muted tiny">${esc(paramsText(row.params))}</span>`,
     `${num(row.exposure, 2)}×`, num(row.sharpe, 2), pct(row.max_drawdown, 1), num(row.num_trades, 0),
     pct(row.pass_rate, 1), pct(row.breach_rate, 1), pct(row.oos_pass_rate, 1), num(row.score, 3), pct(row.dsr, 1),
     gateTag(row.regime_gate),
@@ -4393,7 +4427,7 @@ function renderResearch() {
   ], top, { empty: "Sin informe de research." });
 
   const proposals = (r.proposals || []).map((p) => [
-    `<b>${esc(p.symbol)}</b>`, esc(p.strategy), `<span class="muted tiny">${esc(paramsText(p.params))}</span>`, `${num(p.exposure, 2)}×`,
+    `<b>${esc(p.symbol)}</b> ${datacheckTag(p.datacheck_status || r.datachecks?.[p.symbol]?.status)}`, esc(p.strategy), `<span class="muted tiny">${esc(paramsText(p.params))}</span>`, `${num(p.exposure, 2)}×`,
     num(p.num_trades, 0), pct(p.pass_rate, 1), pct(p.breach_rate, 1), pct(p.oos_pass_rate, 1), pct(p.dsr, 1), num(p.score, 3),
     gateTag(p.regime_gate), `<span class="tag yellow">enabled: false</span>`,
   ]);
@@ -4404,7 +4438,7 @@ function renderResearch() {
   ], proposals, { empty: "Sin propuestas: PBO, walk-forward o regímenes no aprobados." });
 
   const near = (r.near_misses || []).map((p) => [
-    `<b>${esc(p.symbol)}</b>`, esc(p.strategy), `<span class="muted tiny">${esc(paramsText(p.params))}</span>`, `${num(p.exposure, 2)}×`,
+    `<b>${esc(p.symbol)}</b> ${datacheckTag(p.datacheck_status || r.datachecks?.[p.symbol]?.status)}`, esc(p.strategy), `<span class="muted tiny">${esc(paramsText(p.params))}</span>`, `${num(p.exposure, 2)}×`,
     num(p.num_trades, 0), pct(p.pass_rate, 1), pct(p.breach_rate, 1), pct(p.oos_pass_rate, 1), pct(p.dsr, 1), num(p.score, 3),
     gateTag(p.regime_gate), `<span class="muted tiny">${esc(p.note || p.status || "—")}</span>`,
   ]);
@@ -4642,9 +4676,11 @@ function showResearchDetail(row) {
       <div class="metric"><div class="l">MaxDD</div><div class="v">${pct(row.max_drawdown, 1)}</div></div>
       <div class="metric"><div class="l">Familia</div><div class="v">${pct(row.family_median_pass, 1)}</div></div>
       <div class="metric"><div class="l">PBO global</div><div class="v">${pct(pbo.pbo, 1)}</div></div>
-      <div class="metric"><div class="l">WF global</div><div class="v">${esc(wf.verdict || "—")}</div></div>
+      <div class="metric"><div class="l">WF global</div><div class="v">${esc(wf.verdict || "-")}</div></div>
       <div class="metric"><div class="l">WF estabilidad</div><div class="v">${pct(wf.stability, 0)}</div></div>
+      <div class="metric"><div class="l">Datacheck</div><div class="v">${datacheckTag(row.datacheck_status)}</div></div>
     </div>
+    ${(row.datacheck_reasons || []).length ? `<div class="note">Datacheck: ${row.datacheck_reasons.map(esc).join("; ")}</div>` : ""}
     <div class="detail-grid" style="margin-bottom:12px">
       <span class="k">Parámetros</span><span class="mono">${esc(JSON.stringify(row.params || {}))}</span>
       <span class="k">Estado</span><span><span class="tag yellow">${esc(row.status || "—")}</span> · enabled: false</span>
