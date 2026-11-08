@@ -4413,6 +4413,7 @@ function renderResearch() {
     { label: "Candidatos", value: fmtInt.format(r.candidates || 0) },
     { label: "Propuestas", value: fmtInt.format((r.proposals || []).length), cls: (r.proposals || []).length ? "warn" : "" },
     { label: "Casi propuestas", value: fmtInt.format((r.near_misses || []).length) },
+    { label: "Holdout lecturas", value: fmtInt.format(r.holdout?.reads || 0), cls: (r.holdout?.reads || 0) > 0 ? "warn" : "" },
     { label: "PBO global", value: pbo.pbo === undefined || pbo.pbo === null ? "—" : pct(pbo.pbo, 1), cls: pbo.verdict === "ok" ? "" : "warn" },
     { label: "Walk-forward", value: wf.verdict || "—", cls: wf.verdict === "ok" ? "" : "warn" },
     { label: "Generado", value: r.generated_at ? dateTime(r.generated_at) : "—" },

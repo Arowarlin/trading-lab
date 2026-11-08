@@ -758,6 +758,8 @@ def render_markdown(report: dict, top: int = 25) -> str:
         f"- Validación out-of-sample: último {cfg['holdout_fraction']:.0%} de la muestra",
         f"- Ventana OOS: {oos_range}",
         f"- Variantes evaluadas: {report['candidates']}",
+        f"- Holdout: {(report.get('holdout_usage') or {}).get('reads', 0)} lecturas / "
+        f"{(report.get('holdout_usage') or {}).get('configs', 0)} configuraciones",
         f"- Walk-forward clásico: {cfg.get('wf_folds', 4)} bloques",
         pbo_line,
         wf_line,
@@ -1054,6 +1056,7 @@ def write_outputs(report: dict, out_dir: str | Path) -> dict[str, str]:
         "walk_forward": report.get("walk_forward"),
         "datachecks": report.get("datachecks", {}),
         "quantstats": report.get("quantstats") or {},
+        "holdout_usage": report.get("holdout_usage") or {},
         "proposals": report["proposals"],
         "near_misses": report.get("near_misses", []),
     }

@@ -335,9 +335,18 @@ def test_build_id_cambia_con_ui(tmp_path: Path) -> None:
     assert compute_build_id(tmp_path) != first
 
 
+def test_research_muestra_holdout(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(
+        web,
+        "holdout_usage",
+        lambda db: {"reads": 3, "configs": 1, "last": None, "top": []},
+    )
+    report = _data(tmp_path).research()
+    assert report["holdout"]["reads"] == 3
+
+
 def test_regime_payload(tmp_path: Path, monkeypatch) -> None:
     from tradinglab import regimes
-
     rows = 420
     close = 100.0 + 0.2 * np.arange(rows)
     frame = pd.DataFrame(

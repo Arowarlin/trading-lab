@@ -349,6 +349,28 @@ CREATE TABLE IF NOT EXISTS optimization_trials (
 );
 CREATE INDEX IF NOT EXISTS idx_optimization_trials_study
     ON optimization_trials(study);
+CREATE TABLE IF NOT EXISTS holdout_evaluations (
+    config_hash TEXT PRIMARY KEY,
+    symbol TEXT NOT NULL,
+    strategy TEXT NOT NULL,
+    params TEXT NOT NULL,
+    result TEXT NOT NULL,
+    first_read_at TEXT NOT NULL,
+    last_read_at TEXT NOT NULL,
+    reads INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS holdout_reads (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts TEXT NOT NULL,
+    config_hash TEXT NOT NULL,
+    symbol TEXT,
+    strategy TEXT,
+    params TEXT,
+    cached INTEGER NOT NULL,
+    notes TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_holdout_reads_hash
+    ON holdout_reads(config_hash);
 
 CREATE TABLE IF NOT EXISTS model_registry (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

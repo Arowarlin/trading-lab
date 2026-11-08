@@ -2596,17 +2596,42 @@ def lessons_revert_cmd(
 
 @lessons_app.command("holdout")
 def lessons_holdout_cmd() -> None:
-    """Muestra el tramo sellado y el contador global de pruebas."""
-    from .learning import count_tests, holdout_info
+    """Muestra el tramo sellado y cu?ntas veces se ha le?do."""
+    from .learning import count_tests, holdout_info, holdout_usage
 
     info = holdout_info(DEFAULT_DB)
+    usage = holdout_usage(DEFAULT_DB)
     t = Table(title="Holdout sellado")
     t.add_column("Campo", style="bold")
     t.add_column("Valor")
     for key in ("start_date", "end_date", "hash", "sealed_at"):
         t.add_row(key, str(info.get(key) or "Sin datos"))
     t.add_row("trials globales", str(count_tests(DEFAULT_DB)))
+    t.add_row("lecturas", str(usage["reads"]))
+    t.add_row("configuraciones", str(usage["configs"]))
+    last = usage.get("last") or {}
+    t.add_row("?ltima lectura", str(last.get("ts") or "Sin datos"))
+    t.add_row(
+        "?ltima cach?",
+        "s?" if last.get("cached") else "no" if last else "Sin datos",
+    )
     console.print(t)
+    if usage.get("top"):
+        top = Table(title="Configuraciones m?s le?das")
+        top.add_column("Hash", style="bold")
+        top.add_column("S?mbolo")
+        top.add_column("Estrategia")
+        top.add_column("Lecturas", justify="right")
+        top.add_column("?ltima")
+        for row in usage["top"]:
+            top.add_row(
+                str(row.get("config_hash", ""))[:12],
+                str(row.get("symbol") or ""),
+                str(row.get("strategy") or ""),
+                str(row.get("reads", 0)),
+                str(row.get("last_read_at") or ""),
+            )
+        console.print(top)
 
 
 @reports_app.command("journal")
@@ -3152,6 +3177,13 @@ def lessons_weekly_cmd(
         get_settings(),
         min_sample=min_sample,
         limit=limit,
+    )
+    from .learning import holdout_usage
+
+    usage = holdout_usage(DEFAULT_DB)
+    console.print(
+        f"[dim]Holdout: {usage['reads']} lecturas / "
+        f"{usage['configs']} configuraciones[/dim]"
     )
     for lesson in result["created"]:
         console.print(
@@ -4559,6 +4591,10 @@ def research_cmd(
             extra_trials=count_tests(DEFAULT_DB),
         )
 
+    from .learning import holdout_usage
+
+    report["holdout_usage"] = holdout_usage(DEFAULT_DB)
+
     try:
         from .quantstats_report import write_reports
 
@@ -4575,6 +4611,12 @@ def research_cmd(
         }
 
     files = write_outputs(report, out_dir)
+
+    usage = report.get("holdout_usage") or {}
+    console.print(
+        f"[dim]Holdout: {usage.get('reads', 0)} lecturas / "
+        f"{usage.get('configs', 0)} configuraciones[/dim]"
+    )
 
     qs_payload = report.get("quantstats") or {}
     if qs_payload.get("status") == "ok":

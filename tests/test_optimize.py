@@ -7,7 +7,7 @@ import pandas as pd
 
 from tradinglab import optimize
 from tradinglab.config import Settings
-from tradinglab.db import init_db
+from tradinglab.db import connect, init_db
 from tradinglab.learning import count_tests
 
 
@@ -62,3 +62,9 @@ def test_run_optuna_sintetico_suma_trials_y_no_toca_holdout(
     assert report["config"]["dev_end"] < report["config"]["sealed_start"]
     assert isinstance(report["proposals"], list)
     assert report["best_params"]
+    with connect(db) as con:
+        rows = con.execute(
+            "SELECT period_start, period_end FROM optimization_trials"
+        ).fetchall()
+    assert rows
+    assert all(row["period_end"] < "2025-01-01" for row in rows)

@@ -68,6 +68,7 @@ from .learning import (
     apply_lesson,
     count_tests,
     holdout_info,
+    holdout_usage,
     list_lessons,
     revert_lesson,
 )
@@ -1551,6 +1552,7 @@ class LabData:
             "results": (latest.get("results") or [])[:limit],
             "proposals": proposal_rows,
             "datachecks": latest.get("datachecks") or proposals.get("datachecks") or {},
+            "holdout": holdout_usage(self.db_path),
             "near_misses": latest.get("near_misses") or [],
             "pbo": latest.get("pbo"),
             "pbo_ok": latest.get("pbo_ok"),

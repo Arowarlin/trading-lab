@@ -876,7 +876,7 @@ stdlib y `127.0.0.1`. Se conservan todas las pestañas, rutas, CSRF, Host/Origin
 y la lista blanca `WRITE_ROUTES`.
 
 Evidencia: `pytest tests/test_console_shell.py -q` → **3 passed**; suite completa
-**400 passed**; cubre las seis secciones, las 15 vistas actuales, los
+**402 passed**; cubre las seis secciones, las 15 vistas actuales, los
 componentes del dashboard y la ausencia de URLs externas/CDNs.
 
 ---
@@ -1169,7 +1169,7 @@ completa **325 passed**; `ruff` limpio; `lab doctor` OK con avisos conocidos.
 - El panel **Aprendizaje** sigue siendo el único sitio de aprobación humana.
 
 Evidencia: `pytest tests/test_learning.py -q` → **8 passed**; suite completa
-**400 passed**; `ruff` limpio; `lab doctor` OK con avisos conocidos.
+**402 passed**; `ruff` limpio; `lab doctor` OK con avisos conocidos.
 
 ---
 
@@ -1809,8 +1809,31 @@ Evidencia: `pytest tests/test_library.py -q` → **3 passed**; suite completa
   propuestas**. El gate funciona.
 
 Evidencia: `pytest tests/test_optimize.py tests/test_quantstats_report.py
-tests/test_learning.py -q` → **12 passed**; suite completa **400 passed**;
+tests/test_learning.py -q` → **12 passed**; suite completa **402 passed**;
 `ruff` limpio; `lab doctor` OK. Sin activar bots ni tocar `.env`.
+
+---
+
+## 11l. Holdout de una sola lectura
+
+El tramo sellado se evalúa **una vez por configuración**
+`sha256(symbol + strategy + params)`. La segunda petición devuelve el resultado
+guardado sin recalcular; cada lectura se registra en SQLite y suma una prueba
+extra al contador del DSR.
+
+- Primera lectura: evalúa y guarda en `holdout_evaluations`.
+- Segunda lectura: `cached=1`, incrementa `reads` y registra `holdout_reads`.
+- `lab lessons holdout` muestra lecturas, configuraciones, última lectura y
+  configuraciones más leídas; `lab lessons weekly` y Research muestran el
+  contador.
+- Ninguna ruta usa el holdout para elegir parámetros: el desarrollo termina
+  antes de `2025-01-01` y los `optimization_trials` lo verifican.
+- Si el evaluador falla o no hay datos, no se guarda como evaluación válida.
+
+Prueba real: primera lectura `SPY/trend` → **1 lectura / 1 configuración**;
+la repetición cacheada se cubre en tests. Evidencia:
+`pytest tests/test_learning.py tests/test_optimize.py tests/test_web.py -q` →
+**29 passed**; suite completa **402 passed**; `ruff` limpio; `lab doctor` OK.
 
 ---
 

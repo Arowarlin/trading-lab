@@ -607,6 +607,22 @@ limpio; `lab doctor` OK. Sin dependencias nuevas.
   tests/test_learning.py -q` → 12 passed; `pytest -q` → 400 passed; `ruff`
   limpio; `lab doctor` OK. Smoke real: 3 trials, PBO 80,3%, 0 propuestas.
 
+## Bloque 2026-11-08 — Etapas 1–3
+
+### Etapa 1 — Holdout de una sola lectura
+
+- [x] **Caché por configuración**
+  - `holdout_evaluations` con hash de símbolo + estrategia + params.
+  - Primera lectura calcula y guarda; segunda devuelve caché sin recalcular.
+  - Cada lectura se registra en `holdout_reads` y suma al contador DSR.
+  - `lab lessons holdout`, `lab lessons weekly` y Research muestran lecturas.
+  - `run_optuna` recalcula el DSR tras la lectura y mantiene
+    `used_for_selection: false`; los trials de desarrollo terminan antes del
+    holdout.
+- Evidencia: `pytest tests/test_learning.py tests/test_optimize.py
+  tests/test_web.py -q` → 29 passed; `pytest -q` → 402 passed; `ruff` limpio;
+  `lab doctor` OK. Sin dependencias nuevas.
+
 ---
 
 ## Registro de evidencias
@@ -676,4 +692,5 @@ limpio; `lab doctor` OK. Sin dependencias nuevas.
 | 2026-11-07 | Etapa 5 | `pytest tests/test_instruments.py tests/test_data_normalize.py -q` -> 14 passed; `pytest -q` -> 393 passed; XAUUSD/GC separados, bid/ask conservados |
 | 2026-11-07 | Etapa 6 | `pytest tests/test_library.py -q` -> 3 passed; `pytest -q` -> 396 passed; 15 fichas originales, `lab library list|show` |
 | 2026-11-08 | Etapa 7 | `pytest tests/test_optimize.py tests/test_quantstats_report.py tests/test_learning.py -q` -> 12 passed; `pytest -q` -> 400 passed; Optuna 5.0.0/QuantStats 0.0.86; smoke PBO 80.3%, 0 propuestas |
+| 2026-11-08 | Bloque Etapa 1 | `pytest tests/test_learning.py tests/test_optimize.py tests/test_web.py -q` -> 29 passed; `pytest -q` -> 402 passed; holdout cache por hash, lecturas al DSR, UI/CLI |
 |  |  |  |

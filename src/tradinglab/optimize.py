@@ -20,7 +20,13 @@ import pandas as pd
 from . import data as data_mod
 from .backtest import run as run_backtest
 from .config import DEFAULT_DB, Settings, get_settings
-from .learning import count_tests, holdout_info, record_optimization_trial
+from .learning import (
+    count_tests,
+    evaluate_holdout_once,
+    holdout_info,
+    holdout_usage,
+    record_optimization_trial,
+)
 from .research import deflated_sharpe
 from .strategies import STRATEGIES
 from .validation import cscv_pbo
@@ -245,7 +251,7 @@ def run_optuna(
         except Exception:
             wf = None
 
-    holdout_payload: dict = {"status": "Sin datos"}
+    holdout_payload: dict = {"status": "Sin datos", "used_for_selection": False}
     if end_date < sealed_start:
         holdout_payload = {
             "status": "Sin datos",
@@ -253,36 +259,63 @@ def run_optuna(
             "reason": "el periodo solicitado termina antes del holdout",
         }
     else:
-        try:
+        def evaluate_sealed() -> dict:
             sealed_frame = data_mod.fetch(
                 symbol,
                 sealed_start.isoformat(),
                 end_date.isoformat(),
                 cache,
             )
-            if len(sealed_frame) > 0:
-                history = pd.concat([frame, sealed_frame])
-                signal = STRATEGIES[strategy](
-                    history, **best.params
-                ).target.loc[sealed_frame.index]
-                sealed_bt = run_backtest(
-                    sealed_frame,
-                    signal,
-                    starting_cash=100_000.0,
-                    commission_bps=1.0,
-                    slippage_bps=5.0,
-                )
-                holdout_payload = {
-                    "status": "ok",
-                    "used_for_selection": False,
-                    "metrics": sealed_bt.metrics,
-                }
+            if len(sealed_frame) == 0:
+                raise OptunaError("Sin datos: holdout vacío")
+            history = pd.concat([frame, sealed_frame])
+            signal = STRATEGIES[strategy](
+                history, **best.params
+            ).target.loc[sealed_frame.index]
+            sealed_bt = run_backtest(
+                sealed_frame,
+                signal,
+                starting_cash=100_000.0,
+                commission_bps=1.0,
+                slippage_bps=5.0,
+            )
+            return {
+                "status": "ok",
+                "used_for_selection": False,
+                "metrics": sealed_bt.metrics,
+                "period_start": sealed_start.isoformat(),
+                "period_end": end_date.isoformat(),
+            }
+
+        try:
+            holdout_payload = evaluate_holdout_once(
+                db_path,
+                symbol=symbol,
+                strategy=strategy,
+                params=best.params,
+                evaluator=evaluate_sealed,
+                settings=settings,
+                notes="Optuna holdout sellado",
+            )
+            holdout_payload["used_for_selection"] = False
         except Exception as exc:
             holdout_payload = {
                 "status": "Sin datos",
                 "used_for_selection": False,
                 "reason": type(exc).__name__,
             }
+
+    # La lectura del holdout suma una prueba; recalcula el DSR con el contador final.
+    n_trials = count_tests(db_path, settings)
+    dsr = deflated_sharpe(
+        best_sharpe,
+        len(best_returns),
+        skew,
+        kurtosis,
+        trial_sr_std,
+        n_trials,
+    )
+    dsr_ok = dsr is not None and dsr >= MIN_DSR
 
     gates = {
         "dsr": dsr,
@@ -354,6 +387,7 @@ def run_optuna(
         "best_sharpe": best_sharpe,
         "gates": gates,
         "holdout": holdout_payload,
+        "holdout_usage": holdout_usage(db_path, settings),
         "proposals": proposals,
         "reason": None if proposals else "; ".join(failures),
         "history": history,

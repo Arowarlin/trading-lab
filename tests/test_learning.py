@@ -18,7 +18,9 @@ from tradinglab.learning import (
     approve,
     count_tests,
     create_lesson,
+    evaluate_holdout_once,
     holdout_info,
+    holdout_usage,
     init_learning,
     list_lessons,
     record_optimization_trial,
@@ -331,3 +333,56 @@ def test_optimization_trials_suman_al_dsr_y_respetan_holdout(tmp_path: Path) -> 
             period_start="2025-06-01",
             period_end="2025-06-30",
         )
+
+
+def test_holdout_una_lectura_por_configuracion(tmp_path: Path) -> None:
+    db = tmp_path / "lab.db"
+    init_learning(db, Settings())
+    calls = {"n": 0}
+
+    def evaluator() -> dict:
+        calls["n"] += 1
+        return {"status": "ok", "metrics": {"sharpe": 0.5}}
+
+    params = {"fast": 50, "slow": 200, "regime": 200}
+    first = evaluate_holdout_once(
+        db,
+        symbol="SPY",
+        strategy="trend",
+        params=params,
+        evaluator=evaluator,
+        settings=Settings(),
+    )
+    assert calls["n"] == 1
+    assert first["cached"] is False
+    assert first["reads"] == 1
+    before = count_tests(db)
+    second = evaluate_holdout_once(
+        db,
+        symbol="SPY",
+        strategy="trend",
+        params=params,
+        evaluator=evaluator,
+        settings=Settings(),
+    )
+    assert calls["n"] == 1
+    assert second["cached"] is True
+    assert second["reads"] == 2
+    assert count_tests(db) == before + 1
+    usage = holdout_usage(db)
+    assert usage["reads"] == 2
+    assert usage["configs"] == 1
+
+    other = evaluate_holdout_once(
+        db,
+        symbol="SPY",
+        strategy="trend",
+        params={"fast": 20, "slow": 200, "regime": 200},
+        evaluator=evaluator,
+        settings=Settings(),
+    )
+    assert calls["n"] == 2
+    assert other["cached"] is False
+    usage = holdout_usage(db)
+    assert usage["reads"] == 3
+    assert usage["configs"] == 2

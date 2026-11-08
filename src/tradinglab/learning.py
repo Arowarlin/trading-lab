@@ -168,7 +168,149 @@ def count_tests(db_path: str | Path, settings: Settings | None = None) -> int:
         trials = con.execute(
             "SELECT COUNT(*) AS n FROM optimization_trials"
         ).fetchone()["n"]
-    return int(lessons) + int(trials)
+        holdout = con.execute(
+            "SELECT COUNT(*) AS n FROM holdout_reads"
+        ).fetchone()["n"]
+    return int(lessons) + int(trials) + int(holdout)
+
+
+def holdout_usage(
+    db_path: str | Path, settings: Settings | None = None
+) -> dict:
+    """Lecturas del holdout sellado y configuraciones evaluadas."""
+    init_learning(db_path, settings)
+    with connect(db_path) as con:
+        reads = int(
+            con.execute("SELECT COUNT(*) AS n FROM holdout_reads").fetchone()["n"]
+        )
+        configs = int(
+            con.execute(
+                "SELECT COUNT(*) AS n FROM holdout_evaluations"
+            ).fetchone()["n"]
+        )
+        last = con.execute(
+            "SELECT * FROM holdout_reads ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+        top = con.execute(
+            "SELECT config_hash, symbol, strategy, reads, last_read_at "
+            "FROM holdout_evaluations ORDER BY reads DESC, last_read_at DESC LIMIT 10"
+        ).fetchall()
+    return {
+        "reads": reads,
+        "configs": configs,
+        "last": dict(last) if last else None,
+        "top": [dict(row) for row in top],
+    }
+
+
+def _holdout_config_hash(symbol: str, strategy: str, params: dict | None) -> str:
+    payload = json.dumps(
+        {
+            "symbol": symbol.upper(),
+            "strategy": strategy,
+            "params": params or {},
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def evaluate_holdout_once(
+    db_path: str | Path,
+    *,
+    symbol: str,
+    strategy: str,
+    params: dict | None,
+    evaluator,
+    settings: Settings | None = None,
+    notes: str = "",
+) -> dict:
+    """Evalúa el holdout una vez por hash y reutiliza el resultado.
+
+    Cada lectura (calculada o cacheada) se registra en `holdout_reads` y suma
+    una prueba extra al contador DSR. `evaluator` no recibe argumentos y debe
+    devolver un dict serializable.
+    """
+    init_learning(db_path, settings)
+    config_hash = _holdout_config_hash(symbol, strategy, params)
+    now = utcnow()
+    with connect(db_path) as con:
+        row = con.execute(
+            "SELECT * FROM holdout_evaluations WHERE config_hash = ?",
+            (config_hash,),
+        ).fetchone()
+        if row is not None:
+            payload = json.loads(row["result"])
+            reads = int(row["reads"]) + 1
+            con.execute(
+                "UPDATE holdout_evaluations SET reads=?, last_read_at=? "
+                "WHERE config_hash=?",
+                (reads, now, config_hash),
+            )
+            con.execute(
+                "INSERT INTO holdout_reads"
+                "(ts, config_hash, symbol, strategy, params, cached, notes) "
+                "VALUES(?,?,?,?,?,?,?)",
+                (
+                    now,
+                    config_hash,
+                    symbol.upper(),
+                    strategy,
+                    json.dumps(params or {}, ensure_ascii=False, sort_keys=True),
+                    1,
+                    notes[:1000],
+                ),
+            )
+            return {
+                **payload,
+                "cached": True,
+                "reads": reads,
+                "config_hash": config_hash,
+                "first_read_at": row["first_read_at"],
+                "last_read_at": now,
+            }
+
+        result = evaluator()
+        if not isinstance(result, dict):
+            result = {"result": result}
+        con.execute(
+            "INSERT INTO holdout_evaluations"
+            "(config_hash, symbol, strategy, params, result, "
+            "first_read_at, last_read_at, reads) VALUES(?,?,?,?,?,?,?,1)",
+            (
+                config_hash,
+                symbol.upper(),
+                strategy,
+                json.dumps(params or {}, ensure_ascii=False, sort_keys=True),
+                json.dumps(result, ensure_ascii=False, sort_keys=True),
+                now,
+                now,
+            ),
+        )
+        con.execute(
+            "INSERT INTO holdout_reads"
+            "(ts, config_hash, symbol, strategy, params, cached, notes) "
+            "VALUES(?,?,?,?,?,?,?)",
+            (
+                now,
+                config_hash,
+                symbol.upper(),
+                strategy,
+                json.dumps(params or {}, ensure_ascii=False, sort_keys=True),
+                0,
+                notes[:1000],
+            ),
+        )
+    return {
+        **result,
+        "cached": False,
+        "reads": 1,
+        "config_hash": config_hash,
+        "first_read_at": now,
+        "last_read_at": now,
+    }
 
 
 def record_optimization_trial(
@@ -566,8 +708,10 @@ __all__ = [
     "approve",
     "count_tests",
     "create_lesson",
+    "evaluate_holdout_once",
     "get_lesson",
     "holdout_info",
+    "holdout_usage",
     "init_learning",
     "list_lessons",
     "record_optimization_trial",
