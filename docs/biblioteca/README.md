@@ -1,6 +1,6 @@
 # Biblioteca de conocimiento
 
-Revisado: 2026-11-07
+Revisado: 2026-11-08
 
 Fichas originales. No se copia texto de terceros; enlaces y licencias
 se revisan antes de adoptar una dependencia.
@@ -15,8 +15,8 @@ se revisan antes de adoptar una dependencia.
 | [SEC EDGAR API](https://www.sec.gov/edgar/sec-api-documentation) | Datos fundamentales | Datos públicos; términos SEC | EDGAR API v1 | adoptada |
 | [yfinance](https://github.com/ranaroussi/yfinance) | Datos de mercado | Apache-2.0 | 1.8.0 | adoptada |
 | [LM Studio](https://lmstudio.ai/docs) | LLM local | Propietaria; términos de LM Studio | Local; ver la app instalada | adoptada |
-| [Optuna](https://optuna.org) | Optimización | MIT | 5.0.0 | evaluada |
-| [QuantStats](https://github.com/ranaroussi/quantstats) | Reporting | Apache-2.0 | 0.0.86 | evaluada |
+| [Optuna](https://optuna.org) | Optimización | MIT | 5.0.0 | adoptada |
+| [QuantStats](https://github.com/ranaroussi/quantstats) | Reporting | Apache-2.0 | 0.0.86 | adoptada |
 | [Microsoft Qlib](https://github.com/microsoft/qlib) | Plataforma de modelos | MIT | 0.9.7 | descartada |
 | [hmmlearn](https://github.com/hmmlearn/hmmlearn) | Régimen | BSD-3-Clause | 0.3.3 | descartada |
 | [VectorBT](https://github.com/polakowo/vectorbt) | Backtesting | Apache-2.0 | 1.2.0 | descartada |
@@ -161,13 +161,13 @@ se revisan antes de adoptar una dependencia.
 - **Enlace oficial**: https://optuna.org
 - **Licencia**: MIT
 - **Versión**: 5.0.0
-- **Dependencias**: numpy; se añadirá en Etapa 7
+- **Dependencias**: numpy, sqlalchemy, alembic, colorlog, tqdm; instalado 5.0.0
 - **Datos/costes**: Sin coste; CPU local
 - **Ventajas**: Trial counter auditable y poda temprana.
 - **Riesgos**: Aumenta el número de pruebas; debe sumar a n_trials del DSR.
-- **Pruebas en TradingLab**: Pendiente Etapa 7
-- **Estado**: evaluada
-- **Motivo**: Se adopta en Etapa 7 con walk-forward y contador DSR.
+- **Pruebas en TradingLab**: tests/test_optimize.py; smoke real 3 trials (PBO 80.3%, 0 propuestas)
+- **Estado**: adoptada
+- **Motivo**: Adoptada en Etapa 7 con walk-forward, holdout sellado y gates DSR/PBO/WF.
 
 ### QuantStats
 
@@ -177,13 +177,13 @@ se revisan antes de adoptar una dependencia.
 - **Enlace oficial**: https://github.com/ranaroussi/quantstats
 - **Licencia**: Apache-2.0
 - **Versión**: 0.0.86
-- **Dependencias**: pandas, numpy, matplotlib; se añadirá en Etapa 7
+- **Dependencias**: pandas, numpy, matplotlib, scipy, seaborn, tabulate; instalado 0.0.86
 - **Datos/costes**: Sin coste; datos locales
 - **Ventajas**: Informe visual rápido para revisión humana.
 - **Riesgos**: Solo lectura; no debe alterar criterios ni propuestas.
-- **Pruebas en TradingLab**: Pendiente Etapa 7
-- **Estado**: evaluada
-- **Motivo**: Se adopta en Etapa 7 para HTML por propuesta frente a SPY.
+- **Pruebas en TradingLab**: tests/test_quantstats_report.py; HTML smoke OK
+- **Estado**: adoptada
+- **Motivo**: Adoptada en Etapa 7 para HTML por propuesta frente a SPY, solo lectura.
 
 ### Microsoft Qlib
 

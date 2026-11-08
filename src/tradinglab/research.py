@@ -785,6 +785,15 @@ def render_markdown(report: dict, top: int = 25) -> str:
             reasons = "; ".join(dc.get("reasons") or []) or "sin avisos"
             lines.append(f"| {symbol} | {dc.get('status', 'Sin datos')} | {reasons} |")
 
+    quantstats = report.get("quantstats") or {}
+    if quantstats.get("reports"):
+        lines += ["", "## Informes QuantStats", ""]
+        for row in quantstats["reports"]:
+            lines.append(
+                f"- {row.get('symbol', 'Sin datos')}: `{row.get('path')}` "
+                f"(benchmark {row.get('benchmark', 'Sin datos')})"
+            )
+
     def pct(x: float) -> str:
         return f"{x * 100:,.1f}%"
 
@@ -1044,6 +1053,7 @@ def write_outputs(report: dict, out_dir: str | Path) -> dict[str, str]:
         "pbo": report.get("pbo"),
         "walk_forward": report.get("walk_forward"),
         "datachecks": report.get("datachecks", {}),
+        "quantstats": report.get("quantstats") or {},
         "proposals": report["proposals"],
         "near_misses": report.get("near_misses", []),
     }

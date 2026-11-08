@@ -13,12 +13,15 @@ from tradinglab.accounts import history, load_accounts, own_limits
 from tradinglab.config import Settings
 from tradinglab.db import connect, init_db, utcnow
 from tradinglab.learning import (
+    LearningError,
     apply_lesson,
     approve,
     count_tests,
     create_lesson,
     holdout_info,
+    init_learning,
     list_lessons,
+    record_optimization_trial,
     record_test,
     reject,
     revert_lesson,
@@ -298,3 +301,33 @@ def test_weekly_lessons_sin_muestra_o_llm(tmp_path: Path) -> None:
     assert failed["created"] == []
     assert failed["skipped"]
     assert "Sin datos" in failed["reason"]
+
+
+def test_optimization_trials_suman_al_dsr_y_respetan_holdout(tmp_path: Path) -> None:
+    db = tmp_path / "lab.db"
+    init_learning(db, Settings())
+    before = count_tests(db)
+    record_optimization_trial(
+        db,
+        study="test",
+        trial=1,
+        symbol="SPY",
+        strategy="trend",
+        params={"fast": 50, "slow": 200, "regime": 200},
+        value=0.5,
+        period_start="2024-01-01",
+        period_end="2024-12-31",
+    )
+    assert count_tests(db) == before + 1
+    with pytest.raises(LearningError):
+        record_optimization_trial(
+            db,
+            study="test",
+            trial=2,
+            symbol="SPY",
+            strategy="trend",
+            params={"fast": 20},
+            value=0.4,
+            period_start="2025-06-01",
+            period_end="2025-06-30",
+        )

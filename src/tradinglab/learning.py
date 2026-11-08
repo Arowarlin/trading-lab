@@ -164,8 +164,71 @@ def list_lessons(
 def count_tests(db_path: str | Path, settings: Settings | None = None) -> int:
     init_learning(db_path, settings)
     with connect(db_path) as con:
-        row = con.execute("SELECT COUNT(*) AS n FROM lesson_tests").fetchone()
-    return int(row["n"])
+        lessons = con.execute("SELECT COUNT(*) AS n FROM lesson_tests").fetchone()["n"]
+        trials = con.execute(
+            "SELECT COUNT(*) AS n FROM optimization_trials"
+        ).fetchone()["n"]
+    return int(lessons) + int(trials)
+
+
+def record_optimization_trial(
+    db_path: str | Path,
+    *,
+    study: str,
+    trial: int,
+    symbol: str = "",
+    strategy: str = "",
+    params: dict | None = None,
+    value: float | None = None,
+    period_start: str,
+    period_end: str,
+    notes: str = "",
+    settings: Settings | None = None,
+) -> dict:
+    """Suma un trial de Optuna al contador DSR, sin pisar el holdout sellado."""
+    init_learning(db_path, settings)
+    start = _parse_day(period_start)
+    end = _parse_day(period_end)
+    if end < start:
+        raise LearningError("period_end no puede ser anterior a period_start")
+    sealed = holdout_info(db_path, settings)
+    sealed_start = _parse_day(sealed["start_date"])
+    sealed_end = _parse_day(sealed["end_date"])
+    if start <= sealed_end and end >= sealed_start:
+        raise LearningError(
+            "el trial pisa el holdout sellado "
+            f"{sealed_start.isoformat()}..{sealed_end.isoformat()}"
+        )
+    with connect(db_path) as con:
+        cursor = con.execute(
+            "INSERT INTO optimization_trials"
+            "(ts, study, trial, symbol, strategy, params, value, "
+            "period_start, period_end, notes) VALUES(?,?,?,?,?,?,?,?,?,?)",
+            (
+                utcnow(),
+                study[:100],
+                int(trial),
+                symbol.upper()[:30],
+                strategy[:50],
+                json.dumps(params or {}, ensure_ascii=False, sort_keys=True)[:4000],
+                value,
+                start.isoformat(),
+                end.isoformat(),
+                notes[:1000],
+            ),
+        )
+        row_id = int(cursor.lastrowid)
+    return {
+        "id": row_id,
+        "study": study,
+        "trial": int(trial),
+        "symbol": symbol.upper(),
+        "strategy": strategy,
+        "params": params or {},
+        "value": value,
+        "period_start": start.isoformat(),
+        "period_end": end.isoformat(),
+    }
 
 
 def record_test(
@@ -507,6 +570,7 @@ __all__ = [
     "holdout_info",
     "init_learning",
     "list_lessons",
+    "record_optimization_trial",
     "record_test",
     "reject",
     "research_trials",

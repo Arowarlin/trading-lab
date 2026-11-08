@@ -588,6 +588,25 @@ limpio; `lab doctor` OK. Sin dependencias nuevas.
 - Evidencia: `pytest tests/test_library.py -q` → 3 passed; `pytest -q` → 396
   passed; `ruff` limpio; `lab doctor` OK. Sin dependencias nuevas.
 
+## Etapa 7 — Optuna y QuantStats (2026-11-08)
+
+- [x] **Optuna con walk-forward**
+  - `optimize.py` + `lab optimize`: walk-forward sobre el desarrollo; el
+    holdout sellado no se usa para seleccionar.
+  - Cada trial se guarda en `optimization_trials` y suma a `count_tests`
+    (`n_trials` del DSR).
+  - Gates DSR ≥90%, PBO ≤30% y WF aprobado; si falla, propuestas vacías.
+- [x] **QuantStats**
+  - `quantstats_report.py` genera HTML por propuesta frente a SPY en
+    `reports/research/quantstats/`; solo lectura.
+  - Integrado en `lab research`; sin cambios de criterios.
+- [x] **Dependencias**
+  - Optuna 5.0.0 (MIT) y QuantStats 0.0.86 (Apache-2.0); `uv.lock` actualizado;
+    `docs/dependencias.md` con licencias y versiones.
+- Evidencia: `pytest tests/test_optimize.py tests/test_quantstats_report.py
+  tests/test_learning.py -q` → 12 passed; `pytest -q` → 400 passed; `ruff`
+  limpio; `lab doctor` OK. Smoke real: 3 trials, PBO 80,3%, 0 propuestas.
+
 ---
 
 ## Registro de evidencias
@@ -653,4 +672,8 @@ limpio; `lab doctor` OK. Sin dependencias nuevas.
 | 2026-11-07 | Etapa 1 | `pytest tests/test_datacheck.py tests/test_lookahead.py tests/test_research.py -q` → 30 passed; `pytest -q` → 375 passed; datacheck ok/aviso/falla, gate research, UI Research/Run Detail |
 | 2026-11-07 | Etapa 2 | `pytest tests/test_metrics.py tests/test_journal.py tests/test_engine.py tests/test_research.py -q` → 33 passed; `pytest -q` → 379 passed; SQN/Recovery/ruina informativos, N<30 aviso |
 | 2026-11-07 | Etapa 3 | `pytest tests/test_regimes.py tests/test_web.py -q` → 23 passed; `pytest -q` → 386 passed; régimen causal, Dashboard y selector proposed; GMM/HMM no adoptado |
+| 2026-11-07 | Etapa 4 | `pytest tests/test_models.py -q` -> 6 passed; `pytest -q` -> 389 passed; PurgedKFold/CPCV sin solapamiento; meta-labeling solo doc |
+| 2026-11-07 | Etapa 5 | `pytest tests/test_instruments.py tests/test_data_normalize.py -q` -> 14 passed; `pytest -q` -> 393 passed; XAUUSD/GC separados, bid/ask conservados |
+| 2026-11-07 | Etapa 6 | `pytest tests/test_library.py -q` -> 3 passed; `pytest -q` -> 396 passed; 15 fichas originales, `lab library list|show` |
+| 2026-11-08 | Etapa 7 | `pytest tests/test_optimize.py tests/test_quantstats_report.py tests/test_learning.py -q` -> 12 passed; `pytest -q` -> 400 passed; Optuna 5.0.0/QuantStats 0.0.86; smoke PBO 80.3%, 0 propuestas |
 |  |  |  |

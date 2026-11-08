@@ -4399,6 +4399,69 @@ def datacheck_cmd(
         raise typer.Exit(1)
 
 
+@app.command("optimize")
+def optimize_cmd(
+    symbol: str = typer.Option("SPY", "--symbol"),
+    strategy: str = typer.Option("trend", "--strategy", help="trend, trend-ls o meanrev"),
+    trials: int = typer.Option(20, "--trials", help="Número de trials Optuna"),
+    start: str = typer.Option("2015-01-01", "--start"),
+    end: str = typer.Option(None, "--end"),
+    train_days: int = typer.Option(504, "--train-days"),
+    test_days: int = typer.Option(126, "--test-days"),
+    step: int = typer.Option(126, "--step"),
+    out: str = typer.Option(None, "--out"),
+    as_json: bool = typer.Option(False, "--json"),
+) -> None:
+    """Optuna + walk-forward; suma cada trial al DSR y respeta el holdout."""
+    from .optimize import OptunaError, run_optuna, write_report
+
+    settings = get_settings()
+    out_dir = Path(out) if out else ROOT / "reports" / "research" / "optuna"
+    try:
+        report = run_optuna(
+            symbol,
+            strategy,
+            start=start,
+            end=end,
+            trials=trials,
+            train_days=train_days,
+            test_days=test_days,
+            step=step,
+            cache_dir=settings.data.cache_dir,
+            settings=settings,
+        )
+    except OptunaError as exc:
+        console.print(f"[yellow]{exc}[/yellow]")
+        raise typer.Exit(2) from exc
+    files = write_report(report, out_dir)
+
+    def fmt_metric(value):
+        return "Sin datos" if value is None else _fmt_pct(float(value))
+    if as_json:
+        console.print_json(data=report)
+        return
+    gates = report.get("gates") or {}
+    t = Table(title=f"Optuna · {report['symbol']} · {report['strategy']}")
+    t.add_column("Campo", style="bold")
+    t.add_column("Valor")
+    t.add_row("Trials", str(report["trials"]))
+    t.add_row("Mejor trial", str(report["best_trial"]))
+    t.add_row("Mejor Sharpe", f"{report['best_sharpe']:.2f}")
+    t.add_row("Parámetros", str(report["best_params"]))
+    t.add_row("DSR", fmt_metric(gates.get("dsr")))
+    t.add_row("PBO", fmt_metric(gates.get("pbo")))
+    t.add_row("Walk-forward", str(gates.get("walk_forward_verdict")))
+    t.add_row("n_trials DSR", str(report["n_trials_dsr"]))
+    t.add_row("Holdout", str((report.get("holdout") or {}).get("status")))
+    t.add_row("Propuestas", str(len(report.get("proposals") or [])))
+    console.print(t)
+    if report.get("reason"):
+        console.print(f"[yellow]{report['reason']}[/yellow]")
+    else:
+        console.print("[green]Propuesta Optuna generada con gates DSR/PBO/WF.[/green]")
+    console.print(f"[dim]JSON: {files['latest']}[/dim]")
+
+
 @app.command("research")
 def research_cmd(
     symbols: str = typer.Option(
@@ -4496,7 +4559,32 @@ def research_cmd(
             extra_trials=count_tests(DEFAULT_DB),
         )
 
+    try:
+        from .quantstats_report import write_reports
+
+        report["quantstats"] = write_reports(
+            report,
+            out_dir,
+            settings.data.cache_dir,
+        )
+    except Exception as exc:
+        report["quantstats"] = {
+            "status": "Sin datos",
+            "reason": type(exc).__name__,
+            "reports": [],
+        }
+
     files = write_outputs(report, out_dir)
+
+    qs_payload = report.get("quantstats") or {}
+    if qs_payload.get("status") == "ok":
+        console.print(
+            f"[dim]QuantStats: {len(qs_payload.get('reports') or [])} informes HTML[/dim]"
+        )
+    else:
+        console.print(
+            f"[dim]QuantStats: {qs_payload.get('reason', 'Sin datos')}[/dim]"
+        )
 
     datachecks = report.get("datachecks") or {}
     if datachecks:

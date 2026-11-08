@@ -334,6 +334,21 @@ CREATE TABLE IF NOT EXISTS learning_holdout (
     hash TEXT NOT NULL,
     sealed_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS optimization_trials (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts TEXT NOT NULL,
+    study TEXT NOT NULL,
+    trial INTEGER NOT NULL,
+    symbol TEXT,
+    strategy TEXT,
+    params TEXT,
+    value REAL,
+    period_start TEXT NOT NULL,
+    period_end TEXT NOT NULL,
+    notes TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_optimization_trials_study
+    ON optimization_trials(study);
 
 CREATE TABLE IF NOT EXISTS model_registry (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

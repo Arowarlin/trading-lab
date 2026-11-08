@@ -1,7 +1,7 @@
 # Biblioteca de conocimiento de TradingLab.
 # Fuente única para `lab library list|show` y para docs/biblioteca/README.md.
 # Texto original; no se copia documentación de terceros.
-reviewed_at: "2026-11-07"
+reviewed_at: "2026-11-08"
 entries:
   - id: dsr
     name: Deflated Sharpe Ratio (DSR)
@@ -130,13 +130,13 @@ entries:
     official_url: "https://optuna.org"
     license: "MIT"
     version: "5.0.0"
-    dependencies: "numpy; se añadirá en Etapa 7"
+    dependencies: "numpy, sqlalchemy, alembic, colorlog, tqdm; instalado 5.0.0"
     data_costs: "Sin coste; CPU local"
     advantages: "Trial counter auditable y poda temprana."
     risks: "Aumenta el número de pruebas; debe sumar a n_trials del DSR."
-    tests: "Pendiente Etapa 7"
-    status: evaluada
-    reason: "Se adopta en Etapa 7 con walk-forward y contador DSR."
+    tests: "tests/test_optimize.py; smoke real 3 trials (PBO 80.3%, 0 propuestas)"
+    status: adoptada
+    reason: "Adoptada en Etapa 7 con walk-forward, holdout sellado y gates DSR/PBO/WF."
 
   - id: quantstats
     name: QuantStats
@@ -145,13 +145,13 @@ entries:
     official_url: "https://github.com/ranaroussi/quantstats"
     license: "Apache-2.0"
     version: "0.0.86"
-    dependencies: "pandas, numpy, matplotlib; se añadirá en Etapa 7"
+    dependencies: "pandas, numpy, matplotlib, scipy, seaborn, tabulate; instalado 0.0.86"
     data_costs: "Sin coste; datos locales"
     advantages: "Informe visual rápido para revisión humana."
     risks: "Solo lectura; no debe alterar criterios ni propuestas."
-    tests: "Pendiente Etapa 7"
-    status: evaluada
-    reason: "Se adopta en Etapa 7 para HTML por propuesta frente a SPY."
+    tests: "tests/test_quantstats_report.py; HTML smoke OK"
+    status: adoptada
+    reason: "Adoptada en Etapa 7 para HTML por propuesta frente a SPY, solo lectura."
 
   - id: qlib
     name: Microsoft Qlib

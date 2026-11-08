@@ -876,7 +876,7 @@ stdlib y `127.0.0.1`. Se conservan todas las pestañas, rutas, CSRF, Host/Origin
 y la lista blanca `WRITE_ROUTES`.
 
 Evidencia: `pytest tests/test_console_shell.py -q` → **3 passed**; suite completa
-**396 passed**; cubre las seis secciones, las 15 vistas actuales, los
+**400 passed**; cubre las seis secciones, las 15 vistas actuales, los
 componentes del dashboard y la ausencia de URLs externas/CDNs.
 
 ---
@@ -1169,7 +1169,7 @@ completa **325 passed**; `ruff` limpio; `lab doctor` OK con avisos conocidos.
 - El panel **Aprendizaje** sigue siendo el único sitio de aprobación humana.
 
 Evidencia: `pytest tests/test_learning.py -q` → **8 passed**; suite completa
-**396 passed**; `ruff` limpio; `lab doctor` OK con avisos conocidos.
+**400 passed**; `ruff` limpio; `lab doctor` OK con avisos conocidos.
 
 ---
 
@@ -1787,6 +1787,30 @@ lab library show dsr
 
 Evidencia: `pytest tests/test_library.py -q` → **3 passed**; suite completa
 **396 passed**; `ruff` limpio; `lab doctor` OK. Sin dependencias nuevas.
+
+---
+
+## 11k. Optuna y QuantStats (Etapa 7)
+
+- **Optuna 5.0.0 (MIT)** con walk-forward en `lab optimize`: el tramo final
+  sellado (2025-01-01…2026-11-07) **no se usa para elegir parámetros**; solo se
+  evalúa una vez al final y se marca `used_for_selection: false`.
+- Cada trial se registra en `optimization_trials` y **suma al contador
+  `n_trials` del DSR**. Gates: DSR ≥90%, PBO ≤30% y walk-forward aprobado. Si
+  falla cualquiera, **no se propone nada**. Las propuestas nacen `proposed` /
+  `enabled: false`; no activan bots.
+- **QuantStats 0.0.86 (Apache-2.0)** genera un HTML por propuesta frente a SPY
+  en `reports/research/quantstats/`; es **solo lectura** y no altera criterios
+  ni propuestas. Se integra al final de `lab research`.
+- Dependencias documentadas en `docs/dependencias.md`; `uv.lock` actualizado y
+  smoke test con pandas 3.1.1 / numpy 2.5.4. QuantStats emite un warning de
+  matplotlib, no un fallo.
+- Smoke real: 3 trials en SPY → DSR 100%, PBO 80,3%, WF fallido → **0
+  propuestas**. El gate funciona.
+
+Evidencia: `pytest tests/test_optimize.py tests/test_quantstats_report.py
+tests/test_learning.py -q` → **12 passed**; suite completa **400 passed**;
+`ruff` limpio; `lab doctor` OK. Sin activar bots ni tocar `.env`.
 
 ---
 

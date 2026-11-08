@@ -1,6 +1,6 @@
 # Dependencias verificadas
 
-Fecha de verificación: 2026-11-06. Fuente: PyPI JSON y GitHub API.
+Fecha de verificación: 2026-11-08. Fuente: PyPI JSON y GitHub API.
 
 ## Runtime (fijadas en `pyproject.toml` + `uv.lock`)
 
@@ -19,6 +19,8 @@ Fecha de verificación: 2026-11-06. Fuente: PyPI JSON y GitHub API.
 | httpx | 0.28.1 | HTTP |
 | alpaca-py | 0.45.0 | Alpaca paper |
 | **keyring** | **25.7.0** | **nuevo**: Windows Credential Manager; backend verificado `WinVaultKeyring`; licencia MIT; Python >=3.9 |
+| **optuna** | **5.0.0** | **nuevo Etapa 7**: MIT; Python >=3.9; walk-forward y contador `optimization_trials`; deps SQLAlchemy/Alembic (MIT), tqdm (MPL-2.0), Mako/MarkupSafe (MIT/BSD-3) |
+| **quantstats** | **0.0.86** | **nuevo Etapa 7**: Apache-2.0; Python >=3.10; HTML vs SPY; deps matplotlib (PSF/BSD), scipy (BSD-3), seaborn (BSD-3), tabulate (MIT); smoke HTML OK con pandas 3.1.1 y numpy 2.5.4 |
 
 Extra `mt5`: `MetaTrader5==5.0.6231`, `tzdata==2026.6`.
 
@@ -39,8 +41,6 @@ Extra `mt5`: `MetaTrader5==5.0.6231`, `tzdata==2026.6`.
 | ib_async | 2.1.0 | BSD-2-Clause | Fase 6; requiere IB Gateway/TWS y cuenta paper |
 | nautilus_trader | 1.231.0 | LGPL-3.0 | Fase 8; no hay v2 estable en PyPI; esperar |
 | pyqlib | 0.9.7 | MIT | Fase 7; venv aparte, no romper `.venv` |
-| quantstats | 0.0.86 | Apache-2.0 | Fase 3; pendiente de evaluar |
-| optuna | 5.0.0 | MIT | Fase 3; pendiente de evaluar |
 | ProsusAI/finbert | — | **CC-BY-NC-SA 4.0** | **No usar**: restricción no comercial; usar Qwen inicialmente |
 
 ## Notas
