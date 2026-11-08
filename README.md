@@ -876,9 +876,26 @@ No hay CDNs, frameworks, logos ni textos de terceros; solo HTML/CSS/JS propio,
 stdlib y `127.0.0.1`. Se conservan todas las pestañas, rutas, CSRF, Host/Origin
 y la lista blanca `WRITE_ROUTES`.
 
-Evidencia: `pytest tests/test_console_shell.py -q` → **3 passed**; suite completa
-**408 passed**; cubre las seis secciones, las 15 vistas actuales, los
-componentes del dashboard y la ausencia de URLs externas/CDNs.
+### Rediseño visual v3
+
+**Etapa 1 · Tokens y barra HUD.** Paleta grafito, acento cian y colores
+semánticos separados para ganancia (`--positive`), pérdida (`--negative`) y
+alerta (`--alert`); radios, sombras y espaciado como variables. Números
+`tabular-nums` con monoespaciada del sistema y etiquetas en mayúsculas. La barra
+HUD queda fija arriba con modo PAPER, sesión/reloj de Praga, LED de kill-switch,
+estado F13, salud de datos y operador armado con cuenta atrás; mientras el
+operador está armado, un borde ámbar recorre toda la consola. Todos los datos
+salen de `/api/overview` y `/api/operator` ya existentes: no se añadió ninguna
+ruta ni endpoint.
+
+Inventario congelado en [`docs/ui_inventory.json`](docs/ui_inventory.json):
+15 vistas, 232 ids, 34 llamadas `/api/*`, 6 secciones y 15 pestañas. El test
+`test_inventario_ui_base_sigue_completo` falla si desaparece una vista, pestaña,
+id o llamada. Capturas Chrome de las 15 pestañas antes/después en
+`reports/ui/` (ignorado por git).
+
+Evidencia: `pytest tests/test_console_shell.py -q` → **5 passed**; suite completa
+**410 passed**; `ruff` limpio; `lab doctor` OK.
 
 ---
 

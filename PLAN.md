@@ -666,6 +666,35 @@ limpio; `lab doctor` OK. Sin dependencias nuevas.
 
 ---
 
+## Rediseño visual v3 de la consola (2026-11-08)
+
+Solo presentación: sin cambios de rutas API, endpoints, permisos, lógica del
+operador ni datos. Inventario base en `docs/ui_inventory.json` y test
+`tests/test_console_shell.py::test_inventario_ui_base_sigue_completo`.
+
+### Etapa 1 — Tokens y barra HUD
+
+- [x] **Tokens y tipografía**
+  - Grafito `#080c12`, acento cian `#4cc9f0`, semánticos `--positive`,
+    `--negative` y `--alert`; radios, sombras y espaciado como variables.
+  - Números con `font-variant-numeric: tabular-nums` y monoespaciada del
+    sistema; etiquetas pequeñas en mayúsculas con tracking.
+- [x] **Barra HUD fija**
+  - Modo PAPER, sesión/reloj de Praga, LED de kill-switch, F13, salud de datos
+    y operador.
+  - Operador armado muestra cuenta atrás `mm:ss` y borde ámbar fijo en toda la
+    consola mientras dura; datos de `/api/overview` y `/api/operator`.
+- [x] **Inventario congelado**
+  - 15 vistas, 232 ids, 34 llamadas `/api/*`, 6 secciones y 15 pestañas.
+  - Test falla si desaparece una vista, pestaña, id o llamada; las altas de
+    ids nuevos están permitidas.
+- Evidencia: `pytest tests/test_console_shell.py -q` → 5 passed; suite completa
+  **410 passed**; `ruff` limpio; `lab doctor` OK. Capturas Chrome de las 15
+  pestañas en `reports/ui/before` y `reports/ui/stage1`, con diff por pestaña
+  en `reports/ui/stage1_diff.json` (reportes ignorados por git).
+
+---
+
 ## Registro de evidencias
 
 | Fecha | Tarea | Comando / evidencia |
@@ -736,4 +765,5 @@ limpio; `lab doctor` OK. Sin dependencias nuevas.
 | 2026-11-08 | Bloque Etapa 1 | `pytest tests/test_learning.py tests/test_optimize.py tests/test_web.py -q` -> 29 passed; `pytest -q` -> 408 passed; holdout cache por hash, lecturas al DSR, UI/CLI |
 | 2026-11-08 | Bloque Etapa 2 | `pytest tests/test_docs.py -q` -> 4 passed; `pytest -q` -> 408 passed; README F13 activo en paper + test de coherencia con bots.yaml |
 | 2026-11-08 | Bloque Etapa 3 | `pytest tests/test_f13.py -q` -> 16 passed; `pytest -q` -> 408 passed; `lab f13 report` en reports/f13/ (ciclos, reconciliaciones, slippage, tamano, hash, alerta lunes), solo lectura |
+| 2026-11-08 | UI v3 Etapa 1 | `pytest tests/test_console_shell.py -q` -> 5 passed; `pytest -q` -> 410 passed; tokens grafito/cian, HUD fijo, borde de operador armado, inventario UI congelado |
 |  |  |  |

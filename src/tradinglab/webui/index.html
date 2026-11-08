@@ -725,6 +725,165 @@
     .topbar { position: static; padding-top: 0; }
     .ticker { margin-bottom: 12px; }
   }
+
+  /* ================================================================ v3 */
+  :root {
+    --bg: #080c12;
+    --panel: #0d141c;
+    --panel-2: #0a1017;
+    --border: #1a2531;
+    --border-soft: #141d27;
+    --text: #e8f1f8;
+    --muted: #93a6b8;
+    --accent: #4cc9f0;
+    --cyan: #4cc9f0;
+    --green: #3ddc97;
+    --red: #ff8a8a;
+    --yellow: #f6c453;
+    --purple: #b388ff;
+    --ok: var(--green);
+    --bad: var(--red);
+    --warn: var(--yellow);
+    --positive: var(--green);
+    --negative: var(--red);
+    --alert: var(--yellow);
+    --mono: ui-monospace, "Cascadia Code", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    --radius-sm: 7px;
+    --radius: 12px;
+    --radius-lg: 16px;
+    --shadow: 0 18px 50px rgba(0,0,0,.28);
+    --shadow-soft: 0 8px 24px rgba(0,0,0,.18);
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 22px;
+    --space-6: 28px;
+    --hud-h: 46px;
+  }
+  body {
+    background:
+      radial-gradient(1100px 520px at 72% -12%, rgba(76,201,240,.075), transparent 62%),
+      radial-gradient(800px 500px at 18% 106%, rgba(179,136,255,.045), transparent 65%),
+      var(--bg);
+  }
+  .hud {
+    position: sticky;
+    top: 0;
+    z-index: 60;
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+    margin: -24px -28px 18px;
+    padding: 9px 28px;
+    background: rgba(8, 12, 18, .94);
+    border-bottom: 1px solid var(--border);
+    box-shadow: 0 10px 34px rgba(0,0,0,.28);
+    backdrop-filter: blur(16px);
+  }
+  .hud-left, .hud-right { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+  .hud-right { margin-left: auto; }
+  .hud-brand {
+    font-family: var(--mono);
+    font-size: 9.5px;
+    letter-spacing: .18em;
+    text-transform: uppercase;
+    color: #7f93a6;
+    white-space: nowrap;
+  }
+  .hud .badge { padding: 4px 9px; font-size: 9.5px; }
+  .hud .clock { color: #b9c9d8; font-size: 11px; letter-spacing: .04em; }
+  .hud-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 9px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: rgba(10, 16, 23, .82);
+    color: #a9b8c7;
+    font-size: 9.5px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .hud-chip b {
+    color: var(--text);
+    font-weight: 650;
+    font-family: var(--mono);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0;
+  }
+  .hud-chip .hud-ico { color: #7f93a6; font-size: 11px; }
+  .hud-chip.ok { border-color: rgba(61,220,151,.38); color: #b8f5d8; }
+  .hud-chip.ok b { color: var(--green); }
+  .hud-chip.warn { border-color: rgba(246,196,83,.42); color: #ffe7a8; }
+  .hud-chip.warn b { color: var(--yellow); }
+  .hud-chip.bad { border-color: rgba(255,138,138,.46); color: #ffc1c1; }
+  .hud-chip.bad b { color: var(--red); }
+  .hud-operator.armed {
+    border-color: var(--yellow);
+    background: rgba(246,196,83,.14);
+    color: #ffe7a8;
+    box-shadow: 0 0 20px rgba(246,196,83,.18);
+  }
+  .hud-operator.armed b { color: var(--yellow); }
+  .led {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex: 0 0 8px;
+    background: #46505c;
+    box-shadow: 0 0 0 3px rgba(70,80,92,.14);
+  }
+  .hud-chip.ok .led { background: var(--green); box-shadow: 0 0 10px rgba(61,220,151,.8); }
+  .hud-chip.warn .led { background: var(--yellow); box-shadow: 0 0 10px rgba(246,196,83,.8); }
+  .hud-chip.bad .led { background: var(--red); box-shadow: 0 0 10px rgba(255,138,138,.8); }
+  .app.operator-armed::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    border: 2px solid var(--yellow);
+    box-shadow: inset 0 0 0 1px rgba(246,196,83,.26), inset 0 0 34px rgba(246,196,83,.08);
+    pointer-events: none;
+    z-index: 9999;
+  }
+  .topbar {
+    position: static;
+    margin-top: 0;
+    padding-top: 0;
+    background: transparent;
+    backdrop-filter: none;
+    z-index: 20;
+  }
+  .topbar h1 {
+    background: linear-gradient(90deg, #f2f8ff, #b9ecfb 58%, #d9ccff);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .kpi .value, .stat .value, .metric .v, .account-kpis b, .pnl-day .v,
+  td.num, th.num, .clock, .statusbar b, .hud-chip b {
+    font-variant-numeric: tabular-nums;
+    font-family: var(--mono);
+  }
+  .kpi .label, .metric .l, .nav-label, .fund-field > span, .account-kpis span {
+    letter-spacing: .14em;
+    text-transform: uppercase;
+  }
+  .kpi .value { font-size: 25px; letter-spacing: -.6px; }
+  .panel h2 { letter-spacing: .1em; }
+  @media (max-width: 1100px) {
+    .hud { margin: -24px -28px 16px; padding: 8px 20px; }
+    .hud-right { margin-left: 0; }
+  }
+  @media (max-width: 760px) {
+    .hud { position: static; margin: -24px -28px 14px; padding: 8px 14px; }
+    .hud-brand { display: none; }
+    .hud-left, .hud-right { width: 100%; }
+    .hud-right { margin-left: 0; }
+  }
 </style>
 </head>
 <body>
@@ -769,6 +928,20 @@
   </aside>
 
   <main>
+    <div class="hud" id="hud" role="status" aria-live="polite" aria-label="Estado operativo">
+      <div class="hud-left">
+        <span class="hud-brand">TradingLab · consola local</span>
+        <span class="badge paper" id="mode-badge">paper</span>
+        <span class="badge paper" id="session-badge">Praga —</span>
+        <span class="clock" id="clock">—</span>
+      </div>
+      <div class="hud-right">
+        <span class="hud-chip" id="hud-killswitch"><span class="led" id="hud-killswitch-led"></span>Kill-switch <b>—</b></span>
+        <span class="hud-chip" id="hud-f13"><span class="hud-ico">◉</span>F13 <b>—</b></span>
+        <span class="hud-chip" id="hud-data"><span class="hud-ico">▤</span>Datos <b>—</b></span>
+        <span class="hud-chip hud-operator" id="hud-operator"><span class="hud-ico">⌘</span>Operador <b>desarmado</b></span>
+      </div>
+    </div>
     <header class="topbar">
       <div>
         <h1 id="page-title">Resumen</h1>
@@ -776,9 +949,6 @@
       </div>
       <div class="top-actions">
         <button class="btn cmd-btn" id="cmd-open" title="Buscar o navegar (Ctrl+K)"><span class="kbd">Ctrl K</span> Buscar</button>
-        <span class="clock" id="clock">—</span>
-        <span class="badge paper" id="session-badge">Praga —</span>
-        <span class="badge paper" id="mode-badge">paper</span>
         <span class="badge" id="broker-badge">broker</span>
         <span class="action-pill" id="action-pill">Sin acciones</span>
         <button class="btn" id="refresh-btn"><span id="refresh-label">Actualizar</span></button>
@@ -1688,7 +1858,11 @@ function switchView(view, updateHash = true) {
 /* ------------------------------------------------------------------ clock */
 function updateClock() {
   const now = new Date();
-  $("#clock").textContent = now.toLocaleString("es-ES", { dateStyle: "medium", timeStyle: "medium" });
+  const clock = $("#clock");
+  if (clock) {
+    clock.textContent = now.toLocaleTimeString("es-ES", { hour12: false });
+    clock.title = now.toLocaleString("es-ES", { dateStyle: "full", timeStyle: "medium" });
+  }
   const office = $("#office-clock");
   if (office) office.textContent = now.toLocaleTimeString("es-ES", { hour12: false });
   const pp = pragueParts();
@@ -1699,6 +1873,101 @@ function updateClock() {
   }
   const statusPrague = $("#status-prague");
   if (statusPrague) statusPrague.textContent = pp.text;
+  updateHudOperator();
+}
+
+function updateHudOperator() {
+  const chip = $("#hud-operator");
+  if (!chip) return;
+  const session = S.operator?.session || {};
+  const armed = Boolean(session.armed);
+  const app = document.querySelector(".app");
+  if (app) app.classList.toggle("operator-armed", armed);
+  if (!armed) {
+    if (session.locked) {
+      chip.className = "hud-chip hud-operator bad";
+      chip.innerHTML = `<span class="hud-ico">⌘</span>Operador <b>bloqueado</b>`;
+      chip.title = session.locked_until ? `PIN bloqueado hasta ${dateTime(session.locked_until)}` : "PIN bloqueado";
+      return;
+    }
+    chip.className = "hud-chip hud-operator";
+    chip.innerHTML = `<span class="hud-ico">⌘</span>Operador <b>desarmado</b>`;
+    chip.title = "Modo operador desarmado";
+    return;
+  }
+  const expires = session.expires_at ? new Date(session.expires_at).getTime() : NaN;
+  const left = isFinite(expires)
+    ? Math.max(0, Math.ceil((expires - Date.now()) / 1000))
+    : Math.max(0, Number(session.seconds_left || 0));
+  const mm = String(Math.floor(left / 60)).padStart(2, "0");
+  const ss = String(left % 60).padStart(2, "0");
+  chip.className = "hud-chip hud-operator armed";
+  chip.innerHTML = `<span class="hud-ico">⌘</span>Operador <b>armado · ${mm}:${ss}</b>`;
+  chip.title = `Expira ${dateTime(session.expires_at)}`;
+}
+
+function updateHud() {
+  const meta = S.overview?.meta;
+  if (meta) {
+    const mode = $("#mode-badge");
+    if (mode) {
+      mode.textContent = meta.mode;
+      mode.className = "badge " + (meta.mode === "live" ? "live" : "paper");
+    }
+  }
+
+  const ks = S.overview?.killswitch || {};
+  const ksChip = $("#hud-killswitch");
+  if (ksChip) {
+    ksChip.className = "hud-chip " + (ks.active ? "bad" : "ok");
+    const label = ksChip.querySelector("b");
+    if (label) label.textContent = ks.active ? "ON" : "OFF";
+    ksChip.title = ks.reason || (ks.active ? "Kill-switch activo" : "Kill-switch inactivo");
+  }
+
+  const bot = (S.operator?.bots || []).find((item) => item.id === "qqq-trend-f13");
+  const f13 = $("#hud-f13");
+  if (f13) {
+    let label = "—";
+    let tone = "";
+    let title = "F13 sin datos de operador";
+    if (bot) {
+      if (bot.enabled && bot.f13_locked) {
+        label = "activo";
+        tone = "ok";
+        title = "F13 activo en paper";
+      } else if (bot.f13_locked) {
+        label = "congelado";
+        tone = "warn";
+        title = "F13 congelado; bot aún no activo";
+      } else if (bot.enabled) {
+        label = "paper";
+        tone = "warn";
+        title = "Bot habilitado sin F13 congelado";
+      } else {
+        label = "inactivo";
+        tone = "";
+        title = "F13 inactivo";
+      }
+    }
+    f13.className = "hud-chip " + tone;
+    const value = f13.querySelector("b");
+    if (value) value.textContent = label;
+    f13.title = title;
+  }
+
+  const market = S.overview?.market;
+  const dataChip = $("#hud-data");
+  if (dataChip) {
+    const count = Number(market?.count || 0);
+    const ok = market && !market.error && count > 0;
+    dataChip.className = "hud-chip " + (market?.error ? "bad" : ok ? "ok" : "warn");
+    const label = dataChip.querySelector("b");
+    if (label) label.textContent = market ? (ok ? "OK" : "aviso") : "—";
+    dataChip.title = market?.error || (market ? `${count} activos · ${market.source || "caché"}` : "sin datos de mercado");
+  }
+
+  updateHudOperator();
 }
 
 /* ------------------------------------------------------------------ load */
@@ -1841,6 +2110,7 @@ function updatePills() {
   $("#side-guard").textContent = prop ? (prop.label || severity || "—") : "…";
   $("#side-guard").title = prop?.summary || "";
 
+  updateHud();
   renderAction(S.action || S.overview?.action || { status: "idle" });
 }
 
@@ -3342,6 +3612,7 @@ function renderOperator() {
   renderOperatorAudit();
   renderOperatorPreview();
   updateOperatorFields(false);
+  updateHud();
 }
 
 async function loadOperator() {
