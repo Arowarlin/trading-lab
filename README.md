@@ -1530,7 +1530,12 @@ servicios; `lab alerts test` envía una prueba. Nunca se imprimen tokens.
 **Estado: activo en paper.** El bot elegido es `qqq-trend-f13`
 (`config/bots.yaml`, `enabled: true`). Activado el **2026-11-07** con inicio
 **2026-11-09** (hash re-congelado `54b42036…`); sin live y sin órdenes en la
-activación. La aprobación fue humana y explícita.
+activación. La aprobación fue humana y explícita. El estado real vive en SQLite
+(`f13_config`); `config/f13.yaml` solo contiene los criterios.
+
+Backup verificado tras la activación:
+`F:\TradingLabBackups\trading-lab_20261107_223737.zip` (22,85 MB, PASS, sin
+`.env`, SQLite `ok`).
 
 - QQQ, estrategia `trend`, `fast=50 slow=200 regime=200`, exposición **0.35**.
 - Evidencia de `lab research`: 21 trades, pasa 65,5%, revienta 7,2%,
