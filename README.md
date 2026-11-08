@@ -26,7 +26,7 @@ Entorno multi-bot de trading sobre **TradingAgents** y **Trading-R1**, con LLM l
 | F10 | MT5: datos, sizing, órdenes, hora de servidor | ✅ demo validada (abrir/cerrar) |
 | F11 | Motor de reglas de fondeo (FTMO) | ✅ guard + Monte Carlo + fuente contrastada |
 | F12 | Futuros (Topstep + ProjectX) | ✅ adaptador y CLI en dry-run · ⏳ cuenta y guard |
-| F13 | Paper continuo 4-8 semanas | ⏳ |
+| F13 | Paper continuo 4-8 semanas | ✅ activo en paper · tarea `TradingLab-F13` lunes 22:20 |
 | F14 | Investigación automática (`lab research`) | ✅ barrido + OOS + DSR + PBO + walk-forward + regímenes |
 | F15 | Datos de ticks Dukascopy / spread real forex | ⏳ |
 
@@ -739,8 +739,9 @@ pueda determinarse o se configure `mt5.server_utc_offset_hours` verificado.
   historial. Así la consola puede editar sin entrar en el hash de F13.
 - El guard siempre usa el **mínimo** firma/propio; nunca se puede ampliar un
   límite de la firma desde la consola.
-- Nada se activa ni se envía: F13 está **congelado, sin activar**;
-  `qqq-trend-f13` sigue `enabled: false` y no se registró ninguna tarea F13.
+- F13 está **activo en paper**; `qqq-trend-f13` tiene `enabled: true` y la
+  tarea `TradingLab-F13` está registrada con primera ejecución el **lunes
+  2026-11-09 a las 22:20**. El ciclo diario solo opera en paper.
 - Queda pendiente la etapa 5 (datos intradía reales); los commits ya están
   publicados en `origin/master` y con backup verificado.
 
@@ -876,7 +877,7 @@ stdlib y `127.0.0.1`. Se conservan todas las pestañas, rutas, CSRF, Host/Origin
 y la lista blanca `WRITE_ROUTES`.
 
 Evidencia: `pytest tests/test_console_shell.py -q` → **3 passed**; suite completa
-**402 passed**; cubre las seis secciones, las 15 vistas actuales, los
+**403 passed**; cubre las seis secciones, las 15 vistas actuales, los
 componentes del dashboard y la ausencia de URLs externas/CDNs.
 
 ---
@@ -1083,7 +1084,8 @@ Evidencia: `pytest tests/test_market_agents.py -q` → **5 passed**; suite compl
 piloto no activa bots, no congela F13 y no envía órdenes**: solo limita qué
 mercado puede abrir posiciones.
 
-- Equity: piloto `qqq-trend-f13` (`not_started`, bot sigue `enabled:false`).
+- Equity: piloto `qqq-trend-f13` **activo en paper** (bot `enabled:true`; tarea
+  F13 registrada para el lunes 2026-11-09 22:20).
 - Forex/CFD y futuros: `blocked` con motivo explícito (sin M15/H1 real u
   ProjectX sin credenciales).
 - `select_pilot` mantiene **un solo mercado activo**; cambiar de piloto
@@ -1169,7 +1171,7 @@ completa **325 passed**; `ruff` limpio; `lab doctor` OK con avisos conocidos.
 - El panel **Aprendizaje** sigue siendo el único sitio de aprobación humana.
 
 Evidencia: `pytest tests/test_learning.py -q` → **8 passed**; suite completa
-**402 passed**; `ruff` limpio; `lab doctor` OK con avisos conocidos.
+**403 passed**; `ruff` limpio; `lab doctor` OK con avisos conocidos.
 
 ---
 
@@ -1567,7 +1569,7 @@ o ≥20 trades antes de opinar sobre edge. Si falla una parada dura, se detiene 
 se revisa. F13 nunca pasa a dinero real.
 
 ```powershell
-lab f13 status          # congelado + criterios
+lab f13 status          # activo + criterios
 lab f13 freeze          # congela hash/criterios; NO activa el bot
 lab f13 activate        # activa en paper y re-congela el hash; pide confirmación
 lab f13 report          # snapshot + F13 vs SPY vs backtest + slippage
@@ -1576,13 +1578,13 @@ lab f13 config-check    # hash congelado vs actual
 lab f13 check           # paradas duras + alerta
 ```
 
-La activación del bot requiere aprobación humana explícita; `freeze` no cambia
-`enabled: false`.
+La activación del bot requiere aprobación humana explícita; `freeze` no activa
+el bot. `activate` es el paso controlado y ya se ejecutó.
 
 > **Activación controlada:** `lab f13 activate` exige F13 congelado, hash OK,
-> `mode=paper` y el bot `enabled:false`. Edita **solo** la línea `enabled` de
-> `config/bots.yaml`, re-congela el hash con la nueva configuración y audita
-> `f13_activate`. No live y no envía órdenes al activar.
+> `mode=paper` y que el bot aún no esté activo. Edita **solo** la línea
+> `enabled` de `config/bots.yaml`, re-congela el hash con la nueva configuración
+> y audita `f13_activate`. No live y no envía órdenes al activar.
 
 ### Automatización F13 registrada
 
@@ -1809,7 +1811,7 @@ Evidencia: `pytest tests/test_library.py -q` → **3 passed**; suite completa
   propuestas**. El gate funciona.
 
 Evidencia: `pytest tests/test_optimize.py tests/test_quantstats_report.py
-tests/test_learning.py -q` → **12 passed**; suite completa **402 passed**;
+tests/test_learning.py -q` → **12 passed**; suite completa **403 passed**;
 `ruff` limpio; `lab doctor` OK. Sin activar bots ni tocar `.env`.
 
 ---
@@ -1833,7 +1835,7 @@ extra al contador del DSR.
 Prueba real: primera lectura `SPY/trend` → **1 lectura / 1 configuración**;
 la repetición cacheada se cubre en tests. Evidencia:
 `pytest tests/test_learning.py tests/test_optimize.py tests/test_web.py -q` →
-**29 passed**; suite completa **402 passed**; `ruff` limpio; `lab doctor` OK.
+**29 passed**; suite completa **403 passed**; `ruff` limpio; `lab doctor` OK.
 
 ---
 

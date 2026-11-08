@@ -623,6 +623,23 @@ limpio; `lab doctor` OK. Sin dependencias nuevas.
   tests/test_web.py -q` → 29 passed; `pytest -q` → 402 passed; `ruff` limpio;
   `lab doctor` OK. Sin dependencias nuevas.
 
+### Etapa 2 — Limpieza de documentación
+
+- [x] **README coherente con F13 activo en paper**
+  - Tabla de fases: F13 en ✅ activo en paper con la tarea
+    `TradingLab-F13` y primera ejecución el lunes 2026-11-09 22:20.
+  - Sección 6d: F13 activo, `qqq-trend-f13` con `enabled: true`; se eliminó
+    “congelado, sin activar” y el `enabled: false` obsoleto.
+  - Sección 6p: el piloto de equity figura activo en paper.
+  - Sección 11: `lab f13 status` descrito como activo y la activación como
+    paso ya ejecutado.
+  - Test `test_readme_f13_coherente_con_bots_yaml`: falla si el README afirma
+    `enabled: false` para `qqq-trend-f13` mientras `bots.yaml` lo tiene activo,
+    si conserva “congelado, sin activar” o si la fila F13 no dice paper/activo.
+- Evidencia: `pytest tests/test_docs.py -q` → 4 passed; suite completa
+  **403 passed**; `ruff` limpio; `lab doctor` OK. Sin cambios de
+  comportamiento ni dependencias nuevas.
+
 ---
 
 ## Registro de evidencias
@@ -692,5 +709,6 @@ limpio; `lab doctor` OK. Sin dependencias nuevas.
 | 2026-11-07 | Etapa 5 | `pytest tests/test_instruments.py tests/test_data_normalize.py -q` -> 14 passed; `pytest -q` -> 393 passed; XAUUSD/GC separados, bid/ask conservados |
 | 2026-11-07 | Etapa 6 | `pytest tests/test_library.py -q` -> 3 passed; `pytest -q` -> 396 passed; 15 fichas originales, `lab library list|show` |
 | 2026-11-08 | Etapa 7 | `pytest tests/test_optimize.py tests/test_quantstats_report.py tests/test_learning.py -q` -> 12 passed; `pytest -q` -> 400 passed; Optuna 5.0.0/QuantStats 0.0.86; smoke PBO 80.3%, 0 propuestas |
-| 2026-11-08 | Bloque Etapa 1 | `pytest tests/test_learning.py tests/test_optimize.py tests/test_web.py -q` -> 29 passed; `pytest -q` -> 402 passed; holdout cache por hash, lecturas al DSR, UI/CLI |
+| 2026-11-08 | Bloque Etapa 1 | `pytest tests/test_learning.py tests/test_optimize.py tests/test_web.py -q` -> 29 passed; `pytest -q` -> 403 passed; holdout cache por hash, lecturas al DSR, UI/CLI |
+| 2026-11-08 | Bloque Etapa 2 | `pytest tests/test_docs.py -q` -> 4 passed; `pytest -q` -> 403 passed; README F13 activo en paper + test de coherencia con bots.yaml |
 |  |  |  |
