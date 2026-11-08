@@ -5,6 +5,8 @@ from dataclasses import dataclass, field
 import numpy as np
 import pandas as pd
 
+from .metrics import metrics_warning, recovery_factor, risk_of_ruin, system_quality_number
+
 TRADING_DAYS = 252
 
 
@@ -17,6 +19,7 @@ class BacktestResult:
     exposure: float
     trade_pnls: list[float] = field(default_factory=list)
     trade_days: list[str] = field(default_factory=list)
+    trade_returns: list[float] = field(default_factory=list)
 
 
 def run(
@@ -49,6 +52,7 @@ def run(
     trades: list[dict] = []
     realized: list[float] = []
     realized_days: list[str] = []
+    realized_returns: list[float] = []
 
     for dt, bar in df.iterrows():
         px_open = float(bar["open"])
@@ -77,9 +81,12 @@ def run(
                 closing = min(abs(delta), abs(shares))
                 if shares > 0:
                     pnl = (fill_px - avg_cost) * closing
+                    trade_return = (fill_px - avg_cost) / avg_cost if avg_cost > 0 else 0.0
                 else:
                     pnl = (avg_cost - fill_px) * closing
+                    trade_return = (avg_cost - fill_px) / avg_cost if avg_cost > 0 else 0.0
                 realized.append(pnl - fee)
+                realized_returns.append(trade_return)
                 realized_days.append(dt.date().isoformat())
 
             new_shares = shares + delta
@@ -113,7 +120,9 @@ def run(
 
     eq = pd.DataFrame(rows).set_index("ts")["equity"].astype(float)
     rets = eq.pct_change().fillna(0.0)
-    metrics = compute_metrics(eq, rets, realized, float(pos_target.abs().mean()))
+    metrics = compute_metrics(
+        eq, rets, realized, float(pos_target.abs().mean()), realized_returns
+    )
 
     return BacktestResult(
         equity=eq,
@@ -123,6 +132,7 @@ def run(
         exposure=float(pos_target.abs().mean()),
         trade_pnls=realized,
         trade_days=realized_days,
+        trade_returns=realized_returns,
     )
 
 
@@ -131,6 +141,7 @@ def compute_metrics(
     rets: pd.Series,
     realized: list[float],
     exposure: float,
+    trade_returns: list[float] | None = None,
 ) -> dict:
     if len(eq) < 2:
         return {}
@@ -142,9 +153,21 @@ def compute_metrics(
     sharpe = float(rets.mean() / rets.std(ddof=1) * np.sqrt(TRADING_DAYS)) if rets.std(ddof=1) > 0 else 0.0
     drawdown = eq / eq.cummax() - 1
     max_dd = float(drawdown.min())
+    max_dd_usd = float((eq - eq.cummax()).min())
     calmar = float(cagr / abs(max_dd)) if max_dd < 0 else 0.0
     wins = sum(1 for p in realized if p > 0)
+    losses = [p for p in realized if p < 0]
+    gains = [p for p in realized if p > 0]
+    win_rate = (wins / len(realized)) if realized else 0.0
+    payoff = (
+        (sum(gains) / len(gains)) / abs(sum(losses) / len(losses))
+        if gains and losses
+        else None
+    )
     expectancy = float(sum(realized) / len(realized)) if realized else 0.0
+    sqn = system_quality_number(trade_returns or [])
+    recovery = recovery_factor(sum(realized), max_dd_usd)
+    ruin, ruin_assumptions = risk_of_ruin(win_rate, payoff)
 
     return {
         "total_return": total_return,
@@ -152,10 +175,16 @@ def compute_metrics(
         "volatility": vol,
         "sharpe": sharpe,
         "max_drawdown": max_dd,
+        "max_drawdown_usd": max_dd_usd,
         "calmar": calmar,
         "num_trades": len(realized),
-        "win_rate": (wins / len(realized)) if realized else 0.0,
+        "win_rate": win_rate,
         "expectancy": expectancy,
+        "sqn": sqn,
+        "recovery_factor": recovery,
+        "risk_of_ruin": ruin,
+        "risk_of_ruin_assumptions": ruin_assumptions,
+        "metrics_warning": metrics_warning(len(realized)),
         "exposure": exposure,
         "final_equity": float(eq.iloc[-1]),
         "bars": len(eq),

@@ -230,6 +230,9 @@ def test_run_research_edge_passes_pbo_walkforward_and_regime(monkeypatch, tmp_pa
     assert proposal["validation_failures"] == []
     assert proposal["dsr_n_trials"] == report["dsr_n_trials"]
     assert proposal["artifact"] and proposal["artifact"].endswith(".parquet")
+    assert "sqn" in proposal
+    assert "recovery_factor" in proposal
+    assert "risk_of_ruin" in proposal
     artifact = tmp_path / "artifacts" / Path(proposal["artifact"]).name
     assert artifact.exists()
     frame = pd.read_parquet(artifact)

@@ -876,7 +876,7 @@ stdlib y `127.0.0.1`. Se conservan todas las pestañas, rutas, CSRF, Host/Origin
 y la lista blanca `WRITE_ROUTES`.
 
 Evidencia: `pytest tests/test_console_shell.py -q` → **3 passed**; suite completa
-**375 passed**; cubre las seis secciones, las 15 vistas actuales, los
+**379 passed**; cubre las seis secciones, las 15 vistas actuales, los
 componentes del dashboard y la ausencia de URLs externas/CDNs.
 
 ---
@@ -1169,7 +1169,7 @@ completa **325 passed**; `ruff` limpio; `lab doctor` OK con avisos conocidos.
 - El panel **Aprendizaje** sigue siendo el único sitio de aprobación humana.
 
 Evidencia: `pytest tests/test_learning.py -q` → **8 passed**; suite completa
-**375 passed**; `ruff` limpio; `lab doctor` OK con avisos conocidos.
+**379 passed**; `ruff` limpio; `lab doctor` OK con avisos conocidos.
 
 ---
 
@@ -1668,6 +1668,31 @@ barras OHLC inconsistentes y queda excluido de propuestas; GC aún **Sin datos**
 Evidencia: `pytest tests/test_datacheck.py tests/test_lookahead.py
 tests/test_research.py -q` → **30 passed**; suite completa **375 passed**;
 `ruff` limpio; `lab doctor` OK.
+
+---
+
+## 11f. Métricas informativas: SQN, Recovery y ruina
+
+Se añaden a **Diario**, **backtest** y **research** sin tocar los criterios de
+propuesta. Con **N < 30** se muestran con aviso de muestra insuficiente.
+
+- **SQN** = `sqrt(N) · media(R) / desv(R)`. En el diario `R` es el retorno por
+  operación (proxy: no se guarda el riesgo inicial de cada trade); el backtest
+  usa el retorno de cada operación cerrada.
+- **Recovery Factor** = `PnL neto / |max drawdown USD|`. Si no hay drawdown,
+  **Sin datos**.
+- **Riesgo de ruina** = `((1-edge)/(1+edge))^unidades`, con
+  `edge = p - (1-p)/payoff` y `unidades = 1/f`. Supuestos: operaciones
+  independientes, `p` y `payoff` constantes, riesgo fijo del **1%** por
+  operación y ruina = perder todo el capital. Si `edge <= 0`, ruina = 100%.
+- Se muestran en las tarjetas del Diario, en **Run Detail** y en la sección
+  “Métricas informativas” del informe research.
+- No son criterios de propuesta: DSR, PBO, walk-forward, regímenes y datacheck
+  siguen mandando.
+
+Evidencia: `pytest tests/test_metrics.py tests/test_journal.py
+tests/test_engine.py tests/test_research.py -q` → **33 passed**; suite completa
+**379 passed**; `ruff` limpio; `lab doctor` OK. Sin dependencias nuevas.
 
 ---
 

@@ -45,6 +45,10 @@ def test_backtest_runs_and_conserves_cash():
     assert len(bt.equity) > 0
     assert bt.equity.iloc[-1] > 0
     assert np.isfinite(bt.metrics["sharpe"])
+    assert len(bt.trade_returns) == len(bt.trade_pnls)
+    assert "sqn" in bt.metrics
+    assert "recovery_factor" in bt.metrics
+    assert "risk_of_ruin" in bt.metrics
     # Sin apalancamiento el equity nunca debe ser negativo
     assert (bt.equity > 0).all()
 

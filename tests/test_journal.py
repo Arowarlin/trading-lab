@@ -211,6 +211,10 @@ def test_metricas_muestra_y_distribucion(tmp_path: Path) -> None:
     assert summary["sharpe"] is not None
     assert summary["sortino"] is not None
     assert summary["calmar"] is not None
+    assert summary["sqn"] is not None
+    assert summary["recovery_factor"] is not None
+    assert summary["risk_of_ruin"] is not None
+    assert summary["metrics_warning"] is None
     assert summary["max_drawdown"] is not None and summary["max_drawdown"] < 0
     assert summary["max_drawdown_usd"] is not None and summary["max_drawdown_usd"] < 0
     distribution = summary["distribution"]
@@ -226,6 +230,8 @@ def test_metricas_muestra_y_distribucion(tmp_path: Path) -> None:
     two = summarize(trades[:2], accounts)
     assert two["sample_ok"] is False
     assert "N=2" in two["sample_warning"]
+    assert two["metrics_warning"] is not None
+    assert "N=2" in two["metrics_warning"]
 
 
 def test_concentracion_contra_regla_de_firma() -> None:

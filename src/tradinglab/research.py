@@ -450,9 +450,15 @@ def run_research(
                             "sharpe": sharpe,
                             "cagr": cagr * exposure,
                             "max_drawdown": float(m.get("max_drawdown", 0.0)) * exposure,
+                            "max_drawdown_usd": m.get("max_drawdown_usd"),
                             "num_trades": int(m.get("num_trades", 0)),
                             "win_rate": float(m.get("win_rate", 0.0)),
                             "exposure_avg": float(m.get("exposure", 0.0)),
+                            "sqn": m.get("sqn"),
+                            "recovery_factor": m.get("recovery_factor"),
+                            "risk_of_ruin": m.get("risk_of_ruin"),
+                            "risk_of_ruin_assumptions": m.get("risk_of_ruin_assumptions"),
+                            "metrics_warning": m.get("metrics_warning"),
                             "pass_rate": pass_rate,
                             "pass_ci95": list(mc["pass_ci95"]),
                             "breach_rate": breach_rate,
@@ -635,6 +641,11 @@ def run_research(
             "artifact_rows": r.get("artifact_rows"),
             "max_drawdown": r["max_drawdown"],
             "sharpe": r["sharpe"],
+            "sqn": r.get("sqn"),
+            "recovery_factor": r.get("recovery_factor"),
+            "risk_of_ruin": r.get("risk_of_ruin"),
+            "risk_of_ruin_assumptions": r.get("risk_of_ruin_assumptions"),
+            "metrics_warning": r.get("metrics_warning"),
             "status": status,
             "datacheck_status": (r.get("datacheck") or {}).get("status"),
             "datacheck_reasons": (r.get("datacheck") or {}).get("reasons") or [],
@@ -791,6 +802,27 @@ def render_markdown(report: dict, top: int = 25) -> str:
             f"{pct(r['max_drawdown'])} | {r['num_trades']} | {pct(r['pass_rate'])} | "
             f"{pct(r['breach_rate'])} | {pct_opt(r.get('oos_pass_rate'))} | {r['score']:,.3f} | {pct_opt(r.get('dsr'))} | "
             f"{r.get('wf_positive_folds', 0)}/{cfg.get('wf_folds', 4)} | {gate_text(r)} |"
+        )
+
+    lines += [
+        "",
+        "## Métricas informativas",
+        "",
+        "Solo informativas: no cambian ningún criterio de propuesta. Con N<30 se muestran como aviso.",
+        "",
+        "| # | Activo | Estrategia | Escala | N | SQN | Recovery | Ruina | Aviso |",
+        "|---|---|---|---|---|---|---|---|---|",
+    ]
+    for i, r in enumerate(report["results"][:10], 1):
+        sqn = r.get("sqn")
+        recovery = r.get("recovery_factor")
+        ruin = r.get("risk_of_ruin")
+        lines.append(
+            f"| {i} | {r['symbol']} | {r['strategy']} | {r['exposure']:g}× | "
+            f"{r['num_trades']} | {f'{sqn:,.2f}' if sqn is not None else 'Sin datos'} | "
+            f"{f'{recovery:,.2f}' if recovery is not None else 'Sin datos'} | "
+            f"{f'{ruin:.4%}' if ruin is not None else 'Sin datos'} | "
+            f"{r.get('metrics_warning') or '—'} |"
         )
 
     lines += [

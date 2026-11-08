@@ -515,6 +515,18 @@ Evidencia: `pytest tests/test_datacheck.py tests/test_lookahead.py
 tests/test_research.py -q` → 30 passed; `pytest -q` → 375 passed; `ruff`
 limpio; `lab doctor` OK. Sin dependencias nuevas.
 
+## Etapa 2 — Métricas informativas (2026-11-07)
+
+- [x] **SQN, Recovery Factor y riesgo de ruina**
+  - `metrics.py` con fórmulas documentadas y supuestos de independencia.
+  - `journal.summarize` y `backtest.compute_metrics` los calculan.
+  - `research` los guarda por variante y propuesta; el informe tiene sección
+    “Métricas informativas”.
+  - Diario y Run Detail los muestran. Con N<30, aviso; no cambian criterios.
+- Evidencia: `pytest tests/test_metrics.py tests/test_journal.py
+  tests/test_engine.py tests/test_research.py -q` → 33 passed; `pytest -q` →
+  379 passed; `ruff` limpio; `lab doctor` OK. Sin dependencias nuevas.
+
 ---
 
 ## Registro de evidencias
@@ -578,4 +590,5 @@ limpio; `lab doctor` OK. Sin dependencias nuevas.
 | 2026-11-07 | Etapa 0 | `pytest tests/test_operator.py tests/test_telegram.py -q` → 41 passed; `pytest -q` → 357 passed; F13 falla→bloquea+audita, PIN 6-12 persistente, denies acotados, `/push` con diffstat |
 | 2026-11-07 | F13 activado | `lab f13 activate --yes` → hash `54b42036…`; `config-check` OK; bot `enabled:true`; `TradingLab-F13` Ready, próxima 2026-11-09 22:20; backup `trading-lab_20261107_223737.zip` PASS |
 | 2026-11-07 | Etapa 1 | `pytest tests/test_datacheck.py tests/test_lookahead.py tests/test_research.py -q` → 30 passed; `pytest -q` → 375 passed; datacheck ok/aviso/falla, gate research, UI Research/Run Detail |
+| 2026-11-07 | Etapa 2 | `pytest tests/test_metrics.py tests/test_journal.py tests/test_engine.py tests/test_research.py -q` → 33 passed; `pytest -q` → 379 passed; SQN/Recovery/ruina informativos, N<30 aviso |
 |  |  |  |

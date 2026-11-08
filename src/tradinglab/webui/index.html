@@ -3043,6 +3043,9 @@ function renderJournal() {
     { label: "Sharpe", value: jnum(summary.sharpe, 2) },
     { label: "Sortino", value: jnum(summary.sortino, 2) },
     { label: "Calmar", value: jnum(summary.calmar, 2) },
+    { label: "SQN", value: jnum(summary.sqn, 2) },
+    { label: "Recovery", value: jnum(summary.recovery_factor, 2) },
+    { label: "Ruina", value: jpct(summary.risk_of_ruin, 4) },
     { label: "MaxDD", value: jpct(summary.max_drawdown, 2), cls: "neg" },
     { label: "Capital atribuido", value: jmoney(summary.capital) },
   ].map((s) => `<div class="stat"><div class="label">${esc(s.label)}</div><div class="value ${s.cls || ""}">${s.value}</div></div>`).join("");
@@ -4674,6 +4677,9 @@ function showResearchDetail(row) {
       <div class="metric"><div class="l">Pasa OOS</div><div class="v">${pct(row.oos_pass_rate, 1)}</div></div>
       <div class="metric"><div class="l">Sharpe</div><div class="v">${num(row.sharpe, 2)}</div></div>
       <div class="metric"><div class="l">MaxDD</div><div class="v">${pct(row.max_drawdown, 1)}</div></div>
+      <div class="metric"><div class="l">SQN</div><div class="v">${num(row.sqn, 2)}</div></div>
+      <div class="metric"><div class="l">Recovery</div><div class="v">${num(row.recovery_factor, 2)}</div></div>
+      <div class="metric"><div class="l">Ruina</div><div class="v">${pct(row.risk_of_ruin, 4)}</div></div>
       <div class="metric"><div class="l">Familia</div><div class="v">${pct(row.family_median_pass, 1)}</div></div>
       <div class="metric"><div class="l">PBO global</div><div class="v">${pct(pbo.pbo, 1)}</div></div>
       <div class="metric"><div class="l">WF global</div><div class="v">${esc(wf.verdict || "-")}</div></div>
@@ -4681,6 +4687,7 @@ function showResearchDetail(row) {
       <div class="metric"><div class="l">Datacheck</div><div class="v">${datacheckTag(row.datacheck_status)}</div></div>
     </div>
     ${(row.datacheck_reasons || []).length ? `<div class="note">Datacheck: ${row.datacheck_reasons.map(esc).join("; ")}</div>` : ""}
+    ${row.metrics_warning ? `<div class="note">Métricas: ${esc(row.metrics_warning)}. SQN, Recovery y ruina no son criterios de propuesta.</div>` : ""}
     <div class="detail-grid" style="margin-bottom:12px">
       <span class="k">Parámetros</span><span class="mono">${esc(JSON.stringify(row.params || {}))}</span>
       <span class="k">Estado</span><span><span class="tag yellow">${esc(row.status || "—")}</span> · enabled: false</span>

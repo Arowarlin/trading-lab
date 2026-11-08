@@ -20,6 +20,13 @@ from .accounts import (
     load_accounts,
     rules_for_account,
 )
+from .metrics import (
+    RISK_OF_RUIN_ASSUMPTIONS,
+    metrics_warning,
+    recovery_factor,
+    risk_of_ruin,
+    system_quality_number,
+)
 from .orchestrator import load_bots
 from .prop.simulator import multiverse_by_trade
 
@@ -473,6 +480,11 @@ def summarize(
             "sharpe": None,
             "sortino": None,
             "calmar": None,
+            "sqn": None,
+            "recovery_factor": None,
+            "risk_of_ruin": None,
+            "risk_of_ruin_assumptions": RISK_OF_RUIN_ASSUMPTIONS,
+            "metrics_warning": None,
             "avg_holding_hours": None,
             "first_day": None,
             "last_day": None,
@@ -496,6 +508,14 @@ def summarize(
     capital, capital_accounts, capital_missing = _capital_for(trades, accounts)
     consistency_pct, consistency_note = _consistency_pct(capital_accounts, accounts)
     sharpe, sortino, calmar, max_dd, max_dd_usd = _daily_metrics(trades, capital)
+    sqn = system_quality_number(returns)
+    recovery = recovery_factor(net, max_dd_usd)
+    ruin, ruin_assumptions = risk_of_ruin(
+        len(wins) / len(trades),
+        (gross_profit / len(wins)) / abs(gross_loss / len(losses))
+        if wins and losses
+        else None,
+    )
     distribution = _distribution(returns)
     ordered_days = sorted({trade.day for trade in trades})
     return {
@@ -532,6 +552,11 @@ def summarize(
         "sharpe": round(sharpe, 6) if sharpe is not None else None,
         "sortino": round(sortino, 6) if sortino is not None else None,
         "calmar": round(calmar, 6) if calmar is not None else None,
+        "sqn": round(sqn, 6) if sqn is not None else None,
+        "recovery_factor": round(recovery, 6) if recovery is not None else None,
+        "risk_of_ruin": round(ruin, 8) if ruin is not None else None,
+        "risk_of_ruin_assumptions": ruin_assumptions,
+        "metrics_warning": metrics_warning(len(trades)),
         "avg_holding_hours": round(
             sum(trade.holding_hours or 0.0 for trade in trades) / len(trades), 3
         ),
@@ -708,10 +733,15 @@ __all__ = [
     "ClosedTrade",
     "GROUPS",
     "MIN_SAMPLE",
+    "RISK_OF_RUIN_ASSUMPTIONS",
     "SIN_DATOS",
     "build_journal",
     "filter_trades",
     "group_summaries",
     "load_closed_trades",
+    "metrics_warning",
+    "recovery_factor",
+    "risk_of_ruin",
     "summarize",
+    "system_quality_number",
 ]
