@@ -93,6 +93,10 @@ telegram_app = typer.Typer(
     no_args_is_help=True,
     help="Telegram remoto: setup, estado y puente de control.",
 )
+library_app = typer.Typer(
+    no_args_is_help=True,
+    help="Biblioteca de conocimiento: fichas de herramientas y metodologías.",
+)
 app.add_typer(mt5_app, name="mt5")
 app.add_typer(prop_app, name="prop")
 app.add_typer(futures_app, name="futures")
@@ -110,6 +114,7 @@ app.add_typer(models_app, name="models")
 app.add_typer(intel_app, name="intel")
 app.add_typer(sec_app, name="sec")
 app.add_typer(telegram_app, name="telegram")
+app.add_typer(library_app, name="library")
 console = Console()
 
 OK = "[green]OK[/green]"
@@ -5168,6 +5173,74 @@ def telegram_bridge_cmd(
         run_bridge(api, once=once, dry_run=dry_run)
     except KeyboardInterrupt:
         console.print("Puente detenido.")
+
+
+@library_app.command("list")
+def library_list_cmd(
+    status: str = typer.Option(None, "--status", help="adoptada | evaluada | descartada"),
+) -> None:
+    """Lista las fichas de la biblioteca."""
+    from .library import LibraryError, list_library
+
+    try:
+        entries = list_library(status=status)
+    except LibraryError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2) from exc
+    if not entries:
+        console.print("[yellow]Sin datos en la biblioteca.[/yellow]")
+        return
+    table = Table(title="Biblioteca de conocimiento")
+    for column in ("ID", "Herramienta", "Categoría", "Licencia", "Versión", "Estado"):
+        table.add_column(column)
+    for entry in entries:
+        table.add_row(
+            entry["id"],
+            entry["name"],
+            entry["category"],
+            entry["license"],
+            entry["version"],
+            entry["status"],
+        )
+    console.print(table)
+
+
+@library_app.command("show")
+def library_show_cmd(
+    entry_id: str = typer.Argument(..., help="ID de la ficha, p. ej. dsr"),
+    as_json: bool = typer.Option(False, "--json"),
+) -> None:
+    """Muestra una ficha completa."""
+    from .library import LibraryError, get_entry
+
+    try:
+        entry = get_entry(entry_id)
+    except LibraryError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2) from exc
+    if as_json:
+        console.print_json(data=entry)
+        return
+    table = Table(title=f"Biblioteca · {entry['name']}")
+    table.add_column("Campo", style="bold")
+    table.add_column("Valor", overflow="fold")
+    for field, label in (
+        ("id", "ID"),
+        ("category", "Categoría"),
+        ("problem", "Problema"),
+        ("official_url", "Enlace oficial"),
+        ("license", "Licencia"),
+        ("version", "Versión"),
+        ("dependencies", "Dependencias"),
+        ("data_costs", "Datos/costes"),
+        ("advantages", "Ventajas"),
+        ("risks", "Riesgos"),
+        ("tests", "Pruebas en TradingLab"),
+        ("status", "Estado"),
+        ("reason", "Motivo"),
+    ):
+        table.add_row(label, str(entry.get(field) or "Sin datos"))
+    console.print(table)
 
 
 def main() -> None:

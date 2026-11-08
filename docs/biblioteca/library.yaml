@@ -1,0 +1,229 @@
+# Biblioteca de conocimiento de TradingLab.
+# Fuente única para `lab library list|show` y para docs/biblioteca/README.md.
+# Texto original; no se copia documentación de terceros.
+reviewed_at: "2026-11-07"
+entries:
+  - id: dsr
+    name: Deflated Sharpe Ratio (DSR)
+    category: Metodología de validación
+    problem: Corrige el Sharpe por número de pruebas, asimetría y curtosis para reducir el sesgo de selección.
+    official_url: "https://papers.ssrn.com/sol3/papers.cfm?abstract_id=2460551"
+    license: "n/a (metodología)"
+    version: "n/a (metodología)"
+    dependencies: "numpy; implementación propia"
+    data_costs: "Sin coste; usa los retornos ya calculados"
+    advantages: "Penaliza la búsqueda masiva; obliga a declarar n_trials."
+    risks: "No demuestra edge por sí solo; depende de la calidad de la muestra."
+    tests: "tests/test_research.py::test_deflated_sharpe_penaliza_mas_variantes"
+    status: adoptada
+    reason: "Se usa como filtro de propuesta y en el contador de trials."
+
+  - id: pbo
+    name: Probability of Backtest Overfitting (PBO/CSCV)
+    category: Metodología de validación
+    problem: Estima la probabilidad de que la mejor variante in-sample quede por debajo de la mediana out-of-sample.
+    official_url: "https://papers.ssrn.com/sol3/papers.cfm?abstract_id=2326253"
+    license: "n/a (metodología)"
+    version: "n/a (metodología)"
+    dependencies: "numpy; implementación propia de CSCV"
+    data_costs: "Sin coste; matriz de retornos de variantes"
+    advantages: "Mide sobreajuste de forma explícita y reproducible."
+    risks: "Necesita suficientes variantes y bloques; no sustituye OOS ni walk-forward."
+    tests: "tests/test_research.py; tests/test_validation.py"
+    status: adoptada
+    reason: "Gate de propuestas; PBO > umbral no se propone."
+
+  - id: walk-forward
+    name: Walk-forward
+    category: Metodología de validación
+    problem: Evalúa la estabilidad de una estrategia entrenando en el pasado y probando en el tramo siguiente.
+    official_url: "docs/README.md"
+    license: "n/a (metodología)"
+    version: "n/a (metodología)"
+    dependencies: "numpy/pandas; implementación propia"
+    data_costs: "Sin coste; histórico local"
+    advantages: "Respeta el orden temporal y detecta degradación."
+    risks: "Puede elegir variantes inestables si el tramo de test es corto."
+    tests: "tests/test_research.py; tests/test_walkforward.py"
+    status: adoptada
+    reason: "Gate global de propuestas y validación de modelos."
+
+  - id: monte-carlo
+    name: Monte Carlo de reglas
+    category: Metodología de validación
+    problem: Estima probabilidad de pasar/romper reglas de fondeo con remuestreo de operaciones.
+    official_url: "docs/README.md"
+    license: "n/a (metodología)"
+    version: "n/a (metodología)"
+    dependencies: "numpy/pandas; implementación propia"
+    data_costs: "Sin coste; retornos del backtest"
+    advantages: "Cuantifica riesgo de ruina/breach con intervalos."
+    risks: "Asume que el pasado representa el futuro; no captura regímenes nuevos."
+    tests: "tests/test_research.py; tests/test_prop_sim.py"
+    status: adoptada
+    reason: "Se usa para pass/breach y escenarios por exposición."
+
+  - id: fred
+    name: FRED (Federal Reserve Economic Data)
+    category: Datos macro
+    problem: Aporta calendario/indicadores macro para blackout y contexto.
+    official_url: "https://fred.stlouisfed.org/docs/api/fred/"
+    license: "Datos según términos de FRED/St. Louis Fed"
+    version: "API v1"
+    dependencies: "httpx; API key"
+    data_costs: "Gratis con API key; límites de uso"
+    advantages: "Fuente pública, estable y documentada."
+    risks: "Revisión de series y latencia; no es dato intradía."
+    tests: "tests/test_intel_fred.py (si aplica)"
+    status: adoptada
+    reason: "API key presente; se usa para calendario macro cuando hay datos."
+
+  - id: sec-edgar
+    name: SEC EDGAR API
+    category: Datos fundamentales
+    problem: Consulta filings y company facts oficiales.
+    official_url: "https://www.sec.gov/edgar/sec-api-documentation"
+    license: "Datos públicos; términos SEC"
+    version: "EDGAR API v1"
+    dependencies: "httpx; User-Agent con contacto"
+    data_costs: "Gratis; respetar rate limits"
+    advantages: "Fuente primaria y oficial."
+    risks: "Formato variable por compañía; no es señal directa."
+    tests: "tests/test_intel_sec.py (si aplica)"
+    status: adoptada
+    reason: "User-Agent configurado; se usa para due diligence."
+
+  - id: yfinance
+    name: yfinance
+    category: Datos de mercado
+    problem: Descarga OHLCV diario ajustado para la caché parquet.
+    official_url: "https://github.com/ranaroussi/yfinance"
+    license: "Apache-2.0"
+    version: "1.8.0"
+    dependencies: "pandas, numpy, requests; sin API key"
+    data_costs: "Gratis; datos de Yahoo con limitaciones"
+    advantages: "Sencillo para equities/ETF y prototipos."
+    risks: "No es fuente oficial; puede cambiar o faltar; FX diario con artefactos OHLC."
+    tests: "tests/test_datacheck.py; tests/test_data_normalize.py"
+    status: adoptada
+    reason: "Proveedor actual de la caché diaria; el datacheck vigila su calidad."
+
+  - id: lm-studio
+    name: LM Studio
+    category: LLM local
+    problem: Sirve modelos locales (Qwen) para agentes y lecciones.
+    official_url: "https://lmstudio.ai/docs"
+    license: "Propietaria; términos de LM Studio"
+    version: "Local; ver la app instalada"
+    dependencies: "LM Studio + modelo Qwen local"
+    data_costs: "Hardware local; sin coste por token"
+    advantages: "Privacidad y coste marginal cero."
+    risks: "Latencia/VRAM; no apto para decisiones autónomas."
+    tests: "tests/test_llm.py; `lab doctor` LM Studio OK"
+    status: adoptada
+    reason: "Redacta propuestas/lecciones; nunca aprueba ni activa."
+
+  - id: optuna
+    name: Optuna
+    category: Optimización
+    problem: Búsqueda de hiperparámetros con poda y registro de trials.
+    official_url: "https://optuna.org"
+    license: "MIT"
+    version: "5.0.0"
+    dependencies: "numpy; se añadirá en Etapa 7"
+    data_costs: "Sin coste; CPU local"
+    advantages: "Trial counter auditable y poda temprana."
+    risks: "Aumenta el número de pruebas; debe sumar a n_trials del DSR."
+    tests: "Pendiente Etapa 7"
+    status: evaluada
+    reason: "Se adopta en Etapa 7 con walk-forward y contador DSR."
+
+  - id: quantstats
+    name: QuantStats
+    category: Reporting
+    problem: Genera informes HTML de retornos frente a benchmark.
+    official_url: "https://github.com/ranaroussi/quantstats"
+    license: "Apache-2.0"
+    version: "0.0.86"
+    dependencies: "pandas, numpy, matplotlib; se añadirá en Etapa 7"
+    data_costs: "Sin coste; datos locales"
+    advantages: "Informe visual rápido para revisión humana."
+    risks: "Solo lectura; no debe alterar criterios ni propuestas."
+    tests: "Pendiente Etapa 7"
+    status: evaluada
+    reason: "Se adopta en Etapa 7 para HTML por propuesta frente a SPY."
+
+  - id: qlib
+    name: Microsoft Qlib
+    category: Plataforma de modelos
+    problem: Framework de investigación cuantitativa y modelos.
+    official_url: "https://github.com/microsoft/qlib"
+    license: "MIT"
+    version: "0.9.7"
+    dependencies: "Paquete pesado; no instalado"
+    data_costs: "Requiere datos propios; no incluidos"
+    advantages: "Workflows y modelos variados."
+    risks: "Complejidad y dependencias; no aporta ventaja clara frente al walk-forward actual."
+    tests: "No instalado; solo `lab models` comprueba .venv-qlib"
+    status: descartada
+    reason: "No se adopta: coste de integración alto y sin edge demostrado."
+
+  - id: hmmlearn
+    name: hmmlearn
+    category: Régimen
+    problem: Modelos ocultos de Markov para regímenes.
+    official_url: "https://github.com/hmmlearn/hmmlearn"
+    license: "BSD-3-Clause"
+    version: "0.3.3"
+    dependencies: "numpy/scikit-learn; no instalado"
+    data_costs: "Sin coste; serie local"
+    advantages: "Etiquetas probabilísticas de régimen."
+    risks: "Inestabilidad con muestras cortas; difícil de explicar."
+    tests: "No instalado; reglas causales en tests/test_regimes.py"
+    status: descartada
+    reason: "No se adopta: el clasificador por reglas es causal y suficiente."
+
+  - id: vectorbt
+    name: VectorBT
+    category: Backtesting
+    problem: Backtesting vectorizado de muchas variantes.
+    official_url: "https://github.com/polakowo/vectorbt"
+    license: "Apache-2.0"
+    version: "1.2.0"
+    dependencies: "Paquete pesado; no instalado"
+    data_costs: "Sin coste; datos propios"
+    advantages: "Rápido para barridos grandes."
+    risks: "Superficie de dependencias; no sustituye el motor validado actual."
+    tests: "No instalado"
+    status: descartada
+    reason: "No se adopta: el backtester propio ya cubre la necesidad."
+
+  - id: backtrader
+    name: Backtrader
+    category: Backtesting
+    problem: Framework de backtesting con brokers/indicadores.
+    official_url: "https://www.backtrader.com"
+    license: "GPL-3.0"
+    version: "1.9.78.123"
+    dependencies: "No instalado"
+    data_costs: "Sin coste; datos propios"
+    advantages: "Ecosistema maduro."
+    risks: "GPL-3.0 y mantenimiento incierto; no se necesita."
+    tests: "No instalado"
+    status: descartada
+    reason: "No se adopta por licencia GPL y falta de necesidad."
+
+  - id: lean
+    name: QuantConnect LEAN
+    category: Motor de trading
+    problem: Motor de eventos completo para backtest/paper/live.
+    official_url: "https://github.com/QuantConnect/Lean"
+    license: "Apache-2.0"
+    version: "Sin datos (no instalado)"
+    dependencies: "C#/.NET, Docker; no instalado"
+    data_costs: "Datos y infraestructura aparte"
+    advantages: "Motor maduro y multi-mercado."
+    risks: "Complejidad, .NET y superficie de ejecución; no se necesita para paper actual."
+    tests: "No instalado"
+    status: descartada
+    reason: "No se adopta: Fase 8 mantiene el backtester propio."

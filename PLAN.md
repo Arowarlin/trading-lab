@@ -574,6 +574,20 @@ limpio; `lab doctor` OK. Sin dependencias nuevas.
   → 14 passed; `pytest -q` → 393 passed; `ruff` limpio; `lab doctor` OK.
   Sin dependencias nuevas.
 
+## Etapa 6 — Biblioteca de conocimiento (2026-11-07)
+
+- [x] **Fichas originales**
+  - `docs/biblioteca/library.yaml` con 15 fichas: DSR, PBO, walk-forward,
+    Monte Carlo, FRED, SEC, yfinance, LM Studio, Optuna, QuantStats, Qlib,
+    hmmlearn, VectorBT, Backtrader y LEAN.
+  - Campos: problema, enlace, licencia, versión, dependencias, datos/costes,
+    ventajas, riesgos, pruebas y estado/motivo.
+  - `docs/biblioteca/README.md` generado; sin copiar texto de terceros.
+- [x] **CLI**
+  - `lab library list [--status]` y `lab library show <id> [--json]`.
+- Evidencia: `pytest tests/test_library.py -q` → 3 passed; `pytest -q` → 396
+  passed; `ruff` limpio; `lab doctor` OK. Sin dependencias nuevas.
+
 ---
 
 ## Registro de evidencias

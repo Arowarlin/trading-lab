@@ -876,7 +876,7 @@ stdlib y `127.0.0.1`. Se conservan todas las pestañas, rutas, CSRF, Host/Origin
 y la lista blanca `WRITE_ROUTES`.
 
 Evidencia: `pytest tests/test_console_shell.py -q` → **3 passed**; suite completa
-**393 passed**; cubre las seis secciones, las 15 vistas actuales, los
+**396 passed**; cubre las seis secciones, las 15 vistas actuales, los
 componentes del dashboard y la ausencia de URLs externas/CDNs.
 
 ---
@@ -1169,7 +1169,7 @@ completa **325 passed**; `ruff` limpio; `lab doctor` OK con avisos conocidos.
 - El panel **Aprendizaje** sigue siendo el único sitio de aprobación humana.
 
 Evidencia: `pytest tests/test_learning.py -q` → **8 passed**; suite completa
-**393 passed**; `ruff` limpio; `lab doctor` OK con avisos conocidos.
+**396 passed**; `ruff` limpio; `lab doctor` OK con avisos conocidos.
 
 ---
 
@@ -1692,7 +1692,7 @@ propuesta. Con **N < 30** se muestran con aviso de muestra insuficiente.
 
 Evidencia: `pytest tests/test_metrics.py tests/test_journal.py
 tests/test_engine.py tests/test_research.py -q` → **33 passed**; suite completa
-**393 passed**; `ruff` limpio; `lab doctor` OK. Sin dependencias nuevas.
+**396 passed**; `ruff` limpio; `lab doctor` OK. Sin dependencias nuevas.
 
 ---
 
@@ -1717,7 +1717,7 @@ volatilidad; no usa datos futuros y no activa ni desactiva bots.
 
 Estado actual QQQ (2026-11-06): `trend_down`, volatilidad `high`; selector
 propuesto `flat`. Evidencia: `pytest tests/test_regimes.py tests/test_web.py -q`
-→ **23 passed**; suite completa **393 passed**; `ruff` limpio; `lab doctor` OK.
+→ **23 passed**; suite completa **396 passed**; `ruff` limpio; `lab doctor` OK.
 
 ---
 
@@ -1735,7 +1735,7 @@ propuesto `flat`. Evidencia: `pytest tests/test_regimes.py tests/test_web.py -q`
 - Sin dependencias nuevas.
 
 Evidencia: `pytest tests/test_models.py -q` → **6 passed**; suite completa
-**393 passed**; `ruff` limpio; `lab doctor` OK.
+**396 passed**; `ruff` limpio; `lab doctor` OK.
 
 ---
 
@@ -1755,8 +1755,38 @@ serie, fuente, sesión, zona horaria y spread propios:
 - No se descargan series nuevas. Sin caché: **Sin datos**.
 
 Evidencia: `pytest tests/test_instruments.py tests/test_data_normalize.py -q`
-→ **14 passed**; suite completa **393 passed**; `ruff` limpio; `lab doctor` OK.
+→ **14 passed**; suite completa **396 passed**; `ruff` limpio; `lab doctor` OK.
 Sin dependencias nuevas.
+
+---
+
+## 11j. Biblioteca de conocimiento
+
+`docs/biblioteca/library.yaml` es la fuente única de **15 fichas originales**;
+`docs/biblioteca/README.md` se genera desde ella y `lab library list|show`
+permite consultarlas sin abrir el repositorio.
+
+Cada ficha incluye nombre, categoría, problema, enlace oficial, licencia,
+versión, fecha de revisión, dependencias, datos/costes, ventajas, riesgos,
+pruebas hechas en TradingLab y estado (`adoptada`/`evaluada`/`descartada`) con
+motivo.
+
+- **Adoptadas**: DSR, PBO, walk-forward, Monte Carlo, FRED, SEC EDGAR, yfinance
+  y LM Studio.
+- **Evaluadas**: Optuna y QuantStats (adopción prevista en la Etapa 7).
+- **Descartadas**: Qlib, hmmlearn, VectorBT, Backtrader y LEAN, con motivo
+  explícito (dependencias, licencia o falta de ventaja demostrada).
+- No se copia texto de terceros; los enlaces y licencias se revisan antes de
+  añadir una dependencia.
+
+```powershell
+lab library list
+lab library list --status descartada
+lab library show dsr
+```
+
+Evidencia: `pytest tests/test_library.py -q` → **3 passed**; suite completa
+**396 passed**; `ruff` limpio; `lab doctor` OK. Sin dependencias nuevas.
 
 ---
 
