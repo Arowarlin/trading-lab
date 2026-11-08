@@ -735,11 +735,23 @@ def prepare_push(
         return {"ok": False, "error": "Nada que subir: no hay commits por delante de origin/master."}
     dirty = _run(["git", "status", "--porcelain"], runner=runner, timeout=30)
     dirty_lines = [line for line in _out(dirty).splitlines() if line.strip()]
+    diffstat = _run(
+        ["git", "diff", "--stat", f"{PUSH_REMOTE}/{PUSH_BRANCH}..HEAD"],
+        runner=runner,
+        timeout=30,
+    )
+    names = _run(
+        ["git", "diff", "--name-only", f"{PUSH_REMOTE}/{PUSH_BRANCH}..HEAD"],
+        runner=runner,
+        timeout=30,
+    )
     return {
         "ok": True,
         "branch": branch_name,
         "ahead": pending,
         "dirty": len(dirty_lines),
+        "diffstat": _tail(_out(diffstat), 2000) or "Sin datos",
+        "files": _tail(_out(names), 1500) or "Sin datos",
         "summary": (
             f"rama={branch_name} · commits={pending} · "
             f"cambios_sin_commit={len(dirty_lines)}"
@@ -843,7 +855,11 @@ def begin_action(
         plan = prepare_push(runner=runner)
         if not plan["ok"]:
             return False, str(plan["error"])
-        summary = str(plan["summary"])
+        summary = (
+            f"{plan['summary']}\n\n"
+            f"diffstat:\n{plan['diffstat']}\n\n"
+            f"archivos:\n{plan['files']}"
+        )
     elif action == "backup":
         summary = "zip + restore test + integrity_check; puede tardar 1-2 minutos"
     else:

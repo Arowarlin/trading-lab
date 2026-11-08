@@ -32,13 +32,15 @@ from .risk import check_order
 from .runtime import (
     console_actions,
     get_bot_state,
+    init_runtime,
     record_console_action,
     set_bot_enabled,
 )
 from .session import session_block
 
 PIN_KEY = "CONSOLE_PIN"
-PIN_RE = re.compile(r"^\d{4,12}$")
+PIN_RE = re.compile(r"^\d{6,12}$")
+PIN_MIN_DIGITS = 6
 SUPPORTED_PLATFORMS = {"internal", "paper", "alpaca", "mt5"}
 TRADEABLE_STATUSES = {"active", "demo", "paper", "simulated"}
 ACTIONS = {
@@ -78,10 +80,19 @@ def pin_configured(getter: Callable[[], str | None] | None = None) -> bool:
     return bool((getter or _default_pin_get)())
 
 
+def pin_needs_rotation(getter: Callable[[], str | None] | None = None) -> bool:
+    """Avisa si el PIN guardado es más corto que el mínimo actual.
+
+    No borra ni bloquea el PIN corto: solo pide rotarlo.
+    """
+    pin = str((getter or _default_pin_get)() or "")
+    return bool(pin) and len(pin) < PIN_MIN_DIGITS
+
+
 def set_pin(pin: str, setter: Callable[[str], None] | None = None) -> None:
     """Guarda el PIN en keyring. Nunca se escribe en .env ni en logs."""
     if not PIN_RE.match(pin or ""):
-        raise ValueError("El PIN debe tener entre 4 y 12 dígitos.")
+        raise ValueError("El PIN debe tener entre 6 y 12 dígitos.")
     try:
         (setter or _default_pin_set)(pin)
     except Exception as exc:
@@ -98,6 +109,16 @@ def _digest(action: str, payload: dict) -> str:
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
+_PATH_RE = re.compile(r"[A-Za-z]:\\[^\s\"']+")
+
+
+def _sanitize_error(exc: BaseException) -> str:
+    """Error de auditoría sin rutas locales ni secretos."""
+    text = f"{type(exc).__name__}: {exc}"
+    text = _PATH_RE.sub("<ruta>", text)
+    return text[:300]
+
+
 class OperatorSession:
     """Armado por PIN, caducidad y tokens de confirmación de un solo uso."""
 
@@ -110,6 +131,7 @@ class OperatorSession:
         confirm_ttl_seconds: int = 60,
         max_attempts: int = 5,
         lock_seconds: int = 300,
+        db_path: str | Path | None = None,
     ) -> None:
         self._pin_getter = pin_getter or _default_pin_get
         self._now = now or (lambda: datetime.now(timezone.utc))
@@ -117,6 +139,7 @@ class OperatorSession:
         self.confirm_ttl_seconds = max(5, int(confirm_ttl_seconds))
         self.max_attempts = max(1, int(max_attempts))
         self.lock_seconds = max(10, int(lock_seconds))
+        self.db_path = Path(db_path) if db_path is not None else None
         self._lock = threading.RLock()
         self._armed_until: datetime | None = None
         self._failures = 0
@@ -129,13 +152,66 @@ class OperatorSession:
             value = value.replace(tzinfo=timezone.utc)
         return value.astimezone(timezone.utc)
 
+    def _load_pin_state(self) -> tuple[int, datetime | None]:
+        if self.db_path is not None:
+            try:
+                init_runtime(self.db_path)
+                with connect(self.db_path) as con:
+                    row = con.execute(
+                        "SELECT failures, locked_until FROM operator_pin_state WHERE id = 1"
+                    ).fetchone()
+                if row is None:
+                    return 0, None
+                locked: datetime | None = None
+                if row["locked_until"]:
+                    try:
+                        locked = datetime.fromisoformat(str(row["locked_until"]))
+                    except ValueError:
+                        locked = None
+                    if locked is not None:
+                        if locked.tzinfo is None:
+                            locked = locked.replace(tzinfo=timezone.utc)
+                        locked = locked.astimezone(timezone.utc)
+                return int(row["failures"] or 0), locked
+            except Exception:
+                pass
+        return self._failures, self._locked_until
+
+    def _store_pin_state(self, failures: int, locked_until: datetime | None) -> None:
+        self._failures = int(failures)
+        self._locked_until = locked_until
+        if self.db_path is None:
+            return
+        try:
+            init_runtime(self.db_path)
+            with connect(self.db_path) as con:
+                con.execute(
+                    "INSERT INTO operator_pin_state"
+                    "(id, failures, locked_until, updated_at) "
+                    "VALUES(1, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET "
+                    "failures=excluded.failures, "
+                    "locked_until=excluded.locked_until, "
+                    "updated_at=excluded.updated_at",
+                    (
+                        int(failures),
+                        locked_until.isoformat() if locked_until else None,
+                        utcnow(),
+                    ),
+                )
+        except Exception:
+            pass
+
     def status(self) -> dict:
         with self._lock:
             now = self._current()
             if self._armed_until and now >= self._armed_until:
                 self._armed_until = None
                 self._confirmations.clear()
-            locked = self._locked_until is not None and now < self._locked_until
+            failures, locked_until = self._load_pin_state()
+            if locked_until is not None and now >= locked_until:
+                failures, locked_until = 0, None
+                self._store_pin_state(0, None)
+            locked = locked_until is not None and now < locked_until
             seconds_left = (
                 max(0, int((self._armed_until - now).total_seconds()))
                 if self._armed_until
@@ -148,23 +224,26 @@ class OperatorSession:
                 else None,
                 "seconds_left": seconds_left,
                 "pin_configured": pin_configured(self._pin_getter),
-                "attempts_left": max(0, self.max_attempts - self._failures),
+                "pin_needs_rotation": pin_needs_rotation(self._pin_getter),
+                "attempts_left": 0
+                if locked
+                else max(0, self.max_attempts - failures),
                 "locked": bool(locked),
-                "locked_until": self._locked_until.isoformat()
-                if locked and self._locked_until
+                "locked_until": locked_until.isoformat()
+                if locked and locked_until
                 else None,
                 "arm_minutes": round(self.arm_ttl_seconds / 60.0, 1),
                 "confirm_seconds": self.confirm_ttl_seconds,
             }
 
     def _check_pin_locked(self, now: datetime) -> None:
-        if self._locked_until and now < self._locked_until:
+        _, locked_until = self._load_pin_state()
+        if locked_until and now < locked_until:
             raise OperatorError(
                 "PIN bloqueado temporalmente. Espera antes de reintentar.", 429
             )
-        if self._locked_until and now >= self._locked_until:
-            self._locked_until = None
-            self._failures = 0
+        if locked_until and now >= locked_until:
+            self._store_pin_state(0, None)
 
     def _verify(self, pin: str) -> None:
         with self._lock:
@@ -176,20 +255,23 @@ class OperatorSession:
                     "PIN no configurado. Ejecuta `lab operator pin` primero.", 403
                 )
             if not hmac.compare_digest(str(pin or ""), str(expected)):
-                self._failures += 1
-                if self._failures >= self.max_attempts:
-                    self._locked_until = now + timedelta(seconds=self.lock_seconds)
-                    self._failures = 0
+                failures, _ = self._load_pin_state()
+                failures += 1
+                if failures >= self.max_attempts:
+                    self._store_pin_state(
+                        0,
+                        now + timedelta(seconds=self.lock_seconds),
+                    )
                     raise OperatorError(
                         "PIN incorrecto. Bloqueado temporalmente.", 429
                     )
+                self._store_pin_state(failures, None)
                 raise OperatorError(
                     f"PIN incorrecto. Intentos restantes: "
-                    f"{self.max_attempts - self._failures}.",
+                    f"{self.max_attempts - failures}.",
                     403,
                 )
-            self._failures = 0
-            self._locked_until = None
+            self._store_pin_state(0, None)
 
     def verify_pin(self, pin: str) -> None:
         """Verifica PIN para acciones sensibles sin armar el modo operador."""
@@ -274,6 +356,7 @@ class OperatorService:
         self.db_path = Path(db_path)
         cfg = settings.operator
         self.session = session or OperatorSession(
+            db_path=self.db_path,
             arm_ttl_seconds=cfg.arm_minutes * 60,
             confirm_ttl_seconds=cfg.confirm_seconds,
             max_attempts=cfg.max_pin_attempts,
@@ -366,8 +449,15 @@ class OperatorService:
             from .f13 import status as f13_status
 
             frozen = f13_status(self.db_path)
-        except Exception:
-            return False
+        except Exception as exc:
+            self._audit(
+                "f13_status_error",
+                {"bot": bot},
+                "bloqueado",
+                False,
+                reason=_sanitize_error(exc),
+            )
+            return True
         return bool(frozen and str(frozen.get("bot")) == bot)
 
     def _account_allowed(self, account: AccountDefinition) -> tuple[bool, str | None]:
@@ -1173,6 +1263,8 @@ __all__ = [
     "OperatorService",
     "OperatorSession",
     "PIN_KEY",
+    "PIN_MIN_DIGITS",
     "pin_configured",
+    "pin_needs_rotation",
     "set_pin",
 ]

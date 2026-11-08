@@ -795,9 +795,12 @@ La consola puede operar **solo paper/demo**, y solo cuando está **armada**.
 
 - **Desarmada por defecto.** Armar exige PIN verificado con el keyring del
   sistema (`lab operator pin`), caduca a los 15 min (`operator.arm_minutes`) y
-  se desarma al reiniciar el servidor. El PIN nunca se escribe en `.env`, logs
-  ni auditoría. Tras `operator.max_pin_attempts` fallos se bloquea
-  `operator.lock_seconds`.
+  se desarma al reiniciar el servidor. El PIN tiene **6–12 dígitos**; uno corto
+  antiguo no se borra, pero `lab operator status` avisa de que debe rotarse. El
+  PIN nunca se escribe en `.env`, logs ni auditoría.
+- **Bloqueo persistente:** los fallos y el bloqueo por `operator.max_pin_attempts`
+  / `operator.lock_seconds` viven en SQLite (`operator_pin_state`), así que
+  sobreviven a reinicios del servidor y se comparten entre procesos.
 - **Solo si está armada:** ejecutar el orquestador de un bot, enviar una orden
   paper/demo, cerrar posición, aplanar cuenta y activar/desactivar un bot.
 - **Rechazo duro** si `mode=live`, si la cuenta no es `paper/demo/simulated` o
@@ -825,16 +828,18 @@ La consola puede operar **solo paper/demo**, y solo cuando está **armada**.
 
 **La consola NO puede:** operar en live, cambiar `ALLOW_LIVE`, editar YAML,
 activar el bot de F13 congelado/iniciado, resetear el kill-switch sin PIN,
-ejecutar código, crear bots con IA, hacer copy trading ni conectar EAs.
+ejecutar código, crear bots con IA, hacer copy trading ni conectar EAs. Si
+`f13.status` falla, el bot se considera **bloqueado** y el error saneado queda
+en `console_actions`.
 
 ```powershell
 lab operator pin       # guarda/rota el PIN en keyring (entrada oculta)
 lab operator status    # PIN, mode y enabled efectivo por bot
 ```
 
-Evidencia: `pytest tests/test_operator.py -q` → **11 passed**; cubre sin armar
-(403), PIN incorrecto/bloqueo, live/plantilla rechazadas, orden fuera de límite,
-cierre con kill-switch activo, token caducado/reutilizado, F13 intacto y
+Evidencia: `pytest tests/test_operator.py -q` → **17 passed**; cubre sin armar
+(403), PIN corto/bloqueo persistente, live/plantilla rechazadas, orden fuera de
+límite, cierre con kill-switch activo, token caducado/reutilizado, F13 intacto y
 auditoría sin secretos.
 
 ---
@@ -871,7 +876,7 @@ stdlib y `127.0.0.1`. Se conservan todas las pestañas, rutas, CSRF, Host/Origin
 y la lista blanca `WRITE_ROUTES`.
 
 Evidencia: `pytest tests/test_console_shell.py -q` → **3 passed**; suite completa
-**352 passed**; cubre las seis secciones, las 15 vistas actuales, los
+**357 passed**; cubre las seis secciones, las 15 vistas actuales, los
 componentes del dashboard y la ausencia de URLs externas/CDNs.
 
 ---
@@ -1164,7 +1169,7 @@ completa **325 passed**; `ruff` limpio; `lab doctor` OK con avisos conocidos.
 - El panel **Aprendizaje** sigue siendo el único sitio de aprobación humana.
 
 Evidencia: `pytest tests/test_learning.py -q` → **8 passed**; suite completa
-**352 passed**; `ruff` limpio; `lab doctor` OK con avisos conocidos.
+**357 passed**; `ruff` limpio; `lab doctor` OK con avisos conocidos.
 
 ---
 
@@ -1609,8 +1614,9 @@ pública. El token vive en Windows Credential Manager (keyring), nunca en `.env`
   `/pause`, `/resume`, `/mode`, `/new`, `/continue`, `/push`, `/backup`,
   `/pushbackup`, `/confirm`, `/cancel`.
 - **Push/backup con aprobación humana en dos pasos**: la orden genera un código
-  de 6 dígitos válido 5 minutos; solo `/confirm <código>` ejecuta. El agente
-  automático no puede hacer push.
+  de 6 dígitos válido 5 minutos; solo `/confirm <código>` ejecuta. `/push`
+  muestra antes el **diffstat y la lista de archivos**. El agente automático no
+  puede hacer push.
 - **Modo `agent` opcional**: ejecuta `opencode run --agent telegram` con un
   agente restringido: sin live, sin `.env`, sin borrar, sin push, sin tocar
   `config/`, `data/` ni activar F13.

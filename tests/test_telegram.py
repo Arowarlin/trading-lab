@@ -362,6 +362,14 @@ def _git_runner(commands, *, ahead="2", push_code=0, backup_code=0):
             return _cp(command, 0, "")
         if "rev-list --count origin/master..HEAD" in joined:
             return _cp(command, 0, ahead + "\n")
+        if "diff --stat" in joined:
+            return _cp(
+                command,
+                0,
+                " src/a.py | 2 +-\n src/b.py | 1 +\n 2 files changed, 3 insertions(+), 1 deletion(-)\n",
+            )
+        if "diff --name-only" in joined:
+            return _cp(command, 0, "src/a.py\nsrc/b.py\n")
         if "status --porcelain" in joined:
             return _cp(command, 0, "")
         if "push origin master" in joined:
@@ -404,6 +412,9 @@ def test_push_pide_codigo_y_confirma(tmp_path: Path) -> None:
     runner = _git_runner(commands)
     _handle(path, state_path, replies, runner, "/push")
     assert "Push pendiente" in replies[-1]
+    assert "diffstat:" in replies[-1]
+    assert "src/a.py" in replies[-1]
+    assert "archivos:" in replies[-1]
     match = re.search(r"/confirm (\d{6})", replies[-1])
     assert match
     code = match.group(1)
@@ -495,5 +506,42 @@ def test_pause_cancela_pendiente(tmp_path: Path) -> None:
     replies: list[str] = []
     _handle(path, state_path, replies, _git_runner([]), "/pause")
     assert tg.BridgeState.load(state_path).pending_action == ""
+
+
+def test_agente_telegram_deny_edicion() -> None:
+    import fnmatch
+
+    import yaml
+
+    path = Path(__file__).resolve().parents[1] / ".opencode" / "agents" / "telegram.md"
+    text = path.read_text(encoding="utf-8")
+    frontmatter = text.split("---", 2)[1]
+    data = yaml.safe_load(frontmatter)
+    rules = [rule for rule in data["permissions"] if rule.get("action") == "edit"]
+    required = {
+        "scripts/*",
+        "AGENTS.md",
+        "src/tradinglab/operator.py",
+        "src/tradinglab/killswitch.py",
+        "src/tradinglab/risk.py",
+        "src/tradinglab/f13.py",
+        "src/tradinglab/prop/*",
+    }
+    denied = {rule["resource"] for rule in rules if rule.get("effect") == "deny"}
+    assert denied == required
+
+    def effect(resource: str) -> str | None:
+        result = None
+        for rule in rules:
+            if fnmatch.fnmatch(resource, rule["resource"]):
+                result = rule["effect"]
+        return result
+
+    for pattern in required:
+        sample = pattern.replace("*", "x.py")
+        assert effect(sample) == "deny", pattern
+    assert effect("src/tradinglab/cli.py") == "allow"
+    assert effect("README.md") == "allow"
+    assert effect("tests/test_telegram.py") == "allow"
 
 

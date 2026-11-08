@@ -468,6 +468,30 @@ puertos, sin exponer secretos y sin habilitar live.
   - Evidencia: `pytest tests/test_telegram.py -q` → 23 passed; suite completa
     352 passed.
 
+## Etapa 0 — Correcciones pendientes (2026-11-07)
+
+- [x] **A) Fallo de `f13.status` bloquea y audita**
+  - `_f13_bot_locked` devuelve `True` si falla la lectura de F13 y registra
+    `f13_status_error` en `console_actions` con error saneado (sin rutas).
+  - Test con excepción simulada y comprobación de auditoría.
+- [x] **B) PIN 6–12 y bloqueo persistente**
+  - `set_pin` exige 6–12 dígitos; un PIN corto existente no se borra.
+  - `lab operator status` y la consola muestran aviso de rotación.
+  - `operator_pin_state` guarda fallos y `locked_until`; sobrevive reinicios.
+  - Tests de mínimo, rotación y persistencia entre instancias.
+- [x] **C) Deny de edición del agente Telegram acotado**
+  - Solo `scripts/*`, `AGENTS.md`, `operator.py`, `killswitch.py`, `risk.py`,
+    `f13.py` y `prop/*`; el resto editable.
+  - Test que verifica los deny y que `cli.py`, `README.md` y `tests/` siguen
+    editables.
+- [x] **D) `/push` muestra diffstat y archivos**
+  - El mensaje pendiente incluye `diffstat` y `archivos` antes del código.
+  - Sin cambiar el destino: `origin/master`.
+
+Evidencia de la etapa: `pytest tests/test_operator.py tests/test_telegram.py -q`
+→ 41 passed; `ruff` limpio; `lab doctor` OK. Sin tocar Telegram, sin push y sin
+activar bots/F13.
+
 ---
 
 ## Registro de evidencias
@@ -528,4 +552,5 @@ puertos, sin exponer secretos y sin habilitar live.
 | 2026-11-07 | Datos aprendizaje | Job `TradingLab-Agents` + `decisions update`; 3 decisiones SPY/QQQ/NVDA del 2026-11-07; 0 retornos 1/5/20d; ventana 20-30 días |
 | 2026-11-07 | Job diario + outcomes | `pytest tests/test_scripts.py -q` → 5 passed; `pytest -q` → 328 passed; `agents_daily.ps1` ejecuta `decisions update`; `ruff` limpio |
 | 2026-11-07 | 13 Telegram remoto | `pytest tests/test_telegram.py -q` → 23 passed; `pytest -q` → 352 passed; long polling, keyring, comandos, push/backup con `/confirm` y agente restringido; docs/telegram.md |
+| 2026-11-07 | Etapa 0 | `pytest tests/test_operator.py tests/test_telegram.py -q` → 41 passed; `pytest -q` → 357 passed; F13 falla→bloquea+audita, PIN 6-12 persistente, denies acotados, `/push` con diffstat |
 |  |  |  |

@@ -3255,6 +3255,7 @@ function renderOperator() {
   }
   const alerts = [];
   if (!session.pin_configured) alerts.push(`<div class="alert">PIN no configurado: ejecuta <code>lab operator pin</code>.</div>`);
+  if (session.pin_needs_rotation) alerts.push(`<div class="alert">PIN corto: rótalo con <code>lab operator pin</code> (mínimo 6 dígitos).</div>`);
   if (payload.mode === "live") alerts.push(`<div class="alert red">mode=live: la consola no puede operar. ALLOW_LIVE no se cambia desde aquí.</div>`);
   if (session.locked) alerts.push(`<div class="alert red">PIN bloqueado temporalmente hasta ${dateTime(session.locked_until)}.</div>`);
   if ($("#operator-alert")) $("#operator-alert").innerHTML = alerts.join("");

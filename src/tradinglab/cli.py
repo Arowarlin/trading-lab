@@ -3116,7 +3116,7 @@ def operator_pin_cmd() -> None:
     ):
         raise typer.Exit(1)
     pin = typer.prompt(
-        "PIN (4-12 dígitos)", hide_input=True, confirmation_prompt=True
+        "PIN (6-12 dígitos)", hide_input=True, confirmation_prompt=True
     )
     try:
         set_pin(pin)
@@ -3129,15 +3129,38 @@ def operator_pin_cmd() -> None:
 @operator_app.command("status")
 def operator_status_cmd() -> None:
     """Muestra si hay PIN y el estado runtime de los bots."""
-    from .operator import pin_configured
+    from .operator import OperatorSession, pin_configured, pin_needs_rotation
     from .runtime import get_bot_state
 
     settings = get_settings()
+    pin_ok = pin_configured()
+    pin_short = pin_needs_rotation()
+    cfg = settings.operator
+    session_state = OperatorSession(
+        db_path=DEFAULT_DB,
+        max_attempts=cfg.max_pin_attempts,
+        lock_seconds=cfg.lock_seconds,
+    ).status()
     t = Table(title="Modo operador")
     t.add_column("Campo", style="bold")
     t.add_column("Valor")
     t.add_row("mode", settings.mode)
-    t.add_row("PIN en keyring", "sí" if pin_configured() else "no")
+    if not pin_ok:
+        pin_text = "no configurado"
+    elif pin_short:
+        pin_text = "corto (<6 dígitos): debe rotarse"
+    else:
+        pin_text = "ok (>=6 dígitos)"
+    t.add_row("PIN en keyring", pin_text)
+    t.add_row(
+        "Intentos PIN",
+        f"{session_state['attempts_left']} restantes"
+        + (" · bloqueado" if session_state["locked"] else ""),
+    )
+    t.add_row(
+        "Bloqueo PIN",
+        str(session_state.get("locked_until") or "no"),
+    )
     t.add_row("Armado", "solo en el servidor web (se pierde al reiniciar)")
     t.add_row(
         "Ventana",
@@ -3145,6 +3168,11 @@ def operator_status_cmd() -> None:
         f"token {settings.operator.confirm_seconds}s",
     )
     console.print(t)
+    if pin_short:
+        console.print(
+            "[yellow]PIN corto: rótalo con `lab operator pin` "
+            "(mínimo 6 dígitos). No se borra automáticamente.[/yellow]"
+        )
     bots = Table(title="Estado runtime de bots")
     for col in ("Bot", "YAML", "Efectivo", "Actualizado"):
         bots.add_column(col)

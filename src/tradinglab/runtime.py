@@ -37,6 +37,12 @@ CREATE TABLE IF NOT EXISTS console_actions (
     detail TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_console_actions_ts ON console_actions(ts);
+CREATE TABLE IF NOT EXISTS operator_pin_state (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    failures INTEGER NOT NULL DEFAULT 0,
+    locked_until TEXT,
+    updated_at TEXT NOT NULL
+);
 """
 
 

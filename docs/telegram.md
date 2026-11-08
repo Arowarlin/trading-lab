@@ -157,9 +157,9 @@ un toque accidental:
 
 Detalles:
 
-- `/push`: solo rama `master`; hace `git fetch origin`, muestra commits por
-  delante y cambios sin commit, y ejecuta `git push origin master` sin `--force`.
-  Si no hay commits por delante, no pide confirmación.
+- `/push`: solo rama `master`; hace `git fetch origin`, muestra commits,
+  **diffstat y lista de archivos** y ejecuta `git push origin master` sin
+  `--force`. Si no hay commits por delante, no pide confirmación.
 - `/backup`: ejecuta `scripts/backup.ps1` (zip + restore test +
   `integrity_check`). Puede tardar 1–2 minutos.
 - `/pushbackup`: primero push y, si va bien, backup.
@@ -213,5 +213,5 @@ También acepta `--file resumen.txt` o `--stdin`.
 
 ## Evidencia
 
-- `pytest tests/test_telegram.py -q` → 23 passed.
+- `pytest tests/test_telegram.py -q` → 24 passed.
 - `lab doctor` muestra `Telegram remoto` como OK cuando está configurado.

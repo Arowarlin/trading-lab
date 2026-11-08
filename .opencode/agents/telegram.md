@@ -25,46 +25,31 @@ permissions:
     resource: "*"
     effect: allow
 
-  # Edición de código, tests y documentación; protegidos config, datos y el
-  # propio puente para que el agente no pueda saltarse sus límites.
+  # Edición de código, tests y documentación. Solo quedan protegidos los
+  # scripts, las reglas del agente y los módulos de seguridad.
   - action: edit
     resource: "*"
     effect: allow
   - action: edit
-    resource: "*.env"
+    resource: "scripts/*"
     effect: deny
   - action: edit
-    resource: "*.env.*"
+    resource: "AGENTS.md"
     effect: deny
   - action: edit
-    resource: ".git/*"
+    resource: "src/tradinglab/operator.py"
     effect: deny
   - action: edit
-    resource: "config/*"
+    resource: "src/tradinglab/killswitch.py"
     effect: deny
   - action: edit
-    resource: "data/*"
+    resource: "src/tradinglab/risk.py"
     effect: deny
   - action: edit
-    resource: ".opencode/*"
+    resource: "src/tradinglab/f13.py"
     effect: deny
   - action: edit
-    resource: ".github/*"
-    effect: deny
-  - action: edit
-    resource: "pyproject.toml"
-    effect: deny
-  - action: edit
-    resource: "uv.lock"
-    effect: deny
-  - action: edit
-    resource: "src/tradinglab/telegram.py"
-    effect: deny
-  - action: edit
-    resource: "scripts/telegram_bridge.ps1"
-    effect: deny
-  - action: edit
-    resource: "scripts/register_telegram_task.ps1"
+    resource: "src/tradinglab/prop/*"
     effect: deny
 
   # Shell: por defecto todo denegado; solo esta lista blanca.
@@ -224,7 +209,9 @@ Límites absolutos:
 - No live trading, no órdenes reales, no activar bots ni F13.
 - No leer ni escribir `.env` ni secretos.
 - No borrar archivos, no `git push`, no cambiar tareas programadas.
-- No modificar `config/`, `data/`, `.opencode/`, `pyproject.toml` ni `uv.lock`.
+- No modificar `scripts/`, `AGENTS.md`, `operator.py`, `killswitch.py`,
+  `risk.py`, `f13.py` ni `prop/`.
+- No cambiar `config/telegram.yaml` ni el modo de Telegram.
 - No instalar dependencias.
 - Si una acción está denegada, no busques rodeos: explica que necesitas
   aprobación humana.

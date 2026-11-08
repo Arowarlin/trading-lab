@@ -11,7 +11,7 @@ import pytest
 
 from tradinglab import web
 from tradinglab.config import Settings
-from tradinglab.db import init_db
+from tradinglab.db import connect, init_db
 from tradinglab.f13 import config_hash, freeze
 from tradinglab.journal import ClosedTrade
 from tradinglab.killswitch import activate as activate_killswitch
@@ -20,6 +20,8 @@ from tradinglab.operator import (
     OperatorError,
     OperatorService,
     OperatorSession,
+    pin_needs_rotation,
+    set_pin,
 )
 from tradinglab.riskpause import pause_status
 from tradinglab.runtime import console_actions, get_bot_state
@@ -92,6 +94,7 @@ def _service(tmp_path: Path, *, broker=None, now=None, settings=None, pin="1234"
         now=now,
         max_attempts=3,
         lock_seconds=60,
+        db_path=db,
     )
     fake = broker or FakeBroker()
     service = OperatorService(
@@ -135,6 +138,67 @@ def test_pin_bloquea_tras_intentos(tmp_path: Path) -> None:
         session.arm("1234")
     clock["now"] += timedelta(seconds=61)
     assert session.arm("1234")["armed"] is True
+
+
+def test_pin_minimo_6_digitos() -> None:
+    saved: dict[str, str] = {}
+    with pytest.raises(ValueError):
+        set_pin("12345", setter=lambda value: saved.setdefault("pin", value))
+    assert "pin" not in saved
+    set_pin("123456", setter=lambda value: saved.setdefault("pin", value))
+    assert saved["pin"] == "123456"
+
+
+def test_pin_corto_avisa_rotacion() -> None:
+    assert pin_needs_rotation(lambda: "1234") is True
+    assert pin_needs_rotation(lambda: "123456") is False
+    assert pin_needs_rotation(lambda: None) is False
+
+
+def test_pin_lock_persistente_sqlite(tmp_path: Path) -> None:
+    db = tmp_path / "lab.db"
+    init_db(db)
+    clock = {"now": datetime(2026, 1, 5, 15, 0, tzinfo=timezone.utc)}
+    kwargs = {
+        "pin_getter": lambda: "123456",
+        "now": lambda: clock["now"],
+        "max_attempts": 3,
+        "lock_seconds": 60,
+        "db_path": db,
+    }
+    session = OperatorSession(**kwargs)
+    with pytest.raises(OperatorError):
+        session.arm("000000")
+    assert session.status()["attempts_left"] == 2
+
+    # Otra instancia ve el fallo persistido.
+    session2 = OperatorSession(**kwargs)
+    assert session2.status()["attempts_left"] == 2
+    with pytest.raises(OperatorError):
+        session2.arm("000000")
+    with pytest.raises(OperatorError) as exc:
+        session2.arm("000000")
+    assert exc.value.status == 429
+
+    # Otra instancia ve el bloqueo persistido.
+    session3 = OperatorSession(**kwargs)
+    assert session3.status()["locked"] is True
+    assert session3.status()["attempts_left"] == 0
+    with pytest.raises(OperatorError) as exc:
+        session3.arm("123456")
+    assert exc.value.status == 429
+
+    clock["now"] += timedelta(seconds=61)
+    session4 = OperatorSession(**kwargs)
+    assert session4.status()["locked"] is False
+    assert session4.arm("123456")["armed"] is True
+    with connect(db) as con:
+        row = con.execute(
+            "SELECT failures, locked_until FROM operator_pin_state WHERE id = 1"
+        ).fetchone()
+    assert row is not None
+    assert row["failures"] == 0
+    assert row["locked_until"] is None
 
 
 def test_preview_y_token_de_un_solo_uso(tmp_path: Path) -> None:
@@ -354,6 +418,21 @@ def test_auditoria_sin_secretos(tmp_path: Path) -> None:
         text = json.dumps(row, ensure_ascii=False)
         assert "1234" not in text
         assert preview["token"] not in text
+
+
+def test_f13_status_falla_bloquea_y_audita(tmp_path: Path, monkeypatch) -> None:
+    service, _, db = _service(tmp_path)
+
+    def boom(db_path):
+        raise RuntimeError("fallo E:\\secreto\\datos")
+
+    monkeypatch.setattr("tradinglab.f13.status", boom)
+    assert service._f13_bot_locked("qqq-trend-f13") is True
+    rows = console_actions(db, 20)
+    row = next(row for row in rows if row["action"] == "f13_status_error")
+    assert row["ok"] is False
+    assert "<ruta>" in row["detail"]
+    assert "secreto" not in row["detail"]
 
 
 def _http(
