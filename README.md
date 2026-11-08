@@ -739,10 +739,10 @@ pueda determinarse o se configure `mt5.server_utc_offset_hours` verificado.
   historial. Así la consola puede editar sin entrar en el hash de F13.
 - El guard siempre usa el **mínimo** firma/propio; nunca se puede ampliar un
   límite de la firma desde la consola.
-- Nada se activa ni se envía: F13 sigue `no iniciado`, `qqq-trend-f13` sigue
-  `enabled: false` y no se registró ninguna tarea F13.
-- Queda pendiente la etapa 5 (datos intradía reales) y, cuando el usuario lo
-  autorice, push/CI y backup de los commits locales.
+- Nada se activa ni se envía: F13 está **congelado, sin activar**;
+  `qqq-trend-f13` sigue `enabled: false` y no se registró ninguna tarea F13.
+- Queda pendiente la etapa 5 (datos intradía reales); los commits ya están
+  publicados en `origin/master` y con backup verificado.
 
 ---
 
@@ -1572,9 +1572,10 @@ La activación del bot requiere aprobación humana explícita; `freeze` no cambi
 No existe ninguna tarea F13 registrada. Los scripts están listos para que los
 revises y decidas:
 
-- `scripts/f13_daily.ps1`: preflight (aborta si F13 sigue “no iniciado”),
-  ejecuta `lab orchestrate --bot qqq-trend-f13` **sin `--dry-run`**, después
-  `lab reconcile` y `lab f13 check`. Cada paso queda en `logs/f13/`.
+- `scripts/f13_daily.ps1`: preflight (aborta si F13 sigue “no iniciado”;
+  hoy ya está congelado, pero el bot sigue `enabled: false` y la tarea no está
+  registrada), ejecuta `lab orchestrate --bot qqq-trend-f13` **sin `--dry-run`**,
+  después `lab reconcile` y `lab f13 check`. Cada paso queda en `logs/f13/`.
 - `scripts/register_f13_task.ps1`: crea la tarea `TradingLab-F13` L-V a las
   **22:20 hora local de Praga** (después del cierre de EE. UU.). **No se ha
   ejecutado**.
