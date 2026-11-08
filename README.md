@@ -876,7 +876,7 @@ stdlib y `127.0.0.1`. Se conservan todas las pestañas, rutas, CSRF, Host/Origin
 y la lista blanca `WRITE_ROUTES`.
 
 Evidencia: `pytest tests/test_console_shell.py -q` → **3 passed**; suite completa
-**386 passed**; cubre las seis secciones, las 15 vistas actuales, los
+**389 passed**; cubre las seis secciones, las 15 vistas actuales, los
 componentes del dashboard y la ausencia de URLs externas/CDNs.
 
 ---
@@ -1169,7 +1169,7 @@ completa **325 passed**; `ruff` limpio; `lab doctor` OK con avisos conocidos.
 - El panel **Aprendizaje** sigue siendo el único sitio de aprobación humana.
 
 Evidencia: `pytest tests/test_learning.py -q` → **8 passed**; suite completa
-**386 passed**; `ruff` limpio; `lab doctor` OK con avisos conocidos.
+**389 passed**; `ruff` limpio; `lab doctor` OK con avisos conocidos.
 
 ---
 
@@ -1692,7 +1692,7 @@ propuesta. Con **N < 30** se muestran con aviso de muestra insuficiente.
 
 Evidencia: `pytest tests/test_metrics.py tests/test_journal.py
 tests/test_engine.py tests/test_research.py -q` → **33 passed**; suite completa
-**386 passed**; `ruff` limpio; `lab doctor` OK. Sin dependencias nuevas.
+**389 passed**; `ruff` limpio; `lab doctor` OK. Sin dependencias nuevas.
 
 ---
 
@@ -1717,7 +1717,25 @@ volatilidad; no usa datos futuros y no activa ni desactiva bots.
 
 Estado actual QQQ (2026-11-06): `trend_down`, volatilidad `high`; selector
 propuesto `flat`. Evidencia: `pytest tests/test_regimes.py tests/test_web.py -q`
-→ **23 passed**; suite completa **386 passed**; `ruff` limpio; `lab doctor` OK.
+→ **23 passed**; suite completa **389 passed**; `ruff` limpio; `lab doctor` OK.
+
+---
+
+## 11h. Validación de modelos: Purged K-Fold y CPCV
+
+- `PurgedKFold(n_splits, purge, embargo)` y `CombinatorialPurgedCV` en
+  `models.py`; ningún índice de entrenamiento cae en test, purge o embargo.
+- `train_purged_cv` valida el ridge con folds purgados; no registra ni promueve
+  modelos y no activa bots.
+- Test que comprueba intersección vacía y bloqueo de purge/embargo, además del
+  número de combinaciones CPCV.
+- **Meta-labeling y triple barrera**: solo `docs/meta_labeling.md` con
+  requisitos de muestra (≥500 eventos; ≥100 por clase) y datos; no se
+  implementan todavía. F13 no depende de ello.
+- Sin dependencias nuevas.
+
+Evidencia: `pytest tests/test_models.py -q` → **6 passed**; suite completa
+**389 passed**; `ruff` limpio; `lab doctor` OK.
 
 ---
 

@@ -8,7 +8,9 @@ import pytest
 
 from tradinglab.db import init_db
 from tradinglab.models import (
+    CombinatorialPurgedCV,
     ModelError,
+    PurgedKFold,
     compare_models,
     get_model,
     list_models,
@@ -16,6 +18,7 @@ from tradinglab.models import (
     qlib_status,
     registry_payload,
     rollback_model,
+    train_purged_cv,
     train_walk_forward,
 )
 from tradinglab.orchestrator import load_bots
@@ -112,3 +115,54 @@ def test_registry_payload_y_qlib(tmp_path: Path) -> None:
     assert payload["qlib"]["note"]
     text = qlib_status()
     assert text["path"].endswith(".venv-qlib")
+
+
+def test_purged_kfold_sin_solapamiento() -> None:
+    n = 100
+    splitter = PurgedKFold(n_splits=5, purge=5, embargo=2)
+    covered = set()
+    for train_idx, test_idx in splitter.split(n):
+        assert not set(train_idx.tolist()) & set(test_idx.tolist())
+        covered.update(test_idx.tolist())
+        start, end = int(test_idx[0]), int(test_idx[-1]) + 1
+        blocked = set(range(max(0, start - 5), start)) | set(
+            range(end, min(n, end + 2))
+        )
+        assert not set(train_idx.tolist()) & blocked
+    assert covered == set(range(n))
+
+
+def test_cpcv_sin_solapamiento_y_numero_de_splits() -> None:
+    n = 120
+    splitter = CombinatorialPurgedCV(
+        n_groups=6, n_test_groups=2, purge=5, embargo=2
+    )
+    seen = 0
+    for train_idx, test_idx in splitter.split(n):
+        seen += 1
+        assert not set(train_idx.tolist()) & set(test_idx.tolist())
+        for group in np.array_split(np.arange(n), 6):
+            group_start = int(group[0])
+            group_end = int(group[-1]) + 1
+            if set(group.tolist()) <= set(test_idx.tolist()):
+                blocked = set(range(max(0, group_start - 5), group_start)) | set(
+                    range(group_end, min(n, group_end + 2))
+                )
+                assert not set(train_idx.tolist()) & blocked
+    assert seen == splitter.n_splits == 15
+
+
+def test_train_purged_cv_produce_folds() -> None:
+    frame = _prices()
+    result = train_purged_cv(
+        frame,
+        symbol="SPY",
+        n_splits=3,
+        purge=5,
+        embargo=2,
+        alpha=1.0,
+    )
+    assert result["ok"] is True
+    assert result["n_splits"] >= 2
+    assert result["metrics"]["sharpe"] is not None
+    assert all("purge" in fold and "embargo" in fold for fold in result["folds"])

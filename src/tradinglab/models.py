@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass
+from itertools import combinations
 from pathlib import Path
 
 import numpy as np
@@ -26,6 +27,87 @@ DEFAULT_ALPHA = 1.0
 
 class ModelError(ValueError):
     pass
+
+
+class PurgedKFold:
+    """K-Fold contiguo con purge antes y embargo después del test.
+
+    `purge` y `embargo` se expresan en barras. Ningún índice de entrenamiento
+    cae en la ventana de test ni en la purge/embargo que la rodea.
+    """
+
+    def __init__(self, n_splits: int = 5, purge: int = 5, embargo: int = 2) -> None:
+        if n_splits < 2:
+            raise ModelError("n_splits debe ser >= 2")
+        if purge < 0 or embargo < 0:
+            raise ModelError("purge/embargo no pueden ser negativos")
+        self.n_splits = int(n_splits)
+        self.purge = int(purge)
+        self.embargo = int(embargo)
+
+    def split(self, n_samples: int):
+        if n_samples < self.n_splits:
+            raise ModelError("n_samples < n_splits")
+        bounds = np.linspace(0, n_samples, self.n_splits + 1, dtype=int)
+        for index in range(self.n_splits):
+            test_start = int(bounds[index])
+            test_end = int(bounds[index + 1])
+            if test_end <= test_start:
+                continue
+            mask = np.ones(n_samples, dtype=bool)
+            mask[test_start:test_end] = False
+            mask[max(0, test_start - self.purge) : test_start] = False
+            mask[test_end : min(n_samples, test_end + self.embargo)] = False
+            yield np.flatnonzero(mask), np.arange(test_start, test_end)
+
+
+class CombinatorialPurgedCV:
+    """CPCV simple: grupos contiguos, combinaciones de test y purge/embargo.
+
+    No genera las rutas completas de López de Prado; expone los splits purgados
+    para que el llamador pueda calcular PBO/DSR o métricas por combinación.
+    """
+
+    def __init__(
+        self,
+        n_groups: int = 6,
+        n_test_groups: int = 2,
+        purge: int = 5,
+        embargo: int = 2,
+    ) -> None:
+        if n_groups < 2:
+            raise ModelError("n_groups debe ser >= 2")
+        if not 1 <= n_test_groups < n_groups:
+            raise ModelError("n_test_groups debe estar entre 1 y n_groups-1")
+        if purge < 0 or embargo < 0:
+            raise ModelError("purge/embargo no pueden ser negativos")
+        self.n_groups = int(n_groups)
+        self.n_test_groups = int(n_test_groups)
+        self.purge = int(purge)
+        self.embargo = int(embargo)
+
+    @property
+    def n_splits(self) -> int:
+        return len(list(combinations(range(self.n_groups), self.n_test_groups)))
+
+    def split(self, n_samples: int):
+        if n_samples < self.n_groups:
+            raise ModelError("n_samples < n_groups")
+        bounds = np.linspace(0, n_samples, self.n_groups + 1, dtype=int)
+        groups = [
+            np.arange(int(bounds[index]), int(bounds[index + 1]))
+            for index in range(self.n_groups)
+        ]
+        for combo in combinations(range(self.n_groups), self.n_test_groups):
+            test = np.concatenate([groups[index] for index in combo])
+            mask = np.ones(n_samples, dtype=bool)
+            mask[test] = False
+            for index in combo:
+                start = int(bounds[index])
+                end = int(bounds[index + 1])
+                mask[max(0, start - self.purge) : start] = False
+                mask[end : min(n_samples, end + self.embargo)] = False
+            yield np.flatnonzero(mask), np.sort(test)
 
 
 @dataclass(frozen=True)
@@ -195,6 +277,59 @@ def train_walk_forward(
     if db_path is not None:
         result["registry_id"] = _register_model(db_path, result, created_by)
     return result
+
+
+def train_purged_cv(
+    frame: pd.DataFrame,
+    *,
+    symbol: str,
+    n_splits: int = 5,
+    purge: int = 5,
+    embargo: int = 2,
+    alpha: float = DEFAULT_ALPHA,
+) -> dict:
+    """Valida el ridge con Purged K-Fold; no registra ni promociona modelos."""
+    data = _features(frame)
+    splitter = PurgedKFold(n_splits=n_splits, purge=purge, embargo=embargo)
+    folds: list[dict] = []
+    stitched: list[float] = []
+    stitched_exposure: list[int] = []
+    for train_idx, test_idx in splitter.split(len(data)):
+        if len(train_idx) < 80 or len(test_idx) < 20:
+            continue
+        train = data.iloc[train_idx]
+        test = data.iloc[test_idx]
+        model = _fit_ridge(train, alpha)
+        prediction = _predict(model, test)
+        exposure = (prediction > 0).astype(int)
+        returns = exposure * test["target"].to_numpy(dtype=float)
+        folds.append(
+            {
+                "train_start": str(train.index[0].date()),
+                "train_end": str(train.index[-1].date()),
+                "test_start": str(test.index[0].date()),
+                "test_end": str(test.index[-1].date()),
+                "purge": int(purge),
+                "embargo": int(embargo),
+                "metrics": _metrics(returns, exposure),
+            }
+        )
+        stitched.extend(returns.tolist())
+        stitched_exposure.extend(exposure.tolist())
+    if not folds:
+        raise ModelError("sin folds purged válidos")
+    return {
+        "ok": True,
+        "symbol": symbol.upper(),
+        "n_splits": len(folds),
+        "purge": int(purge),
+        "embargo": int(embargo),
+        "folds": folds,
+        "metrics": _metrics(
+            np.asarray(stitched),
+            np.asarray(stitched_exposure),
+        ),
+    }
 
 
 def _register_model(db_path: str | Path, result: dict, created_by: str) -> int:
@@ -413,12 +548,14 @@ def registry_payload(db_path: str | Path) -> dict:
 
 
 __all__ = [
+    "CombinatorialPurgedCV",
     "DEFAULT_ALPHA",
     "DEFAULT_STEP",
     "DEFAULT_TEST_DAYS",
     "DEFAULT_TRAIN_DAYS",
     "FEATURES",
     "ModelError",
+    "PurgedKFold",
     "RidgeModel",
     "compare_models",
     "get_model",
@@ -427,5 +564,6 @@ __all__ = [
     "qlib_status",
     "registry_payload",
     "rollback_model",
+    "train_purged_cv",
     "train_walk_forward",
 ]

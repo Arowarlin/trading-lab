@@ -546,6 +546,19 @@ limpio; `lab doctor` OK. Sin dependencias nuevas.
 - Evidencia: `pytest tests/test_regimes.py tests/test_web.py -q` → 23 passed;
   `pytest -q` → 386 passed; `ruff` limpio; `lab doctor` OK.
 
+## Etapa 4 — Validación de modelos (2026-11-07)
+
+- [x] **Purged K-Fold y CPCV**
+  - `PurgedKFold`/`CombinatorialPurgedCV` en `models.py`, con purge antes y
+    embargo después del test.
+  - `train_purged_cv` valida el ridge sin registrar ni promocionar modelos.
+  - Tests de no solapamiento, bloqueo de purge/embargo y número de splits CPCV.
+- [x] **Meta-labeling/triple barrera**
+  - Solo `docs/meta_labeling.md`: requisitos de ≥500 eventos, ≥100 por clase,
+    etiquetado con barreras y validación purgada. No se implementa.
+- Evidencia: `pytest tests/test_models.py -q` → 6 passed; `pytest -q` → 389
+  passed; `ruff` limpio; `lab doctor` OK. Sin dependencias nuevas.
+
 ---
 
 ## Registro de evidencias
