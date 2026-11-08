@@ -8,6 +8,11 @@ import pytest
 from tradinglab import telegram as tg
 
 
+@pytest.fixture(autouse=True)
+def _logs_en_tmp(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(tg, "LOG_DIR", tmp_path / "logs")
+
+
 def _config(path: Path, **overrides) -> tg.TelegramConfig:
     config = tg.TelegramConfig(
         enabled=True,

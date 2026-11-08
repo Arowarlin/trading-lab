@@ -450,6 +450,9 @@ puertos, sin exponer secretos y sin habilitar live.
     (tarea al iniciar sesión; no se registra automáticamente).
   - `lab telegram send` para el resumen final; el puente envía el resumen del
     agente.
+  - Configurado en vivo el 2026-11-07: `@Arowarlin_TradingLab_bot`; tarea
+    `TradingLab-Telegram` **Running**; `/ping` → `pong` y `/continue` → agente
+    OK. Sin activar bots ni F13.
 - [x] **13.4 Tests y documentación** — 2026-11-07
   - `pytest tests/test_telegram.py -q` → 17 passed; suite completa **346
     passed**; `docs/telegram.md`; README 11d; `lab doctor` muestra Telegram
