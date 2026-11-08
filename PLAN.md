@@ -97,6 +97,10 @@ Reglas de trabajo:
   - **Congelar no activa:** `qqq-trend-f13` sigue `enabled: false` y no hay
     ninguna tarea F13 registrada. La activación exige aprobación humana
     explícita y sigue siendo en paper.
+  - **Pendiente antes de activar:** `freeze` exige `enabled:false`, la consola
+    bloquea activar el bot F13 y editar `bots.yaml` cambiaría el hash (parada
+    dura). Hay que acordar el paso de activación (p. ej., comando confirmado
+    que re-congele) antes de arrancar; hoy no se activa nada.
 
 ## Fase 3 — Mejoras de lab research
 

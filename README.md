@@ -1567,6 +1567,11 @@ lab f13 check           # paradas duras + alerta
 La activación del bot requiere aprobación humana explícita; `freeze` no cambia
 `enabled: false`.
 
+> **Pendiente antes de activar:** `freeze` exige `enabled:false`, la consola
+> bloquea activar el bot F13 y editar `bots.yaml` cambiaría el hash (parada
+> dura). Antes de arrancar hay que acordar el paso de activación; hoy no está
+> implementado y no se activa nada.
+
 ### Automatización F13 preparada (NO registrada)
 
 No existe ninguna tarea F13 registrada. Los scripts están listos para que los
