@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import os
+import secrets
 import shutil
 import subprocess
 import time
@@ -114,6 +115,9 @@ class TelegramConfig:
 @dataclass
 class BridgeState:
     last_update_id: int = 0
+    pending_action: str = ""
+    pending_code: str = ""
+    pending_expires_at: float = 0.0
 
     @classmethod
     def load(cls, path: Path = STATE_PATH) -> "BridgeState":
@@ -121,7 +125,12 @@ class BridgeState:
             return cls()
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
-            return cls(last_update_id=int(data.get("last_update_id") or 0))
+            return cls(
+                last_update_id=int(data.get("last_update_id") or 0),
+                pending_action=str(data.get("pending_action") or ""),
+                pending_code=str(data.get("pending_code") or ""),
+                pending_expires_at=float(data.get("pending_expires_at") or 0.0),
+            )
         except Exception:
             return cls()
 
@@ -129,10 +138,23 @@ class BridgeState:
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp = path.with_suffix(path.suffix + ".tmp")
         tmp.write_text(
-            json.dumps({"last_update_id": int(self.last_update_id)}, ensure_ascii=False),
+            json.dumps(
+                {
+                    "last_update_id": int(self.last_update_id),
+                    "pending_action": self.pending_action,
+                    "pending_code": self.pending_code,
+                    "pending_expires_at": self.pending_expires_at,
+                },
+                ensure_ascii=False,
+            ),
             encoding="utf-8",
         )
         tmp.replace(path)
+
+    def clear_pending(self) -> None:
+        self.pending_action = ""
+        self.pending_code = ""
+        self.pending_expires_at = 0.0
 
 
 @dataclass(frozen=True)
@@ -608,10 +630,16 @@ HELP_TEXT = """TradingLab · comandos
 /mode commands|agent · cambiar modo
 /new · empezar una sesión de agente nueva
 /continue <texto> · enviar una instrucción al agente
+/push · preparar push a origin/master (pide confirmación)
+/backup · preparar backup + restore test (pide confirmación)
+/pushbackup · preparar push y backup (pide confirmación)
+/confirm <código> · confirmar la acción pendiente
+/cancel · cancelar la acción pendiente
 /help · esta ayuda
 
 Modo agente: solo paper, sin live, sin .env, sin borrar, sin push y sin
 activar F13. El agente trabaja en E:\\trading-lab y responde con el resumen.
+Push/backup solo se ejecutan con /confirm y el código temporal.
 """
 
 
@@ -625,6 +653,236 @@ def _agent_prompt(user_text: str) -> str:
     )
 
 
+PENDING_TTL_S = 300
+PUSH_BRANCH = "master"
+PUSH_REMOTE = "origin"
+ACTION_LABELS = {
+    "push": "Push",
+    "backup": "Backup",
+    "pushbackup": "Push + backup",
+}
+
+
+def _creationflags() -> int:
+    return getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
+
+
+def _run(
+    command: list[str],
+    *,
+    runner: Callable[..., subprocess.CompletedProcess] = subprocess.run,
+    timeout: int = 120,
+    cwd: Path = ROOT,
+) -> subprocess.CompletedProcess:
+    return runner(
+        command,
+        cwd=str(cwd),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=timeout,
+        creationflags=_creationflags(),
+    )
+
+
+def _clean_output(text: str) -> str:
+    return "".join(ch for ch in (text or "") if ch in "\n\r\t" or ord(ch) >= 32).strip()
+
+
+def _out(result: subprocess.CompletedProcess) -> str:
+    text = (result.stdout or "") + ("\n" + result.stderr if result.stderr else "")
+    return _clean_output(text)
+
+
+def _tail(text: str, limit: int = 1500) -> str:
+    clean = _clean_output(text)
+    return clean[-limit:] if len(clean) > limit else clean
+
+
+def _new_code() -> str:
+    return "".join(secrets.choice("0123456789") for _ in range(6))
+
+
+def prepare_push(
+    runner: Callable[..., subprocess.CompletedProcess] = subprocess.run,
+) -> dict:
+    """Comprueba rama, fetch y commits pendientes antes de pedir confirmación."""
+    branch = _run(["git", "rev-parse", "--abbrev-ref", "HEAD"], runner=runner, timeout=30)
+    branch_name = _out(branch).strip()
+    if branch.returncode != 0:
+        return {"ok": False, "error": "No se pudo leer la rama: " + _tail(_out(branch), 300)}
+    if branch_name != PUSH_BRANCH:
+        return {
+            "ok": False,
+            "error": f"Rama actual {branch_name}; solo se hace push de {PUSH_BRANCH}.",
+        }
+    fetch = _run(["git", "fetch", "--quiet", PUSH_REMOTE], runner=runner, timeout=60)
+    if fetch.returncode != 0:
+        return {"ok": False, "error": "No se pudo consultar origin: " + _tail(_out(fetch), 300)}
+    ahead = _run(
+        ["git", "rev-list", "--count", f"{PUSH_REMOTE}/{PUSH_BRANCH}..HEAD"],
+        runner=runner,
+        timeout=30,
+    )
+    if ahead.returncode != 0:
+        return {"ok": False, "error": "No se pudo contar commits: " + _tail(_out(ahead), 300)}
+    try:
+        pending = int(_out(ahead).strip() or "0")
+    except ValueError:
+        pending = 0
+    if pending <= 0:
+        return {"ok": False, "error": "Nada que subir: no hay commits por delante de origin/master."}
+    dirty = _run(["git", "status", "--porcelain"], runner=runner, timeout=30)
+    dirty_lines = [line for line in _out(dirty).splitlines() if line.strip()]
+    return {
+        "ok": True,
+        "branch": branch_name,
+        "ahead": pending,
+        "dirty": len(dirty_lines),
+        "summary": (
+            f"rama={branch_name} · commits={pending} · "
+            f"cambios_sin_commit={len(dirty_lines)}"
+        ),
+    }
+
+
+def execute_push(
+    runner: Callable[..., subprocess.CompletedProcess] = subprocess.run,
+) -> tuple[bool, str]:
+    result = _run(
+        ["git", "push", PUSH_REMOTE, PUSH_BRANCH],
+        runner=runner,
+        timeout=300,
+    )
+    output = _tail(_out(result), 1500)
+    if result.returncode == 0:
+        return True, "Push completado.\n" + (output or "sin salida")
+    return False, f"Push falló (código {result.returncode}).\n" + (output or "sin salida")
+
+
+def execute_backup(
+    runner: Callable[..., subprocess.CompletedProcess] = subprocess.run,
+) -> tuple[bool, str]:
+    script = ROOT / "scripts" / "backup.ps1"
+    if not script.exists():
+        return False, "No existe scripts/backup.ps1."
+    result = _run(
+        [
+            "powershell.exe",
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(script),
+        ],
+        runner=runner,
+        timeout=900,
+    )
+    output = _tail(_out(result), 2000)
+    if result.returncode == 0:
+        return True, "Backup completado.\n" + (output or "sin salida")
+    return False, f"Backup falló (código {result.returncode}).\n" + (output or "sin salida")
+
+
+def _audit_action(
+    action: str,
+    *,
+    user_id: str,
+    ok: bool,
+    detail: str = "",
+) -> None:
+    try:
+        from .runtime import record_console_action
+
+        record_console_action(
+            DEFAULT_DB,
+            action=f"telegram_{action}",
+            params={"action": action},
+            result="ok" if ok else "fail",
+            ok=ok,
+            actor=f"telegram:{user_id}",
+            detail=_tail(detail, 1000),
+        )
+    except Exception:
+        pass
+
+
+def execute_action(
+    action: str,
+    *,
+    user_id: str,
+    runner: Callable[..., subprocess.CompletedProcess] = subprocess.run,
+) -> tuple[bool, str]:
+    if action == "push":
+        ok, text = execute_push(runner=runner)
+    elif action == "backup":
+        ok, text = execute_backup(runner=runner)
+    elif action == "pushbackup":
+        ok, text = execute_push(runner=runner)
+        if not ok:
+            _audit_action(action, user_id=user_id, ok=False, detail=text)
+            return ok, text
+        ok_backup, text_backup = execute_backup(runner=runner)
+        ok = ok_backup
+        text = text + "\n\n" + text_backup
+    else:
+        return False, "Acción desconocida."
+    _audit_action(action, user_id=user_id, ok=ok, detail=text)
+    return ok, text
+
+
+def begin_action(
+    action: str,
+    *,
+    state: BridgeState,
+    state_path: Path = STATE_PATH,
+    runner: Callable[..., subprocess.CompletedProcess] = subprocess.run,
+) -> tuple[bool, str]:
+    if action in ("push", "pushbackup"):
+        plan = prepare_push(runner=runner)
+        if not plan["ok"]:
+            return False, str(plan["error"])
+        summary = str(plan["summary"])
+    elif action == "backup":
+        summary = "zip + restore test + integrity_check; puede tardar 1-2 minutos"
+    else:
+        return False, "Acción desconocida."
+    code = _new_code()
+    state.pending_action = action
+    state.pending_code = code
+    state.pending_expires_at = time.time() + PENDING_TTL_S
+    state.save(state_path)
+    label = ACTION_LABELS[action]
+    return True, (
+        f"{label} pendiente.\n{summary}\n\n"
+        f"Para confirmar, envía:\n/confirm {code}\n\n"
+        f"Caduca en {PENDING_TTL_S // 60} minutos."
+    )
+
+
+def confirm_action(
+    code: str,
+    *,
+    state: BridgeState,
+    state_path: Path = STATE_PATH,
+    user_id: str,
+    runner: Callable[..., subprocess.CompletedProcess] = subprocess.run,
+) -> tuple[bool, str]:
+    if not state.pending_action or not state.pending_code:
+        return False, "No hay ninguna acción pendiente."
+    if time.time() > state.pending_expires_at:
+        state.clear_pending()
+        state.save(state_path)
+        return False, "El código ha caducado. Solicita la acción de nuevo."
+    if not secrets.compare_digest(code.strip(), state.pending_code):
+        return False, "Código incorrecto."
+    action = state.pending_action
+    state.clear_pending()
+    state.save(state_path)
+    return execute_action(action, user_id=user_id, runner=runner)
+
+
 def handle_inbound(
     msg: Inbound,
     config: TelegramConfig,
@@ -632,12 +890,15 @@ def handle_inbound(
     sender: Callable[[str, str], Any],
     agent_runner: Callable[[str, TelegramConfig], AgentResult] = run_agent,
     config_path: Path = CONFIG_PATH,
+    state_path: Path = STATE_PATH,
+    command_runner: Callable[..., subprocess.CompletedProcess] = subprocess.run,
 ) -> None:
     def reply(text: str) -> None:
         for chunk in chunk_text(text, config.max_chars):
             sender(msg.chat_id, chunk)
 
     config = TelegramConfig.load(config_path)
+    state = BridgeState.load(state_path)
     if not is_authorized(msg, config):
         return
     if msg.forwarded:
@@ -661,6 +922,8 @@ def handle_inbound(
     if msg.command == "/pause":
         config.enabled = False
         config.save(config_path)
+        state.clear_pending()
+        state.save(state_path)
         reply("Puente pausado. Solo responderé a /status, /help, /resume y /ping.")
         return
     if msg.command == "/resume":
@@ -670,6 +933,42 @@ def handle_inbound(
         return
     if not config.enabled:
         reply("Puente pausado. Envía /resume para reactivarlo.")
+        return
+    if msg.command in ("/push", "/backup", "/pushbackup"):
+        action = msg.command.lstrip("/")
+        ok, text = begin_action(
+            action,
+            state=state,
+            state_path=state_path,
+            runner=command_runner,
+        )
+        reply(text)
+        return
+    if msg.command == "/confirm":
+        if not msg.args.strip():
+            reply("Uso: /confirm <código>")
+            return
+        if (
+            state.pending_action
+            and state.pending_code
+            and time.time() <= state.pending_expires_at
+            and secrets.compare_digest(msg.args.strip(), state.pending_code)
+        ):
+            label = ACTION_LABELS.get(state.pending_action, state.pending_action)
+            reply(f"Confirmado. Ejecutando {label}…")
+        ok, text = confirm_action(
+            msg.args,
+            state=state,
+            state_path=state_path,
+            user_id=msg.user_id,
+            runner=command_runner,
+        )
+        reply(text)
+        return
+    if msg.command == "/cancel":
+        state.clear_pending()
+        state.save(state_path)
+        reply("Acción pendiente cancelada.")
         return
     if msg.command == "/mode":
         mode = msg.args.strip().lower()
@@ -733,6 +1032,7 @@ def run_bridge(
     dry_run: bool = False,
     sender: Callable[[str, str], Any] | None = None,
     agent_runner: Callable[[str, TelegramConfig], AgentResult] = run_agent,
+    command_runner: Callable[..., subprocess.CompletedProcess] = subprocess.run,
     sleep: Callable[[float], None] = time.sleep,
 ) -> None:
     """Bucle de long polling. Serializa los mensajes de una en una."""
@@ -774,6 +1074,8 @@ def run_bridge(
                     sender=send,
                     agent_runner=agent_runner,
                     config_path=config_path,
+                    state_path=state_path,
+                    command_runner=command_runner,
                 )
             except Exception as exc:
                 _log_event(f"handle_error update_id={msg.update_id} error={type(exc).__name__}")
@@ -822,14 +1124,20 @@ __all__ = [
     "EXAMPLE_PATH",
     "Inbound",
     "MAX_CHARS",
+    "PENDING_TTL_S",
     "STATE_PATH",
     "TelegramAPI",
     "TelegramConfig",
     "TelegramError",
+    "begin_action",
     "chunk_text",
+    "confirm_action",
     "decisions_text",
     "discover_chats",
     "doctor_status",
+    "execute_action",
+    "execute_backup",
+    "execute_push",
     "f13_text",
     "get_chat_id",
     "get_token",
@@ -838,6 +1146,7 @@ __all__ = [
     "opencode_executable",
     "parse_inbound",
     "parse_opencode_output",
+    "prepare_push",
     "run_agent",
     "run_bridge",
     "save_secrets",

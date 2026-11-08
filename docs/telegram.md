@@ -137,6 +137,36 @@ Unregister-ScheduledTask -TaskName TradingLab-Telegram -Confirm:$false
 | `/mode commands\|agent` | Cambiar modo |
 | `/new` | Empezar sesión de agente nueva |
 | `/continue <texto>` | Instrucción al agente |
+| `/push` | Preparar push a `origin/master` (pide confirmación) |
+| `/backup` | Preparar backup + restore test (pide confirmación) |
+| `/pushbackup` | Preparar push y backup (pide confirmación) |
+| `/confirm <código>` | Confirmar la acción pendiente |
+| `/cancel` | Cancelar la acción pendiente |
+
+## Push y backup con aprobación humana
+
+**Sí: un mensaje tuyo desde el chat autorizado es una aprobación humana.** Para
+`push` y `backup` se exige confirmación en dos pasos, para que no se dispare por
+un toque accidental:
+
+1. Envía `/push`, `/backup` o `/pushbackup`.
+2. El puente revisa el estado y responde con un **código de 6 dígitos** válido
+   **5 minutos**.
+3. Responde `/confirm 123456` para ejecutar. El código es de un solo uso.
+4. `/cancel` cancela la acción pendiente; `/pause` también la cancela.
+
+Detalles:
+
+- `/push`: solo rama `master`; hace `git fetch origin`, muestra commits por
+  delante y cambios sin commit, y ejecuta `git push origin master` sin `--force`.
+  Si no hay commits por delante, no pide confirmación.
+- `/backup`: ejecuta `scripts/backup.ps1` (zip + restore test +
+  `integrity_check`). Puede tardar 1–2 minutos.
+- `/pushbackup`: primero push y, si va bien, backup.
+- Cada ejecución queda auditada en `console_actions` con actor
+  `telegram:<user_id>`; no se guardan token ni código.
+- El agente automático sigue **sin poder hacer push**: solo este flujo del
+  puente, con tu `/confirm`, puede ejecutarlo.
 
 ## Enviar un resumen desde el PC
 
@@ -183,5 +213,5 @@ También acepta `--file resumen.txt` o `--stdin`.
 
 ## Evidencia
 
-- `pytest tests/test_telegram.py -q` → 17 passed.
+- `pytest tests/test_telegram.py -q` → 23 passed.
 - `lab doctor` muestra `Telegram remoto` como OK cuando está configurado.

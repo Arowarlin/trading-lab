@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import re
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -11,6 +13,8 @@ from tradinglab import telegram as tg
 @pytest.fixture(autouse=True)
 def _logs_en_tmp(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(tg, "LOG_DIR", tmp_path / "logs")
+    monkeypatch.setattr(tg, "STATE_PATH", tmp_path / "state.json")
+    monkeypatch.setattr(tg, "_audit_action", lambda *args, **kwargs: None)
 
 
 def _config(path: Path, **overrides) -> tg.TelegramConfig:
@@ -342,4 +346,154 @@ def test_send_text_trocea_y_llama_al_sender() -> None:
     )
     assert count == len(sent) > 1
     assert "".join(sent) == "x" * 9000
+
+
+def _cp(command, code=0, out="", err=""):
+    return subprocess.CompletedProcess(command, code, out, err)
+
+
+def _git_runner(commands, *, ahead="2", push_code=0, backup_code=0):
+    def runner(command, **kwargs):
+        commands.append(command)
+        joined = " ".join(command)
+        if "rev-parse --abbrev-ref HEAD" in joined:
+            return _cp(command, 0, "master\n")
+        if "fetch --quiet origin" in joined:
+            return _cp(command, 0, "")
+        if "rev-list --count origin/master..HEAD" in joined:
+            return _cp(command, 0, ahead + "\n")
+        if "status --porcelain" in joined:
+            return _cp(command, 0, "")
+        if "push origin master" in joined:
+            return _cp(
+                command,
+                push_code,
+                "abc..def  master -> master\n" if push_code == 0 else "",
+                "" if push_code == 0 else "rejected\n",
+            )
+        if "backup.ps1" in joined:
+            return _cp(
+                command,
+                backup_code,
+                "Backup: F:\\TradingLabBackups\\test.zip\nPASS: backup restaurado\n",
+                "" if backup_code == 0 else "fallo\n",
+            )
+        return _cp(command, 0, "")
+    return runner
+
+
+def _handle(path: Path, state_path: Path, replies: list[str], runner, command: str) -> None:
+    msg = tg.parse_inbound(_message(command))
+    assert msg is not None
+    tg.handle_inbound(
+        msg,
+        tg.TelegramConfig.load(path),
+        sender=lambda chat, text: replies.append(text),
+        config_path=path,
+        state_path=state_path,
+        command_runner=runner,
+    )
+
+
+def test_push_pide_codigo_y_confirma(tmp_path: Path) -> None:
+    path = tmp_path / "telegram.yaml"
+    state_path = tmp_path / "state.json"
+    _config(path)
+    replies: list[str] = []
+    commands: list[list[str]] = []
+    runner = _git_runner(commands)
+    _handle(path, state_path, replies, runner, "/push")
+    assert "Push pendiente" in replies[-1]
+    match = re.search(r"/confirm (\d{6})", replies[-1])
+    assert match
+    code = match.group(1)
+    state = tg.BridgeState.load(state_path)
+    assert state.pending_action == "push"
+    assert state.pending_code == code
+    assert not any(command[:2] == ["git", "push"] for command in commands)
+
+    wrong = "000000" if code != "000000" else "111111"
+    _handle(path, state_path, replies, runner, f"/confirm {wrong}")
+    assert "incorrecto" in replies[-1].lower()
+    assert not any(command[:2] == ["git", "push"] for command in commands)
+
+    _handle(path, state_path, replies, runner, f"/confirm {code}")
+    assert any(command[:2] == ["git", "push"] for command in commands)
+    assert "Push completado" in replies[-1]
+    assert tg.BridgeState.load(state_path).pending_action == ""
+
+
+def test_push_sin_commits_no_pide_confirmacion(tmp_path: Path) -> None:
+    path = tmp_path / "telegram.yaml"
+    state_path = tmp_path / "state.json"
+    _config(path)
+    replies: list[str] = []
+    commands: list[list[str]] = []
+    runner = _git_runner(commands, ahead="0")
+    _handle(path, state_path, replies, runner, "/push")
+    assert "Nada que subir" in replies[-1]
+    assert tg.BridgeState.load(state_path).pending_action == ""
+    assert not any(command[:2] == ["git", "push"] for command in commands)
+
+
+def test_backup_pide_codigo_y_confirma(tmp_path: Path) -> None:
+    path = tmp_path / "telegram.yaml"
+    state_path = tmp_path / "state.json"
+    _config(path)
+    replies: list[str] = []
+    commands: list[list[str]] = []
+    runner = _git_runner(commands)
+    _handle(path, state_path, replies, runner, "/backup")
+    match = re.search(r"/confirm (\d{6})", replies[-1])
+    assert match
+    _handle(path, state_path, replies, runner, f"/confirm {match.group(1)}")
+    assert any("backup.ps1" in " ".join(command) for command in commands)
+    assert "Backup completado" in replies[-1]
+
+
+def test_pushbackup_ejecuta_ambos(tmp_path: Path) -> None:
+    path = tmp_path / "telegram.yaml"
+    state_path = tmp_path / "state.json"
+    _config(path)
+    replies: list[str] = []
+    commands: list[list[str]] = []
+    runner = _git_runner(commands)
+    _handle(path, state_path, replies, runner, "/pushbackup")
+    match = re.search(r"/confirm (\d{6})", replies[-1])
+    assert match
+    _handle(path, state_path, replies, runner, f"/confirm {match.group(1)}")
+    assert any(command[:2] == ["git", "push"] for command in commands)
+    assert any("backup.ps1" in " ".join(command) for command in commands)
+    assert "Push completado" in replies[-1]
+    assert "Backup completado" in replies[-1]
+
+
+def test_confirm_caducado(tmp_path: Path) -> None:
+    path = tmp_path / "telegram.yaml"
+    state_path = tmp_path / "state.json"
+    _config(path)
+    tg.BridgeState(
+        pending_action="push",
+        pending_code="123456",
+        pending_expires_at=0.0,
+    ).save(state_path)
+    replies: list[str] = []
+    _handle(path, state_path, replies, _git_runner([]), "/confirm 123456")
+    assert "caducado" in replies[-1].lower()
+    assert tg.BridgeState.load(state_path).pending_action == ""
+
+
+def test_pause_cancela_pendiente(tmp_path: Path) -> None:
+    path = tmp_path / "telegram.yaml"
+    state_path = tmp_path / "state.json"
+    _config(path)
+    tg.BridgeState(
+        pending_action="push",
+        pending_code="123456",
+        pending_expires_at=9_999_999_999.0,
+    ).save(state_path)
+    replies: list[str] = []
+    _handle(path, state_path, replies, _git_runner([]), "/pause")
+    assert tg.BridgeState.load(state_path).pending_action == ""
+
 

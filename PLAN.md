@@ -454,9 +454,19 @@ puertos, sin exponer secretos y sin habilitar live.
     `TradingLab-Telegram` **Running**; `/ping` → `pong` y `/continue` → agente
     OK. Sin activar bots ni F13.
 - [x] **13.4 Tests y documentación** — 2026-11-07
-  - `pytest tests/test_telegram.py -q` → 17 passed; suite completa **346
+  - `pytest tests/test_telegram.py -q` → 23 passed; suite completa **352
     passed**; `docs/telegram.md`; README 11d; `lab doctor` muestra Telegram
     remoto.
+- [x] **13.5 Push/backup con aprobación humana** — 2026-11-07
+  - `/push`, `/backup` y `/pushbackup` generan un código de 6 dígitos válido
+    5 minutos y de un solo uso; `/confirm <código>` ejecuta; `/cancel` y
+    `/pause` cancelan.
+  - Push solo rama `master`, `git fetch` previo y sin `--force`; backup ejecuta
+    `scripts/backup.ps1` con restore test.
+  - Auditoría en `console_actions` con actor `telegram:<user_id>`; sin token ni
+    código. El agente automático sigue sin poder hacer push.
+  - Evidencia: `pytest tests/test_telegram.py -q` → 23 passed; suite completa
+    352 passed.
 
 ---
 
@@ -517,5 +527,5 @@ puertos, sin exponer secretos y sin habilitar live.
 | 2026-11-07 | F13 congelado | `lab f13 freeze --yes --start 2026-11-09`; hash `df8acdaa…`; `config-check` OK; bot `enabled: false`; sin tarea F13 |
 | 2026-11-07 | Datos aprendizaje | Job `TradingLab-Agents` + `decisions update`; 3 decisiones SPY/QQQ/NVDA del 2026-11-07; 0 retornos 1/5/20d; ventana 20-30 días |
 | 2026-11-07 | Job diario + outcomes | `pytest tests/test_scripts.py -q` → 5 passed; `pytest -q` → 328 passed; `agents_daily.ps1` ejecuta `decisions update`; `ruff` limpio |
-| 2026-11-07 | 13 Telegram remoto | `pytest tests/test_telegram.py -q` → 17 passed; `pytest -q` → 346 passed; long polling, keyring, comandos y agente restringido; docs/telegram.md |
+| 2026-11-07 | 13 Telegram remoto | `pytest tests/test_telegram.py -q` → 23 passed; `pytest -q` → 352 passed; long polling, keyring, comandos, push/backup con `/confirm` y agente restringido; docs/telegram.md |
 |  |  |  |

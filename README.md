@@ -871,7 +871,7 @@ stdlib y `127.0.0.1`. Se conservan todas las pestañas, rutas, CSRF, Host/Origin
 y la lista blanca `WRITE_ROUTES`.
 
 Evidencia: `pytest tests/test_console_shell.py -q` → **3 passed**; suite completa
-**346 passed**; cubre las seis secciones, las 15 vistas actuales, los
+**352 passed**; cubre las seis secciones, las 15 vistas actuales, los
 componentes del dashboard y la ausencia de URLs externas/CDNs.
 
 ---
@@ -1164,7 +1164,7 @@ completa **325 passed**; `ruff` limpio; `lab doctor` OK con avisos conocidos.
 - El panel **Aprendizaje** sigue siendo el único sitio de aprobación humana.
 
 Evidencia: `pytest tests/test_learning.py -q` → **8 passed**; suite completa
-**346 passed**; `ruff` limpio; `lab doctor` OK con avisos conocidos.
+**352 passed**; `ruff` limpio; `lab doctor` OK con avisos conocidos.
 
 ---
 
@@ -1606,7 +1606,11 @@ pública. El token vive en Windows Credential Manager (keyring), nunca en `.env`
 
 - **Solo el chat/usuario autorizado**; ignora otros chats y reenviados.
 - **Modo `commands` por defecto**: `/status`, `/f13`, `/decisions`, `/ping`,
-  `/pause`, `/resume`, `/mode`, `/new`, `/continue`.
+  `/pause`, `/resume`, `/mode`, `/new`, `/continue`, `/push`, `/backup`,
+  `/pushbackup`, `/confirm`, `/cancel`.
+- **Push/backup con aprobación humana en dos pasos**: la orden genera un código
+  de 6 dígitos válido 5 minutos; solo `/confirm <código>` ejecuta. El agente
+  automático no puede hacer push.
 - **Modo `agent` opcional**: ejecuta `opencode run --agent telegram` con un
   agente restringido: sin live, sin `.env`, sin borrar, sin push, sin tocar
   `config/`, `data/` ni activar F13.
