@@ -280,12 +280,17 @@ real, sin tocar `.env` y sin borrar archivos.
   - Kill-switch global, exposición agregada y capital por bolsillo con aviso si
     un clúster supera su presupuesto.
   - Evidencia: `pytest tests/test_fund_web.py -q` → 6 passed.
-- [ ] **9.5 Intradía forex/CFD** — bloqueada, sin descarga
-  - `lab mt5 status`: `offset_source=unknown`, `offset_known=False`; mercado
-    cerrado (2026-11-07, fin de semana).
-  - No se ejecutó `lab mt5 fetch`, no se inventó el offset y no se generó
-    `intraday.json`. No se relajó ningún umbral. Pendiente de mercado abierto y
-    offset resuelto.
+- [x] **9.5 Intradía forex/CFD** — 2026-11-08
+  - `lab mt5 status`: `server_utc_offset_hours=2.00`, `offset_source=detectado`,
+    `offset_known=True`, `identity_ok=True`.
+  - `lab mt5 fetch`: M15 50.000 barras (2024-11-04 → 2026-11-08) y H1 20.000
+    (2023-08-21 → 2026-11-08); parquet UTC, sin duplicados, `NaN` ni OHLC
+    inválido; spread mediano 1/2 puntos y `spread_reliable=True`.
+  - `lab research-intraday --symbol EURUSD --timeframe M15`: 28 variantes,
+    **0/28 pasan**; PBO 0,0 % pero `prob_oos_loss=100 %`, walk-forward
+    **fallido** y todos los Sharpe negativos (mejor −7,72; MaxDD −50,4 %).
+  - No se relajó ningún umbral, no se activó ningún bot y no se enviaron
+    órdenes. El resultado es “sin edge” para las estrategias actuales.
 - [x] **9.6 Documentación** — 2026-11-07
   - README 6d con cuentas, reglas, seguridad, panel, resultados por perfil y
     estado de la etapa 5; tabla por perfil también en Research.
@@ -820,4 +825,5 @@ operador ni datos. Inventario base en `docs/ui_inventory.json` y test
 | 2026-11-08 | UI v3 Etapa 2 | `pytest tests/test_console_shell.py -q` -> 6 passed; `pytest -q` -> 411 passed; KPIs delta/sparkline, gauges de colchon/DD/salud, chips con icono, densidad persistida, skeletons y reduced-motion |
 | 2026-11-08 | UI v3 Etapa 3 | `pytest tests/test_console_shell.py -q` -> 7 passed; `pytest -q` -> 412 passed; equity SVG con cruz/marcas/bandas, heatmaps PnL y correlacion, sin curvas inventadas |
 | 2026-11-08 | UI v3 Etapa 4 | `pytest tests/test_console_shell.py -q` -> 8 passed; `pytest -q` -> 413 passed; foco visible, skip-link, aria-current, flechas, Ctrl+K, responsive 390px y refresco 8s sin re-render |
+| 2026-11-08 | 9.5 Intradia | `lab mt5 status` -> offset +2.00 detectado; M15 50k + H1 20k; `lab research-intraday` -> 0/28, WF fallido, spread real; sin activar bots |
 |  |  |  |

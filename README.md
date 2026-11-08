@@ -622,10 +622,21 @@ Para enviar de verdad hay que añadir `--execute`. Una cuenta real exige además
 
 ## 6c. Intradía forex/CFD (`lab mt5 fetch` / `lab research-intraday`)
 
-La infraestructura está implementada, pero **la descarga M15 real está
-bloqueada ahora mismo**: el terminal FTMO demo está conectado y el mercado
-cerrado, y no hay offset de servidor cacheado (`offset_source=unknown`). No se
-inventa el offset ni se descargan datos de otra fuente.
+La etapa **9.5 ya se ejecutó con el mercado abierto** y el offset resuelto por
+el terminal, sin inventar valores:
+
+- `lab mt5 status`: `server_utc_offset_hours=2.00`, `offset_source=detectado`,
+  `offset_known=True`, `identity_ok=True`.
+- **M15**: 50.000 barras EURUSD, 2024-11-04 → 2026-11-08 (2,01 años).
+- **H1**: 20.000 barras EURUSD, 2023-08-21 → 2026-11-08 (3,22 años).
+- Parquet en UTC, ordenado, sin duplicados, `NaN` en cierre ni OHLC inválido.
+- Spread real: mediana 1 punto en M15 y 2 en H1; `spread_reliable=True`.
+- `lab research-intraday --symbol EURUSD --timeframe M15`: **0/28 variantes
+  pasan**. PBO 0,0 %, pero `prob_oos_loss=100 %` y walk-forward **fallido**;
+  todos los Sharpe son negativos (mejor −7,72) y el MaxDD del mejor caso es
+  −50,4 %. No hay edge que justifique activar un bot.
+
+No se relajó ningún umbral, no se activó ningún bot y no se enviaron órdenes.
 
 ```powershell
 # con el mercado abierto y offset resuelto:
@@ -719,16 +730,17 @@ La tabla también está en **Research → Resultados por perfil**.
 | Perfil | Estado | Retorno | Sharpe | MaxDD | Pasa FTMO 120d | Breach | Nota |
 |---|---|---|---|---|---|---|---|
 | `swing_equity` | validado | 81.1% | 1.03 | -9.2% | 70.6% | 3.5% | cartera de 3 bots; 0/10 variantes frágiles a 2/20 bps |
-| `intraday_fx` | pendiente | — | — | — | — | — | sin datos M15/H1 por `offset_source=unknown` y mercado cerrado |
+| `intraday_fx` | validado · sin edge | — | — | — | — | — | M15 50k, spread real; 0/28 pasan; WF fallido; PBO 0% con `prob_oos_loss=100%` |
 | `intraday_futures` | stub | — | — | — | — | — | ProjectX sin credenciales/suscripción; proxy diario ES=F/NQ=F |
 
-### Etapa 5 pendiente (intradía forex/CFD)
+### Etapa 5 completada (intradía forex/CFD)
 
-`lab mt5 status` confirma `offset_source=unknown`, `offset_known=False` y el
-mercado cerrado (2026-11-07, fin de semana). Por la regla de la etapa **no se
-descargó M15/H1, no se inventó el offset y no se generó `intraday.json`**. No se
-relajó ningún umbral. Se reanudará cuando el mercado esté abierto y el offset
-pueda determinarse o se configure `mt5.server_utc_offset_hours` verificado.
+`lab mt5 status` resolvió el offset con el mercado abierto:
+`server_utc_offset_hours=2.00`, `offset_source=detectado`, `offset_known=True`
+e `identity_ok=True`. Se descargaron M15/H1 y se generó
+`reports/research/intraday.json`/`.md`: **0/28 variantes pasan**, walk-forward
+fallido y todos los Sharpe negativos. El PBO de 0,0 % no es señal de edge:
+`prob_oos_loss=100%`. No se relajó ningún umbral y no se activó ningún bot.
 
 ### Resumen final de decisiones
 
