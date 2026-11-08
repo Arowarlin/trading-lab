@@ -559,6 +559,21 @@ limpio; `lab doctor` OK. Sin dependencias nuevas.
 - Evidencia: `pytest tests/test_models.py -q` → 6 passed; `pytest -q` → 389
   passed; `ruff` limpio; `lab doctor` OK. Sin dependencias nuevas.
 
+## Etapa 5 — Oro e instrumentos (2026-11-07)
+
+- [x] **XAUUSD y GC separados**
+  - XAUUSD `cfd`/`mt5`/`XAUUSD.SPOT`, GC `futures`/`projectx`/`GC.FUT`, con
+    sesión, zona, tick, contrato y tick value propios.
+  - Spread sin dato verificado: **Sin datos**, no inventado.
+  - `validate_universe` rechaza mezclar clases en un mismo backtest.
+- [x] **Bid/ask**
+  - `normalize` conserva bid/ask/mid/spread y calcula mid/spread si faltan.
+  - El `spread` de barras MT5 se conserva.
+  - No se descargan series nuevas.
+- Evidencia: `pytest tests/test_instruments.py tests/test_data_normalize.py -q`
+  → 14 passed; `pytest -q` → 393 passed; `ruff` limpio; `lab doctor` OK.
+  Sin dependencias nuevas.
+
 ---
 
 ## Registro de evidencias

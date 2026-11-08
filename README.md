@@ -876,7 +876,7 @@ stdlib y `127.0.0.1`. Se conservan todas las pestañas, rutas, CSRF, Host/Origin
 y la lista blanca `WRITE_ROUTES`.
 
 Evidencia: `pytest tests/test_console_shell.py -q` → **3 passed**; suite completa
-**389 passed**; cubre las seis secciones, las 15 vistas actuales, los
+**393 passed**; cubre las seis secciones, las 15 vistas actuales, los
 componentes del dashboard y la ausencia de URLs externas/CDNs.
 
 ---
@@ -1169,7 +1169,7 @@ completa **325 passed**; `ruff` limpio; `lab doctor` OK con avisos conocidos.
 - El panel **Aprendizaje** sigue siendo el único sitio de aprobación humana.
 
 Evidencia: `pytest tests/test_learning.py -q` → **8 passed**; suite completa
-**389 passed**; `ruff` limpio; `lab doctor` OK con avisos conocidos.
+**393 passed**; `ruff` limpio; `lab doctor` OK con avisos conocidos.
 
 ---
 
@@ -1692,7 +1692,7 @@ propuesta. Con **N < 30** se muestran con aviso de muestra insuficiente.
 
 Evidencia: `pytest tests/test_metrics.py tests/test_journal.py
 tests/test_engine.py tests/test_research.py -q` → **33 passed**; suite completa
-**389 passed**; `ruff` limpio; `lab doctor` OK. Sin dependencias nuevas.
+**393 passed**; `ruff` limpio; `lab doctor` OK. Sin dependencias nuevas.
 
 ---
 
@@ -1717,7 +1717,7 @@ volatilidad; no usa datos futuros y no activa ni desactiva bots.
 
 Estado actual QQQ (2026-11-06): `trend_down`, volatilidad `high`; selector
 propuesto `flat`. Evidencia: `pytest tests/test_regimes.py tests/test_web.py -q`
-→ **23 passed**; suite completa **389 passed**; `ruff` limpio; `lab doctor` OK.
+→ **23 passed**; suite completa **393 passed**; `ruff` limpio; `lab doctor` OK.
 
 ---
 
@@ -1735,7 +1735,28 @@ propuesto `flat`. Evidencia: `pytest tests/test_regimes.py tests/test_web.py -q`
 - Sin dependencias nuevas.
 
 Evidencia: `pytest tests/test_models.py -q` → **6 passed**; suite completa
-**389 passed**; `ruff` limpio; `lab doctor` OK.
+**393 passed**; `ruff` limpio; `lab doctor` OK.
+
+---
+
+## 11i. Oro y series por instrumento
+
+`XAUUSD` (CFD spot del bróker) y `GC` (futuros) son instrumentos distintos, con
+serie, fuente, sesión, zona horaria y spread propios:
+
+- `XAUUSD`: `cfd`, serie `XAUUSD.SPOT`, fuente `mt5`, 24/5 UTC, tick 0.01,
+  contrato 100 oz, tick value 1 USD. Spread **Sin datos** (verificar bróker).
+- `GC`: `futures`, serie `GC.FUT`, fuente `projectx`, 24/5 con pausa ET, zona
+  `America/New_York`, tick 0.10, tick value 10 USD. Spread **Sin datos**.
+- `validate_universe` rechaza mezclar clases en un mismo backtest
+  (`XAUUSD`+`GC` falla; `SPY`+`QQQ` pasa).
+- `normalize` conserva `bid`/`ask`/`mid`/`spread`; si hay bid/ask y faltan
+  mid/spread, los calcula. Las barras MT5 con `spread` lo conservan.
+- No se descargan series nuevas. Sin caché: **Sin datos**.
+
+Evidencia: `pytest tests/test_instruments.py tests/test_data_normalize.py -q`
+→ **14 passed**; suite completa **393 passed**; `ruff` limpio; `lab doctor` OK.
+Sin dependencias nuevas.
 
 ---
 

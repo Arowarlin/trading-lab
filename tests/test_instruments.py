@@ -11,6 +11,7 @@ from tradinglab.instruments import (
     list_instruments,
     register,
     validate_catalog,
+    validate_universe,
 )
 
 
@@ -109,3 +110,24 @@ def test_cfd_solo_con_especificacion_verificada():
         assert any(row["symbol"] == "TESTCFD" for row in catalog("cfd"))
     finally:
         INSTRUMENTS.pop("TESTCFD", None)
+
+
+def test_xauusd_y_gc_son_instrumentos_distintos():
+    xau = get_instrument("XAUUSD")
+    gc = get_instrument("GC")
+    assert xau.asset_class == "cfd"
+    assert gc.asset_class == "futures"
+    assert xau.series_id == "XAUUSD.SPOT"
+    assert gc.series_id == "GC.FUT"
+    assert xau.data_source == "mt5"
+    assert gc.data_source == "projectx"
+    assert xau.session_tz == "UTC"
+    assert gc.session_tz == "America/New_York"
+    assert xau.spread is None and xau.spread_note
+    assert gc.spread is None and gc.spread_note
+    assert xau.tick_value == pytest.approx(1.0)
+    assert gc.tick_value == pytest.approx(10.0)
+    with pytest.raises(InstrumentError):
+        validate_universe(["XAUUSD", "GC"])
+    assert validate_universe(["SPY", "QQQ"]) is True
+

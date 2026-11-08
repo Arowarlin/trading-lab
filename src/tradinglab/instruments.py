@@ -32,6 +32,9 @@ class Instrument:
     session: str = "24/5"
     session_tz: str = "UTC"
     data_source: str = ""
+    series_id: str = ""
+    spread: float | None = None
+    spread_note: str = ""
     notes: str = ""
 
     # ------------------------------------------------------------------ básicos
@@ -154,7 +157,12 @@ class Instrument:
             base += f" tick_value=${self.tick_value:,.2f}"
         base += f" lote={self.min_lot:g}/{self.lot_step:g}/{self.max_lot:g}"
         base += f" fuente={self.data_source or 'sin datos'}"
+        base += f" serie={self.series_id or self.symbol}"
         base += f" sesión={self.session} {self.session_tz}"
+        if self.spread is not None:
+            base += f" spread={self.spread:g}"
+        elif self.spread_note:
+            base += f" spread=Sin datos ({self.spread_note})"
         return base
 
     def catalog_row(self) -> dict:
@@ -198,6 +206,25 @@ def catalog(asset_class: str | None = None) -> list[dict]:
     return [item.catalog_row() for item in list_instruments(asset_class)]
 
 
+def validate_universe(symbols: list[str]) -> bool:
+    """Rechaza mezclar clases de activo en un mismo backtest."""
+    if not symbols:
+        raise InstrumentError("universo vacío")
+    items = [get_instrument(symbol) for symbol in symbols]
+    classes = {item.asset_class for item in items}
+    if len(classes) > 1:
+        detail = ", ".join(
+            f"{item.symbol}={item.asset_class}" for item in items
+        )
+        raise InstrumentError(
+            f"no mezclar clases de activo en un mismo backtest: {detail}"
+        )
+    series = [item.series_id or item.symbol for item in items]
+    if len(series) != len(set(series)):
+        raise InstrumentError(f"series duplicadas en el universo: {series}")
+    return True
+
+
 def validate_catalog() -> dict:
     """Valida que no haya huecos ni especificaciones imposibles."""
     errors: list[str] = []
@@ -227,6 +254,9 @@ def validate_catalog() -> dict:
         if item.asset_class == "cfd" and item.tick_value is None:
             # CFD puede usar tick_value del bróker; si falta, se marca.
             errors.append(f"{item.symbol}: CFD sin tick_value verificado")
+    series = [item.series_id or item.symbol for item in INSTRUMENTS.values()]
+    if len(series) != len(set(series)):
+        errors.append("series_id duplicadas en el catálogo")
     classes = sorted({item.asset_class for item in INSTRUMENTS.values()})
     return {
         "ok": not errors,
@@ -272,25 +302,41 @@ for _sym, _quote, _tick in [
 register(
     Instrument(
         "XAUUSD",
-        "forex",
+        "cfd",
         quote_ccy="USD",
         tick_size=0.01,
         contract_size=100,
+        tick_value=1.0,
+        min_lot=0.01,
+        lot_step=0.01,
         max_lot=50,
+        session="24/5",
         session_tz="UTC",
         data_source="mt5",
+        series_id="XAUUSD.SPOT",
+        spread=None,
+        spread_note="pendiente de verificar con el bróker",
+        notes="CFD spot de oro; no mezclar con GC futuros",
     )
 )
 register(
     Instrument(
         "XAGUSD",
-        "forex",
+        "cfd",
         quote_ccy="USD",
         tick_size=0.001,
         contract_size=5_000,
+        tick_value=5.0,
+        min_lot=0.01,
+        lot_step=0.01,
         max_lot=50,
+        session="24/5",
         session_tz="UTC",
         data_source="mt5",
+        series_id="XAGUSD.SPOT",
+        spread=None,
+        spread_note="pendiente de verificar con el bróker",
+        notes="CFD spot de plata",
     )
 )
 
@@ -328,6 +374,9 @@ for _sym, _tick, _tv, _mult, _max in _FUTURES:
             session="24/5 (pausa diaria 17:00-18:00 ET)",
             session_tz="America/New_York",
             data_source="projectx",
+            series_id=f"{_sym}.FUT",
+            spread=None,
+            spread_note="pendiente de verificar con el mercado",
         )
     )
 
@@ -360,4 +409,5 @@ __all__ = [
     "get_instrument",
     "list_instruments",
     "validate_catalog",
+    "validate_universe",
 ]

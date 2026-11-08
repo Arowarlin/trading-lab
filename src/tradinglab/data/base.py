@@ -22,10 +22,16 @@ def normalize(df: pd.DataFrame) -> pd.DataFrame:
     missing = [c for c in wanted if c not in df.columns]
     if missing:
         raise RuntimeError(f"Faltan columnas {missing}")
-    df = df[wanted]
+    optional = [c for c in ("bid", "ask", "mid", "spread") if c in df.columns]
+    df = df[wanted + optional]
+    if "bid" in df.columns and "ask" in df.columns:
+        if "mid" not in df.columns:
+            df["mid"] = (df["bid"] + df["ask"]) / 2.0
+        if "spread" not in df.columns:
+            df["spread"] = df["ask"] - df["bid"]
     idx = pd.to_datetime(df.index)
     if getattr(idx, "tz", None) is not None:
         idx = idx.tz_localize(None)
     df.index = idx
     df = df[~df.index.duplicated(keep="last")].sort_index()
-    return df.dropna()
+    return df.dropna(subset=wanted)
