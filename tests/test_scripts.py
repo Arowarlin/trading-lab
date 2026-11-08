@@ -55,6 +55,19 @@ def test_agents_daily_incluye_decisions_update():
     assert "--execute" not in script.lower()
 
 
+def test_telegram_scripts_preparados_sin_registrar():
+    bridge = (ROOT / "scripts" / "telegram_bridge.ps1").read_text(encoding="utf-8")
+    assert "telegram bridge" in bridge
+    assert "config\\telegram.yaml" in bridge
+    assert "Register-ScheduledTask" not in bridge
+
+    register = (ROOT / "scripts" / "register_telegram_task.ps1").read_text(encoding="utf-8")
+    assert "Register-ScheduledTask" in register
+    assert "TradingLab-Telegram" in register
+    assert "AtLogOn" in register
+    assert "no se ejecuta" in register.lower()
+
+
 def test_f13_scripts_preparados_sin_registrar():
     daily = (ROOT / "scripts" / "f13_daily.ps1").read_text(encoding="utf-8")
     assert "orchestrate" in daily and "qqq-trend-f13" in daily

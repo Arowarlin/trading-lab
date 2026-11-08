@@ -429,6 +429,32 @@ sin romper vistas ni añadir dependencias.
     datos sintéticos de equity/evaluación para el dashboard.
   - README 6g y PLAN Fase 12.
 
+## Fase 13 — Control remoto por Telegram
+
+Objetivo: recibir resúmenes y dar instrucciones desde Telegram sin abrir
+puertos, sin exponer secretos y sin habilitar live.
+
+- [x] **13.1 Puente seguro** — 2026-11-07
+  - Long polling; token y chat ID en keyring; solo chat/usuario autorizado;
+    ignora mensajes reenviados.
+  - `config/telegram.yaml` ignorado por git; estado local en
+    `data/telegram_state.json`.
+- [x] **13.2 Comandos y modo agente** — 2026-11-07
+  - Modo `commands` por defecto: `/status`, `/f13`, `/decisions`, `/ping`,
+    `/pause`, `/resume`, `/mode`, `/new`, `/continue`.
+  - Modo `agent`: `opencode run --agent telegram` con allowlist de shell;
+    `.env`, `config/`, `data/`, borrado, `git push` y `f13 freeze` denegados;
+    bloqueo si el laboratorio no está en paper.
+- [x] **13.3 Arranque y notificaciones** — 2026-11-07
+  - `scripts/telegram_bridge.ps1` + `scripts/register_telegram_task.ps1`
+    (tarea al iniciar sesión; no se registra automáticamente).
+  - `lab telegram send` para el resumen final; el puente envía el resumen del
+    agente.
+- [x] **13.4 Tests y documentación** — 2026-11-07
+  - `pytest tests/test_telegram.py -q` → 17 passed; suite completa **346
+    passed**; `docs/telegram.md`; README 11d; `lab doctor` muestra Telegram
+    remoto.
+
 ---
 
 ## Registro de evidencias
@@ -488,4 +514,5 @@ sin romper vistas ni añadir dependencias.
 | 2026-11-07 | F13 congelado | `lab f13 freeze --yes --start 2026-11-09`; hash `df8acdaa…`; `config-check` OK; bot `enabled: false`; sin tarea F13 |
 | 2026-11-07 | Datos aprendizaje | Job `TradingLab-Agents` + `decisions update`; 3 decisiones SPY/QQQ/NVDA del 2026-11-07; 0 retornos 1/5/20d; ventana 20-30 días |
 | 2026-11-07 | Job diario + outcomes | `pytest tests/test_scripts.py -q` → 5 passed; `pytest -q` → 328 passed; `agents_daily.ps1` ejecuta `decisions update`; `ruff` limpio |
+| 2026-11-07 | 13 Telegram remoto | `pytest tests/test_telegram.py -q` → 17 passed; `pytest -q` → 346 passed; long polling, keyring, comandos y agente restringido; docs/telegram.md |
 |  |  |  |

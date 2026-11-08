@@ -20,5 +20,7 @@ vendor/
 .env.*
 !.env.example
 .env.local.bak
+config/telegram.yaml
+data/telegram_state.json
 # Informes de TradingAgents generados en la raiz
 20??-??-??/

@@ -1,0 +1,15 @@
+# Ejemplo de configuración del puente Telegram.
+# El setup real escribe config/telegram.yaml (ignorado por git).
+# El token y el chat ID se guardan en Windows Credential Manager (keyring),
+# nunca en este archivo ni en .env.
+
+enabled: false
+mode: commands          # commands | agent
+agent: telegram         # agente de .opencode/agents/telegram.md
+working_dir: "E:\\trading-lab"
+session_id: ""
+allowed_chat_id: ""
+allowed_user_id: ""
+poll_timeout_s: 30
+agent_timeout_s: 1800
+max_chars: 3800

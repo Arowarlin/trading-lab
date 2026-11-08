@@ -871,7 +871,7 @@ stdlib y `127.0.0.1`. Se conservan todas las pestañas, rutas, CSRF, Host/Origin
 y la lista blanca `WRITE_ROUTES`.
 
 Evidencia: `pytest tests/test_console_shell.py -q` → **3 passed**; suite completa
-**328 passed**; cubre las seis secciones, las 15 vistas actuales, los
+**346 passed**; cubre las seis secciones, las 15 vistas actuales, los
 componentes del dashboard y la ausencia de URLs externas/CDNs.
 
 ---
@@ -1164,7 +1164,7 @@ completa **325 passed**; `ruff` limpio; `lab doctor` OK con avisos conocidos.
 - El panel **Aprendizaje** sigue siendo el único sitio de aprobación humana.
 
 Evidencia: `pytest tests/test_learning.py -q` → **8 passed**; suite completa
-**328 passed**; `ruff` limpio; `lab doctor` OK con avisos conocidos.
+**346 passed**; `ruff` limpio; `lab doctor` OK con avisos conocidos.
 
 ---
 
@@ -1595,6 +1595,37 @@ El script diario no envía órdenes mientras el bot siga `enabled: false`; el
 orquestador ignora bots deshabilitados. La activación real exige editar
 `config/bots.yaml` a mano y aprobación humana explícita. F13 ya está congelado;
 no hay ninguna tarea F13 registrada.
+
+---
+
+## 11d. Control remoto por Telegram
+
+Puente local para recibir resúmenes y, opcionalmente, enviar instrucciones a
+OpenCode desde el móvil. Usa **long polling**: no abre puertos ni necesita IP
+pública. El token vive en Windows Credential Manager (keyring), nunca en `.env`.
+
+- **Solo el chat/usuario autorizado**; ignora otros chats y reenviados.
+- **Modo `commands` por defecto**: `/status`, `/f13`, `/decisions`, `/ping`,
+  `/pause`, `/resume`, `/mode`, `/new`, `/continue`.
+- **Modo `agent` opcional**: ejecuta `opencode run --agent telegram` con un
+  agente restringido: sin live, sin `.env`, sin borrar, sin push, sin tocar
+  `config/`, `data/` ni activar F13.
+- El resumen final del agente se envía a Telegram en el mismo formato
+  **Hecho / 1..N / Aviso / Siguiente**.
+- El PC debe estar encendido y con la sesión de Windows iniciada.
+
+Pasos rápidos:
+
+```powershell
+cd E:\trading-lab
+.\.venv\Scripts\lab.exe telegram setup      # token oculto + chat ID + keyring
+.\.venv\Scripts\lab.exe telegram enable
+.\.venv\Scripts\lab.exe telegram mode agent --yes   # opcional
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\register_telegram_task.ps1
+Start-ScheduledTask -TaskName TradingLab-Telegram
+```
+
+Guía completa, seguridad y solución de problemas: `docs/telegram.md`.
 
 ---
 

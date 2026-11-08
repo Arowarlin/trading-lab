@@ -88,6 +88,10 @@ markets_app = typer.Typer(no_args_is_help=True, help="Agentes por mercado y coor
 models_app = typer.Typer(no_args_is_help=True, help="Modelos walk-forward, registry y campeón/retador.")
 intel_app = typer.Typer(no_args_is_help=True, help="Información continua: RSS, saneado y estado.")
 sec_app = typer.Typer(no_args_is_help=True, help="SEC EDGAR: CIK, filings y company facts.")
+telegram_app = typer.Typer(
+    no_args_is_help=True,
+    help="Telegram remoto: setup, estado y puente de control.",
+)
 app.add_typer(mt5_app, name="mt5")
 app.add_typer(prop_app, name="prop")
 app.add_typer(futures_app, name="futures")
@@ -104,6 +108,7 @@ app.add_typer(markets_app, name="markets")
 app.add_typer(models_app, name="models")
 app.add_typer(intel_app, name="intel")
 app.add_typer(sec_app, name="sec")
+app.add_typer(telegram_app, name="telegram")
 console = Console()
 
 OK = "[green]OK[/green]"
@@ -333,6 +338,17 @@ def doctor(network: bool = typer.Option(False, "--network", help="Probar descarg
         )
     except Exception as exc:
         table.add_row("Alertas", WARN, str(exc)[:160])
+    try:
+        from .telegram import doctor_status
+
+        telegram = doctor_status()
+        table.add_row(
+            "Telegram remoto",
+            OK if telegram["configured"] else WARN,
+            telegram["detail"],
+        )
+    except Exception as exc:
+        table.add_row("Telegram remoto", WARN, str(exc)[:160])
     if settings:
         px = settings.projectx
         px_ok = bool(px.username and os.getenv("PROJECTX_API_KEY") and px.account_id)
@@ -4625,6 +4641,288 @@ def futures_close(
         f"Contrato {result['contract_id']}: {result['status']}"
         + (" [yellow](dry-run)[/yellow]" if result.get("dry_run") else "")
     )
+
+
+@telegram_app.command("setup")
+def telegram_setup(
+    chat_id: str = typer.Option("", "--chat-id", help="Chat ID autorizado (si ya lo sabes)"),
+    user_id: str = typer.Option("", "--user-id", help="User ID autorizado (opcional)"),
+    mode: str = typer.Option("commands", "--mode", help="commands | agent"),
+    no_test: bool = typer.Option(False, "--no-test", help="No enviar mensaje de prueba"),
+) -> None:
+    """Valida el bot y guarda token/chat en keyring. No escribe .env."""
+    from .telegram import TelegramAPI, TelegramError, discover_chats, save_setup, wait_for_chat
+
+    token = os.getenv("TELEGRAM_BOT_TOKEN") or ""
+    if not token:
+        if not sys.stdin.isatty():
+            console.print(
+                "[red]Sin terminal interactiva para pedir el token.[/red] "
+                "Exporta TELEGRAM_BOT_TOKEN o ejecuta setup en una terminal normal."
+            )
+            raise typer.Exit(2)
+        token = typer.prompt("Token del bot (se oculta)", hide_input=True).strip()
+    if not token:
+        console.print("[red]Token vacío.[/red]")
+        raise typer.Exit(2)
+
+    api = TelegramAPI(token)
+    try:
+        me = api.get_me()
+    except TelegramError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2) from exc
+    console.print(f"[green]Bot validado[/green] @{me.get('username') or me.get('id')}")
+
+    candidates, last_update_id = discover_chats(api)
+    if not chat_id:
+        if not candidates:
+            console.print(
+                "[yellow]No hay mensajes recientes.[/yellow] Abre el bot en Telegram, "
+                "envíale /start y espero hasta 60 segundos…"
+            )
+            candidates, last_update_id = wait_for_chat(api, 60)
+        if len(candidates) == 1:
+            candidate = candidates[0]
+            chat_id = candidate["chat_id"]
+            user_id = user_id or candidate["user_id"]
+            console.print(f"Chat detectado: {chat_id} ({candidate['type'] or 'desconocido'})")
+        elif candidates:
+            table = Table(title="Chats que han escrito al bot")
+            table.add_column("Chat ID", style="bold")
+            table.add_column("User ID")
+            table.add_column("Tipo")
+            table.add_column("Usuario")
+            for candidate in candidates:
+                table.add_row(
+                    candidate["chat_id"],
+                    candidate["user_id"],
+                    candidate["type"],
+                    candidate["username"],
+                )
+            console.print(table)
+            chat_id = typer.prompt("Chat ID autorizado").strip()
+        else:
+            console.print(
+                "[yellow]No hay mensajes recientes.[/yellow] Abre el bot en Telegram, "
+                "envíale cualquier mensaje y vuelve a ejecutar setup."
+            )
+            chat_id = typer.prompt("Chat ID autorizado").strip()
+    if not chat_id:
+        console.print("[red]Falta el chat ID.[/red]")
+        raise typer.Exit(2)
+    if not user_id:
+        user_id = chat_id
+
+    try:
+        config = save_setup(
+            token,
+            chat_id,
+            user_id,
+            mode=mode,
+            last_update_id=last_update_id,
+        )
+    except TelegramError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2) from exc
+
+    if not no_test:
+        try:
+            api.send_message(chat_id, "TradingLab: bot conectado. Envía /help.")
+            console.print("[green]Mensaje de prueba enviado.[/green]")
+        except TelegramError as exc:
+            console.print(f"[yellow]No se pudo enviar la prueba: {exc}[/yellow]")
+
+    console.print(
+        f"[green]Configuración guardada[/green] · chat={config.allowed_chat_id} · "
+        f"modo={config.mode} · token en keyring."
+    )
+    console.print("[yellow]El puente sigue desactivado.[/yellow] Ejecuta `lab telegram enable`.")
+
+
+@telegram_app.command("discover")
+def telegram_discover() -> None:
+    """Muestra chats que han escrito al bot, sin mostrar textos."""
+    from .telegram import TelegramAPI, TelegramError, discover_chats, get_token
+
+    try:
+        candidates, _ = discover_chats(TelegramAPI(get_token()))
+    except TelegramError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2) from exc
+    if not candidates:
+        console.print("[yellow]Sin datos: envía un mensaje al bot y reintenta.[/yellow]")
+        return
+    table = Table(title="Chats vistos")
+    table.add_column("Chat ID", style="bold")
+    table.add_column("User ID")
+    table.add_column("Tipo")
+    table.add_column("Usuario")
+    for candidate in candidates:
+        table.add_row(
+            candidate["chat_id"],
+            candidate["user_id"],
+            candidate["type"],
+            candidate["username"],
+        )
+    console.print(table)
+
+
+@telegram_app.command("status")
+def telegram_status_cmd() -> None:
+    """Estado del puente, sin mostrar el token."""
+    from .telegram import STATE_PATH, TelegramConfig, doctor_status
+
+    config = TelegramConfig.load()
+    info = doctor_status()
+    table = Table(title="Telegram remoto")
+    table.add_column("Campo", style="bold")
+    table.add_column("Valor", overflow="fold")
+    table.add_row("Configurado", "sí" if info["configured"] else "no")
+    table.add_row("Puente", "activo" if config.enabled else "pausado")
+    table.add_row("Modo", config.mode)
+    table.add_row("Chat autorizado", config.allowed_chat_id or "—")
+    table.add_row("Usuario autorizado", config.allowed_user_id or "—")
+    table.add_row("Agente", config.agent)
+    table.add_row("Sesión", config.session_id or "—")
+    table.add_row("Estado", str(STATE_PATH))
+    console.print(table)
+
+
+@telegram_app.command("enable")
+def telegram_enable() -> None:
+    """Activa el puente (sigue sin ejecutar nada hasta recibir mensajes)."""
+    from .telegram import TelegramConfig, doctor_status
+
+    if not doctor_status()["configured"]:
+        console.print("[red]Sin configurar.[/red] Ejecuta `lab telegram setup`.")
+        raise typer.Exit(2)
+    config = TelegramConfig.load()
+    config.enabled = True
+    config.save()
+    console.print("[green]Puente activado.[/green] Inicia `lab telegram bridge` o la tarea.")
+
+
+@telegram_app.command("disable")
+def telegram_disable() -> None:
+    """Pausa el puente; solo responderá a /status, /help, /ping y /resume."""
+    from .telegram import TelegramConfig
+
+    config = TelegramConfig.load()
+    config.enabled = False
+    config.save()
+    console.print("[yellow]Puente pausado.[/yellow]")
+
+
+@telegram_app.command("mode")
+def telegram_mode(
+    mode: str = typer.Argument(..., help="commands | agent"),
+    yes: bool = typer.Option(False, "--yes", help="No pedir confirmación"),
+) -> None:
+    """Cambia entre comandos seguros y agente remoto restringido."""
+    from .telegram import MODES, TelegramConfig
+
+    mode = mode.strip().lower()
+    if mode not in MODES:
+        console.print("[red]Modo inválido.[/red] Usa commands o agent.")
+        raise typer.Exit(2)
+    if mode == "agent" and not yes:
+        if not typer.confirm(
+            "El modo agent permite ejecutar OpenCode con auto-aprobación restringida. ¿Activar?"
+        ):
+            raise typer.Exit(1)
+    config = TelegramConfig.load()
+    config.mode = mode
+    config.save()
+    console.print(f"[green]Modo {mode} activado.[/green]")
+
+
+@telegram_app.command("new-session")
+def telegram_new_session() -> None:
+    """Olvida la sesión remota; el próximo mensaje crea una nueva."""
+    from .telegram import TelegramConfig
+
+    config = TelegramConfig.load()
+    config.session_id = ""
+    config.save()
+    console.print("[green]Sesión remota reiniciada.[/green]")
+
+
+@telegram_app.command("test")
+def telegram_test() -> None:
+    """Envía un mensaje de prueba al chat autorizado."""
+    from .telegram import TelegramAPI, TelegramError, get_chat_id, get_token
+
+    try:
+        chat_id = get_chat_id()
+        if not chat_id:
+            console.print("[red]Falta el chat ID.[/red] Ejecuta `lab telegram setup`.")
+            raise typer.Exit(2)
+        TelegramAPI(get_token()).send_message(chat_id, "TradingLab: prueba de conexión OK.")
+    except TelegramError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2) from exc
+    console.print("[green]Mensaje de prueba enviado.[/green]")
+
+
+@telegram_app.command("send")
+def telegram_send(
+    text: str = typer.Option("", "--text", "-t", help="Texto a enviar"),
+    file: Path = typer.Option(None, "--file", "-f", help="Archivo de texto a enviar"),
+    stdin: bool = typer.Option(False, "--stdin", help="Leer el mensaje de stdin"),
+) -> None:
+    """Envía un resumen o aviso al chat autorizado."""
+    from .telegram import TelegramError, send_configured
+
+    if file is not None:
+        try:
+            content = file.read_text(encoding="utf-8")
+        except Exception as exc:
+            console.print(f"[red]No se pudo leer el archivo: {type(exc).__name__}[/red]")
+            raise typer.Exit(2) from exc
+    elif text:
+        content = text
+    elif stdin:
+        content = sys.stdin.read()
+    else:
+        console.print("[red]Falta texto: usa --text, --file o --stdin.[/red]")
+        raise typer.Exit(2)
+    if not content.strip():
+        console.print("[red]Mensaje vacío.[/red]")
+        raise typer.Exit(2)
+    try:
+        send_configured(content)
+    except TelegramError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2) from exc
+    console.print("[green]Mensaje enviado a Telegram.[/green]")
+
+
+@telegram_app.command("bridge")
+def telegram_bridge_cmd(
+    once: bool = typer.Option(False, "--once", help="Procesa pendientes y sale"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="No envía respuestas reales"),
+) -> None:
+    """Long polling de Telegram; lo normal es lanzarlo con la tarea programada."""
+    from .telegram import TelegramAPI, TelegramConfig, TelegramError, get_token, run_bridge
+
+    config = TelegramConfig.load()
+    if not config.allowed_chat_id:
+        console.print("[red]Sin configurar.[/red] Ejecuta `lab telegram setup`.")
+        raise typer.Exit(2)
+    try:
+        api = TelegramAPI(get_token())
+    except TelegramError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2) from exc
+    console.print(
+        f"[green]Puente Telegram[/green] · modo={config.mode} · "
+        f"{'activo' if config.enabled else 'pausado'}"
+    )
+    try:
+        run_bridge(api, once=once, dry_run=dry_run)
+    except KeyboardInterrupt:
+        console.print("Puente detenido.")
 
 
 def main() -> None:
