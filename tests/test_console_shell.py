@@ -162,6 +162,29 @@ def test_componentes_v3_presentes() -> None:
         assert marker in text, marker
 
 
+def test_formato_gauges_performers_y_regimen() -> None:
+    text = INDEX.read_text(encoding="utf-8")
+    for marker in (
+        "const arc = item.arc === undefined",
+        'stroke-dasharray="${(arc * 100).toFixed(1)} 100"',
+        "arc: health / 100",
+        "value: num(health, 0)",
+        "PARCIAL · cobertura",
+        "Evaluaciones de backtest (no reales)",
+        'id="performers-note"',
+        "Trades*",
+        "rebalanceos diarios",
+        'id="regime-panel"',
+        "panel-compact",
+        'useGrouping: "always"',
+        "function clampZero(",
+        "function toneFor(",
+        ".gauge-value { fill: var(--text); font-family: var(--mono); font-size: 16px;",
+    ):
+        assert marker in text, marker
+    assert "100 / 100" not in text
+
+
 def test_graficas_svg_y_mapas_de_calor_presentes() -> None:
     text = INDEX.read_text(encoding="utf-8")
     assert re.search(r'<svg[^>]*id="equity-canvas"', text)

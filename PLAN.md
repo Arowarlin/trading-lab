@@ -749,6 +749,26 @@ operador ni datos. Inventario base en `docs/ui_inventory.json` y test
   en `reports/ui/stage4`, móvil en `reports/ui/stage4/overview_mobile.png` y
   diff en `reports/ui/stage4_diff.json`; Ctrl+K y flechas verificados por CDP.
 
+### Ajustes de formato y métricas
+
+- [x] **Gauges y cero negativo**
+  - Arco de colchón = `1 - used`; `used=0` llena el arco y `used=0.8` lo deja
+    al 20 % con estado `AL LÍMITE`.
+  - `clampZero`/`toneFor`: porcentajes entre -0,005 % y 0 se muestran `0.00 %`
+    con tono neutro y sin flecha roja.
+- [x] **Salud, moneda y performers**
+  - Cobertura <100 % → `PARCIAL · cobertura N%`; centro `100`, sin `/100`,
+    para no pisar el arco.
+  - `useGrouping: "always"` en moneda (`9.973,51 US$`).
+  - Título visible `Evaluaciones de backtest (no reales)` y nota de que los
+    trades son eventos de PnL por rebalanceo, no round-trips.
+  - Causa de `qqq-trend-f13` 864: `backtest.py` usa `len(realized)` y el bot
+    rebalancea a diario; no se modificó la lógica del backtest.
+- [x] **Régimen compacto**
+  - Sin datos → `panel-compact`, una fila, sin panel alto.
+- Evidencia: `pytest tests/test_console_js.py tests/test_console_shell.py -q`
+  → 11 passed; suite completa **416 passed**; `ruff` limpio; `lab doctor` OK.
+
 ---
 
 ## Registro de evidencias
@@ -826,4 +846,5 @@ operador ni datos. Inventario base en `docs/ui_inventory.json` y test
 | 2026-11-08 | UI v3 Etapa 3 | `pytest tests/test_console_shell.py -q` -> 7 passed; `pytest -q` -> 412 passed; equity SVG con cruz/marcas/bandas, heatmaps PnL y correlacion, sin curvas inventadas |
 | 2026-11-08 | UI v3 Etapa 4 | `pytest tests/test_console_shell.py -q` -> 8 passed; `pytest -q` -> 413 passed; foco visible, skip-link, aria-current, flechas, Ctrl+K, responsive 390px y refresco 8s sin re-render |
 | 2026-11-08 | 9.5 Intradia | `lab mt5 status` -> offset +2.00 detectado; M15 50k + H1 20k; `lab research-intraday` -> 0/28, WF fallido, spread real; sin activar bots |
+| 2026-11-08 | UI formato/metricas | `pytest tests/test_console_js.py tests/test_console_shell.py -q` -> 11 passed; `pytest -q` -> 416 passed; gauges restantes, cero negativo, moneda agrupada, salud parcial, performers y regimen compacto |
 |  |  |  |

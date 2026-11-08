@@ -951,6 +951,29 @@ Evidencia: `pytest tests/test_console_shell.py -q` → **8 passed**; suite compl
 `reports/ui/stage4`, móvil en `reports/ui/stage4/overview_mobile.png` y diff en
 `reports/ui/stage4_diff.json`. Ctrl+K y flechas verificados con Chrome CDP.
 
+### Ajustes de formato y métricas (2026-11-08)
+
+- Los gauges de colchón dibujan lo que **queda** (`1 - used`), no lo usado:
+  `used=0` → arco completo; `used=0.8` → 20 % y estado **AL LÍMITE**.
+- Cero negativo: porcentajes que redondean a `-0.00 %` se muestran como
+  `0.00 %`, con tono neutro y sin flecha roja (`clampZero`/`toneFor`).
+- Moneda con separador de miles forzado (`useGrouping: "always"`):
+  `9.973,51 US$`.
+- Salud de cuenta: si la cobertura es <100 %, el estado es
+  **PARCIAL · cobertura N%** y el tono es de aviso; el centro muestra `100`
+  sin `/100` para no pisar el arco.
+- Top performers pasa a **Evaluaciones de backtest (no reales)**, visible, con
+  nota: `qqq-trend-f13` muestra **864 eventos de PnL realizado**, no 864
+  operaciones redondas. Causa: `backtest.py` cuenta `len(realized)` y el bot
+  rebalancea a diario para mantener su exposición objetivo; cada reducción
+  parcial genera un evento. No se cambió la lógica del backtest.
+- Régimen sin datos usa una fila compacta (`panel-compact`), no un panel alto.
+
+Evidencia: `pytest tests/test_console_js.py tests/test_console_shell.py -q` →
+**11 passed**; suite completa **416 passed**; `ruff` limpio; `lab doctor` OK.
+Los tests JS extraen y ejecutan `pct`, `money`, `toneFor`, `gaugeCardHtml` y
+`cushionStatus` del propio HTML.
+
 ---
 
 ## 6h. Multiverse por operación (10.2)
