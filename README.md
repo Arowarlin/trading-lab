@@ -363,12 +363,13 @@ real: los tests usan runners simulados.
   errores saneados en `lite_model_comparisons`; **no cambia el modelo por
   defecto**. `lab llm report` agrega acuerdo y confianza; con menos de 30
   comparaciones marca muestra insuficiente.
-- La comparación real contra un MoE ~30B queda pendiente: LM Studio solo tiene
-  cargado `qwen/qwen3.8-27b` y un modelo de embeddings.
+- Primera comparación real con el MoE `qwen/qwen3-30b-a3b` (2026-11-09, SPY):
+  ambos **Hold**; confianza 58% vs 60%; 224,4 s vs 78,6 s; acuerdo 100%.
+  Muestra n=1 < 30: sin conclusión y sin cambiar el default.
 
 ```powershell
 lab llm status
-lab llm compare SPY --models qwen/qwen3.8-27b,moe-30b
+lab llm compare SPY --models qwen/qwen3.8-27b,qwen/qwen3-30b-a3b
 lab llm report
 ```
 

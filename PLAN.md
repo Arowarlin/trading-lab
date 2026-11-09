@@ -172,8 +172,10 @@ Reglas de trabajo:
   - Marco listo: `lab llm compare TICKER --models actual,candidato` y
     `lab llm report`, con tabla `lite_model_comparisons`, errores saneados y
     aviso de muestra <30. No se cambia el modelo por defecto.
-  - Bloqueado para ejecución real: en LM Studio no hay un MoE ~30B cargado;
-    solo `qwen/qwen3.8-27b` y un modelo de embeddings.
+  - MoE `qwen/qwen3-30b-a3b` descargado y primera comparación real 2026-11-09
+    (SPY): ambos Hold; confianza 58% vs 60%; 224,4 s vs 78,6 s; acuerdo 100%.
+    Muestra n=1 < 30: sin conclusión; el default sigue siendo
+    `qwen/qwen3.8-27b`. Repetir en días distintos hasta n≥30.
 - [x] **5.5 Versionado de prompts** — 2026-11-07
   - `prompt_version` + `prompt_hash` guardados por decisión lite; deep usa hash simple.
 
@@ -1185,4 +1187,5 @@ etapa.
 | 2026-11-09 | Runner Trading-R1 | `.\scripts\trading_r1_premarket.ps1 -PreflightOnly` -> backend 8765 + qwen3.8-27b OK; `pytest tests/test_scripts.py tests/test_docs.py -q` -> 16 passed |
 | 2026-11-09 | Trading-R1 premarket | 1 ronda, 2354 chars, datos locales, `Sin datos` donde falta; Telegram enviado; reporte en `reports/premarket/` |
 | 2026-11-09 | Suite final Trading-R1 | `pytest -q --basetemp=...` -> 532 passed; `ruff` limpio; informe premarket 1 ronda + Telegram OK; runner local validado |
+| 2026-11-09 | MoE 30B vs actual | `lab llm compare SPY --models qwen/qwen3.8-27b,qwen/qwen3-30b-a3b` -> Hold/Hold, 58%/60%, 224.4s/78.6s, acuerdo 100%, n=1/30 |
 |  |  |  |
