@@ -415,7 +415,8 @@ manualmente. El modelo de scoring se toma de `config/intel.yaml`
 
 Verificación real del 2026-11-09: Finnhub respondió `ok`, se guardaron 10
 noticias nuevas y `lab intel score --limit 2 --model qwen/qwen3.8-27b` puntuó
-2/2 sin inválidas ni ausentes. Quedaron 89 pendientes.
+3/3 sin inválidas ni ausentes. Quedaron 88 pendientes; latencia real 62-96 s
+por lote.
 
 ### FRED y calendario macro
 

@@ -141,7 +141,7 @@ Reglas de trabajo:
   - FinBERT descartado por licencia CC-BY-NC-SA 4.0; no se descarga modelo nuevo.
   - `lab intel score` sanea/delimita el texto y devuelve sentimiento/relevancia;
     sin respuesta válida no se inventan puntuaciones.
-  - Verificado con 2 noticias reales y el modelo `qwen/qwen3.8-27b`.
+  - Verificado con 3 noticias reales y el modelo `qwen/qwen3.8-27b`.
 - [x] **4.3 Esquema** — 2026-11-07
   - `news_items`, `news_scores`, `macro_events`; dedupe por hash, trusted=false.
 - [x] **4.4 Seguridad** — 2026-11-07
@@ -1010,7 +1010,7 @@ etapa.
     se descargaron 10 noticias reales saneadas y con `trusted=false`.
   - Scoring con Qwen: prompt con texto delimitado como no confiable, schema
     estricto, sentimiento/relevancia y escritura idempotente en `news_scores`.
-  - `lab intel score` procesó 2 noticias reales con `qwen/qwen3.8-27b`; 89
+  - `lab intel score` procesó 3 noticias reales con `qwen/qwen3.8-27b`; 88
     quedaron pendientes para las siguientes pasadas. OpenBB no está instalado
     y no se añadió como dependencia.
 - [x] **Validación de esquema**
@@ -1025,7 +1025,8 @@ etapa.
     modelo cargado en LM Studio.
 - Evidencia: suite completa **501 passed**; `ruff` limpio; `lab doctor` OK con
   WARN conocidos; `lab f13 config-check` OK. Verificación real: Finnhub `ok`,
-  10 noticias nuevas y scoring 2/2 con `qwen/qwen3.8-27b` sin inválidas.
+  10 noticias nuevas y scoring 3/3 con `qwen/qwen3.8-27b` sin inválidas y
+  latencia real 62-96 s por lote.
 
 ---
 
@@ -1113,7 +1114,7 @@ etapa.
 | 2026-11-09 | Incubadora Etapa 5 | `pytest tests/test_lifecycle.py -q` -> 7 passed; `pytest -q` -> 465 passed; estados, gate, criterios congelados, reporte forward y limite concurrente; sin activar bots |
 | 2026-11-09 | Procedencia Etapa 6 | `pytest tests/test_agent_compare.py tests/test_decisions.py tests/test_scripts.py -q` -> 19 passed; `pytest -q` -> 474 passed; comparacion lite/deep, procedencia, reporte por fuente y scripts nocturnos sin registrar |
 | 2026-11-09 | UI Etapa 7 | `pytest tests/test_web.py tests/test_console_shell.py tests/test_console_js.py tests/test_agent_compare.py tests/test_lifecycle.py -q` -> 46 passed; `pytest -q` -> 477 passed; vista Activo, Incubadora, lite/deep y desglose por fuente; 17 vistas/267 ids/34 API sin retirar las anteriores |
-| 2026-11-09 | Fases 4-5 | `pytest -q` -> 501 passed; Finnhub real ok + 10 noticias; scoring Qwen 2/2; `llm status` con schema_ok; `ruff`/doctor/f13 OK; MoE real bloqueado por modelo no cargado |
+| 2026-11-09 | Fases 4-5 | `pytest -q` -> 501 passed; Finnhub real ok + 10 noticias; scoring Qwen 3/3 (62-96 s/lote); `llm status` con schema_ok; `ruff`/doctor/f13 OK; MoE real bloqueado por modelo no cargado |
 | 2026-11-09 | CFD specs F6 | `lab mt5 spec XAUUSD` y `US100.cash` -> tick 0.01, contratos 100/1, volumen min 0.01, trade_mode 4; API MT5 sin sesiones |
 | 2026-11-08 | UI formato/metricas | `pytest tests/test_console_js.py tests/test_console_shell.py -q` -> 11 passed; `pytest -q` -> 416 passed; gauges restantes, cero negativo, moneda agrupada, salud parcial, performers y regimen compacto |
 |  |  |  |
