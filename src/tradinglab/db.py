@@ -192,7 +192,34 @@ CREATE TABLE IF NOT EXISTS decision_outcomes (
     return_5d REAL,
     return_20d REAL,
     updated_at TEXT,
+    analysts TEXT,
+    duration_s REAL,
     UNIQUE(ticker, decision_date, mode)
+);
+CREATE TABLE IF NOT EXISTS agent_comparisons (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts TEXT NOT NULL,
+    ticker TEXT NOT NULL,
+    decision_date TEXT NOT NULL,
+    lite_rating TEXT,
+    lite_confidence REAL,
+    lite_target REAL,
+    deep_rating TEXT,
+    deep_confidence REAL,
+    deep_target REAL,
+    lite_model TEXT,
+    deep_model TEXT,
+    lite_prompt_hash TEXT,
+    deep_prompt_hash TEXT,
+    lite_analysts TEXT,
+    deep_analysts TEXT,
+    lite_duration_s REAL,
+    deep_duration_s REAL,
+    agreement INTEGER,
+    retrospective INTEGER NOT NULL DEFAULT 0,
+    lite_error TEXT,
+    deep_error TEXT,
+    UNIQUE(ticker, decision_date, retrospective)
 );
 
 CREATE TABLE IF NOT EXISTS news_items (
@@ -546,6 +573,7 @@ def init_db(path: str | Path) -> None:
         con.executescript(SCHEMA)
         _migrate_equity(con)
         _migrate_bot_evaluations(con)
+        _migrate_decision_outcomes(con)
 
 
 def _migrate_equity(con: sqlite3.Connection) -> None:
@@ -577,6 +605,18 @@ def _migrate_bot_evaluations(con: sqlite3.Connection) -> None:
     ]
     if columns and "expectancy" not in columns:
         con.execute("ALTER TABLE bot_evaluations ADD COLUMN expectancy REAL")
+
+
+def _migrate_decision_outcomes(con: sqlite3.Connection) -> None:
+    """Añade procedencia (analistas/duración) sin perder el historial."""
+    columns = [
+        row["name"]
+        for row in con.execute("PRAGMA table_info(decision_outcomes)").fetchall()
+    ]
+    if columns and "analysts" not in columns:
+        con.execute("ALTER TABLE decision_outcomes ADD COLUMN analysts TEXT")
+    if columns and "duration_s" not in columns:
+        con.execute("ALTER TABLE decision_outcomes ADD COLUMN duration_s REAL")
 
 
 def log_event(path: str | Path, level: str, source: str, message: str, data: str | None = None) -> None:

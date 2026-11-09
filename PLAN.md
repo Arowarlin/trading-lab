@@ -928,7 +928,36 @@ etapa.
 - Evidencia: `pytest tests/test_lifecycle.py -q` → 7 passed; suite completa
   **465 passed**; `ruff` limpio; `lab doctor` OK; `lab f13 config-check` OK
   (hash sin cambios). Sin activar bots, sin órdenes.
-- Etapas 6-7: pendientes.
+
+### Etapa 6 — Procedencia de decisiones y comparación lite/deep
+
+- [x] **Procedencia**
+  - `decision_outcomes` guarda `analysts` y `duration_s`; migración aditiva que
+    conserva el historial existente.
+  - `deep_prompt_hash` unifica el hash de modelo, analistas y fecha entre
+    `decision_outcomes` y `agent_comparisons`.
+  - `lab decisions report` añade la tabla **por fuente** (lite/deep), con N,
+    retornos 1/5/20d, hit rate, t/p y aviso de retornos pendientes.
+- [x] **Comparación**
+  - `agent_comparisons` guarda rating, confianza, objetivo, modelo, hash,
+    analistas, duración, acuerdo, errores saneados y marca `retrospective`.
+  - `lab agent-compare TICKER` compara el mismo activo y fecha; fuera de hoy
+    exige `--retrospective` y esas pasadas se excluyen del reporte forward.
+  - Si el run con todos los analistas falla, se prueba uno a uno y se usa el
+    primero que funcione. Los errores se recortan y redactan secretos.
+  - Reporte: acuerdo, matriz de ratings lite→deep y diferencia media de
+    objetivo. Con menos de 30 comparaciones: **muestra insuficiente**.
+- [x] **Automatización preparada, no registrada**
+  - `scripts/deep_compare_nightly.ps1`: un activo rotatorio por noche, solo
+    mide y actualiza retornos; no ejecuta órdenes ni activa bots.
+  - `scripts/register_deep_compare_task.ps1`: tarea `TradingLab-DeepCompare`
+    a las 02:30; **no se ejecuta sola**.
+- Evidencia: `pytest tests/test_agent_compare.py tests/test_decisions.py
+  tests/test_scripts.py -q` → 19 passed; suite completa **474 passed**;
+  `ruff` limpio; `lab doctor` OK con WARN conocidos; `lab f13 config-check`
+  OK (hash sin cambios); `lab agent-compare --report` → sin datos. No se
+  lanzó ningún deep real: los tests usan runners simulados. Sin órdenes.
+- Etapa 7: pendiente.
 
 ---
 
@@ -1014,5 +1043,6 @@ etapa.
 | 2026-11-09 | Validacion Etapa 3 | `pytest tests/test_intraday.py tests/test_mt5_offsets.py tests/test_asset_aliases.py tests/test_intraday_bots.py -q` -> 28 passed; `pytest -q` -> 448 passed; 4 activos M15, costes por activo, 0/84 pasan, DSR 117, informes por activo |
 | 2026-11-09 | Riesgo Etapa 4 | `pytest tests/test_risk_budget.py tests/test_intraday_bots.py -q` -> 14 passed; `pytest -q` -> 458 passed; budget 1%/0.25%/0.5%, neto por activo, cluster USD, news blackout, slices con historial y F13 lock |
 | 2026-11-09 | Incubadora Etapa 5 | `pytest tests/test_lifecycle.py -q` -> 7 passed; `pytest -q` -> 465 passed; estados, gate, criterios congelados, reporte forward y limite concurrente; sin activar bots |
+| 2026-11-09 | Procedencia Etapa 6 | `pytest tests/test_agent_compare.py tests/test_decisions.py tests/test_scripts.py -q` -> 19 passed; `pytest -q` -> 474 passed; comparacion lite/deep, procedencia, reporte por fuente y scripts nocturnos sin registrar |
 | 2026-11-08 | UI formato/metricas | `pytest tests/test_console_js.py tests/test_console_shell.py -q` -> 11 passed; `pytest -q` -> 416 passed; gauges restantes, cero negativo, moneda agrupada, salud parcial, performers y regimen compacto |
 |  |  |  |

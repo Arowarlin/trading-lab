@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import sqlite3
+
 import pandas as pd
 import pytest
 
@@ -9,6 +11,7 @@ from tradinglab.decisions import (
     lite_prompt_version,
     record_decision,
     report,
+    report_by_source,
     update_outcomes,
 )
 
@@ -70,6 +73,58 @@ def test_record_y_update_outcomes(tmp_path, monkeypatch):
     assert rows[0]["hit_rate_20d"] == pytest.approx(1.0)
     assert rows[0]["insufficient"] is True
     assert "muestra insuficiente" in rows[0]["sample_warning"]
+
+
+def test_migracion_decision_outcomes_conserva_historial(tmp_path):
+    db = tmp_path / "lab.db"
+    with sqlite3.connect(db) as con:
+        con.execute(
+            "CREATE TABLE decision_outcomes ("
+            "id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT NOT NULL, "
+            "ticker TEXT NOT NULL, decision_date TEXT NOT NULL, mode TEXT NOT NULL, "
+            "rating TEXT NOT NULL, confidence REAL, model TEXT, prompt_version TEXT, "
+            "prompt_hash TEXT, ref_price REAL, return_1d REAL, return_5d REAL, "
+            "return_20d REAL, updated_at TEXT, UNIQUE(ticker, decision_date, mode))"
+        )
+        con.execute(
+            "INSERT INTO decision_outcomes"
+            "(ts, ticker, decision_date, mode, rating) VALUES(?,?,?,?,?)",
+            ("2026-01-05T00:00:00+00:00", "SPY", "2026-01-05", "lite", "Buy"),
+        )
+    init_db(db)
+    with connect(db) as con:
+        columns = {
+            row["name"] for row in con.execute("PRAGMA table_info(decision_outcomes)")
+        }
+        row = con.execute("SELECT * FROM decision_outcomes").fetchone()
+    assert {"analysts", "duration_s"} <= columns
+    assert row["ticker"] == "SPY"
+
+
+def test_reporte_por_fuente_y_retornos_pendientes(tmp_path):
+    db = tmp_path / "lab.db"
+    init_db(db)
+    with connect(db) as con:
+        con.execute(
+            "INSERT INTO decision_outcomes"
+            "(ts, ticker, decision_date, mode, rating, return_20d) "
+            "VALUES(?,?,?,?,?,?)",
+            ("2026-01-05T00:00:00+00:00", "SPY", "2026-01-05", "lite", "Buy", 0.10),
+        )
+        con.execute(
+            "INSERT INTO decision_outcomes"
+            "(ts, ticker, decision_date, mode, rating) VALUES(?,?,?,?,?)",
+            ("2026-01-06T00:00:00+00:00", "QQQ", "2026-01-06", "deep", "Hold"),
+        )
+    rows = {row["source"]: row for row in report_by_source(db)}
+    assert rows["lite"]["n"] == 1
+    assert rows["lite"]["n_20d"] == 1
+    assert rows["lite"]["mean_20d"] == pytest.approx(0.10)
+    assert rows["deep"]["n"] == 1
+    assert rows["deep"]["n_20d"] == 0
+    assert rows["deep"]["mean_20d"] is None
+    assert rows["deep"]["insufficient"] is True
+    assert "retornos 20d insuficientes" in rows["deep"]["sample_warning"]
 
 
 def test_compare_llm_buy_hold_y_trend(tmp_path, monkeypatch):

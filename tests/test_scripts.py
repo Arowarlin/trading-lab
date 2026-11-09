@@ -68,6 +68,26 @@ def test_telegram_scripts_preparados_sin_registrar():
     assert "no se ejecuta" in register.lower()
 
 
+def test_deep_compare_scripts_preparados_sin_registrar():
+    nightly = (ROOT / "scripts" / "deep_compare_nightly.ps1").read_text(
+        encoding="utf-8"
+    )
+    assert "agent-compare" in nightly
+    assert "PreflightOnly" in nightly
+    assert "orchestrate" not in nightly.lower()
+    assert "--execute" not in nightly.lower()
+    assert "Register-ScheduledTask" not in nightly
+
+    register = (ROOT / "scripts" / "register_deep_compare_task.ps1").read_text(
+        encoding="utf-8"
+    )
+    assert "Register-ScheduledTask" in register
+    assert "TradingLab-DeepCompare" in register
+    assert "02:30" in register
+    assert "deep_compare_nightly.ps1" in register
+    assert "no envia ordenes" in register.lower()
+
+
 def test_f13_scripts_preparados_sin_registrar():
     daily = (ROOT / "scripts" / "f13_daily.ps1").read_text(encoding="utf-8")
     assert "orchestrate" in daily and "qqq-trend-f13" in daily

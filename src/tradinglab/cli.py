@@ -708,6 +708,132 @@ def _agent_decision(
     raise typer.BadParameter("--mode debe ser 'lite' o 'deep'")
 
 
+@app.command("agent-compare")
+def agent_compare_cmd(
+    ticker: str = typer.Argument(
+        None, help="Símbolo a comparar; omítelo para ver solo el reporte"
+    ),
+    analysis_date: str = typer.Option(
+        None, "--date", help="YYYY-MM-DD; fuera de hoy exige --retrospective"
+    ),
+    analysts: str = typer.Option(
+        "market,news,fundamentals,social", "--analysts"
+    ),
+    retrospective: bool = typer.Option(
+        False, "--retrospective", help="Pasada histórica: se excluye del reporte forward"
+    ),
+    report_only: bool = typer.Option(False, "--report", help="Solo muestra el reporte"),
+    min_sample: int = typer.Option(30, "--min-sample", help="Mínimo para conclusiones"),
+) -> None:
+    """Compara lite vs deep sobre el mismo activo y fecha, sin enviar órdenes."""
+    from .agent_compare import CompareError, run_comparison
+    from .agent_compare import report as compare_report
+
+    init_db(DEFAULT_DB)
+    if ticker and not report_only:
+        names = [item.strip() for item in analysts.split(",") if item.strip()]
+        try:
+            row = run_comparison(
+                DEFAULT_DB,
+                ticker,
+                day=analysis_date,
+                analysts=names,
+                retrospective=retrospective,
+                settings=get_settings(),
+            )
+        except CompareError as exc:
+            console.print(f"[red]{exc}[/red]")
+            raise typer.Exit(2) from exc
+        table = Table(title=f"Comparación lite/deep · {ticker.upper()}")
+        table.add_column("Fuente", style="bold")
+        table.add_column("Rating")
+        table.add_column("Confianza", justify="right")
+        table.add_column("Objetivo", justify="right")
+        table.add_column("Analistas", overflow="fold")
+        table.add_column("Duración", justify="right")
+        table.add_column("Error", overflow="fold")
+        table.add_row(
+            "lite",
+            str(row["lite_rating"] or "sin datos"),
+            _fmt_pct(row["lite_confidence"])
+            if row["lite_confidence"] is not None
+            else "—",
+            "—" if row["lite_target"] is None else f"{float(row['lite_target']):.2f}",
+            str(row["lite_analysts"] or "—"),
+            "—"
+            if row["lite_duration_s"] is None
+            else f"{float(row['lite_duration_s']):.1f}s",
+            str(row["lite_error"] or "—"),
+        )
+        table.add_row(
+            "deep",
+            str(row["deep_rating"] or "sin datos"),
+            _fmt_pct(row["deep_confidence"])
+            if row["deep_confidence"] is not None
+            else "—",
+            "—" if row["deep_target"] is None else f"{float(row['deep_target']):.2f}",
+            str(row["deep_analysts"] or "—"),
+            "—"
+            if row["deep_duration_s"] is None
+            else f"{float(row['deep_duration_s']):.1f}s",
+            str(row["deep_error"] or "—"),
+        )
+        console.print(table)
+        if row["retrospective"]:
+            console.print(
+                "[yellow]Pasada retrospectiva: no cuenta para el reporte forward.[/yellow]"
+            )
+
+    data = compare_report(DEFAULT_DB, min_sample=min_sample)
+    if not data["n"]:
+        console.print("[yellow]Sin datos: no hay comparaciones forward.[/yellow]")
+        return
+    target_diff = (
+        "sin datos"
+        if data["mean_target_diff"] is None
+        else f"{float(data['mean_target_diff']):.2f}"
+    )
+    console.print(
+        f"Acuerdo lite/deep: [bold]{data['agreement_rate']:.0%}[/bold] "
+        f"({data['n']} comparaciones) · diferencia media de objetivo: "
+        f"{target_diff}"
+    )
+    matrix = Table(title="Matriz de ratings (lite → deep)")
+    matrix.add_column("Lite", style="bold")
+    columns = sorted(
+        {deep for row in data["matrix"].values() for deep in row}
+    )
+    for column in columns:
+        matrix.add_column(column, justify="right")
+    for lite in sorted(data["matrix"]):
+        matrix.add_row(
+            lite,
+            *[str(data["matrix"][lite].get(column, 0)) for column in columns],
+        )
+    console.print(matrix)
+
+    source = Table(title="Decisiones forward por fuente")
+    for column in ("Fuente", "N", "1d", "5d", "20d", "Hit 20d", "t", "p", "Muestra"):
+        source.add_column(column, overflow="fold")
+    for item in data["by_source"]:
+        source.add_row(
+            str(item["source"]),
+            str(item["n"]),
+            _fmt_pct(item["mean_1d"]) if item["mean_1d"] is not None else "—",
+            _fmt_pct(item["mean_5d"]) if item["mean_5d"] is not None else "—",
+            _fmt_pct(item["mean_20d"]) if item["mean_20d"] is not None else "—",
+            _fmt_pct(item["hit_rate_20d"])
+            if item["hit_rate_20d"] is not None
+            else "—",
+            f"{item['t_stat']:.2f}" if item["t_stat"] is not None else "—",
+            f"{item['p_value']:.3f}" if item["p_value"] is not None else "—",
+            "insuficiente" if item["insufficient"] else "ok",
+        )
+    console.print(source)
+    if data["insufficient"]:
+        console.print(f"[yellow]{data['sample_warning']}.[/yellow]")
+
+
 @app.command()
 def agent(
     ticker: str = typer.Argument(..., help="Símbolo, p. ej. NVDA"),
@@ -3308,6 +3434,29 @@ def decisions_report_cmd() -> None:
             "insuficiente" if row["insufficient"] else "ok",
         )
     console.print(t)
+
+    from .decisions import report_by_source
+
+    sources = report_by_source(DEFAULT_DB)
+    if sources:
+        s = Table(title="Decisiones forward por fuente")
+        for col in ("Fuente", "N", "1d", "5d", "20d", "Hit 20d", "t", "p", "Muestra"):
+            s.add_column(col, overflow="fold")
+        for row in sources:
+            s.add_row(
+                str(row["source"]),
+                str(row["n"]),
+                _fmt_pct(row["mean_1d"]) if row["mean_1d"] is not None else "—",
+                _fmt_pct(row["mean_5d"]) if row["mean_5d"] is not None else "—",
+                _fmt_pct(row["mean_20d"]) if row["mean_20d"] is not None else "—",
+                _fmt_pct(row["hit_rate_20d"])
+                if row["hit_rate_20d"] is not None
+                else "—",
+                f"{row['t_stat']:.2f}" if row["t_stat"] is not None else "—",
+                f"{row['p_value']:.3f}" if row["p_value"] is not None else "—",
+                "insuficiente" if row["insufficient"] else "ok",
+            )
+        console.print(s)
 
     baseline = decisions_compare(DEFAULT_DB, settings.data.cache_dir)
     b = Table(title="Comparación sobre las mismas fechas · forward 20d")

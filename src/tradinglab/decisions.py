@@ -30,6 +30,18 @@ def lite_prompt_version() -> tuple[str, str]:
     return version, digest
 
 
+def deep_prompt_hash(
+    model: str | None, analysts: str | list[str] | tuple[str, ...], day: str
+) -> str:
+    """Hash estable de la procedencia deep (modelo, analistas y fecha)."""
+    if isinstance(analysts, (list, tuple)):
+        names = ",".join(str(item) for item in analysts)
+    else:
+        names = str(analysts or "")
+    raw = f"deep|{model or ''}|{names}|{day}"
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
 def record_decision(db_path: str | Path, payload: dict, *, mode: str) -> None:
     ticker = str(payload.get("ticker") or "").upper()
     decision_date = str(payload.get("date") or date.today().isoformat())
@@ -44,21 +56,32 @@ def record_decision(db_path: str | Path, payload: dict, *, mode: str) -> None:
             ref_price = float(df["close"].iloc[-1])
         except Exception:
             ref_price = None
+    analysts = payload.get("analysts")
+    if isinstance(analysts, (list, tuple)):
+        analysts_text = ",".join(str(item) for item in analysts)
+    else:
+        analysts_text = str(analysts or "")
+    duration = payload.get("elapsed_s", payload.get("duration_s"))
     if mode == "lite":
         prompt_version, prompt_hash = lite_prompt_version()
     else:
-        prompt_version, prompt_hash = f"{mode}-v1", hashlib.sha256(f"{mode}:{payload.get('model', '')}".encode()).hexdigest()
+        prompt_version = f"{mode}-v1"
+        prompt_hash = payload.get("prompt_hash") or deep_prompt_hash(
+            payload.get("model"), analysts_text, decision_date
+        )
 
     init_db(db_path)
     with connect(db_path) as con:
         con.execute(
             "INSERT INTO decision_outcomes"
             "(ts, ticker, decision_date, mode, rating, confidence, model, prompt_version, "
-            "prompt_hash, ref_price) VALUES(?,?,?,?,?,?,?,?,?,?) "
+            "prompt_hash, ref_price, analysts, duration_s) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?,?,?) "
             "ON CONFLICT(ticker, decision_date, mode) DO UPDATE SET "
             "rating=excluded.rating, confidence=excluded.confidence, model=excluded.model, "
             "prompt_version=excluded.prompt_version, prompt_hash=excluded.prompt_hash, "
-            "ref_price=COALESCE(excluded.ref_price, decision_outcomes.ref_price)",
+            "ref_price=COALESCE(excluded.ref_price, decision_outcomes.ref_price), "
+            "analysts=excluded.analysts, duration_s=excluded.duration_s",
             (
                 utcnow(),
                 ticker,
@@ -70,6 +93,8 @@ def record_decision(db_path: str | Path, payload: dict, *, mode: str) -> None:
                 prompt_version,
                 prompt_hash,
                 float(ref_price) if ref_price is not None else None,
+                analysts_text or None,
+                float(duration) if duration is not None else None,
             ),
         )
 
@@ -156,6 +181,56 @@ def report(db_path: str | Path, *, min_sample: int = MIN_SAMPLE) -> list[dict]:
                 "sample_warning": (
                     f"muestra insuficiente: n={n} < {min_sample}"
                     if n < min_sample
+                    else ""
+                ),
+            }
+        )
+    return out
+
+
+def report_by_source(
+    db_path: str | Path, *, min_sample: int = MIN_SAMPLE
+) -> list[dict]:
+    """Cantidad y retorno forward separados por fuente lite/deep."""
+    init_db(db_path)
+    with connect(db_path) as con:
+        rows = con.execute(
+            "SELECT mode, return_1d, return_5d, return_20d FROM decision_outcomes"
+        ).fetchall()
+    groups: dict[str, list] = {}
+    for row in rows:
+        groups.setdefault(str(row["mode"]), []).append(row)
+    out = []
+    nd = NormalDist()
+    for source, items in sorted(groups.items()):
+        n = len(items)
+        r20 = [float(x["return_20d"]) for x in items if x["return_20d"] is not None]
+        n20 = len(r20)
+        mean = statistics.mean(r20) if r20 else None
+        std = statistics.stdev(r20) if n20 > 1 else 0.0
+        t_stat = (
+            mean / (std / (n20**0.5))
+            if mean is not None and std > 0 and n20 > 1
+            else None
+        )
+        p_value = 2 * (1 - nd.cdf(abs(t_stat))) if t_stat is not None else None
+        r1 = [float(x["return_1d"]) for x in items if x["return_1d"] is not None]
+        r5 = [float(x["return_5d"]) for x in items if x["return_5d"] is not None]
+        out.append(
+            {
+                "source": source,
+                "n": n,
+                "n_20d": n20,
+                "mean_1d": _mean(r1),
+                "mean_5d": _mean(r5),
+                "mean_20d": mean,
+                "hit_rate_20d": _hit_rate(r20),
+                "t_stat": t_stat,
+                "p_value": p_value,
+                "insufficient": n20 < min_sample,
+                "sample_warning": (
+                    f"retornos 20d insuficientes: n={n20} < {min_sample}"
+                    if n20 < min_sample
                     else ""
                 ),
             }

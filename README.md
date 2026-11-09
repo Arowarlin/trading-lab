@@ -321,6 +321,36 @@ El rating se traduce a fracción de posición (`Buy`=1.0, `Overweight`=0.5,
 risk engine y el broker paper. La decisión y el contexto numérico quedan en
 `data/agent_runs/`.
 
+### Comparación lite vs deep (etapa 6)
+
+Cada decisión guarda su procedencia: `decision_outcomes` añade `analysts` y
+`duration_s`, y `agent_comparisons` conserva rating, confianza, objetivo,
+modelo, hash de prompt, duración y errores saneados de ambas fuentes.
+
+```powershell
+lab agent-compare SPY
+lab agent-compare SPY --date 2026-01-05 --retrospective
+lab agent-compare --report
+lab decisions report
+```
+
+- Solo se compara el día actual; una fecha pasada exige `--retrospective` y
+  queda **excluida** del reporte forward.
+- Si el run con todos los analistas falla, se prueba uno a uno y se usa el
+  primero que funcione. El reporte muestra acuerdo, matriz lite→deep,
+  diferencia media de objetivo y estadísticas por fuente.
+- Con menos de **30 comparaciones** el resultado se marca como **muestra
+  insuficiente**; sin retornos a 20 días se muestra “sin datos”, no cero.
+- `scripts/deep_compare_nightly.ps1` rota un activo por noche y
+  `scripts/register_deep_compare_task.ps1` prepara la tarea
+  `TradingLab-DeepCompare` a las 02:30. **No se registra ni ejecuta sola**;
+  solo mide, no envía órdenes ni activa bots.
+
+Evidencia: `pytest tests/test_agent_compare.py tests/test_decisions.py
+tests/test_scripts.py -q` → **19 passed**; suite completa **474 passed**;
+`ruff` limpio; `lab doctor` OK con WARN conocidos. No se lanzó ningún deep
+real: los tests usan runners simulados.
+
 ---
 
 ## 4b. Información continua (`intel`)
