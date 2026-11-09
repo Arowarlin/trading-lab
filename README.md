@@ -1603,6 +1603,14 @@ Opciones, en orden recomendado:
    ```bash
    trading-r1 --profile vllm
    ```
+   Runner no interactivo (requiere el backend vivo: TUI abierta o
+   `trading-r1 serve`):
+   ```powershell
+   .\scripts\trading_r1_premarket.ps1 -PreflightOnly
+   .\scripts\trading_r1_premarket.ps1 -Send
+   ```
+   Guarda Markdown/JSON en `reports/premarket/` y, con `-Send`, usa
+   `lab telegram send`. No envía órdenes.
    Reinstalación limpia dentro de Ubuntu:
    ```bash
    sudo apt-get update && sudo apt-get install -y unzip

@@ -133,6 +133,22 @@ def test_resume_after_reboot_reabre_sesion_exacta():
     assert "resume_after_reboot.ps1" in register
 
 
+def test_trading_r1_premarket_runner_sin_ordenes():
+    script = (ROOT / "scripts" / "trading_r1_premarket.ps1").read_text(
+        encoding="utf-8"
+    )
+    assert "trading-r1" in script
+    assert "backend.json" in script
+    assert "/research" in script
+    assert "Invoke-RestMethod" in script
+    assert "PreflightOnly" in script
+    assert "telegram send" in script
+    assert "qwen3.8-27b" in script
+    assert "Sin datos" in script
+    assert "900" in script
+    assert "order" not in script.lower()
+
+
 def test_deep_compare_scripts_preparados_sin_registrar():
     nightly = (ROOT / "scripts" / "deep_compare_nightly.ps1").read_text(
         encoding="utf-8"

@@ -53,3 +53,16 @@ quedó corriendo en una pestaña de Windows Terminal. No se configuró ninguna
 clave Tauric ni se enviaron órdenes.
 
 Para entrar manualmente: `wsl -d Ubuntu-24.04`.
+
+## Runner pre-market
+
+Con el backend de Trading-R1 vivo (TUI abierta o `trading-r1 serve`):
+
+```powershell
+.\scripts\trading_r1_premarket.ps1 -PreflightOnly
+.\scripts\trading_r1_premarket.ps1 -Send
+```
+
+El runner consulta `POST /research`, guarda Markdown y JSON en
+`reports/premarket/` y, con `-Send`, envía el Markdown con
+`lab telegram send`. No envía órdenes.
