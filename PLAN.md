@@ -177,6 +177,9 @@ Reglas de trabajo:
     latencia 190-235 s vs 71-79 s; acuerdo 100%. Muestra n=3 < 30: sin
     conclusión; el default sigue siendo `qwen/qwen3.8-27b`. Repetir en días
     distintos hasta n≥30.
+  - Tarea `TradingLab-LLMCompare` registrada y `Ready` (L-V 18:30) para
+    acumular la muestra; no cambia el default. Primera ejecución:
+    2026-11-09 18:30 local.
 - [x] **5.5 Versionado de prompts** — 2026-11-07
   - `prompt_version` + `prompt_hash` guardados por decisión lite; deep usa hash simple.
 
@@ -1189,4 +1192,5 @@ etapa.
 | 2026-11-09 | Trading-R1 premarket | 1 ronda, 2354 chars, datos locales, `Sin datos` donde falta; Telegram enviado; reporte en `reports/premarket/` |
 | 2026-11-09 | Suite final Trading-R1 | `pytest -q --basetemp=...` -> 532 passed; `ruff` limpio; informe premarket 1 ronda + Telegram OK; runner local validado |
 | 2026-11-09 | MoE 30B vs actual | `lab llm compare` SPY/QQQ/NVDA -> Hold/Hold, media 62%/60%, 190-235s vs 71-79s, acuerdo 100%, n=3/30 |
+| 2026-11-09 | Tarea LLMCompare | `TradingLab-LLMCompare` Ready, L-V 18:30, `IgnoreNew`; preflight OK; suite 533 passed; sin ordenes |
 |  |  |  |

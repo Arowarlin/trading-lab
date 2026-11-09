@@ -153,6 +153,25 @@ def test_trading_r1_premarket_runner_sin_ordenes():
     assert "order" not in script.lower()
 
 
+def test_llm_compare_diario_sin_ordenes():
+    daily = (ROOT / "scripts" / "llm_compare_daily.ps1").read_text(encoding="utf-8")
+    assert "lab llm compare" in daily
+    assert "qwen/qwen3.8-27b" in daily
+    assert "qwen/qwen3-30b-a3b" in daily
+    assert "lms unload" in daily
+    assert "PreflightOnly" in daily
+    assert "llm_compare_failed" in daily
+    assert "order" not in daily.lower()
+
+    register = (ROOT / "scripts" / "register_llm_compare_task.ps1").read_text(
+        encoding="utf-8"
+    )
+    assert "TradingLab-LLMCompare" in register
+    assert "18:30" in register
+    assert "Weekly" in register
+    assert "IgnoreNew" in register
+
+
 def test_deep_compare_scripts_preparados_sin_registrar():
     nightly = (ROOT / "scripts" / "deep_compare_nightly.ps1").read_text(
         encoding="utf-8"

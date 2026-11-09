@@ -367,6 +367,8 @@ real: los tests usan runners simulados.
   SPY/QQQ/NVDA): ambos **Hold** en los tres; confianza media 62% vs 60%;
   latencia 190-235 s vs 71-79 s; acuerdo 100%. Muestra n=3 < 30: sin
   conclusión y sin cambiar el default.
+- Tarea `TradingLab-LLMCompare` (L-V 18:30) repite la comparación para
+  SPY/QQQ/NVDA y acumula la muestra; no cambia el default ni envía órdenes.
 
 ```powershell
 lab llm status
