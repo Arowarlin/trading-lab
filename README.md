@@ -2304,7 +2304,9 @@ lab research-intraday --symbol EURUSD --tick-spread data/cache/ticks/EURUSD_2025
 - Descarga secuencial con `--interval` (0,5 s por defecto); un 429 espera al
   menos 5 s antes de reintentar. No lanzar varias descargas en paralelo.
 - Verificación real: EURUSD 2025-01-10 14:00 UTC → **15.997 ticks**, spread
-  mediano **0,29 bps**; parquet generado.
+  mediano **0,29 bps**; parquet generado. La descarga de un día completo quedó
+  pendiente: Dukascopy devolvió **HTTP 429** al intentar el lote; se reintentará
+  secuencialmente más tarde, no se fuerza el rate limit.
 
 **Backtest.** `backtest.run` acepta `session=("09:30","16:00")`,
 `session_tz` y `flat_dates` para cerrar fuera de sesión o en días de

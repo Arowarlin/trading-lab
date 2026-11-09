@@ -1058,6 +1058,8 @@ etapa.
     las velas MT5 por la mediana horaria de ticks; el informe indica la fuente.
   - Verificación real: EURUSD 2025-01-10 14 UTC, 15.997 ticks, spread mediano
     0,29 bps.
+  - Descarga de día completo pendiente: Dukascopy devolvió HTTP 429; se añadió
+    `--interval` y backoff de 5 s; no se fuerza el rate limit.
 - [x] **DeepCompare**
   - Tarea `TradingLab-DeepCompare` registrada y en estado `Ready` (02:30).
 - [ ] **F7 Trading-R1**
