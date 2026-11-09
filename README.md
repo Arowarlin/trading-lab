@@ -28,7 +28,7 @@ Entorno multi-bot de trading sobre **TradingAgents** y **Trading-R1**, con LLM l
 | F12 | Futuros (Topstep + ProjectX) | ✅ adaptador y CLI en dry-run · ⏳ cuenta y guard |
 | F13 | Paper continuo 4-8 semanas | ✅ activo en paper · tarea `TradingLab-F13` lunes 22:20 |
 | F14 | Investigación automática (`lab research`) | ✅ barrido + OOS + DSR + PBO + walk-forward + regímenes |
-| F15 | Datos de ticks Dukascopy / spread real forex | ⏳ |
+| F15 | Datos de ticks Dukascopy / spread real forex | ✅ descarga/decodifica ticks · ⏳ integración en research |
 
 ---
 
@@ -341,10 +341,9 @@ lab decisions report
   diferencia media de objetivo y estadísticas por fuente.
 - Con menos de **30 comparaciones** el resultado se marca como **muestra
   insuficiente**; sin retornos a 20 días se muestra “sin datos”, no cero.
-- `scripts/deep_compare_nightly.ps1` rota un activo por noche y
-  `scripts/register_deep_compare_task.ps1` prepara la tarea
-  `TradingLab-DeepCompare` a las 02:30. **No se registra ni ejecuta sola**;
-  solo mide, no envía órdenes ni activa bots.
+- `scripts/deep_compare_nightly.ps1` rota un activo por noche. La tarea
+  **`TradingLab-DeepCompare`** quedó registrada el 2026-11-09 a las 02:30
+  (estado `Ready`); solo mide, no envía órdenes ni activa bots.
 
 Evidencia: `pytest tests/test_agent_compare.py tests/test_decisions.py
 tests/test_scripts.py -q` → **19 passed**; suite completa **474 passed**;
@@ -1566,6 +1565,10 @@ Evidencia: `pytest tests/test_learning.py -q` → **8 passed**; suite completa
 ## 7. Trading-R1 en Windows
 
 Trading-R1 usa `fcntl`, `os.O_NOFOLLOW` y `os.getuid()`: **no funciona en Windows**.
+Estado 2026-11-09: WSL **no está instalado** en este equipo; el repositorio
+`vendor/Trading-R1` está presente, pero no se puede ejecutar hasta instalar
+WSL2 + Ubuntu. No se ha descargado ni configurado ninguna clave Tauric.
+
 Opciones, en orden recomendado:
 
 1. **WSL2** (recomendado):
@@ -2189,7 +2192,7 @@ lab library show dsr
 ```
 
 Evidencia: `pytest tests/test_library.py -q` → **4 passed**; suite completa
-**502 passed**; `ruff` limpio; `lab doctor` OK. Sin dependencias nuevas ni
+**513 passed**; `ruff` limpio; `lab doctor` OK. Sin dependencias nuevas ni
 automatización de scraping.
 
 ---
@@ -2241,6 +2244,36 @@ la repetición cacheada se cubre en tests. Evidencia:
 
 ---
 
+## 11l. Ticks Dukascopy y backtest con sesiones
+
+**Ticks.** `lab ticks fetch` descarga archivos `.bi5` de Dukascopy, los
+descomprime (LZMA), decodifica registros de 20 bytes y guarda un parquet en
+`data/cache/ticks/`. No envía órdenes ni descarga datos de pago.
+
+```powershell
+lab ticks fetch EURUSD --day 2025-01-10 --hours 14
+lab ticks fetch USDJPY --day 2025-01-10 --hours 8-16
+lab ticks summary EURUSD --day 2025-01-10
+```
+
+- Precio = entero × point del símbolo; `--point` permite símbolos fuera del
+  mapa (`EURUSD`, `USDJPY`, `XAUUSD`).
+- 404 = mercado cerrado o archivo vacío: se muestra **Sin datos**, no se
+  inventan ticks.
+- Verificación real: EURUSD 2025-01-10 14:00 UTC → **15.997 ticks**, spread
+  mediano **0,29 bps**; parquet generado.
+
+**Backtest.** `backtest.run` acepta `session=("09:30","16:00")`,
+`session_tz` y `flat_dates` para cerrar fuera de sesión o en días de
+rollover/vencimiento. `continuous.stitch_continuous` une contratos ajustando
+el salto por ratio o diferencia; los tests cubren ambos métodos.
+
+Evidencia: `pytest tests/test_ticks.py tests/test_continuous.py
+tests/test_engine.py -q` → **18 passed**; suite completa **513 passed**;
+`ruff` limpio. Sin descarga de datos de pago ni órdenes.
+
+---
+
 ## 12. Roadmap restante
 
 1. ~~**F6** validar un `agent` real y medir latencia~~ → `lite` validado (77-95 s);
@@ -2248,13 +2281,17 @@ la repetición cacheada se cubre en tests. Evidencia:
 2. **F12** futuros: ~~elegir firma y adaptador~~ → Topstep + ProjectX en dry-run.
    Preset Topstep 50K añadido como plantilla inactiva; faltan abrir la cuenta,
    validar el MLL y las barras históricas.
-3. **F9c** backtester con sesiones, rollover y contratos continuos (los cortos ya están).
+3. ~~**F9c** backtester con sesiones, rollover y contratos continuos~~ → ✅
+   `session`/`flat_dates` opcionales en `backtest.run` y `continuous.stitch_continuous`
+   con ajuste ratio/difference; los cortos ya estaban.
 4. **F11b** filtros de noticias, viernes y rollover en el guard → ✅ implementado
    (`news_blackout_min`, `weekend_holding`, `friday_cutoff_hour`,
    `rollover_blackout_min`) con tests de FOMC/NFP/CPI y cambios de hora.
 5. **F13** paper continuo 4-8 semanas → comparar contra SPY y decidir.
-6. **F7** Trading-R1 en WSL para el informe pre-market + Telegram.
-7. **F15** datos de ticks Dukascopy para modelar spread real en forex.
+6. **F7** Trading-R1 en WSL para el informe pre-market + Telegram → ⏳ WSL no
+   instalado; no se puede ejecutar todavía.
+7. ~~**F15** datos de ticks Dukascopy para modelar spread real en forex~~ → ✅
+   descarga y decodificación `.bi5`; falta integrar el spread en research.
 
 ---
 
