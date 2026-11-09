@@ -181,6 +181,11 @@ Reglas de trabajo:
   obligatorio y cierre permitido; CFD solo si se confirma disponibilidad.
   - Evaluación hecha en `docs/fase6_multimercado.md`; sin cuenta/confirmación.
 - [ ] **6.2 CFD vía MT5** con especificaciones y horarios.
+  - Especificaciones reales verificadas el 2026-11-09: XAUUSD tick 0,01 /
+    contrato 100 / volumen mín. 0,01; US100.cash tick 0,01 / contrato 1 /
+    volumen mín. 0,01; `trade_mode=4` y `filling_mode=3` en ambos.
+  - Horario: la API Python de MT5 instalada no expone sesiones; el catálogo
+    mantiene `24/5 UTC` como referencia, no como verificación del bróker.
 - [ ] **6.3 Futuros**: preset Topstep 50K añadido como plantilla inactiva;
   faltan MLL validado y barras continuas con rollover.
 - [x] **6.4 Catálogo único de instrumentos por clase** — 2026-11-07
@@ -1109,5 +1114,6 @@ etapa.
 | 2026-11-09 | Procedencia Etapa 6 | `pytest tests/test_agent_compare.py tests/test_decisions.py tests/test_scripts.py -q` -> 19 passed; `pytest -q` -> 474 passed; comparacion lite/deep, procedencia, reporte por fuente y scripts nocturnos sin registrar |
 | 2026-11-09 | UI Etapa 7 | `pytest tests/test_web.py tests/test_console_shell.py tests/test_console_js.py tests/test_agent_compare.py tests/test_lifecycle.py -q` -> 46 passed; `pytest -q` -> 477 passed; vista Activo, Incubadora, lite/deep y desglose por fuente; 17 vistas/267 ids/34 API sin retirar las anteriores |
 | 2026-11-09 | Fases 4-5 | `pytest -q` -> 501 passed; Finnhub real ok + 10 noticias; scoring Qwen 2/2; `llm status` con schema_ok; `ruff`/doctor/f13 OK; MoE real bloqueado por modelo no cargado |
+| 2026-11-09 | CFD specs F6 | `lab mt5 spec XAUUSD` y `US100.cash` -> tick 0.01, contratos 100/1, volumen min 0.01, trade_mode 4; API MT5 sin sesiones |
 | 2026-11-08 | UI formato/metricas | `pytest tests/test_console_js.py tests/test_console_shell.py -q` -> 11 passed; `pytest -q` -> 416 passed; gauges restantes, cero negativo, moneda agrupada, salud parcial, performers y regimen compacto |
 |  |  |  |

@@ -706,6 +706,12 @@ offset de cada barra. El método está en `execution/mt5_offsets.py`:
 - `lab mt5 fetch` imprime los tramos y guarda
   `data/cache/mt5/EURUSD_<TF>.offsets.json`.
 
+`lab mt5 spec` verificó el 2026-11-09 las especificaciones reales de
+**XAUUSD** (tick 0,01; contrato 100; volumen mínimo 0,01) y **US100.cash**
+(tick 0,01; contrato 1; volumen mínimo 0,01), con `trade_mode=4` y
+`filling_mode=3`. La API Python de MT5 no expone horarios de sesión: el
+`24/5 UTC` del catálogo es una referencia, no una verificación del bróker.
+
 Datos corregidos:
 
 - **M15**: 50.000 barras, 2024-11-04 01:45 → 2026-11-08 23:45 UTC; 5 tramos
