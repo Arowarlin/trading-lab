@@ -723,6 +723,49 @@ def _agent_decision(
     raise typer.BadParameter("--mode debe ser 'lite' o 'deep'")
 
 
+@app.command("premarket")
+def premarket_cmd(
+    tickers: str = typer.Option(
+        "SPY,QQQ,NVDA", "--tickers", help="Watchlist separada por comas"
+    ),
+    hours: int = typer.Option(48, "--hours", help="Ventana de calendario macro"),
+    no_llm: bool = typer.Option(
+        False, "--no-llm", help="Genera solo datos, sin llamar a Qwen"
+    ),
+    send: bool = typer.Option(False, "--send", help="Enviar el informe por Telegram"),
+    out: Path = typer.Option(None, "--out", help="Archivo Markdown de salida"),
+) -> None:
+    """Informe pre-market nativo con Qwen; no usa Trading-R1 ni envía órdenes."""
+    from .premarket import build_report, send_report
+
+    settings = get_settings()
+    init_db(DEFAULT_DB)
+    try:
+        report = build_report(
+            DEFAULT_DB,
+            settings,
+            tickers=[item.strip() for item in tickers.split(",") if item.strip()],
+            include_llm=not no_llm,
+            hours=max(1, hours),
+        )
+    except Exception as exc:
+        console.print(f"[red]No se pudo generar el pre-market:[/red] {exc}")
+        raise typer.Exit(1) from exc
+    text = report["text"]
+    console.print(text)
+    if out is not None:
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(text, encoding="utf-8")
+        console.print(f"[green]Informe guardado:[/green] {out}")
+    if send:
+        try:
+            send_report(text)
+        except Exception as exc:
+            console.print(f"[red]Telegram:[/red] {exc}")
+            raise typer.Exit(1) from exc
+        console.print("[green]Informe enviado a Telegram.[/green]")
+
+
 @app.command("agent-compare")
 def agent_compare_cmd(
     ticker: str = typer.Argument(
