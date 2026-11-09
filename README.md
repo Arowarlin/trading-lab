@@ -622,31 +622,59 @@ Para enviar de verdad hay que añadir `--execute`. Una cuenta real exige además
 
 ## 6c. Intradía forex/CFD (`lab mt5 fetch` / `lab research-intraday`)
 
-La etapa **9.5 ya se ejecutó con el mercado abierto** y el offset resuelto por
-el terminal, sin inventar valores:
+La etapa **9.5 se reabrió y corrigió**. `MT5Broker.rates` ya no resta un offset
+global: infiere el offset de cada semana desde los bordes de sesión y aplica el
+offset de cada barra. El método está en `execution/mt5_offsets.py`:
 
-- `lab mt5 status`: `server_utc_offset_hours=2.00`, `offset_source=detectado`,
-  `offset_known=True`, `identity_ok=True`.
-- **M15**: 50.000 barras EURUSD, 2024-11-04 → 2026-11-08 (2,01 años).
-- **H1**: 20.000 barras EURUSD, 2023-08-21 → 2026-11-08 (3,22 años).
-- Parquet en UTC, ordenado, sin duplicados, `NaN` en cierre ni OHLC inválido.
-- Spread real: mediana 1 punto en M15 y 2 en H1; `spread_reliable=True`.
-- `lab research-intraday --symbol EURUSD --timeframe M15`: **0/28 variantes
-  pasan**. PBO 0,0 %, pero `prob_oos_loss=100 %` y walk-forward **fallido**;
-  todos los Sharpe son negativos (mejor −7,72) y el MaxDD del mejor caso es
-  −50,4 %. No hay edge que justifique activar un bot.
+- Para cada semana ISO toma la primera barra (apertura del domingo) y la última
+  (cierre del viernes) en hora de servidor.
+- Las compara con la apertura/cierre de **17:00 America/New_York**; de ahí sale
+  el offset, redondeado a media hora.
+- Confirma el cambio contra las transiciones de EE. UU.: apertura semanal
+  **22:00 UTC** con GMT+2 y **21:00 UTC** con GMT+3.
+- Rellena semanas festivas/incompletas con el tramo detectado más cercano.
+- `lab mt5 fetch` imprime los tramos y guarda
+  `data/cache/mt5/EURUSD_<TF>.offsets.json`.
+
+Datos corregidos:
+
+- **M15**: 50.000 barras, 2024-11-04 01:45 → 2026-11-08 23:45 UTC; 5 tramos
+  (+2/+3).
+- **H1**: 20.000 barras, 2023-08-21 14:00 → 2026-11-08 23:00 UTC; 8 tramos.
+- Parquet UTC, ordenado, sin duplicados, `NaN` en cierre ni OHLC inválido.
+- Spread real: mediana 1 punto M15 / 2 puntos H1; `spread_reliable=True`.
+
+El informe anterior, generado con offset constante, queda conservado como
+**no fiable: offset constante** en
+`reports/research/intraday_offset_constante.json` y `.md`; no se borró.
+
+Resultado con el offset corregido:
+
+- `lab research-intraday --symbol EURUSD --timeframe M15`: **0/28 pasan**;
+  mejor Sharpe neto **−8,19**, PBO 0,0 % con `prob_oos_loss=100 %` y
+  walk-forward **fallido**.
+- Variante de diagnóstico con comisión, slippage y spread en cero: mejor
+  Sharpe bruto **+1,34** (pullback), pero PBO **39,4 %**, walk-forward
+  fallido y régimen no aprobado; 0/28 pasan.
+- La misma pullback pasa de +1,34 bruto a −24,79 neto; la mejor neta (ORB)
+  tiene bruto −0,91. **Los costes explican el desplome neto, pero no hay edge
+  bruto robusto**; la alineación de sesiones ya está verificada.
 
 No se relajó ningún umbral, no se activó ningún bot y no se enviaron órdenes.
 
 ```powershell
-# con el mercado abierto y offset resuelto:
+# datos corregidos por periodo
 lab mt5 fetch EURUSD --timeframe M15 --bars 50000
 lab mt5 fetch EURUSD --timeframe H1 --bars 20000
 lab research-intraday --symbol EURUSD --timeframe M15
+
+# diagnóstico de costes (no usar para aprobar)
+lab research-intraday --symbol EURUSD --timeframe M15 `
+  --commission-bps 0 --slippage-bps 0 --zero-spread `
+  --out reports/research/intraday_zero_costs
 ```
 
-- Cachea velas ya corregidas a UTC por `MT5Broker.rates` en
-  `data/cache/mt5/EURUSD_M15.parquet`.
+- Cachea velas ya corregidas a UTC en `data/cache/mt5/EURUSD_M15.parquet`.
 - Modela spread por hora desde la columna `spread`, más slippage conservador y
   comisión. Si no hay spread realista, marca `spread_reliable=false` y los
   resultados como **no confiables**.
@@ -655,9 +683,10 @@ lab research-intraday --symbol EURUSD --timeframe M15
 - Pasa por DSR, PBO, walk-forward y regímenes con los mismos umbrales; reporta
   trades y cuántas pasan (puede ser cero). Monte Carlo a 22/44/120 días.
 
-Los tests usan datos sintéticos. El informe real `intraday.md/json` se generará
-cuando MT5 pueda determinar el offset con el mercado abierto o se configure
-`mt5.server_utc_offset_hours` verificado.
+Evidencia: `pytest tests/test_mt5_offsets.py tests/test_intraday.py -q` →
+**11 passed**; suite completa **423 passed**; `ruff` limpio; `lab doctor` OK.
+Los tests sintéticos cubren el cambio de hora de EE. UU. (offset +2/+3) y que
+una sesión de 08:00 UTC siga siendo 08:00 UTC antes y después del cambio.
 
 Futuros intradía: perfil definido y proveedor ProjectX como **stub**; no se
 implementa descarga de pago. Ver `docs/fase6_futuros_intradia.md`.
@@ -730,17 +759,23 @@ La tabla también está en **Research → Resultados por perfil**.
 | Perfil | Estado | Retorno | Sharpe | MaxDD | Pasa FTMO 120d | Breach | Nota |
 |---|---|---|---|---|---|---|---|
 | `swing_equity` | validado | 81.1% | 1.03 | -9.2% | 70.6% | 3.5% | cartera de 3 bots; 0/10 variantes frágiles a 2/20 bps |
-| `intraday_fx` | validado · sin edge | — | — | — | — | — | M15 50k, spread real; 0/28 pasan; WF fallido; PBO 0% con `prob_oos_loss=100%` |
+| `intraday_fx` | validado · sin edge | — | — | — | — | — | offset por periodo; neto mejor −8,19 / bruto +1,34; 0/28; WF fallido; PBO bruto 39,4% |
 | `intraday_futures` | stub | — | — | — | — | — | ProjectX sin credenciales/suscripción; proxy diario ES=F/NQ=F |
 
-### Etapa 5 completada (intradía forex/CFD)
+### Etapa 5 completada y corregida (intradía forex/CFD)
 
-`lab mt5 status` resolvió el offset con el mercado abierto:
-`server_utc_offset_hours=2.00`, `offset_source=detectado`, `offset_known=True`
-e `identity_ok=True`. Se descargaron M15/H1 y se generó
-`reports/research/intraday.json`/`.md`: **0/28 variantes pasan**, walk-forward
-fallido y todos los Sharpe negativos. El PBO de 0,0 % no es señal de edge:
-`prob_oos_loss=100%`. No se relajó ningún umbral y no se activó ningún bot.
+La primera ejecución usó un offset constante y quedó marcada como **no fiable:
+offset constante** (`reports/research/intraday_offset_constante.*`), sin
+borrarla. La versión corregida infiere +2/+3 por semana desde los bordes
+semanales y confirma las transiciones de EE. UU. (apertura 22:00 UTC en
+invierno, 21:00 en verano). Datos: M15 50.000 barras y H1 20.000, spread real.
+
+Con la conversión corregida, **0/28 variantes pasan**, el mejor Sharpe neto es
+**−8,19**, el walk-forward falla y el PBO neto es 0,0 % con
+`prob_oos_loss=100%`. La variante de diagnóstico sin costes da un mejor Sharpe
+bruto **+1,34**, pero PBO 39,4 % y walk-forward fallido: los costes explican el
+desplome neto, pero el bruto tampoco es un edge robusto. No se relajó ningún
+umbral y no se activó ningún bot.
 
 ### Resumen final de decisiones
 
@@ -754,7 +789,8 @@ fallido y todos los Sharpe negativos. El PBO de 0,0 % no es señal de edge:
 - F13 está **activo en paper**; `qqq-trend-f13` tiene `enabled: true` y la
   tarea `TradingLab-F13` está registrada con primera ejecución el **lunes
   2026-11-09 a las 22:20**. El ciclo diario solo opera en paper.
-- Queda pendiente la etapa 5 (datos intradía reales); los commits ya están
+- Etapa 5 (intradía forex/CFD) completada y corregida: offset por periodo,
+  datos M15/H1 reales y resultado sin edge robusto; los commits ya están
   publicados en `origin/master` y con backup verificado.
 
 ---

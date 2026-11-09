@@ -12,6 +12,7 @@ import pandas as pd
 
 from ..db import connect, utcnow
 from ..instruments import Instrument, InstrumentError, get_instrument
+from .mt5_offsets import infer_bar_offsets, offset_periods
 
 
 class MT5Error(RuntimeError):
@@ -103,6 +104,7 @@ class MT5Broker:
         self._offset_cache = (
             Path(db_path).parent / "cache" / "mt5_offset.json" if db_path else None
         )
+        self.rate_offset_periods: list[dict] = []
         self._connected = False
 
     # ------------------------------------------------------------- conexión
@@ -388,13 +390,12 @@ class MT5Broker:
         }
 
     def rates(self, symbol: str, timeframe: str = "H1", count: int = 500) -> pd.DataFrame:
-        """Velas del terminal, indexadas en UTC real (corrige el desfase del servidor)."""
-        if self._offset_source == "unknown":
-            raise MT5Error(
-                "No se pudo determinar el offset del servidor MT5 (mercado cerrado y "
-                "sin caché). Configura mt5.server_utc_offset_hours o reintenta con el "
-                "mercado abierto."
-            )
+        """Velas del terminal, indexadas en UTC real con offset por periodo.
+
+        El offset de cada barra se infiere de los bordes semanales (apertura del
+        domingo y cierre del viernes en hora de servidor) contra las 17:00 de
+        America/New_York. No se aplica un único offset a todo el histórico.
+        """
         mt5 = self._require()
         tf_map = {
             "M1": mt5.TIMEFRAME_M1,
@@ -416,10 +417,16 @@ class MT5Broker:
             raise MT5Error(f"sin histórico para {symbol} {key}: {mt5.last_error()}")
 
         df = pd.DataFrame(raw)
-        df["time"] = (
-            pd.to_datetime(df["time"], unit="s", utc=True)
-            - pd.Timedelta(hours=self._server_offset)
-        )
+        server_time = pd.to_datetime(df["time"], unit="s", utc=True)
+        try:
+            offsets = infer_bar_offsets(server_time, key)
+        except ValueError as exc:
+            raise MT5Error(
+                f"No se pudo inferir el offset por periodo para {symbol} {key}: {exc}. "
+                "No se aplica un offset global."
+            ) from exc
+        self.rate_offset_periods = offset_periods(server_time, offsets)
+        df["time"] = server_time - pd.to_timedelta(offsets.to_numpy(), unit="h")
         df = df.set_index("time").rename(columns={"tick_volume": "volume"})
         cols = ["open", "high", "low", "close", "volume", "spread"]
         return df[[c for c in cols if c in df.columns]].astype(float)

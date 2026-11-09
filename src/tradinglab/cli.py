@@ -3783,8 +3783,10 @@ def mt5_fetch_cmd(
 
     settings = get_settings()
     broker = _mt5(settings, dry_run=True)
+    periods: list[dict] = []
     try:
         df = broker.rates(symbol, timeframe, bars)
+        periods = list(getattr(broker, "rate_offset_periods", []))
     except Exception as exc:
         console.print(f"[red]No se pudo leer MT5:[/red] {exc}")
         raise typer.Exit(1)
@@ -3792,12 +3794,23 @@ def mt5_fetch_cmd(
         broker.shutdown()
     path = save_bars(df, settings.data.cache_dir, symbol, timeframe)
     meta = cache_metadata(df, timeframe)
+    offsets_path = path.with_suffix(".offsets.json")
+    offsets_path.write_text(
+        json.dumps(periods, indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    period_lines = "\n".join(
+        f"  {row['start'][:16]} → {row['end'][:16]} · {row['offset']:+.2f} h"
+        for row in periods
+    ) or "  sin tramos detectados"
     console.print(
         Panel(
             f"{symbol} · {timeframe}\n"
             f"Barras: {meta['rows']:,}\n"
             f"Rango: {meta['start']} → {meta['end']} ({meta['years']} años)\n"
-            f"Caché: {path}",
+            f"Offset por periodo ({len(periods)} tramos):\n{period_lines}\n"
+            f"Caché: {path}\n"
+            f"Offset sidecar: {offsets_path}",
             title="MT5 fetch (solo lectura)",
         )
     )
@@ -4724,6 +4737,11 @@ def research_intraday_cmd(
     timeframe: str = typer.Option("M15", "--timeframe"),
     paths: int = typer.Option(500, "--paths"),
     point: float = typer.Option(0.0001, "--point"),
+    commission_bps: float = typer.Option(1.0, "--commission-bps"),
+    slippage_bps: float = typer.Option(2.0, "--slippage-bps"),
+    zero_spread: bool = typer.Option(
+        False, "--zero-spread", help="Diagnóstico: coste de spread 0"
+    ),
     out: str = typer.Option(None, "--out"),
 ) -> None:
     """Valida estrategias intradía sobre caché MT5 (DSR/PBO/WF/regímenes)."""
@@ -4741,15 +4759,40 @@ def research_intraday_cmd(
         timeframe=timeframe,
         paths=paths,
         point=point,
+        commission_bps=commission_bps,
+        slippage_bps=slippage_bps,
+        spread_override_bps=0.0 if zero_spread else None,
     )
     files = write(report, Path(out) if out else ROOT / "reports" / "research")
+    best = max(
+        report["outcomes"],
+        key=lambda row: row["metrics"]["sharpe"],
+        default=None,
+    )
+    best_text = (
+        f"Mejor Sharpe: {best['metrics']['sharpe']:.2f}"
+        if best is not None
+        else "Mejor Sharpe: sin datos"
+    )
+    costs = report.get("costs") or {}
+    cost_text = (
+        f"Costes: comisión {costs.get('commission_bps', 0):g} bps · "
+        f"slippage {costs.get('slippage_bps', 0):g} bps · "
+        f"spread {'0' if costs.get('spread_override_bps') == 0 else 'observado'} bps"
+    )
+    pbo_text = (
+        f"PBO: {report['pbo']['pbo']:.1%}"
+        if report.get("pbo")
+        else "PBO: sin datos"
+    )
     console.print(
         Panel(
             f"{symbol} · {timeframe} · {report['bars']['rows']:,} barras "
             f"({report['bars']['years']} años)\n"
             f"Spread confiable: {'sí' if report['spread_reliable'] else 'NO'}\n"
-            f"PBO: {report['pbo']['pbo']:.1%}" if report.get("pbo") else
-            f"{symbol} · {timeframe} · PBO sin datos",
+            f"{cost_text}\n"
+            f"{best_text}\n"
+            f"{pbo_text}",
             title="Intradía FX/CFD",
         )
     )

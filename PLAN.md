@@ -280,17 +280,26 @@ real, sin tocar `.env` y sin borrar archivos.
   - Kill-switch global, exposición agregada y capital por bolsillo con aviso si
     un clúster supera su presupuesto.
   - Evidencia: `pytest tests/test_fund_web.py -q` → 6 passed.
-- [x] **9.5 Intradía forex/CFD** — 2026-11-08
-  - `lab mt5 status`: `server_utc_offset_hours=2.00`, `offset_source=detectado`,
-    `offset_known=True`, `identity_ok=True`.
-  - `lab mt5 fetch`: M15 50.000 barras (2024-11-04 → 2026-11-08) y H1 20.000
-    (2023-08-21 → 2026-11-08); parquet UTC, sin duplicados, `NaN` ni OHLC
-    inválido; spread mediano 1/2 puntos y `spread_reliable=True`.
-  - `lab research-intraday --symbol EURUSD --timeframe M15`: 28 variantes,
-    **0/28 pasan**; PBO 0,0 % pero `prob_oos_loss=100 %`, walk-forward
-    **fallido** y todos los Sharpe negativos (mejor −7,72; MaxDD −50,4 %).
-  - No se relajó ningún umbral, no se activó ningún bot y no se enviaron
-    órdenes. El resultado es “sin edge” para las estrategias actuales.
+- [x] **9.5 Intradía forex/CFD** — 2026-11-08, corregido tras reapertura
+  - El primer informe usó offset constante y queda conservado como **no
+    fiable: offset constante** en `reports/research/intraday_offset_constante.*`.
+  - `execution/mt5_offsets.py`: offset por semana desde apertura dominical y
+    cierre del viernes en hora de servidor, contra 17:00 America/New_York;
+    confirma +2/+3 en las transiciones de EE. UU. (22:00/21:00 UTC).
+  - `MT5Broker.rates` aplica el offset de cada barra; `lab mt5 fetch` imprime
+    los tramos y escribe `EURUSD_<TF>.offsets.json`.
+  - M15: 50.000 barras, 2024-11-04 01:45 → 2026-11-08 23:45 UTC, 5 tramos.
+    H1: 20.000 barras, 2023-08-21 14:00 → 2026-11-08 23:00 UTC, 8 tramos.
+    Parquet UTC sin duplicados, `NaN` ni OHLC inválido; spread mediano 1/2
+    puntos y `spread_reliable=True`.
+  - Neto corregido: **0/28 pasan**, mejor Sharpe **−8,19**, PBO 0,0 % con
+    `prob_oos_loss=100 %`, walk-forward fallido.
+  - Diagnóstico sin costes: mejor bruto **+1,34**, pero PBO 39,4 % y WF
+    fallido; la misma pullback cae a −24,79 neto y la mejor neta (ORB) tiene
+    bruto −0,91. Los costes explican el desplome, sin edge bruto robusto.
+  - Alineación verificada: aperturas semanales 22:00 UTC (invierno) y 21:00
+    UTC (verano). No se relajó ningún umbral, no se activó ningún bot y no se
+    enviaron órdenes.
 - [x] **9.6 Documentación** — 2026-11-07
   - README 6d con cuentas, reglas, seguridad, panel, resultados por perfil y
     estado de la etapa 5; tabla por perfil también en Research.
@@ -845,6 +854,7 @@ operador ni datos. Inventario base en `docs/ui_inventory.json` y test
 | 2026-11-08 | UI v3 Etapa 2 | `pytest tests/test_console_shell.py -q` -> 6 passed; `pytest -q` -> 411 passed; KPIs delta/sparkline, gauges de colchon/DD/salud, chips con icono, densidad persistida, skeletons y reduced-motion |
 | 2026-11-08 | UI v3 Etapa 3 | `pytest tests/test_console_shell.py -q` -> 7 passed; `pytest -q` -> 412 passed; equity SVG con cruz/marcas/bandas, heatmaps PnL y correlacion, sin curvas inventadas |
 | 2026-11-08 | UI v3 Etapa 4 | `pytest tests/test_console_shell.py -q` -> 8 passed; `pytest -q` -> 413 passed; foco visible, skip-link, aria-current, flechas, Ctrl+K, responsive 390px y refresco 8s sin re-render |
-| 2026-11-08 | 9.5 Intradia | `lab mt5 status` -> offset +2.00 detectado; M15 50k + H1 20k; `lab research-intraday` -> 0/28, WF fallido, spread real; sin activar bots |
+| 2026-11-08 | 9.5 inicial (NO FIABLE: offset constante) | `lab mt5 status` -> offset +2.00 detectado; M15 50k + H1 20k; `lab research-intraday` -> 0/28, WF fallido, spread real; sin activar bots |
+| 2026-11-08 | 9.5 offset corregido | `pytest tests/test_mt5_offsets.py tests/test_intraday.py -q` -> 11 passed; offset por periodo +2/+3 (5 tramos M15, 8 H1); neto mejor -8.19, bruto +1.34; 0/28; WF fallido |
 | 2026-11-08 | UI formato/metricas | `pytest tests/test_console_js.py tests/test_console_shell.py -q` -> 11 passed; `pytest -q` -> 416 passed; gauges restantes, cero negativo, moneda agrupada, salud parcial, performers y regimen compacto |
 |  |  |  |

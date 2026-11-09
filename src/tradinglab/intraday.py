@@ -104,13 +104,22 @@ def backtest_intraday(
     commission_bps: float = 1.0,
     slippage_bps: float = 2.0,
     point: float = 0.0001,
+    spread_override_bps: float | None = None,
 ) -> dict:
-    """Retorno neto con costes por spread horario, slippage y comisión."""
+    """Retorno neto con costes por spread horario, slippage y comisión.
+
+    `spread_override_bps=0` es solo diagnóstico: conserva la fiabilidad real
+    del spread observado, pero elimina su coste para medir el Sharpe bruto.
+    """
     close = pd.to_numeric(df["close"], errors="coerce")
     pos = target.reindex(df.index).fillna(0.0).clip(-1.0, 1.0).shift(1).fillna(0.0)
     gross = close.pct_change().fillna(0.0) * pos
     turnover = pos.diff().abs().fillna(pos.abs())
-    spread, reliable = _spread_bps(df, point)
+    observed_spread, reliable = _spread_bps(df, point)
+    if spread_override_bps is None:
+        spread = observed_spread
+    else:
+        spread = pd.Series(float(spread_override_bps), index=df.index)
     cost_bps = float(commission_bps) + float(slippage_bps) + spread
     net = gross - turnover * cost_bps / 10_000.0
     equity = (1.0 + net).cumprod()
@@ -129,6 +138,8 @@ def backtest_intraday(
             "bars": int(len(net)),
         },
         "spread_bps_median": float(spread.median()) if len(spread) else 0.0,
+        "spread_observed_bps_median": float(observed_spread.median()) if len(observed_spread) else 0.0,
+        "spread_override_bps": spread_override_bps,
         "spread_reliable": reliable,
     }
 
@@ -277,6 +288,7 @@ def run_intraday(
     point: float = 0.0001,
     commission_bps: float = 1.0,
     slippage_bps: float = 2.0,
+    spread_override_bps: float | None = None,
 ) -> dict:
     """Valida las estrategias intradía con los controles existentes."""
     profile = get_profile("intraday_fx")
@@ -294,6 +306,7 @@ def run_intraday(
                 commission_bps=commission_bps,
                 slippage_bps=slippage_bps,
                 point=point,
+                spread_override_bps=spread_override_bps,
             )
             key = f"{name}|{json.dumps(params, sort_keys=True)}"
             returns_by_id[key] = bt["returns"]
@@ -385,6 +398,14 @@ def run_intraday(
         "timeframe": timeframe,
         "bars": cache_metadata(df, timeframe),
         "profile": profile.id,
+        "costs": {
+            "commission_bps": float(commission_bps),
+            "slippage_bps": float(slippage_bps),
+            "spread_override_bps": spread_override_bps,
+            "diagnostic_zero_costs": spread_override_bps == 0
+            and commission_bps == 0
+            and slippage_bps == 0,
+        },
         "spread_reliable": all(row["spread_reliable"] for row in outcomes),
         "pbo": pbo,
         "walk_forward": wf.to_dict() if wf else None,
@@ -404,6 +425,16 @@ def render_markdown(report: dict) -> str:
         f"- Barras: {report['bars']['rows']:,} · {report['bars']['start']} → {report['bars']['end']} · {report['bars']['years']} años",
         f"- Perfil: {report['profile']} · DSR n_trials={report['n_trials']}",
         f"- Spread realista: {'sí' if report['spread_reliable'] else 'NO — resultados no confiables'}",
+        (
+            f"- Costes: comisión {report.get('costs', {}).get('commission_bps', 1.0):g} bps"
+            f" + slippage {report.get('costs', {}).get('slippage_bps', 2.0):g} bps"
+            f" + spread {report.get('costs', {}).get('spread_override_bps') if report.get('costs', {}).get('spread_override_bps') is not None else 'observado'}"
+        ),
+        (
+            "- **Diagnóstico zero-cost: no usar para aprobar estrategias.**"
+            if report.get("costs", {}).get("diagnostic_zero_costs")
+            else "- Modelo de costes normal."
+        ),
         f"- PBO: {report['pbo']['pbo']:.1%}" if report.get("pbo") else "- PBO: sin datos",
         f"- Walk-forward: {report['walk_forward_verdict']}",
         f"- Pasan: {report['passed']}/{len(report['outcomes'])}",

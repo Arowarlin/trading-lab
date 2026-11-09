@@ -59,6 +59,37 @@ def test_backtest_intraday_costes_y_spread():
     assert backtest_intraday(no_spread, target, timeframe="M15")["spread_reliable"] is False
 
 
+def test_backtest_zero_costs_es_diagnostico():
+    df = _bars()
+    target = opening_range_breakout(df).target
+    normal = backtest_intraday(df, target, timeframe="M15")
+    zero = backtest_intraday(
+        df,
+        target,
+        timeframe="M15",
+        commission_bps=0.0,
+        slippage_bps=0.0,
+        spread_override_bps=0.0,
+    )
+    assert zero["spread_reliable"] is True
+    assert zero["spread_bps_median"] == 0.0
+    assert zero["spread_observed_bps_median"] > 0
+    assert zero["metrics"]["sharpe"] >= normal["metrics"]["sharpe"]
+
+
+def test_run_intraday_marca_costes_cero():
+    df = _bars(days=30)
+    report = run_intraday(
+        df,
+        paths=10,
+        commission_bps=0.0,
+        slippage_bps=0.0,
+        spread_override_bps=0.0,
+    )
+    assert report["costs"]["diagnostic_zero_costs"] is True
+    assert "Diagnóstico zero-cost" in render_markdown(report)
+
+
 def test_tres_estrategias_generan_targets():
     df = _bars()
     for fn in (opening_range_breakout, trend_pullback, asian_range_reversal):
