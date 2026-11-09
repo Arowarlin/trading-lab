@@ -4046,6 +4046,11 @@ def mt5_spec(symbol: str = typer.Argument(..., help="Ej. EURUSD")) -> None:
     for k, v in spec.items():
         t.add_row(k, f"{v:,.5f}" if isinstance(v, float) else str(v))
     t.add_row("pip_size", f"{inst.pip_size():g}" if inst.is_fx else "n/a")
+    t.add_row("sesion_catalogo", f"{inst.session} ({inst.session_tz})")
+    t.add_row(
+        "spread_catalogo",
+        f"{inst.spread:g}" if inst.spread is not None else (inst.spread_note or "sin datos"),
+    )
     console.print(t)
 
 
