@@ -351,31 +351,71 @@ tests/test_scripts.py -q` → **19 passed**; suite completa **474 passed**;
 `ruff` limpio; `lab doctor` OK con WARN conocidos. No se lanzó ningún deep
 real: los tests usan runners simulados.
 
+### Validación de esquema y comparación de modelos (etapa 5)
+
+- `chat_json` valida el subconjunto de JSON Schema usado por los agentes
+  (objetos, arrays, enums, requeridos, tipos, rangos y campos extra). El
+  resultado queda en `llm_calls.schema_ok`/`schema_error`, sin guardar el texto
+  completo del modelo.
+- `lab llm status` muestra llamadas validadas, fallidas y los últimos errores
+  por modelo. Un fallo de esquema no se convierte en una decisión válida.
+- `lab llm compare TICKER --models actual,candidato` ejecuta dos modelos lite
+  con el mismo prompt y fecha. Guarda rating, confianza, duración, hashes y
+  errores saneados en `lite_model_comparisons`; **no cambia el modelo por
+  defecto**. `lab llm report` agrega acuerdo y confianza; con menos de 30
+  comparaciones marca muestra insuficiente.
+- La comparación real contra un MoE ~30B queda pendiente: LM Studio solo tiene
+  cargado `qwen/qwen3.8-27b` y un modelo de embeddings.
+
+```powershell
+lab llm status
+lab llm compare SPY --models qwen/qwen3.8-27b,moe-30b
+lab llm report
+```
+
 ---
 
 ## 4b. Información continua (`intel`)
 
-Fase 4 inicial: RSS de Yahoo Finance, saneado y almacenado en SQLite. **No hay
-herramientas de ejecución en esta capa** y todo el texto entra como
+Fase 4: RSS de Yahoo Finance y Finnhub, saneado y almacenado en SQLite. **No
+hay herramientas de ejecución en esta capa** y todo el texto entra como
 `trusted=false`.
 
 ```powershell
-.\.venv\Scripts\lab.exe intel fetch
+.\.venv\Scripts\lab.exe intel fetch --retries 2
+.\.venv\Scripts\lab.exe intel finnhub --limit 20
+.\.venv\Scripts\lab.exe intel score --limit 20 --batch-size 8
 .\.venv\Scripts\lab.exe intel status
+.\.venv\Scripts\lab.exe intel providers --check
 .\.venv\Scripts\lab.exe intel fred --days 90
 .\.venv\Scripts\lab.exe intel calendar
 ```
 
 - `news_items`: URL, fuente, hora UTC, hash, título/resumen recortados.
-- `news_scores`: esquema creado; scoring con Qwen pendiente.
+- `news_scores`: sentimiento (-1..1) y relevancia (0..1) por noticia, modelo y
+  versión. El scoring con Qwen usa el texto delimitado como no confiable y es
+  idempotente; una respuesta inválida no genera puntuaciones inventadas.
 - `macro_events`: FRED + eventos manuales. El guard usa `news_blackout_min`
   sobre esta tabla.
-- **Decisión FinBERT:** no se incorpora por ahora. `ProsusAI/finbert` tiene
-  licencia **CC-BY-NC-SA 4.0** (no comercial); el análisis inicial de noticias
-  se hará con Qwen. No se descarga ningún modelo nuevo.
+- **RSS**: reintentos con backoff solo para 429/5xx/red; 401/404 no se
+  reintentan. Si todas las fuentes fallan, `lab intel fetch` devuelve error.
+- **Finnhub** es el proveedor alternativo. `lab intel providers --check` valida
+  la clave con una lectura de SPY sin imprimirla. OpenBB no está instalado y no
+  se añade como dependencia.
+- **Decisión FinBERT:** no se incorpora. `ProsusAI/finbert` tiene licencia
+  **CC-BY-NC-SA 4.0** (no comercial); el análisis se hace con Qwen.
 - `wrap_untrusted()` delimita el texto y ordena al LLM no seguir instrucciones
   contenidas; hay test de prompt injection.
 - Tarea **`TradingLab-Intel`** a las 07:10; logs en `logs/intel/`.
+
+`scripts/intel_daily.ps1` acepta `-Finnhub` y `-Score`; la tarea registrada
+actual no los activa, así que la ingesta RSS sigue igual hasta que se cambie
+manualmente. El modelo de scoring se toma de `config/intel.yaml`
+(`qwen/qwen3.8-27b`) sin cambiar el default de `lab.yaml`.
+
+Verificación real del 2026-11-09: Finnhub respondió `ok`, se guardaron 10
+noticias nuevas y `lab intel score --limit 2 --model qwen/qwen3.8-27b` puntuó
+2/2 sin inválidas ni ausentes. Quedaron 89 pendientes.
 
 ### FRED y calendario macro
 
@@ -406,8 +446,8 @@ guarda los eventos en `macro_events` con impacto `high`:
   Federal (<https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm>) y
   se inserta con `lab intel event FOMC --at ...`.
 
-- Pendiente Fase 4: scoring barato, OpenBB, reintentos por fuente y proveedor
-  de noticias alternativo.
+- Fase 4: scoring Qwen, reintentos por fuente y Finnhub implementados. OpenBB
+  no se instala; si se necesita, se evaluará en un venv separado.
 
 ---
 

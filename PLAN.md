@@ -123,24 +123,33 @@ Reglas de trabajo:
     variantes planas y PBO sin planas (informativo).
 - [x] **3.3 Monte Carlo block bootstrap** — ya existía y research usa
   `block_size=5`; documentado.
-- [ ] **3.4 Optuna** para explorar parámetros con validación walk-forward.
-- [ ] **3.5 QuantStats** para el HTML de cada propuesta frente a SPY.
+- [x] **3.4 Optuna** para explorar parámetros con validación walk-forward.
+  - Completado en la Etapa 7 de optimización; walk-forward sobre desarrollo,
+    holdout intacto y trials registrados en el contador DSR.
+- [x] **3.5 QuantStats** para el HTML de cada propuesta frente a SPY.
+  - Completado en la Etapa 7; HTML por propuesta con benchmark y sin cambiar
+    los umbrales de aprobación.
 - [x] **3.6 Criterio**: research completo con datos sintéticos en tests
   (`tests/test_research.py`) y barrido real con PBO/walk-forward/DSR.
 
 ## Fase 4 — Capa de información continua
 
-- [ ] **4.1 Fuentes**: RSS Yahoo y SEC EDGAR operativos; FRED operativo para
-  CPI/NFP; Finnhub y OpenBB pendientes de conectar/verificar.
-- [ ] **4.2 Triaje barato**: FinBERT o modelo local pequeño; medir latencia/RAM.
-  - Decisión 2026-11-07: **no usar FinBERT** (CC-BY-NC-SA 4.0, no comercial);
-    usar Qwen inicialmente. No se descarga modelo nuevo.
+- [x] **4.1 Fuentes**: RSS Yahoo y SEC EDGAR operativos; FRED operativo para
+  CPI/NFP; Finnhub implementado y verificado con lectura de SPY; OpenBB no
+  instalado y no se usa (no se añade dependencia).
+- [x] **4.2 Triaje barato**: scoring de noticias con Qwen en `news_scores`.
+  - FinBERT descartado por licencia CC-BY-NC-SA 4.0; no se descarga modelo nuevo.
+  - `lab intel score` sanea/delimita el texto y devuelve sentimiento/relevancia;
+    sin respuesta válida no se inventan puntuaciones.
+  - Verificado con 2 noticias reales y el modelo `qwen/qwen3.8-27b`.
 - [x] **4.3 Esquema** — 2026-11-07
   - `news_items`, `news_scores`, `macro_events`; dedupe por hash, trusted=false.
 - [x] **4.4 Seguridad** — 2026-11-07
   - `sanitize_untrusted` + `wrap_untrusted`; test de noticia con instrucciones.
-- [ ] **4.5 Planificador**: `TradingLab-Intel` 07:10 + logs/alerta; faltan
-  reintentos por fuente.
+- [x] **4.5 Planificador**: `TradingLab-Intel` 07:10 + logs/alerta.
+  - Reintentos con backoff solo para fallos transitorios (429/5xx/red); un
+    404/401 no se reintenta y la ingesta devuelve código distinto de cero si
+    fallan todas las fuentes.
 - [x] **4.6 Calendario → guard** — 2026-11-07
   - `news_blackout_min` (antes/después), `weekend_holding` + `friday_cutoff_hour`
     en Europe/Prague, `rollover_blackout_min`; proveedor abstracto y cierres
@@ -149,14 +158,20 @@ Reglas de trabajo:
 ## Fase 5 — Medir si el LLM aporta algo + memoria
 
 - [x] **5.1 Salida estructurada** — 2026-11-07
-  - `lite` ya usa `json_schema` estricto; los fallos quedan en `llm_calls`.
-  - Pendiente: conteo explícito de fallos de validación de esquema.
+  - `lite` usa `json_schema` estricto; `chat_json` valida el subconjunto de
+    JSON Schema y guarda `schema_ok`/`schema_error` en `llm_calls`.
+  - `lab llm status` muestra validadas, fallidas y últimos errores por modelo.
 - [x] **5.2 `decision_outcomes`** — 2026-11-07
   - Tabla + `lab decisions update` con retorno a 1/5/20 días hábiles.
 - [x] **5.3 Línea base** — 2026-11-07
   - `lab decisions report` compara LLM lite, buy&hold y señal trend sobre las
     mismas fechas, con retorno medio, hit rate, N y aviso de muestra insuficiente.
 - [ ] **5.4 Comparar MoE ~30B** vs modelo actual en lite; no cambiar el default.
+  - Marco listo: `lab llm compare TICKER --models actual,candidato` y
+    `lab llm report`, con tabla `lite_model_comparisons`, errores saneados y
+    aviso de muestra <30. No se cambia el modelo por defecto.
+  - Bloqueado para ejecución real: en LM Studio no hay un MoE ~30B cargado;
+    solo `qwen/qwen3.8-27b` y un modelo de embeddings.
 - [x] **5.5 Versionado de prompts** — 2026-11-07
   - `prompt_version` + `prompt_hash` guardados por decisión lite; deep usa hash simple.
 
@@ -982,6 +997,31 @@ etapa.
   `ruff` limpio; `lab doctor` OK con WARN conocidos; `lab f13 config-check`
   OK (hash sin cambios). Sin activar bots, sin órdenes y sin abrir deep real.
 
+### Fases 4 y 5 — Noticias y validación de modelos (2026-11-09)
+
+- [x] **Noticias**
+  - Reintentos RSS con backoff solo para 429/5xx/red; 401/404 no se reintentan.
+  - Finnhub como proveedor alternativo verificado (`lab intel providers --check`);
+    se descargaron 10 noticias reales saneadas y con `trusted=false`.
+  - Scoring con Qwen: prompt con texto delimitado como no confiable, schema
+    estricto, sentimiento/relevancia y escritura idempotente en `news_scores`.
+  - `lab intel score` procesó 2 noticias reales con `qwen/qwen3.8-27b`; 89
+    quedaron pendientes para las siguientes pasadas. OpenBB no está instalado
+    y no se añadió como dependencia.
+- [x] **Validación de esquema**
+  - `validate_schema` cubre objetos, arrays, enums, requeridos, tipos, rangos y
+    `additionalProperties:false`.
+  - `llm_calls.schema_ok/schema_error` se rellena tras cada `chat_json` con
+    schema; `lab llm status` muestra el conteo explícito.
+- [x] **Comparación de modelos (marco)**
+  - `lite_model_comparisons`, `lab llm compare` y `lab llm report`; no cambia
+    el default ni envía órdenes.
+  - La ejecución real contra un MoE ~30B queda pendiente porque no hay ese
+    modelo cargado en LM Studio.
+- Evidencia: suite completa **501 passed**; `ruff` limpio; `lab doctor` OK con
+  WARN conocidos; `lab f13 config-check` OK. Verificación real: Finnhub `ok`,
+  10 noticias nuevas y scoring 2/2 con `qwen/qwen3.8-27b` sin inválidas.
+
 ---
 
 ## Registro de evidencias
@@ -1068,5 +1108,6 @@ etapa.
 | 2026-11-09 | Incubadora Etapa 5 | `pytest tests/test_lifecycle.py -q` -> 7 passed; `pytest -q` -> 465 passed; estados, gate, criterios congelados, reporte forward y limite concurrente; sin activar bots |
 | 2026-11-09 | Procedencia Etapa 6 | `pytest tests/test_agent_compare.py tests/test_decisions.py tests/test_scripts.py -q` -> 19 passed; `pytest -q` -> 474 passed; comparacion lite/deep, procedencia, reporte por fuente y scripts nocturnos sin registrar |
 | 2026-11-09 | UI Etapa 7 | `pytest tests/test_web.py tests/test_console_shell.py tests/test_console_js.py tests/test_agent_compare.py tests/test_lifecycle.py -q` -> 46 passed; `pytest -q` -> 477 passed; vista Activo, Incubadora, lite/deep y desglose por fuente; 17 vistas/267 ids/34 API sin retirar las anteriores |
+| 2026-11-09 | Fases 4-5 | `pytest -q` -> 501 passed; Finnhub real ok + 10 noticias; scoring Qwen 2/2; `llm status` con schema_ok; `ruff`/doctor/f13 OK; MoE real bloqueado por modelo no cargado |
 | 2026-11-08 | UI formato/metricas | `pytest tests/test_console_js.py tests/test_console_shell.py -q` -> 11 passed; `pytest -q` -> 416 passed; gauges restantes, cero negativo, moneda agrupada, salud parcial, performers y regimen compacto |
 |  |  |  |
