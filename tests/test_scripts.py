@@ -79,6 +79,42 @@ def test_telegram_scripts_preparados_sin_registrar():
     assert "no se ejecuta" in register.lower()
 
 
+def test_premarket_scripts_nativos_sin_trading_r1():
+    daily = (ROOT / "scripts" / "premarket_daily.ps1").read_text(encoding="utf-8")
+    assert "premarket --send" in daily
+    assert "PreflightOnly" in daily
+    assert "trading_r1" not in daily.lower()
+    assert "orchestrate" not in daily.lower()
+    assert "--execute" not in daily.lower()
+
+    register = (ROOT / "scripts" / "register_premarket_task.ps1").read_text(
+        encoding="utf-8"
+    )
+    assert "Register-ScheduledTask" in register
+    assert "TradingLab-Premarket" in register
+    assert "07:45" in register
+    assert "premarket_daily.ps1" in register
+    assert "sin ordenes" in register.lower()
+
+
+def test_resume_after_reboot_reabre_sesion_exacta():
+    resume = (ROOT / "scripts" / "resume_after_reboot.ps1").read_text(
+        encoding="utf-8"
+    )
+    assert "ses_e5220563affelHrJU9DmgfjCb3" in resume
+    assert "opencode --session" in resume
+    assert "wt.exe" in resume
+    assert "Unregister-ScheduledTask" in resume
+
+    register = (ROOT / "scripts" / "register_resume_task.ps1").read_text(
+        encoding="utf-8"
+    )
+    assert "TradingLab-Resume" in register
+    assert "AtLogOn" in register
+    assert "Register-ScheduledTask" in register
+    assert "resume_after_reboot.ps1" in register
+
+
 def test_deep_compare_scripts_preparados_sin_registrar():
     nightly = (ROOT / "scripts" / "deep_compare_nightly.ps1").read_text(
         encoding="utf-8"
