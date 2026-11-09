@@ -1610,6 +1610,21 @@ Opciones, en orden recomendado:
 3. Parchear `trading_r1/state/fileio.py` para Windows. No recomendado: hay más
    supuestos Unix en el proyecto.
 
+### Fallback nativo sin WSL
+
+Mientras WSL no esté listo, `lab premarket` genera el informe diario con Qwen
+local, datos de la caché, calendario macro y envío opcional a Telegram. No usa
+Trading-R1, no activa bots y no envía órdenes.
+
+```powershell
+lab premarket --tickers SPY,QQQ,NVDA --out logs\premarket\premarket.md
+lab premarket --tickers SPY,QQQ,NVDA --send
+```
+
+La tarea `TradingLab-Premarket` (L-V 07:45) es opcional y se registra con
+`scripts/register_premarket_task.ps1`. El script `scripts/resume_after_reboot.ps1`
+reabre Windows Terminal y la sesión exacta de OpenCode después del reinicio.
+
 ---
 
 ## 8. Programación diaria (Windows Task Scheduler)
@@ -2211,7 +2226,7 @@ lab library show dsr
 ```
 
 Evidencia: `pytest tests/test_library.py -q` → **4 passed**; suite completa
-**521 passed**; `ruff` limpio; `lab doctor` OK. Sin dependencias nuevas ni
+**527 passed**; `ruff` limpio; `lab doctor` OK. Sin dependencias nuevas ni
 automatización de scraping.
 
 ---
@@ -2290,7 +2305,7 @@ rollover/vencimiento. `continuous.stitch_continuous` une contratos ajustando
 el salto por ratio o diferencia; los tests cubren ambos métodos.
 
 Evidencia: `pytest tests/test_ticks.py tests/test_continuous.py
-tests/test_engine.py -q` → **18 passed**; suite completa **521 passed**;
+tests/test_engine.py -q` → **18 passed**; suite completa **527 passed**;
 `ruff` limpio. Sin descarga de datos de pago ni órdenes.
 
 ---
