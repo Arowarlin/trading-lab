@@ -111,10 +111,18 @@ def test_resume_after_reboot_reabre_sesion_exacta():
     resume = (ROOT / "scripts" / "resume_after_reboot.ps1").read_text(
         encoding="utf-8"
     )
-    assert "ses_e5220563affelHrJU9DmgfjCb3" in resume
-    assert "opencode --session" in resume
+    terminal = (ROOT / "scripts" / "resume_terminal.ps1").read_text(
+        encoding="utf-8"
+    )
+    assert "resume_terminal.ps1" in resume
+    assert (
+        "powershell.exe -NoExit -NoProfile -ExecutionPolicy Bypass -File" in resume
+    )
+    assert "last_boot.txt" in resume
     assert "wt.exe" in resume
-    assert "Unregister-ScheduledTask" in resume
+    assert "Unregister-ScheduledTask" not in resume  # requiere elevacion
+    assert "opencode --session" in terminal
+    assert "ses_e5220563affelHrJU9DmgfjCb3" in terminal
 
     register = (ROOT / "scripts" / "register_resume_task.ps1").read_text(
         encoding="utf-8"

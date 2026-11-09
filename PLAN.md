@@ -1064,11 +1064,14 @@ etapa.
   - Tarea `TradingLab-DeepCompare` registrada y en estado `Ready` (02:30).
 - [ ] **F7 Trading-R1**
   - WSL: características `Microsoft-Windows-Subsystem-Linux` y
-    `VirtualMachinePlatform` habilitadas; falta reiniciar e instalar Ubuntu.
+    `VirtualMachinePlatform` habilitadas; falta instalar Ubuntu
+    (`wsl --status` devuelve exit 50).
   - Fallback nativo `lab premarket` con Qwen, datos, calendario y Telegram;
     no usa Trading-R1 ni envía órdenes.
   - `TradingLab-Resume` reabrirá Windows Terminal y la sesión exacta de OpenCode
     tras el reinicio; guía en `docs/reinicio_wsl.md`.
+    Fix 2026-11-09: usa `scripts/resume_terminal.ps1` con `-File` y un marcador
+    por arranque, porque `wt.exe` partía el comando inline en cada `;`.
   - Se mantiene sin claves Tauric ni cambios de Telegram.
 - Evidencia: `pytest tests/test_ticks.py tests/test_continuous.py
   tests/test_engine.py -q` → 18 passed; suite completa **531 passed**; `ruff` limpio;
@@ -1168,4 +1171,5 @@ etapa.
 | 2026-11-09 | F7 fallback/resume | `pytest tests/test_premarket.py tests/test_scripts.py -q` -> 14 passed; suite 527; premarket Qwen 3/3 + Telegram; TradingLab-Premarket y TradingLab-Resume Ready |
 | 2026-11-09 | CLI/OAuth/readiness | `pytest -q` -> 531 passed; `lab backtest --session`, `lab futures stitch`, `lab tradestation auth-url|exchange`, `lab readiness` |
 | 2026-11-08 | UI formato/metricas | `pytest tests/test_console_js.py tests/test_console_shell.py -q` -> 11 passed; `pytest -q` -> 416 passed; gauges restantes, cero negativo, moneda agrupada, salud parcial, performers y regimen compacto |
+| 2026-11-09 | Fix reapertura tras reinicio | `pytest -q --basetemp=...` -> 531 passed; `ruff` limpio; `lab doctor` OK; `resume_after_reboot.ps1` omite si ya corrió en el arranque; `wt.exe` ya no parte el comando por `;` |
 |  |  |  |

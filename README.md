@@ -1623,8 +1623,11 @@ lab premarket --tickers SPY,QQQ,NVDA --send
 ```
 
 La tarea `TradingLab-Premarket` (L-V 07:45) es opcional y se registra con
-`scripts/register_premarket_task.ps1`. El script `scripts/resume_after_reboot.ps1`
-reabre Windows Terminal y la sesión exacta de OpenCode después del reinicio.
+`scripts/register_premarket_task.ps1`. La tarea `TradingLab-Resume` reabre
+Windows Terminal y la sesión exacta de OpenCode al iniciar sesión, una vez por
+arranque, ejecutando `scripts/resume_terminal.ps1` con `-File` para que `wt.exe`
+no interprete los `;` como comandos. Queda registrada; para quitarla hace falta
+una consola elevada.
 
 ---
 

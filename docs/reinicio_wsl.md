@@ -2,12 +2,17 @@
 
 Fecha: 2026-11-09.
 
-## Estado antes de reiniciar
+## Estado tras el reinicio
 
 - `Microsoft-Windows-Subsystem-Linux` y `VirtualMachinePlatform`: **Enabled**.
-- `wsl --status` sigue fallando hasta reiniciar.
-- La tarea `TradingLab-Resume` reabrirá Windows Terminal y la sesión exacta
-  `ses_e5220563affelHrJU9DmgfjCb3` de OpenCode después del login.
+- `wsl --status` devuelve "no está instalado" (exit 50): falta
+  `wsl --install -d Ubuntu`.
+- La tarea `TradingLab-Resume` reabre Windows Terminal y la sesión exacta
+  `ses_e5220563affelHrJU9DmgfjCb3` de OpenCode al iniciar sesión, como máximo
+  una vez por arranque. Lanza `scripts/resume_terminal.ps1` con `-File` para
+  que `wt.exe` no parta el comando por los `;`. Queda registrada: quitarla
+  requiere una consola elevada
+  (`Unregister-ScheduledTask -TaskName TradingLab-Resume -Confirm:$false`).
 - `scripts/reboot_after_download.ps1` espera a que termine la descarga del MoE y
 programa el reinicio con 120 s de aviso; si el modelo no aparece, no reinicia.
 Si hay que cancelar: `shutdown /a`.

@@ -1,5 +1,5 @@
-# Registra la reapertura única de Windows Terminal + OpenCode tras el reinicio.
-# La tarea se elimina sola después de abrir la sesión.
+# Registra la reapertura de Windows Terminal + OpenCode tras el reinicio.
+# La tarea queda registrada y actúa como máximo una vez por arranque.
 $ErrorActionPreference = "Stop"
 
 $root = "E:\trading-lab"
