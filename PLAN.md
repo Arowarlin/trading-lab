@@ -1193,4 +1193,5 @@ etapa.
 | 2026-11-09 | Suite final Trading-R1 | `pytest -q --basetemp=...` -> 532 passed; `ruff` limpio; informe premarket 1 ronda + Telegram OK; runner local validado |
 | 2026-11-09 | MoE 30B vs actual | `lab llm compare` SPY/QQQ/NVDA -> Hold/Hold, media 62%/60%, 190-235s vs 71-79s, acuerdo 100%, n=3/30 |
 | 2026-11-09 | Tarea LLMCompare | `TradingLab-LLMCompare` Ready, L-V 18:30, `IgnoreNew`; preflight OK; suite 533 passed; sin ordenes |
+| 2026-11-09 | Comparacion 84 variantes eventos | `execution_model` antes `a8743f9` vs actual: tablas identicas, 0/84 cambios; es modelo de costes, no motor de eventos. Serie por activo (mediana): EURUSD Sharpe -6.79, coste 4.62 bps/op, equilibrio 0.00, 0 pasan; USDJPY -7.03, 5.38, 0.00, 0; XAUUSD -2.55, 6.27, 0.74, 0; US100 -2.01, 5.44, 0.00, 0. Evento real solo `caja_ny` US100 (4 variantes): Sharpe neto medio -3.10 -> -3.57 (-15.0%), session_skipped 0 -> 31.510/variante, DSR 121/116 sin cambios. No se invento session_skipped para las 84. |
 |  |  |  |
