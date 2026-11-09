@@ -930,6 +930,29 @@ lab risk-budget news --symbol EURUSD
 Evidencia: `pytest tests/test_risk_budget.py tests/test_intraday_bots.py -q`
 → **14 passed**; suite completa **458 passed**; `ruff` limpio; `lab doctor` OK.
 
+### Incubadora y ciclo de vida (etapa 5)
+
+`config/lifecycle.yaml` define la puerta y los criterios congelados. Estados:
+`candidato → incubando → evaluado → promovible`, más `rechazado` y
+`archivado`; **no existe ningún estado de dinero real**.
+
+- Puerta: datacheck ok, N mínimo de operaciones, coste de equilibrio
+  **≥1,5×** el calibrado y sin régimen catastrófico. Solo marca **elegible**.
+- Al pasar a `incubando` se congelan ventana, trades mínimos, Sharpe forward,
+  slippage máximo, deriva y brechas de guard, con hash.
+- `lab lifecycle status|report`: progreso, trades, Sharpe/expectancy forward,
+  slippage real vs supuesto, deriva y brechas. Al cerrar la ventana propone
+  **promovible** o **rechazado**; la decisión final es humana.
+- Límite de 3 bots incubando; cada uno suma una prueba al contador DSR.
+
+```powershell
+lab lifecycle status
+lab lifecycle report --bot eurusd-range-reversal
+```
+
+Evidencia: `pytest tests/test_lifecycle.py -q` → **7 passed**; suite completa
+**465 passed**; `ruff` limpio; `lab doctor` OK.
+
 ---
 
 ## 6e. Diario de operaciones (etapa 1)

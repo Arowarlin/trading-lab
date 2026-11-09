@@ -1,0 +1,15 @@
+# Puerta de incubación y criterios congelados al entrar en paper.
+# Valores iniciales conservadores. Nunca activa un bot: solo marca elegible.
+max_concurrent: 3
+gate:
+  require_datacheck_ok: true
+  min_trades: 10
+  min_breakeven_multiple: 1.5
+  forbid_catastrophic_regime: true
+criteria:
+  window_weeks: 4
+  min_trades: 10
+  min_forward_sharpe: 0.5
+  max_slippage_bps: 10.0
+  max_drift_status: "ok"
+  max_guard_breaches: 0

@@ -268,7 +268,9 @@ def count_incubated(db_path: str | Path) -> int:
         ).fetchone()
         if not exists:
             return 0
-        row = con.execute("SELECT COUNT(*) AS n FROM lifecycle_bots").fetchone()
+        row = con.execute(
+            "SELECT COUNT(*) AS n FROM lifecycle_bots WHERE frozen_at IS NOT NULL"
+        ).fetchone()
     return int(row["n"])
 
 

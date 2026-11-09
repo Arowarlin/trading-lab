@@ -909,7 +909,26 @@ etapa.
   → 14 passed; suite completa **458 passed**; `ruff` limpio; `lab doctor` OK;
   `lab f13 config-check` OK (hash `54b420360f17c75d…` sin cambios). Sin
   activar bots, sin órdenes y sin tocar los YAML prohibidos.
-- Etapas 5-7: pendientes.
+### Etapa 5 — Ciclo de vida e incubadora
+
+- [x] **Estados y historial**
+  - `candidato → incubando → evaluado → promovible`, más `rechazado` y
+    `archivado`; no existe ningún estado de dinero real.
+  - `lifecycle_bots` + `lifecycle_events` con actor, fecha y motivo.
+- [x] **Puerta de incubación** (`config/lifecycle.yaml`)
+  - Datacheck ok, N mínimo, coste de equilibrio ≥ 1,5× el calibrado y sin
+    régimen catastrófico. Solo marca elegible; nunca activa.
+  - Límite de bots incubando a la vez (3) y criterios congelados con hash al
+    entrar: ventana, min trades, Sharpe forward, slippage, deriva y brechas.
+- [x] **Reporte y decisión**
+  - `lab lifecycle status|report`: progreso, trades, Sharpe/expectancy
+    forward, slippage real vs supuesto, deriva y brechas.
+  - Al cerrar la ventana propone `promovible` o `rechazado`; la decisión final
+    exige `set_final_state` humano. Cada bot incubado suma una prueba al DSR.
+- Evidencia: `pytest tests/test_lifecycle.py -q` → 7 passed; suite completa
+  **465 passed**; `ruff` limpio; `lab doctor` OK; `lab f13 config-check` OK
+  (hash sin cambios). Sin activar bots, sin órdenes.
+- Etapas 6-7: pendientes.
 
 ---
 
@@ -994,5 +1013,6 @@ etapa.
 | 2026-11-09 | Universo Etapa 2 | `pytest tests/test_asset_aliases.py tests/test_intraday_bots.py -q` -> 7 passed; `pytest -q` -> 443 passed; alias MT5 US100.CASH/XAUUSD/EURUSD/USDJPY; guard rechaza aperturas fuera del universo; 8 bots intrad?a enabled:false |
 | 2026-11-09 | Validacion Etapa 3 | `pytest tests/test_intraday.py tests/test_mt5_offsets.py tests/test_asset_aliases.py tests/test_intraday_bots.py -q` -> 28 passed; `pytest -q` -> 448 passed; 4 activos M15, costes por activo, 0/84 pasan, DSR 117, informes por activo |
 | 2026-11-09 | Riesgo Etapa 4 | `pytest tests/test_risk_budget.py tests/test_intraday_bots.py -q` -> 14 passed; `pytest -q` -> 458 passed; budget 1%/0.25%/0.5%, neto por activo, cluster USD, news blackout, slices con historial y F13 lock |
+| 2026-11-09 | Incubadora Etapa 5 | `pytest tests/test_lifecycle.py -q` -> 7 passed; `pytest -q` -> 465 passed; estados, gate, criterios congelados, reporte forward y limite concurrente; sin activar bots |
 | 2026-11-08 | UI formato/metricas | `pytest tests/test_console_js.py tests/test_console_shell.py -q` -> 11 passed; `pytest -q` -> 416 passed; gauges restantes, cero negativo, moneda agrupada, salud parcial, performers y regimen compacto |
 |  |  |  |

@@ -423,6 +423,31 @@ CREATE TABLE IF NOT EXISTS risk_slice_history (
     reason TEXT,
     reverted_at TEXT
 );
+CREATE TABLE IF NOT EXISTS lifecycle_bots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    bot TEXT NOT NULL UNIQUE,
+    asset TEXT NOT NULL,
+    state TEXT NOT NULL DEFAULT 'candidato',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    start_date TEXT,
+    end_date TEXT,
+    criteria TEXT,
+    criteria_hash TEXT,
+    frozen_at TEXT,
+    evidence TEXT,
+    note TEXT
+);
+CREATE TABLE IF NOT EXISTS lifecycle_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts TEXT NOT NULL,
+    bot TEXT NOT NULL,
+    from_state TEXT,
+    to_state TEXT NOT NULL,
+    actor TEXT,
+    reason TEXT,
+    criteria_hash TEXT
+);
 
 CREATE TABLE IF NOT EXISTS model_registry (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

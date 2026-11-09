@@ -93,6 +93,10 @@ telegram_app = typer.Typer(
     no_args_is_help=True,
     help="Telegram remoto: setup, estado y puente de control.",
 )
+lifecycle_app = typer.Typer(
+    no_args_is_help=True,
+    help="Incubadora: estados, criterios congelados y reporte forward.",
+)
 risk_budget_app = typer.Typer(
     no_args_is_help=True,
     help="Riesgo neto por activo, clúster USD y rebanadas por bot.",
@@ -112,6 +116,7 @@ app.add_typer(decisions_app, name="decisions")
 app.add_typer(fund_app, name="fund")
 app.add_typer(operator_app, name="operator")
 app.add_typer(risk_budget_app, name="risk-budget")
+app.add_typer(lifecycle_app, name="lifecycle")
 app.add_typer(lessons_app, name="lessons")
 app.add_typer(reports_app, name="reports")
 app.add_typer(markets_app, name="markets")
@@ -5090,6 +5095,77 @@ def risk_budget_news_cmd(
     console.print(f"{symbol}: {status} · {result['reason']}")
     if not result["data_ok"]:
         console.print("[yellow]Sin datos de macro_events.[/yellow]")
+
+
+@lifecycle_app.command("status")
+def lifecycle_status_cmd() -> None:
+    """Estado de la incubadora, ventana y propuesta."""
+    from .lifecycle import status
+
+    rows = status(DEFAULT_DB, settings=get_settings())
+    if not rows:
+        console.print("[yellow]Sin datos: no hay bots en la incubadora.[/yellow]")
+        return
+    t = Table(title="Incubadora")
+    for col in ("Bot", "Activo", "Estado", "Progreso", "Trades", "Sharpe", "Deriva", "Propuesta"):
+        t.add_column(col, overflow="fold")
+    for row in rows:
+        metrics = row.get("metrics") or {}
+        t.add_row(
+            str(row.get("bot")),
+            str(row.get("asset")),
+            str(row.get("state")),
+            f"{row.get('progress_pct', 0):.0f}%",
+            str(metrics.get("n_trades", 0)),
+            "—" if metrics.get("sharpe") is None else f"{float(metrics['sharpe']):.2f}",
+            str((row.get("drift") or {}).get("status") or "sin datos"),
+            str(row.get("proposal") or "—"),
+        )
+    console.print(t)
+    failures = [
+        (row.get("bot"), row.get("failures") or [])
+        for row in rows
+        if row.get("state") in {"incubando", "evaluado"} and row.get("failures")
+    ]
+    for bot, reasons in failures:
+        console.print(f"[yellow]{bot}:[/yellow] {'; '.join(reasons)}")
+
+
+@lifecycle_app.command("report")
+def lifecycle_report_cmd(
+    bot: str = typer.Option(None, "--bot"),
+) -> None:
+    """Reporte forward: ventana, trades, Sharpe, slippage, deriva y brechas."""
+    from .lifecycle import report_bot, status
+
+    rows = (
+        [report_bot(DEFAULT_DB, bot, settings=get_settings())]
+        if bot
+        else status(DEFAULT_DB, settings=get_settings())
+    )
+    if not rows:
+        console.print("[yellow]Sin datos.[/yellow]")
+        return
+    for row in rows:
+        criteria = row.get("criteria") or {}
+        metrics = row.get("metrics") or {}
+        panel = Table(title=f"Incubadora · {row.get('bot')} · {row.get('state')}")
+        panel.add_column("Campo", style="bold")
+        panel.add_column("Valor", overflow="fold")
+        panel.add_row("Activo", str(row.get("asset")))
+        panel.add_row("Ventana", f"{row.get('start_date')} → {row.get('end_date')}")
+        panel.add_row("Progreso", f"{row.get('progress_pct', 0):.1f}% · faltan {row.get('days_left', '—')} días")
+        panel.add_row("Criterios", json.dumps(criteria, ensure_ascii=False, sort_keys=True))
+        panel.add_row("Hash", str(row.get("criteria_hash") or "—"))
+        panel.add_row("Trades", str(metrics.get("n_trades", 0)))
+        panel.add_row("Sharpe forward", "—" if metrics.get("sharpe") is None else f"{float(metrics['sharpe']):.2f}")
+        panel.add_row("Expectancy", "—" if metrics.get("expectancy") is None else f"{float(metrics['expectancy']):.2f}")
+        panel.add_row("Slippage p95", "—" if row.get("slippage_p95_bps") is None else f"{float(row['slippage_p95_bps']):.2f} bps")
+        panel.add_row("Deriva", str((row.get("drift") or {}).get("status") or "sin datos"))
+        panel.add_row("Brechas guard", str(row.get("guard_breaches", 0)))
+        panel.add_row("Propuesta", str(row.get("proposal") or "—"))
+        panel.add_row("Motivos", "; ".join(row.get("failures") or []) or "—")
+        console.print(panel)
 
 
 @app.command("research-clusters")
