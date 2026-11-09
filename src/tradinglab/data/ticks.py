@@ -112,7 +112,7 @@ def fetch_hour(
     point: float | None = None,
     client: httpx.Client | None = None,
     retries: int = 2,
-    backoff_s: float = 0.5,
+    backoff_s: float = 1.0,
 ) -> pd.DataFrame:
     own = client is None
     http = client or httpx.Client(timeout=20, follow_redirects=True)
@@ -145,10 +145,16 @@ def fetch_hour(
                     raise TickError(
                         f"Dukascopy no disponible: {type(exc).__name__}"
                     ) from exc
-                if backoff_s > 0:
+                wait = float(backoff_s) * (2**attempt)
+                if (
+                    isinstance(exc, httpx.HTTPStatusError)
+                    and exc.response.status_code == 429
+                ):
+                    wait = max(wait, 5.0)
+                if wait > 0:
                     import time
 
-                    time.sleep(float(backoff_s) * (2**attempt))
+                    time.sleep(wait)
         raise TickError("sin intentos")  # pragma: no cover
     finally:
         if own:
@@ -163,10 +169,15 @@ def fetch_day(
     point: float | None = None,
     client: httpx.Client | None = None,
     retries: int = 2,
+    min_interval_s: float = 0.5,
 ) -> pd.DataFrame:
     selected = list(range(24)) if hours is None else [int(hour) for hour in hours]
     frames = []
-    for hour in selected:
+    for index, hour in enumerate(selected):
+        if index and min_interval_s > 0:
+            import time
+
+            time.sleep(float(min_interval_s))
         frame = fetch_hour(
             symbol,
             day,

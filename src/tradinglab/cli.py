@@ -4582,6 +4582,9 @@ def ticks_fetch_cmd(
     point: float = typer.Option(None, "--point", help="Escala de precio si no está en el mapa"),
     out: Path = typer.Option(None, "--out", help="Directorio de parquet"),
     retries: int = typer.Option(2, "--retries"),
+    interval: float = typer.Option(
+        0.5, "--interval", help="Segundos entre horas para evitar HTTP 429"
+    ),
 ) -> None:
     """Descarga ticks Dukascopy y los guarda en parquet. No envía órdenes."""
     from .data.ticks import (
@@ -4605,6 +4608,7 @@ def ticks_fetch_cmd(
             hours=selected,
             point=point,
             retries=max(0, retries),
+            min_interval_s=max(0.0, interval),
         )
     except TickError as exc:
         console.print(f"[red]Dukascopy:[/red] {exc}")

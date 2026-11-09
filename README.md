@@ -2301,6 +2301,8 @@ lab research-intraday --symbol EURUSD --tick-spread data/cache/ticks/EURUSD_2025
   mapa (`EURUSD`, `USDJPY`, `XAUUSD`).
 - 404 = mercado cerrado o archivo vacío: se muestra **Sin datos**, no se
   inventan ticks.
+- Descarga secuencial con `--interval` (0,5 s por defecto); un 429 espera al
+  menos 5 s antes de reintentar. No lanzar varias descargas en paralelo.
 - Verificación real: EURUSD 2025-01-10 14:00 UTC → **15.997 ticks**, spread
   mediano **0,29 bps**; parquet generado.
 
