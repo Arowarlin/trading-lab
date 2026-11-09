@@ -1184,4 +1184,5 @@ etapa.
 | 2026-11-09 | WSL2 + Trading-R1 | WSL 3.0.3, Ubuntu 24.04.5, usuario pc; Trading-R1 0.1.1 en ~/.venv-r1; bun 1.4.4 nativo; mirrored + LM Studio HTTP 200; TUI viva |
 | 2026-11-09 | Runner Trading-R1 | `.\scripts\trading_r1_premarket.ps1 -PreflightOnly` -> backend 8765 + qwen3.8-27b OK; `pytest tests/test_scripts.py tests/test_docs.py -q` -> 16 passed |
 | 2026-11-09 | Trading-R1 premarket | 1 ronda, 2354 chars, datos locales, `Sin datos` donde falta; Telegram enviado; reporte en `reports/premarket/` |
+| 2026-11-09 | Suite final Trading-R1 | `pytest -q --basetemp=...` -> 532 passed; `ruff` limpio; informe premarket 1 ronda + Telegram OK; runner local validado |
 |  |  |  |
