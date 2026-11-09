@@ -2162,9 +2162,12 @@ Sin dependencias nuevas.
 
 ## 11j. Biblioteca de conocimiento
 
-`docs/biblioteca/library.yaml` es la fuente única de **15 fichas originales**;
+`docs/biblioteca/library.yaml` es la fuente única de **18 fichas originales**;
 `docs/biblioteca/README.md` se genera desde ella y `lab library list|show`
-permite consultarlas sin abrir el repositorio.
+permite consultarlas sin abrir el repositorio. Incluye **ResearchGate**,
+**Google Scholar** y **SSRN** como fuentes de investigación científica para
+consulta manual: no se automatiza scraping, no se saltan paywalls y no se
+consideran evidencia peer-reviewed por sí solas.
 
 Cada ficha incluye nombre, categoría, problema, enlace oficial, licencia,
 versión, fecha de revisión, dependencias, datos/costes, ventajas, riesgos,
@@ -2185,8 +2188,9 @@ lab library list --status descartada
 lab library show dsr
 ```
 
-Evidencia: `pytest tests/test_library.py -q` → **3 passed**; suite completa
-**396 passed**; `ruff` limpio; `lab doctor` OK. Sin dependencias nuevas.
+Evidencia: `pytest tests/test_library.py -q` → **4 passed**; suite completa
+**502 passed**; `ruff` limpio; `lab doctor` OK. Sin dependencias nuevas ni
+automatización de scraping.
 
 ---
 

@@ -1,7 +1,7 @@
 # Biblioteca de conocimiento de TradingLab.
 # Fuente única para `lab library list|show` y para docs/biblioteca/README.md.
 # Texto original; no se copia documentación de terceros.
-reviewed_at: "2026-11-08"
+reviewed_at: "2026-11-09"
 entries:
   - id: dsr
     name: Deflated Sharpe Ratio (DSR)
@@ -227,3 +227,48 @@ entries:
     tests: "No instalado"
     status: descartada
     reason: "No se adopta: Fase 8 mantiene el backtester propio."
+
+  - id: researchgate
+    name: ResearchGate
+    category: Fuente de investigación científica
+    problem: Localizar publicaciones, preprints y solicitudes de acceso directo a autores para revisión bibliográfica.
+    official_url: "https://www.researchgate.net/"
+    license: "Términos del sitio; los textos conservan el copyright de sus autores"
+    version: "n/a (servicio web)"
+    dependencies: "Consulta manual; sin API ni scraping integrado"
+    data_costs: "Gratis con cuenta y límites; algunos textos requieren solicitud al autor"
+    advantages: "Descubrimiento de papers y contacto con autores; útil para literatura gris."
+    risks: "No es una revista ni garantiza peer review; evitar scraping, respetar copyright y no usar un PDF sin licencia."
+    tests: "tests/test_library.py::test_biblioteca_carga_y_estructura (ficha)"
+    status: adoptada
+    reason: "Consulta manual para bibliografía; no es dependencia de ejecución ni fuente de datos automática."
+
+  - id: google-scholar
+    name: Google Scholar
+    category: Fuente de investigación científica
+    problem: Buscar literatura académica, citas y versiones de un paper para fundamentar hipótesis y metodologías.
+    official_url: "https://scholar.google.com/"
+    license: "Términos de Google Scholar; los resultados enlazan a contenido de terceros"
+    version: "n/a (servicio web)"
+    dependencies: "Consulta manual; sin API estable ni scraping integrado"
+    data_costs: "Gratis; respetar límites de uso y enlaces a editores"
+    advantages: "Cobertura amplia, citas y alertas; buen punto de partida para revisar evidencia."
+    risks: "Puede incluir versiones no revisadas o duplicadas; verificar DOI, revista y peer review antes de citar."
+    tests: "tests/test_library.py::test_biblioteca_carga_y_estructura (ficha)"
+    status: adoptada
+    reason: "Consulta manual para revisiones bibliográficas; no se automatiza scraping."
+
+  - id: ssrn
+    name: Social Science Research Network (SSRN)
+    category: Fuente de investigación científica
+    problem: Acceder a working papers y preprints de finanzas, economía y ciencias sociales.
+    official_url: "https://www.ssrn.com/"
+    license: "Términos de SSRN/Elsevier; copyright de los autores"
+    version: "n/a (servicio web)"
+    dependencies: "Consulta manual; sin API integrada"
+    data_costs: "Gratis con cuenta; algunos trabajos pueden requerir suscripción"
+    advantages: "Working papers actuales y acceso temprano a investigación en finanzas cuantitativas."
+    risks: "No todos están peer-reviewed; pueden cambiar de versión; no citar como definitivo sin DOI/revista."
+    tests: "tests/test_library.py::test_biblioteca_carga_y_estructura (ficha)"
+    status: adoptada
+    reason: "Consulta manual para working papers; no se usa como dato operativo ni se scrapea."

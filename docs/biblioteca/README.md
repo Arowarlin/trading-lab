@@ -1,6 +1,6 @@
 # Biblioteca de conocimiento
 
-Revisado: 2026-11-08
+Revisado: 2026-11-09
 
 Fichas originales. No se copia texto de terceros; enlaces y licencias
 se revisan antes de adoptar una dependencia.
@@ -22,6 +22,9 @@ se revisan antes de adoptar una dependencia.
 | [VectorBT](https://github.com/polakowo/vectorbt) | Backtesting | Apache-2.0 | 1.2.0 | descartada |
 | [Backtrader](https://www.backtrader.com) | Backtesting | GPL-3.0 | 1.9.78.123 | descartada |
 | [QuantConnect LEAN](https://github.com/QuantConnect/Lean) | Motor de trading | Apache-2.0 | Sin datos (no instalado) | descartada |
+| [ResearchGate](https://www.researchgate.net/) | Fuente de investigación científica | Términos del sitio; los textos conservan el copyright de sus autores | n/a (servicio web) | adoptada |
+| [Google Scholar](https://scholar.google.com/) | Fuente de investigación científica | Términos de Google Scholar; los resultados enlazan a contenido de terceros | n/a (servicio web) | adoptada |
+| [Social Science Research Network (SSRN)](https://www.ssrn.com/) | Fuente de investigación científica | Términos de SSRN/Elsevier; copyright de los autores | n/a (servicio web) | adoptada |
 
 ## Fichas
 
@@ -264,3 +267,51 @@ se revisan antes de adoptar una dependencia.
 - **Pruebas en TradingLab**: No instalado
 - **Estado**: descartada
 - **Motivo**: No se adopta: Fase 8 mantiene el backtester propio.
+
+### ResearchGate
+
+- **ID**: `researchgate`
+- **Categoría**: Fuente de investigación científica
+- **Problema**: Localizar publicaciones, preprints y solicitudes de acceso directo a autores para revisión bibliográfica.
+- **Enlace oficial**: https://www.researchgate.net/
+- **Licencia**: Términos del sitio; los textos conservan el copyright de sus autores
+- **Versión**: n/a (servicio web)
+- **Dependencias**: Consulta manual; sin API ni scraping integrado
+- **Datos/costes**: Gratis con cuenta y límites; algunos textos requieren solicitud al autor
+- **Ventajas**: Descubrimiento de papers y contacto con autores; útil para literatura gris.
+- **Riesgos**: No es una revista ni garantiza peer review; evitar scraping, respetar copyright y no usar un PDF sin licencia.
+- **Pruebas en TradingLab**: tests/test_library.py::test_biblioteca_carga_y_estructura (ficha)
+- **Estado**: adoptada
+- **Motivo**: Consulta manual para bibliografía; no es dependencia de ejecución ni fuente de datos automática.
+
+### Google Scholar
+
+- **ID**: `google-scholar`
+- **Categoría**: Fuente de investigación científica
+- **Problema**: Buscar literatura académica, citas y versiones de un paper para fundamentar hipótesis y metodologías.
+- **Enlace oficial**: https://scholar.google.com/
+- **Licencia**: Términos de Google Scholar; los resultados enlazan a contenido de terceros
+- **Versión**: n/a (servicio web)
+- **Dependencias**: Consulta manual; sin API estable ni scraping integrado
+- **Datos/costes**: Gratis; respetar límites de uso y enlaces a editores
+- **Ventajas**: Cobertura amplia, citas y alertas; buen punto de partida para revisar evidencia.
+- **Riesgos**: Puede incluir versiones no revisadas o duplicadas; verificar DOI, revista y peer review antes de citar.
+- **Pruebas en TradingLab**: tests/test_library.py::test_biblioteca_carga_y_estructura (ficha)
+- **Estado**: adoptada
+- **Motivo**: Consulta manual para revisiones bibliográficas; no se automatiza scraping.
+
+### Social Science Research Network (SSRN)
+
+- **ID**: `ssrn`
+- **Categoría**: Fuente de investigación científica
+- **Problema**: Acceder a working papers y preprints de finanzas, economía y ciencias sociales.
+- **Enlace oficial**: https://www.ssrn.com/
+- **Licencia**: Términos de SSRN/Elsevier; copyright de los autores
+- **Versión**: n/a (servicio web)
+- **Dependencias**: Consulta manual; sin API integrada
+- **Datos/costes**: Gratis con cuenta; algunos trabajos pueden requerir suscripción
+- **Ventajas**: Working papers actuales y acceso temprano a investigación en finanzas cuantitativas.
+- **Riesgos**: No todos están peer-reviewed; pueden cambiar de versión; no citar como definitivo sin DOI/revista.
+- **Pruebas en TradingLab**: tests/test_library.py::test_biblioteca_carga_y_estructura (ficha)
+- **Estado**: adoptada
+- **Motivo**: Consulta manual para working papers; no se usa como dato operativo ni se scrapea.
