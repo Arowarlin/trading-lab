@@ -123,12 +123,38 @@ def family_execution_mode(family: str) -> str:
     return FAMILY_EXECUTION_MODES.get(str(family), "series")
 
 
+TRADING_DAYS_PER_YEAR = 252
+SESSION_MINUTES = 24 * 60
+BAR_MINUTES = {
+    "M1": 1,
+    "M5": 5,
+    "M15": 15,
+    "M30": 30,
+    "H1": 60,
+    "H4": 240,
+    "D1": 1440,
+}
+# Barras completas por sesión de 24 h; D1 es una barra por sesión.
+BARS_PER_SESSION = {
+    timeframe: SESSION_MINUTES // minutes
+    for timeframe, minutes in BAR_MINUTES.items()
+}
+BARS_PER_YEAR = {
+    timeframe: TRADING_DAYS_PER_YEAR * bars
+    for timeframe, bars in BARS_PER_SESSION.items()
+}
+
+
 def _bars_per_year(timeframe: str) -> float:
-    if timeframe.upper() == "M15":
-        return 252 * 96
-    if timeframe.upper() == "H1":
-        return 252 * 24
-    return 252
+    """Barras anuales del timeframe; falla si no está en el mapa."""
+    key = str(timeframe).strip().upper()
+    try:
+        return float(BARS_PER_YEAR[key])
+    except KeyError:
+        valid = ", ".join(sorted(BARS_PER_YEAR))
+        raise ValueError(
+            f"timeframe desconocido: {timeframe!r}; usa uno de: {valid}"
+        ) from None
 
 
 def _sharpe_returns(returns: pd.Series, timeframe: str) -> float:

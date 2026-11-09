@@ -7,6 +7,8 @@ import pandas as pd
 import pytest
 
 from tradinglab.intraday import (
+    BARS_PER_SESSION,
+    _bars_per_year,
     asian_range_reversal,
     backtest_intraday,
     break_even_cost_bps,
@@ -48,6 +50,32 @@ def _bars(days: int = 60, spread: bool = True) -> pd.DataFrame:
     if spread:
         frame["spread"] = 10.0
     return frame
+
+
+@pytest.mark.parametrize(
+    ("timeframe", "bars_per_session", "bars_per_year"),
+    [
+        ("M1", 1440, 252 * 1440),
+        ("M5", 288, 252 * 288),
+        ("M15", 96, 252 * 96),
+        ("M30", 48, 252 * 48),
+        ("H1", 24, 252 * 24),
+        ("H4", 6, 252 * 6),
+        ("D1", 1, 252),
+    ],
+)
+def test_bars_per_year_por_timeframe(
+    timeframe: str, bars_per_session: int, bars_per_year: int
+) -> None:
+    assert BARS_PER_SESSION[timeframe] == bars_per_session
+    assert _bars_per_year(timeframe) == bars_per_year
+    assert _bars_per_year(timeframe.lower()) == bars_per_year
+
+
+@pytest.mark.parametrize("timeframe", ["M7", "1d", "W1", "", "D"])
+def test_bars_per_year_timeframe_desconocido_falla(timeframe: str) -> None:
+    with pytest.raises(ValueError, match="timeframe desconocido"):
+        _bars_per_year(timeframe)
 
 
 def test_cache_roundtrip(tmp_path):
