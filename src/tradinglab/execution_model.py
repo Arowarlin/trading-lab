@@ -1,7 +1,7 @@
 """Informe de coste efectivo por operación: serie vs eventos.
 
-No reejecuta backtests ni registra trials. Lee las 84 variantes ya registradas
-en ``reports/research/intraday_<ACTIVO>/intraday_broker.json`` y el coste bróker
+No reejecuta backtests ni registra trials. Lee las variantes ya registradas en
+``reports/research/intraday_<ACTIVO>/intraday_broker.json`` y el coste bróker
 p75 medido en la tarea 1B. El modo de eventos se expresa como rango porque los
 informes de variantes no guardan el mix de salidas (objetivo, stop o forzada);
 no se inventa ese mix.
@@ -9,6 +9,7 @@ no se inventa ese mix.
 from __future__ import annotations
 
 import json
+import sqlite3
 import statistics
 from datetime import datetime, timezone
 from pathlib import Path
@@ -46,10 +47,61 @@ def _median(values: list[float | None]) -> float | None:
     return statistics.median(clean) if clean else None
 
 
-def collect_variants(reports_dir: str | Path = REPORT_DIR) -> list[dict]:
-    """Devuelve las 84 variantes con coste serie y rango de eventos."""
+def _dsr_count_readonly(db_path: str | Path) -> int | None:
+    """Lee el contador DSR sin crear tablas ni escribir en la base."""
+    path = Path(db_path)
+    if not path.exists():
+        return None
+    connection = None
+    try:
+        connection = sqlite3.connect(
+            f"file:{path.as_posix()}?mode=ro", uri=True, timeout=3
+        )
+        connection.row_factory = sqlite3.Row
+        total = 0
+        for table in (
+            "lesson_tests",
+            "optimization_trials",
+            "holdout_reads",
+            "strategy_trials",
+        ):
+            exists = connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
+                (table,),
+            ).fetchone()
+            if exists:
+                total += int(
+                    connection.execute(
+                        f"SELECT COUNT(*) AS n FROM {table}"
+                    ).fetchone()["n"]
+                )
+        exists = connection.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='lifecycle_bots'"
+        ).fetchone()
+        if exists:
+            total += int(
+                connection.execute(
+                    "SELECT COUNT(*) AS n FROM lifecycle_bots "
+                    "WHERE frozen_at IS NOT NULL"
+                ).fetchone()["n"]
+            )
+        return total
+    except sqlite3.Error:
+        return None
+    finally:
+        if connection is not None:
+            connection.close()
+
+
+def collect_variants(
+    reports_dir: str | Path = REPORT_DIR,
+    *,
+    db_path: str | Path | None = None,
+) -> list[dict]:
+    """Devuelve las variantes con coste serie, rango de eventos y DSR leído."""
     reports = Path(reports_dir)
     broker = load_broker_report(reports)
+    dsr_count = _dsr_count_readonly(db_path) if db_path is not None else None
     rows: list[dict] = []
     for asset in ASSETS:
         data, path = _asset_report(reports, asset)
@@ -99,6 +151,7 @@ def collect_variants(reports_dir: str | Path = REPORT_DIR) -> list[dict]:
                     "event_base_bps_op": event_base,
                     "event_max_bps_op": event_max,
                     "source": str(path),
+                    "dsr_count": dsr_count,
                 }
             )
     return rows
@@ -149,11 +202,15 @@ def _summary(rows: list[dict]) -> list[dict]:
 
 def render_report(rows: list[dict]) -> str:
     summary = _summary(rows)
+    variant_count = len(rows)
+    dsr_count = rows[0].get("dsr_count") if rows else None
+    dsr_text = "sin datos" if dsr_count is None else str(dsr_count)
     lines = [
         "# Modelo de ejecución: coste efectivo por operación",
         "",
         f"- Generado: {datetime.now(timezone.utc).isoformat(timespec='seconds')}",
-        f"- Variantes registradas: **{len(rows)}** (mismas 84 de la etapa 3).",
+        f"- Variantes registradas: **{variant_count}**.",
+        f"- Contador DSR leído: **{dsr_text}** (sin cambios; el informe no registra trials).",
         "- Medición, no búsqueda: no se registraron trials ni se cambió el contador DSR.",
         "- No se cambió ningún umbral de aprobación ni se activó ningún bot.",
         "- Serie: coste calibrado del recálculo con spread bróker p75 (por turnover) ×2 "
@@ -181,7 +238,7 @@ def render_report(rows: list[dict]) -> str:
         )
     lines += [
         "",
-        "## Detalle de las 84 variantes",
+        f"## Detalle de las {variant_count} variantes",
         "",
         "| Activo | Estrategia | Parámetros | Trades | Comisión bps | Spread p75 bps | Serie bps/op | Eventos mín. | Eventos base | Eventos máx. |",
         "|---|---|---|---:|---:|---:|---:|---:|---:|---:|",
@@ -205,7 +262,8 @@ def render_report(rows: list[dict]) -> str:
         "la serie. El test de reconciliación de `tests/test_execution_fills.py` "
         "fuerza ese caso y falla si el retorno neto de eventos supera al de serie.",
         "- El ahorro potencial del modo de eventos depende de que la entrada y el "
-        "objetivo sean limitados; no se extrapola a partir de estas 84 variantes.",
+        f"objetivo sean limitados; no se extrapola a partir de estas {variant_count} "
+        "variantes.",
         "",
     ]
     return "\n".join(lines)
@@ -215,9 +273,10 @@ def build_report(
     out_dir: str | Path = REPORT_DIR,
     *,
     reports_dir: str | Path = REPORT_DIR,
+    db_path: str | Path | None = None,
 ) -> Path:
-    """Escribe ``execution_model.md`` sin tocar SQLite ni strategy_trials."""
-    rows = collect_variants(reports_dir)
+    """Escribe ``execution_model.md`` sin registrar trials ni escribir SQLite."""
+    rows = collect_variants(reports_dir, db_path=db_path)
     out = Path(out_dir) / "execution_model.md"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(render_report(rows), encoding="utf-8")
