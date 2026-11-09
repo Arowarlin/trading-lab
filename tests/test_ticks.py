@@ -5,6 +5,7 @@ import struct
 from datetime import date
 
 import httpx
+import pandas as pd
 import pytest
 
 from tradinglab.data.ticks import (
@@ -13,6 +14,7 @@ from tradinglab.data.ticks import (
     fetch_day,
     fetch_hour,
     hour_url,
+    hourly_spread_bps,
     parse_hours,
     point_size,
     save_ticks,
@@ -100,6 +102,28 @@ def test_fetch_hour_404_es_sin_datos():
         "EURUSD", date(2026, 11, 7), 3, client=Client(), retries=0
     )
     assert frame.empty
+
+
+def test_hourly_spread_bps(tmp_path):
+    frame = pd.DataFrame(
+        {
+            "ts": pd.to_datetime(
+                [
+                    "2025-01-10T14:00:00Z",
+                    "2025-01-10T14:30:00Z",
+                    "2025-01-10T15:00:00Z",
+                ]
+            ),
+            "spread_bps": [0.2, 0.4, 0.6],
+        }
+    )
+    path = tmp_path / "ticks.parquet"
+    frame.to_parquet(path, index=False)
+    hourly = hourly_spread_bps(path)
+    assert hourly.loc[14] == pytest.approx(0.3)
+    assert hourly.loc[15] == pytest.approx(0.6)
+    with pytest.raises(TickError, match="spread_bps"):
+        hourly_spread_bps(frame.drop(columns=["spread_bps"]))
 
 
 def test_fetch_day_combina_horas_y_guarda(tmp_path):

@@ -199,6 +199,26 @@ def save_ticks(
     return path
 
 
+def hourly_spread_bps(
+    frame_or_path: pd.DataFrame | str | Path,
+) -> pd.Series:
+    """Mediana de spread bps por hora UTC, para alimentar el coste intradía."""
+    frame = (
+        pd.read_parquet(frame_or_path)
+        if isinstance(frame_or_path, (str, Path))
+        else frame_or_path
+    )
+    if frame.empty or "spread_bps" not in frame.columns:
+        raise TickError("parquet de ticks sin columna spread_bps")
+    stamps = pd.to_datetime(frame["ts"], utc=True)
+    values = pd.to_numeric(frame["spread_bps"], errors="coerce")
+    valid = values.notna()
+    if not valid.any():
+        raise TickError("parquet de ticks sin spread válido")
+    hourly = values[valid].groupby(stamps[valid].dt.hour).median()
+    return hourly.sort_index()
+
+
 def summarize_ticks(frame: pd.DataFrame) -> dict:
     if frame.empty:
         return {
@@ -253,6 +273,7 @@ __all__ = [
     "fetch_day",
     "fetch_hour",
     "hour_url",
+    "hourly_spread_bps",
     "parse_hours",
     "point_size",
     "save_ticks",

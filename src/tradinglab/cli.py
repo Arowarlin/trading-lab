@@ -101,6 +101,10 @@ ticks_app = typer.Typer(
     no_args_is_help=True,
     help="Ticks Dukascopy: descarga, parquet y métricas de spread.",
 )
+tradestation_app = typer.Typer(
+    no_args_is_help=True,
+    help="TradeStation SIM: OAuth, cuentas y posiciones en solo lectura.",
+)
 llm_app = typer.Typer(
     no_args_is_help=True,
     help="LLM local: validación de esquema y comparación de modelos lite.",
@@ -127,6 +131,7 @@ app.add_typer(risk_budget_app, name="risk-budget")
 app.add_typer(lifecycle_app, name="lifecycle")
 app.add_typer(llm_app, name="llm")
 app.add_typer(ticks_app, name="ticks")
+app.add_typer(tradestation_app, name="tradestation")
 app.add_typer(lessons_app, name="lessons")
 app.add_typer(reports_app, name="reports")
 app.add_typer(markets_app, name="markets")
@@ -4253,6 +4258,141 @@ def mt5_fetch_cmd(
 
 # ==================================================================== Fondeo
 
+@tradestation_app.command("setup")
+def tradestation_setup_cmd() -> None:
+    """Guarda API Key, refresh token y cuenta en keyring (nunca en .env)."""
+    import keyring
+
+    from .config import KEYRING_SERVICE
+
+    if not sys.stdin.isatty():
+        console.print("[red]Setup requiere una terminal interactiva.[/red]")
+        raise typer.Exit(2)
+    console.print(
+        "[yellow]TradeStation WebAPI: usa API Key, Client Secret y refresh token "
+        "con scope offline_access. No se validan contra la API todavía.[/yellow]"
+    )
+    values = {
+        "TRADESTATION_CLIENT_ID": typer.prompt("Client ID").strip(),
+        "TRADESTATION_CLIENT_SECRET": typer.prompt(
+            "Client Secret", hide_input=True
+        ).strip(),
+        "TRADESTATION_REFRESH_TOKEN": typer.prompt(
+            "Refresh token", hide_input=True
+        ).strip(),
+        "TRADESTATION_ACCOUNT_ID": typer.prompt(
+            "Account ID (opcional)", default=""
+        ).strip(),
+    }
+    if not values["TRADESTATION_CLIENT_ID"] or not values[
+        "TRADESTATION_CLIENT_SECRET"
+    ] or not values["TRADESTATION_REFRESH_TOKEN"]:
+        console.print("[red]Faltan Client ID, Client Secret o refresh token.[/red]")
+        raise typer.Exit(2)
+    for key, value in values.items():
+        if value:
+            keyring.set_password(KEYRING_SERVICE, key, value)
+    console.print(
+        "[green]Credenciales TradeStation guardadas en keyring.[/green] "
+        "No se escribió .env ni se envió ninguna orden."
+    )
+
+
+def _trade_station_broker():
+    from .execution import get_tradestation_broker
+
+    return get_tradestation_broker(get_settings(), DEFAULT_DB, dry_run=True)
+
+
+@tradestation_app.command("status")
+def tradestation_status_cmd() -> None:
+    """Comprueba OAuth y cuenta SIM; solo lectura."""
+    from .execution.tradestation import (
+        TradeStationAuthError,
+        TradeStationError,
+    )
+
+    broker = _trade_station_broker()
+    try:
+        health = broker.health()
+    except TradeStationAuthError as exc:
+        console.print(f"[yellow]TradeStation sin credenciales:[/yellow] {exc}")
+        console.print(
+            "[dim]Ejecuta `lab tradestation setup` cuando tengas la API Key.[/dim]"
+        )
+        return
+    except TradeStationError as exc:
+        console.print(f"[red]TradeStation:[/red] {exc}")
+        raise typer.Exit(1) from exc
+    finally:
+        broker.close()
+    table = Table(title="TradeStation SIM")
+    table.add_column("Campo", style="bold")
+    table.add_column("Valor", overflow="fold")
+    for key, value in health.items():
+        table.add_row(str(key), str(value))
+    console.print(table)
+
+
+@tradestation_app.command("accounts")
+def tradestation_accounts_cmd() -> None:
+    """Lista las cuentas visibles para la API Key."""
+    from .execution.tradestation import TradeStationError
+
+    broker = _trade_station_broker()
+    try:
+        accounts = broker.accounts()
+    except TradeStationError as exc:
+        console.print(f"[red]TradeStation:[/red] {exc}")
+        raise typer.Exit(1) from exc
+    finally:
+        broker.close()
+    if not accounts:
+        console.print("[yellow]Sin datos: la API no devolvió cuentas.[/yellow]")
+        return
+    table = Table(title="Cuentas TradeStation")
+    for col in ("AccountID", "AccountType", "Currency", "Status"):
+        table.add_column(col, overflow="fold")
+    for row in accounts:
+        table.add_row(
+            str(row.get("AccountID") or row.get("AccountId") or "—"),
+            str(row.get("AccountType") or "—"),
+            str(row.get("Currency") or "—"),
+            str(row.get("Status") or "—"),
+        )
+    console.print(table)
+
+
+@tradestation_app.command("positions")
+def tradestation_positions_cmd() -> None:
+    """Posiciones de la cuenta SIM; solo lectura."""
+    from .execution.tradestation import TradeStationError
+
+    broker = _trade_station_broker()
+    try:
+        positions = broker.positions()
+    except TradeStationError as exc:
+        console.print(f"[red]TradeStation:[/red] {exc}")
+        raise typer.Exit(1) from exc
+    finally:
+        broker.close()
+    if not positions:
+        console.print("[yellow]Sin posiciones abiertas.[/yellow]")
+        return
+    table = Table(title="Posiciones TradeStation")
+    for col in ("Symbol", "Quantity", "AveragePrice", "Last", "MarketValue"):
+        table.add_column(col, overflow="fold")
+    for row in positions:
+        table.add_row(
+            str(row.get("Symbol") or "—"),
+            str(row.get("Quantity") or "—"),
+            str(row.get("AveragePrice") or "—"),
+            str(row.get("Last") or "—"),
+            str(row.get("MarketValue") or "—"),
+        )
+    console.print(table)
+
+
 @ticks_app.command("fetch")
 def ticks_fetch_cmd(
     symbol: str = typer.Argument("EURUSD", help="EURUSD, USDJPY, XAUUSD…"),
@@ -4336,6 +4476,38 @@ def ticks_summary_cmd(
     for key, value in summary.items():
         console.print(f"{key}: {value}")
     console.print(f"[dim]{path}[/dim]")
+
+
+@ticks_app.command("spread")
+def ticks_spread_cmd(
+    symbol: str = typer.Argument("EURUSD"),
+    day: str = typer.Option(..., "--day", help="YYYY-MM-DD"),
+    out: Path = typer.Option(None, "--out", help="Directorio de parquet"),
+) -> None:
+    """Muestra la mediana de spread por hora de un parquet de ticks."""
+    from .data.ticks import TickError, hourly_spread_bps
+
+    try:
+        target_day = date.fromisoformat(day)
+    except ValueError as exc:
+        console.print(f"[red]Fecha inválida:[/red] {day}")
+        raise typer.Exit(2) from exc
+    base = Path(out) if out else ROOT / "data" / "cache" / "ticks"
+    path = base / f"{symbol.upper()}_{target_day:%Y%m%d}.parquet"
+    if not path.exists():
+        console.print(f"[yellow]Sin datos: no existe {path}[/yellow]")
+        return
+    try:
+        hourly = hourly_spread_bps(path)
+    except TickError as exc:
+        console.print(f"[red]Ticks:[/red] {exc}")
+        raise typer.Exit(1) from exc
+    table = Table(title=f"Spread por hora · {symbol.upper()} · {target_day}")
+    table.add_column("Hora UTC", justify="right")
+    table.add_column("Spread bps", justify="right")
+    for hour, value in hourly.items():
+        table.add_row(f"{int(hour):02d}", f"{float(value):.3f}")
+    console.print(table)
 
 
 @mt5_app.command("aliases")
@@ -5302,6 +5474,9 @@ def research_intraday_cmd(
     zero_spread: bool = typer.Option(
         False, "--zero-spread", help="Diagnóstico: coste de spread 0"
     ),
+    tick_spread: Path = typer.Option(
+        None, "--tick-spread", help="Parquet de ticks Dukascopy para spread horario"
+    ),
     force: bool = typer.Option(
         False, "--force", help="Permite exceder el presupuesto semanal del activo"
     ),
@@ -5341,6 +5516,19 @@ def research_intraday_cmd(
         )
         if warning:
             console.print(f"[yellow]{warning}[/yellow]")
+    tick_spread_bps = None
+    if tick_spread is not None:
+        from .data.ticks import TickError, hourly_spread_bps
+
+        try:
+            tick_spread_bps = hourly_spread_bps(tick_spread)
+        except (OSError, TickError) as exc:
+            console.print(f"[red]Ticks:[/red] {exc}")
+            raise typer.Exit(1) from exc
+        console.print(
+            f"[dim]Spread de ticks: {len(tick_spread_bps)} horas desde "
+            f"{tick_spread}[/dim]"
+        )
     try:
         report = run_intraday(
             df,
@@ -5352,6 +5540,7 @@ def research_intraday_cmd(
             slippage_bps=slippage_bps,
             slippage_optimistic_bps=slippage_optimistic_bps,
             spread_override_bps=0.0 if zero_spread else None,
+            tick_spread_bps=tick_spread_bps,
             db_path=DEFAULT_DB,
             lesson_id=lesson_id,
         )

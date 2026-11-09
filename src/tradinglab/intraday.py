@@ -204,12 +204,32 @@ def cache_metadata(df: pd.DataFrame, timeframe: str) -> dict:
     }
 
 
-def _spread_bps(df: pd.DataFrame, point: float) -> tuple[pd.Series, bool]:
+def _spread_bps(
+    df: pd.DataFrame,
+    point: float,
+    tick_spread_bps: pd.Series | None = None,
+) -> tuple[pd.Series, bool]:
+    if tick_spread_bps is not None and len(tick_spread_bps):
+        hourly = pd.to_numeric(tick_spread_bps, errors="coerce").dropna()
+        if len(hourly):
+            mapped = pd.Series(
+                [
+                    float(hourly.get(ts.hour, hourly.median()))
+                    for ts in df.index
+                ],
+                index=df.index,
+            )
+            reliable = bool(len(hourly) >= 2 and float(hourly.median()) > 0.0)
+            return mapped, reliable
     if "spread" not in df.columns:
         return pd.Series(3.0, index=df.index), False
     raw = pd.to_numeric(df["spread"], errors="coerce").fillna(0.0)
     close = pd.to_numeric(df["close"], errors="coerce")
-    spread = (raw * point / close * 10_000).replace([np.inf, -np.inf], np.nan).fillna(0.0)
+    spread = (
+        (raw * point / close * 10_000)
+        .replace([np.inf, -np.inf], np.nan)
+        .fillna(0.0)
+    )
     hourly = spread.groupby(spread.index.hour).median()
     mapped = pd.Series(
         [float(hourly.get(ts.hour, hourly.median())) for ts in spread.index],
@@ -235,17 +255,22 @@ def backtest_intraday(
     slippage_optimistic_bps: float | None = None,
     point: float = 0.0001,
     spread_override_bps: float | None = None,
+    tick_spread_bps: pd.Series | None = None,
 ) -> dict:
     """Retorno neto con costes por spread horario, slippage y comisión.
 
     `spread_override_bps=0` es solo diagnóstico: conserva la fiabilidad real
     del spread observado, pero elimina su coste para medir el Sharpe bruto.
+    `tick_spread_bps` permite usar la mediana horaria de ticks Dukascopy en
+    lugar del spread de las velas MT5.
     """
     close = pd.to_numeric(df["close"], errors="coerce")
     pos = target.reindex(df.index).fillna(0.0).clip(-1.0, 1.0).shift(1).fillna(0.0)
     gross = close.pct_change().fillna(0.0) * pos
     turnover = pos.diff().abs().fillna(pos.abs())
-    observed_spread, reliable = _spread_bps(df, point)
+    observed_spread, reliable = _spread_bps(
+        df, point, tick_spread_bps=tick_spread_bps
+    )
     if spread_override_bps is None:
         spread = observed_spread
     else:
@@ -286,6 +311,10 @@ def backtest_intraday(
         "spread_bps_median": float(spread.median()) if len(spread) else 0.0,
         "spread_observed_bps_median": float(observed_spread.median()) if len(observed_spread) else 0.0,
         "spread_override_bps": spread_override_bps,
+        "spread_source": "ticks" if tick_spread_bps is not None else "mt5_bars",
+        "spread_tick_hours": (
+            int(len(tick_spread_bps)) if tick_spread_bps is not None else 0
+        ),
         "spread_reliable": reliable,
         "commission_bps_median": float(commission.median()) if len(commission) else 0.0,
         "calibrated_cost_bps": calibrated_cost,
@@ -566,6 +595,7 @@ def run_intraday(
     slippage_bps: float | None = None,
     slippage_optimistic_bps: float | None = None,
     spread_override_bps: float | None = None,
+    tick_spread_bps: pd.Series | None = None,
     db_path: str | Path | None = None,
     run_id: str | None = None,
     lesson_id: int | None = None,
@@ -617,6 +647,7 @@ def run_intraday(
                 slippage_optimistic_bps=slippage_optimistic_bps,
                 point=point,
                 spread_override_bps=spread_override_bps,
+                tick_spread_bps=tick_spread_bps,
             )
             key = f"{name}|{json.dumps(params, sort_keys=True)}"
             returns_by_id[key] = bt["returns"]
@@ -627,6 +658,8 @@ def run_intraday(
                     "metrics": bt["metrics"],
                     "spread_bps_median": bt["spread_bps_median"],
                     "spread_observed_bps_median": bt["spread_observed_bps_median"],
+                    "spread_source": bt["spread_source"],
+                    "spread_tick_hours": bt["spread_tick_hours"],
                     "spread_reliable": bt["spread_reliable"],
                     "commission_bps_median": bt["commission_bps_median"],
                     "calibrated_cost_bps": bt["calibrated_cost_bps"],
@@ -809,8 +842,15 @@ def run_intraday(
                 "verified_at": "2026-11-08",
             },
             "spread": {
-                "source": "MT5 bars: columna spread, mediana por hora",
+                "source": (
+                    "Dukascopy ticks: mediana por hora"
+                    if tick_spread_bps is not None
+                    else "MT5 bars: columna spread, mediana por hora"
+                ),
                 "hourly": True,
+                "tick_hours": (
+                    int(len(tick_spread_bps)) if tick_spread_bps is not None else 0
+                ),
                 "median_bps": (
                     float(np.median([row["spread_bps_median"] for row in outcomes]))
                     if outcomes

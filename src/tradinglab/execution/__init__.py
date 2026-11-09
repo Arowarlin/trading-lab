@@ -36,6 +36,24 @@ def get_projectx_broker(settings: Settings, db_path=None, dry_run: bool | None =
     )
 
 
+def get_tradestation_broker(
+    settings: Settings, db_path=None, dry_run: bool | None = None
+):
+    """TradeStation SIM en solo lectura; requiere OAuth y API Key."""
+    from ..config import DEFAULT_DB
+    from .tradestation import TradeStationBroker
+
+    return TradeStationBroker(
+        account_id=settings.tradestation.account_id,
+        base_url=settings.tradestation.base_url,
+        dry_run=(
+            settings.tradestation.dry_run if dry_run is None else bool(dry_run)
+        ),
+        require_simulated=settings.tradestation.require_simulated,
+        db_path=db_path or DEFAULT_DB,
+    )
+
+
 def get_mt5_broker(settings: Settings, db_path=None, dry_run: bool | None = None):
     """Broker MT5 para forex. Import perezoso: el paquete solo existe en Windows."""
     from ..config import DEFAULT_DB
@@ -61,4 +79,5 @@ __all__ = [
     "get_broker",
     "get_mt5_broker",
     "get_projectx_broker",
+    "get_tradestation_broker",
 ]

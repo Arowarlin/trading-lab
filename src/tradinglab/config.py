@@ -20,6 +20,10 @@ SECRET_KEYS = (
     "ALPACA_SECRET_KEY",
     "MT5_PASSWORD",
     "PROJECTX_API_KEY",
+    "TRADESTATION_CLIENT_ID",
+    "TRADESTATION_CLIENT_SECRET",
+    "TRADESTATION_REFRESH_TOKEN",
+    "TRADESTATION_ACCOUNT_ID",
     "FRED_API_KEY",
     "FINNHUB_API_KEY",
     "NTFY_TOPIC",
@@ -163,6 +167,13 @@ class ProjectXSettings(BaseModel):
     require_simulated: bool = True  # el guard rechaza cuentas reales
 
 
+class TradeStationSettings(BaseModel):
+    base_url: str = "https://sim-api.tradestation.com/v3"
+    account_id: str | None = None
+    dry_run: bool = True  # solo lectura y previsualización hasta validar la cuenta
+    require_simulated: bool = True  # rechaza la URL live salvo cambio explícito
+
+
 class PropSettings(BaseModel):
     enabled: bool = False
     firm: str = "FTMO"
@@ -212,6 +223,7 @@ class Settings(BaseModel):
     data: DataSettings = Field(default_factory=DataSettings)
     mt5: MT5Settings = Field(default_factory=MT5Settings)
     projectx: ProjectXSettings = Field(default_factory=ProjectXSettings)
+    tradestation: TradeStationSettings = Field(default_factory=TradeStationSettings)
     prop: PropSettings = Field(default_factory=PropSettings)
     operator: OperatorSettings = Field(default_factory=OperatorSettings)
     fund_health: FundHealthSettings = Field(default_factory=FundHealthSettings)
@@ -259,6 +271,21 @@ class Settings(BaseModel):
             settings.projectx.account_id = int(v)
         if v := os.getenv("PROJECTX_REQUIRE_SIMULATED"):
             settings.projectx.require_simulated = v.strip().lower() not in {"0", "false", "no"}
+        # TradeStation SIM (solo lectura hasta completar la integración)
+        if v := os.getenv("TRADESTATION_BASE_URL"):
+            settings.tradestation.base_url = v
+        if v := os.getenv("TRADESTATION_ACCOUNT_ID"):
+            settings.tradestation.account_id = v
+        if v := os.getenv("TRADESTATION_REQUIRE_SIMULATED"):
+            settings.tradestation.require_simulated = (
+                v.strip().lower() not in {"0", "false", "no"}
+            )
+        if v := os.getenv("TRADESTATION_DRY_RUN"):
+            settings.tradestation.dry_run = v.strip().lower() not in {
+                "0",
+                "false",
+                "no",
+            }
         if v := os.getenv("PROP_FIRM"):
             settings.prop.firm = v
         if v := os.getenv("PROP_PHASE"):

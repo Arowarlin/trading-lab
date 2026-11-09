@@ -73,6 +73,30 @@ def test_backtest_intraday_costes_y_spread():
     assert backtest_intraday(no_spread, target, timeframe="M15")["spread_reliable"] is False
 
 
+def test_backtest_usa_spread_de_ticks_por_hora():
+    df = _bars(days=2).drop(columns=["spread"])
+    target = opening_range_breakout(df).target
+    hourly = pd.Series({hour: 2.0 for hour in range(24)})
+    result = backtest_intraday(
+        df,
+        target,
+        timeframe="M15",
+        tick_spread_bps=hourly,
+    )
+    assert result["spread_source"] == "ticks"
+    assert result["spread_tick_hours"] == 24
+    assert result["spread_bps_median"] == pytest.approx(2.0)
+    assert result["spread_reliable"] is True
+
+
+def test_run_intraday_atribuye_spread_de_ticks():
+    df = _bars(days=30).drop(columns=["spread"])
+    hourly = pd.Series({hour: 1.5 for hour in range(24)})
+    report = run_intraday(df, paths=5, tick_spread_bps=hourly)
+    assert "Dukascopy" in report["cost_model"]["spread"]["source"]
+    assert report["cost_model"]["spread"]["tick_hours"] == 24
+
+
 def test_backtest_zero_costs_es_diagnostico():
     df = _bars()
     target = opening_range_breakout(df).target
