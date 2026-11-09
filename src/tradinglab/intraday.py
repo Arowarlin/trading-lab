@@ -18,7 +18,7 @@ import pandas as pd
 from .config import DEFAULT_DB, ROOT
 from .indicators import atr, ema
 from .intraday_costs import asset_costs
-from .learning import get_lesson
+from .learning import count_tests, get_lesson
 from .profiles import get_profile
 from .prop.rules import from_yaml
 from .prop.simulator import monte_carlo
@@ -32,6 +32,20 @@ INTRADAY_GRIDS = {
     "orb": {"range_bars": [4, 8], "buffer_atr": [0.1, 0.25], "max_hold": [8, 16]},
     "pullback": {"fast": [20, 50], "slow": [100, 200], "pullback_atr": [0.25, 0.5], "max_hold": [8, 16]},
     "asian_rev": {"buffer_atr": [0.1, 0.3], "max_hold": [8, 16]},
+    "orb_ny": {"range_bars": [4, 8], "buffer_atr": [0.1, 0.25], "max_hold": [8, 16]},
+    "trend_intraday": {"fast": [20, 50], "slow": [100, 200], "pullback_atr": [0.25, 0.5], "max_hold": [8, 16]},
+    "overlap_breakout": {"range_bars": [4, 8], "buffer_atr": [0.1, 0.25], "max_hold": [4, 8]},
+    "range_reversal": {"lookback": [12, 24], "entry_z": [1.5, 2.0], "max_hold": [8, 16]},
+    "london_pullback": {"fast": [20, 50], "slow": [100, 200], "pullback_atr": [0.25, 0.5], "max_hold": [8, 16]},
+    "session_trend": {"fast": [20, 50], "slow": [100, 200], "pullback_atr": [0.25, 0.5], "max_hold": [8, 16]},
+    "tokyo_breakout": {"range_bars": [4, 8], "buffer_atr": [0.1, 0.25], "max_hold": [4, 12]},
+}
+ASSET_FAMILIES = {
+    "US100.CASH": ("orb_ny", "trend_intraday"),
+    "NASDAQ": ("orb_ny", "trend_intraday"),
+    "XAUUSD": ("asian_rev", "overlap_breakout"),
+    "EURUSD": ("range_reversal", "london_pullback"),
+    "USDJPY": ("session_trend", "tokyo_breakout"),
 }
 DEFAULT_HORIZONS = (22, 44, 120)
 COST_GRID_BPS = (0.0, 0.5, 1.0, 2.0, 3.0)
@@ -48,7 +62,40 @@ FAMILY_HYPOTHESES = {
         "Reversión del rango asiático: el rango formado en la sesión asiática "
         "suele revertirse al inicio de la sesión europea."
     ),
+    "orb_ny": (
+        "Ruptura del rango de apertura de Nueva York: la momentum posterior a "
+        "las 09:30 ET continúa en el índice."
+    ),
+    "trend_intraday": (
+        "Tendencia intradía en la sesión de Nueva York: el índice mantiene "
+        "dirección tras la apertura."
+    ),
+    "overlap_breakout": (
+        "Ruptura en el solape Londres/NY: el oro amplía rango cuando coinciden "
+        "las dos sesiones."
+    ),
+    "range_reversal": (
+        "Reversión a la media en rango durante Londres: los extremos del rango "
+        "vuelven a la media."
+    ),
+    "london_pullback": (
+        "Tendencia con retroceso en Londres: el retroceso a la media rápida "
+        "ofrece entrada a favor de la tendencia del euro."
+    ),
+    "session_trend": (
+        "Tendencia con filtro de sesión en USDJPY: la dirección dominante "
+        "persiste durante Tokio/Londres."
+    ),
+    "tokyo_breakout": (
+        "Ruptura tras la sesión de Tokio: el rango asiático se rompe al abrir "
+        "Europa."
+    ),
 }
+
+
+def families_for_symbol(symbol: str) -> tuple[str, ...]:
+    """Familias asignadas al activo (todas si no está en el mapa)."""
+    return ASSET_FAMILIES.get(str(symbol).upper(), tuple(INTRADAY_GRIDS))
 
 
 def _bars_per_year(timeframe: str) -> float:
@@ -303,13 +350,20 @@ def trend_pullback(
     slow: int = 100,
     pullback_atr: float = 0.25,
     max_hold: int = 8,
+    start_hour: int = 0,
+    end_hour: int = 24,
 ) -> StrategyResult:
-    """Tendencia con retroceso a la media rápida."""
+    """Tendencia con retroceso a la media rápida, con filtro de sesión opcional."""
     close = df["close"]
     fast_ma, slow_ma, atr_s = ema(close, fast), ema(close, slow), atr(df)
+    mask = _session_mask(df.index, start_hour, end_hour)
     target = pd.Series(0.0, index=df.index)
     pos, hold = 0.0, 0
     for ts, row in df.iterrows():
+        if not bool(mask.loc[ts]):
+            pos, hold = 0.0, 0
+            target.loc[ts] = 0.0
+            continue
         if pos == 0.0:
             atr_value = float(atr_s.loc[ts])
             if fast_ma.loc[ts] > slow_ma.loc[ts] and row["low"] <= fast_ma.loc[ts] - pullback_atr * atr_value:
@@ -324,8 +378,85 @@ def trend_pullback(
     return StrategyResult(
         "pullback",
         target,
-        {"fast": fast, "slow": slow, "pullback_atr": pullback_atr, "max_hold": max_hold},
+        {
+            "fast": fast,
+            "slow": slow,
+            "pullback_atr": pullback_atr,
+            "max_hold": max_hold,
+            "start_hour": start_hour,
+            "end_hour": end_hour,
+        },
     )
+
+
+def range_reversal(
+    df: pd.DataFrame,
+    *,
+    lookback: int = 24,
+    entry_z: float = 1.5,
+    max_hold: int = 8,
+    start_hour: int = 7,
+    end_hour: int = 16,
+) -> StrategyResult:
+    """Reversión a la media dentro de un rango móvil y una sesión."""
+    close = df["close"]
+    mean = close.rolling(lookback).mean()
+    std = close.rolling(lookback).std(ddof=0).replace(0.0, np.nan)
+    zscore = (close - mean) / std
+    mask = _session_mask(df.index, start_hour, end_hour)
+    target = pd.Series(0.0, index=df.index)
+    pos, hold = 0.0, 0
+    for ts in df.index:
+        value = float(zscore.loc[ts]) if np.isfinite(zscore.loc[ts]) else 0.0
+        if not bool(mask.loc[ts]) or not np.isfinite(zscore.loc[ts]):
+            pos, hold = 0.0, 0
+            target.loc[ts] = 0.0
+            continue
+        if pos == 0.0:
+            if value <= -entry_z:
+                pos = 1.0
+            elif value >= entry_z:
+                pos = -1.0
+        else:
+            hold += 1
+            if hold >= max_hold or (pos > 0 and value >= 0.0) or (pos < 0 and value <= 0.0):
+                pos, hold = 0.0, 0
+        target.loc[ts] = pos
+    return StrategyResult(
+        "range_reversal",
+        target,
+        {
+            "lookback": lookback,
+            "entry_z": entry_z,
+            "max_hold": max_hold,
+            "start_hour": start_hour,
+            "end_hour": end_hour,
+        },
+    )
+
+
+def orb_ny(df: pd.DataFrame, **kwargs) -> StrategyResult:
+    return opening_range_breakout(df, start_hour=13, end_hour=20, **kwargs)
+
+
+def trend_intraday(df: pd.DataFrame, **kwargs) -> StrategyResult:
+    return trend_pullback(df, start_hour=13, end_hour=20, **kwargs)
+
+
+def overlap_breakout(df: pd.DataFrame, **kwargs) -> StrategyResult:
+    return opening_range_breakout(df, start_hour=12, end_hour=16, **kwargs)
+
+
+def london_pullback(df: pd.DataFrame, **kwargs) -> StrategyResult:
+    return trend_pullback(df, start_hour=7, end_hour=16, **kwargs)
+
+
+def session_trend(df: pd.DataFrame, **kwargs) -> StrategyResult:
+    return trend_pullback(df, start_hour=0, end_hour=16, **kwargs)
+
+
+def tokyo_breakout(df: pd.DataFrame, **kwargs) -> StrategyResult:
+    return opening_range_breakout(df, start_hour=0, end_hour=3, **kwargs)
 
 
 def asian_range_reversal(
@@ -368,6 +499,13 @@ STRATEGIES = {
     "orb": opening_range_breakout,
     "pullback": trend_pullback,
     "asian_rev": asian_range_reversal,
+    "orb_ny": orb_ny,
+    "trend_intraday": trend_intraday,
+    "overlap_breakout": overlap_breakout,
+    "range_reversal": range_reversal,
+    "london_pullback": london_pullback,
+    "session_trend": session_trend,
+    "tokyo_breakout": tokyo_breakout,
 }
 
 
@@ -432,6 +570,7 @@ def run_intraday(
     run_id: str | None = None,
     lesson_id: int | None = None,
     record: bool = True,
+    families: tuple[str, ...] | None = None,
 ) -> dict:
     """Valida las estrategias intradía con los controles existentes."""
     profile = get_profile("intraday_fx")
@@ -459,9 +598,14 @@ def run_intraday(
         if isinstance(commission, pd.Series)
         else float(commission)
     )
+    selected_families = tuple(families) if families else families_for_symbol(symbol)
+    unknown = [name for name in selected_families if name not in INTRADAY_GRIDS]
+    if unknown:
+        raise ValueError(f"familias intradía desconocidas: {', '.join(unknown)}")
     outcomes = []
     returns_by_id: dict[str, pd.Series] = {}
-    for name, grid in INTRADAY_GRIDS.items():
+    for name in selected_families:
+        grid = INTRADAY_GRIDS[name]
         for params in _combos(grid):
             result = STRATEGIES[name](df, **params)
             bt = backtest_intraday(
@@ -495,6 +639,9 @@ def run_intraday(
 
     sr_values = [row["metrics"]["sharpe"] for row in outcomes]
     sr_std = float(np.std(sr_values, ddof=1)) if len(sr_values) > 1 else 0.0
+    n_trials_dsr = len(outcomes) + (
+        count_tests(db_path) if db_path is not None else 0
+    )
     for row in outcomes:
         row["dsr"] = deflated_sharpe(
             row["metrics"]["sharpe"],
@@ -502,8 +649,9 @@ def run_intraday(
             0.0,
             3.0,
             sr_std,
-            len(outcomes),
+            n_trials_dsr,
         )
+        row["dsr_n_trials"] = n_trials_dsr
 
     aligned = _aligned(returns_by_id)
     pbo = None
@@ -633,6 +781,8 @@ def run_intraday(
         "run_id": run,
         "trials_recorded": recorded,
         "window": {"start": window_start, "end": window_end},
+        "dsr_n_trials": n_trials_dsr,
+        "families": list(selected_families),
         "costs": {
             "commission_bps_median": commission_median,
             "commission_source": commission_source,
@@ -793,9 +943,26 @@ def write(report: dict, out_dir: str | Path = ROOT / "reports" / "research") -> 
     out.mkdir(parents=True, exist_ok=True)
     json_path = out / "intraday.json"
     md_path = out / "intraday.md"
-    json_path.write_text(json.dumps(report, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
-    md_path.write_text(render_markdown(report), encoding="utf-8")
-    return {"json": str(json_path), "md": str(md_path)}
+    text = json.dumps(report, indent=2, ensure_ascii=False, default=str)
+    markdown = render_markdown(report)
+    json_path.write_text(text, encoding="utf-8")
+    md_path.write_text(markdown, encoding="utf-8")
+    safe = "".join(
+        char if char.isalnum() or char in "-_." else "_"
+        for char in str(report.get("symbol") or "sin_datos").upper()
+    )
+    asset_dir = out / "intraday"
+    asset_dir.mkdir(parents=True, exist_ok=True)
+    asset_json = asset_dir / f"{safe}.json"
+    asset_md = asset_dir / f"{safe}.md"
+    asset_json.write_text(text, encoding="utf-8")
+    asset_md.write_text(markdown, encoding="utf-8")
+    return {
+        "json": str(json_path),
+        "md": str(md_path),
+        "asset_json": str(asset_json),
+        "asset_md": str(asset_md),
+    }
 
 
 __all__ = [

@@ -24,7 +24,7 @@ INTRADAY_IDS = {
     "usdjpy-session-trend",
     "usdjpy-tokyo-breakout",
 }
-ALLOWED_SYMBOLS = {"US100.CASH", "XAUUSD", "EURUSD", "USDJPY"}
+ALLOWED_SYMBOLS = {"US100.cash", "XAUUSD", "EURUSD", "USDJPY"}
 
 
 class FakeSpecBroker:

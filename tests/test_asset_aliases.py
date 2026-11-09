@@ -13,7 +13,7 @@ from tradinglab.db import connect, init_db
 class FakeSpecBroker:
     def symbol_spec(self, symbol: str) -> dict:
         known = {
-            "US100.cash": "US100.CASH",
+            "US100.cash": "US100.cash",
             "XAUUSD": "XAUUSD",
             "EURUSD": "EURUSD",
             "USDJPY": "USDJPY",
@@ -28,14 +28,14 @@ def test_descubre_alias_del_broker(tmp_path):
     init_db(db)
     found = discover(db, FakeSpecBroker())
     assert found == {
-        "NASDAQ": "US100.CASH",
+        "NASDAQ": "US100.cash",
         "XAUUSD": "XAUUSD",
         "EURUSD": "EURUSD",
         "USDJPY": "USDJPY",
     }
     rows = aliases(db)
     assert {row["broker_symbol"] for row in rows} == {
-        "US100.CASH",
+        "US100.cash",
         "XAUUSD",
         "EURUSD",
         "USDJPY",
@@ -47,8 +47,9 @@ def test_symbol_allowed_rechaza_fuera_del_universo(tmp_path):
     db = tmp_path / "lab.db"
     init_db(db)
     discover(db, FakeSpecBroker())
-    assert allowed_symbols(db) == {"US100.CASH", "XAUUSD", "EURUSD", "USDJPY"}
+    assert allowed_symbols(db) == {"US100.cash", "XAUUSD", "EURUSD", "USDJPY"}
     assert symbol_allowed(db, "US100.cash")[0] is True
+    assert symbol_allowed(db, "US100.CASH")[0] is True
     assert symbol_allowed(db, "XAUUSD")[0] is True
     ok, reason = symbol_allowed(db, "BTCUSD")
     assert ok is False
@@ -70,4 +71,4 @@ def test_alias_persistido_se_reescribe(tmp_path):
         )
     discover(db, FakeSpecBroker())
     row = next(item for item in aliases(db) if item["canonical"] == "NASDAQ")
-    assert row["broker_symbol"] == "US100.CASH"
+    assert row["broker_symbol"] == "US100.cash"

@@ -648,38 +648,49 @@ El informe anterior, generado con offset constante, queda conservado como
 **no fiable: offset constante** en
 `reports/research/intraday_offset_constante.json` y `.md`; no se borró.
 
-Resultado con el offset corregido y costes calibrados:
+Validación por activo (etapa 3), con coste conservador y DSR global:
 
-- `lab research-intraday --symbol EURUSD --timeframe M15`: **0/28 pasan**;
-  mejor Sharpe neto **−6,78**, PBO 0,0 % con `prob_oos_loss=100 %` y
-  walk-forward **fallido**.
-- Comisión **EURUSD**: **2,50 USD/lote/lado** según la tabla oficial de FTMO
-  (“Trading Update | 25 Sep 2025”, publicada el 2025-09-25, vigente desde
-  2025-09-29):
-  https://ftmo.com/en/blog/trading-updates/trading-update-25-sep-2025/
-  El coste mediano resultante es **0,217 bps/lado**.
-- Spread real por hora: mediana **0,853 bps** en M15.
-- Slippage explícito por lado: **optimista 0,5 bps** / **conservador 2,0 bps**
-  (órdenes a mercado; no incluye huecos de apertura ni fines de semana).
-- **Coste de equilibrio** (bps uniformes por unidad de turnover donde el
-  Sharpe neto cruza 0): mejor variante **0,32 bps**; coste calibrado mediano
-  **3,72 bps**. La tabla del informe y de Research muestra Sharpe a
-  **0 / 0,5 / 1 / 2 / 3 bps** por variante.
-- Variante de diagnóstico sin costes: mejor Sharpe bruto **+1,34**, pero PBO
-  **39,4 %**, walk-forward fallido y régimen no aprobado; 0/28 pasan.
-- La pullback de mejor bruto pasa de +1,34 a −24,79 neto; la mejor neta (ORB)
-  tiene bruto −0,91. **Los costes explican el desplome neto y el equilibrio
-  está muy por debajo del coste calibrado; no hay edge bruto robusto**.
-  La alineación de sesiones ya está verificada.
+| Activo | Barras | Familias | n_trials DSR | PBO | WF | Pasan | Mejor neto | Equilibrio | Calibrado |
+|---|---|---|---|---|---|---|---|---|---|
+| EURUSD | 50.000 | range_reversal, london_pullback | 57 | 0,0 % | fallido | 0/24 | −5,86 | 0,23 bps | 3,07 bps |
+| USDJPY | 50.000 | session_trend, tokyo_breakout | 81 | 2,1 % | fallido | 0/24 | −4,03 | 0,14 bps | 2,28 bps |
+| XAUUSD | 50.000 | asian_rev, overlap_breakout | 93 | 8,5 % | fallido | 0/12 | −0,23 | 1,61 bps | 2,08 bps |
+| US100.cash | 50.000 | orb_ny, trend_intraday | 117 | 37,2 % | fallido | 0/24 | −0,28 | 1,57 bps | 2,01 bps |
+
+**Ningún activo pasa.** XAUUSD y US100.cash se acercan al equilibrio, pero el
+coste calibrado sigue por encima del coste de equilibrio; US100 además supera
+el PBO máximo (37,2 % > 30 %). No se relajó ningún umbral.
+
+- Comisiones oficiales: Forex (EURUSD/USDJPY) **2,50 USD/lote/lado**
+  (0,217/0,250 bps), metales (XAUUSD) **0,0007 % del volumen/lado**
+  (0,070 bps) e índices (US100.cash) **0**; fuentes FTMO “Trading Update |
+  25 Sep 2025” y “Zero Commissions on Indices” (2025-08-01/2025-11-04).
+- Spread real por hora medido por activo; slippage explícito **0,5/2,0 bps
+  por lado** (optimista/conservador).
+- Coste de equilibrio y tabla Sharpe a **0/0,5/1/2/3 bps** en cada
+  `reports/research/intraday_<ACTIVO>/intraday.md` y en Research.
+- Cada una de las **84 variantes nuevas** quedó en `strategy_trials`; el
+  contador único DSR terminó en **117** pruebas. El barrido EURUSD inicial
+  (orb/pullback/asian_rev, 0/28, −6,78) queda como histórico registrado y su
+  diagnóstico zero-cost (+1,34 bruto) no se usa para aprobar.
+- Alineación de sesiones verificada: aperturas semanales 22:00/21:00 UTC
+  (forex) y 23:00/22:00 UTC (metales/índices).
 
 No se relajó ningún umbral, no se activó ningún bot y no se enviaron órdenes.
 Un candidato solo avanza con el escenario conservador; 0 bps es diagnóstico.
 
 ```powershell
-# datos corregidos por periodo
+# datos corregidos por periodo (M15 de los 4 activos)
 lab mt5 fetch EURUSD --timeframe M15 --bars 50000
-lab mt5 fetch EURUSD --timeframe H1 --bars 20000
-lab research-intraday --symbol EURUSD --timeframe M15
+lab mt5 fetch USDJPY --timeframe M15 --bars 50000
+lab mt5 fetch XAUUSD --timeframe M15 --bars 50000
+lab mt5 fetch US100.cash --timeframe M15 --bars 50000
+
+# informe por activo
+lab research-intraday --symbol EURUSD --timeframe M15 --out reports/research/intraday_EURUSD
+lab research-intraday --symbol USDJPY --timeframe M15 --out reports/research/intraday_USDJPY
+lab research-intraday --symbol XAUUSD --timeframe M15 --out reports/research/intraday_XAUUSD
+lab research-intraday --symbol US100.cash --timeframe M15 --out reports/research/intraday_US100
 
 # diagnóstico de costes (no usar para aprobar)
 lab research-intraday --symbol EURUSD --timeframe M15 `
@@ -778,6 +789,12 @@ Evidencia: `pytest tests/test_asset_aliases.py tests/test_intraday_bots.py -q`
 `lab f13 config-check` OK antes y después (hash `54b420360f17c75d…` sin
 cambios).
 
+Evidencia etapa 3: `pytest tests/test_intraday.py tests/test_mt5_offsets.py
+tests/test_asset_aliases.py tests/test_intraday_bots.py -q` → **28 passed**;
+suite completa **448 passed**; `ruff` limpio; `lab doctor` OK; `lab f13
+config-check` OK (mismo hash). Sin activar bots, sin órdenes y sin relajar
+umbrales.
+
 ---
 
 ## 6d. Fondo personal: cuentas, límites y panel
@@ -846,7 +863,7 @@ La tabla también está en **Research → Resultados por perfil**.
 | Perfil | Estado | Retorno | Sharpe | MaxDD | Pasa FTMO 120d | Breach | Nota |
 |---|---|---|---|---|---|---|---|
 | `swing_equity` | validado | 81.1% | 1.03 | -9.2% | 70.6% | 3.5% | cartera de 3 bots; 0/10 variantes frágiles a 2/20 bps |
-| `intraday_fx` | validado · sin edge | — | — | — | — | — | offset por periodo; neto mejor −6,78 / bruto +1,34; equilibrio 0,32 vs calibrado 3,72 bps; 0/28; WF fallido |
+| `intraday_fx` | validado · sin edge | — | — | — | — | — | 4 activos M15; 0/84 pasan; mejor XAU −0,23; equilibrio < calibrado; WF fallido; DSR 117 |
 | `intraday_futures` | stub | — | — | — | — | — | ProjectX sin credenciales/suscripción; proxy diario ES=F/NQ=F |
 
 ### Etapa 5 completada y corregida (intradía forex/CFD)
@@ -857,16 +874,13 @@ borrarla. La versión corregida infiere +2/+3 por semana desde los bordes
 semanales y confirma las transiciones de EE. UU. (apertura 22:00 UTC en
 invierno, 21:00 en verano). Datos: M15 50.000 barras y H1 20.000, spread real.
 
-Con la conversión corregida y costes calibrados, **0/28 variantes pasan**, el
-mejor Sharpe neto es **−6,78**, el walk-forward falla y el PBO neto es 0,0 %
-con `prob_oos_loss=100%`. La comisión oficial de EURUSD es 2,50 USD/lote/lado
-(0,217 bps/lado), el spread real mediano es 0,853 bps y el slippage conservador
-es 2,0 bps/lado. El **coste de equilibrio** de la mejor variante es **0,32 bps**
-frente a un coste calibrado mediano de **3,72 bps**: el margen es negativo.
-La variante sin costes da un mejor Sharpe bruto **+1,34**, pero PBO 39,4 % y
-walk-forward fallido: los costes explican el desplome neto, pero el bruto
-tampoco es un edge robusto. Solo avanza el escenario conservador; no se relajó
-ningún umbral y no se activó ningún bot.
+Con la conversión corregida y costes calibrados, **0/84 variantes pasan** en
+los cuatro activos. El mejor Sharpe neto es **−0,23** en XAUUSD, pero su coste
+de equilibrio (1,61 bps) sigue por debajo del calibrado (2,08 bps); US100.cash
+queda en −0,28 con equilibrio 1,57 frente a 2,01 bps y PBO 37,2 %. EURUSD y
+USDJPY son claramente negativos (−5,86 y −4,03). El walk-forward falla en los
+cuatro y no se relajó ningún umbral. Solo avanza el escenario conservador; no
+se activó ningún bot.
 
 ### Resumen final de decisiones
 

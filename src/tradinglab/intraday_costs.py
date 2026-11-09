@@ -16,9 +16,12 @@ COSTS_PATH = ROOT / "config" / "costs.yaml"
 class AssetCost:
     symbol: str
     verified: bool
+    commission_type: str
     commission_per_lot_usd: float | None
+    commission_percent_per_side: float | None
     commission_side: str | None
     contract_size: float | None
+    base_currency: str | None
     quote_currency: str | None
     source: str | None
     source_date: str | None
@@ -30,19 +33,39 @@ class AssetCost:
 
     def commission_bps(self, close: pd.Series) -> pd.Series:
         """Comisión por lado en bps para una serie de precios."""
-        if (
-            not self.verified
-            or self.commission_per_lot_usd is None
-            or self.contract_size is None
-            or self.quote_currency != "USD"
-        ):
+        if not self.verified:
             raise ValueError(
                 f"comisión sin verificar para {self.symbol}: no se inventa la cifra"
             )
-        notional_usd = float(self.contract_size) * pd.to_numeric(close, errors="coerce")
-        if (notional_usd <= 0).any():
-            raise ValueError(f"precio inválido para convertir comisión de {self.symbol}")
-        return float(self.commission_per_lot_usd) / notional_usd * 10_000.0
+        index = close.index
+        if self.commission_type == "zero":
+            return pd.Series(0.0, index=index, dtype=float)
+        if self.commission_type == "percent_of_volume":
+            if self.commission_percent_per_side is None:
+                raise ValueError(f"porcentaje de comisión ausente para {self.symbol}")
+            rate = float(self.commission_percent_per_side) / 100.0 * 10_000.0
+            return pd.Series(rate, index=index, dtype=float)
+        if self.commission_type == "per_lot_usd":
+            if self.commission_per_lot_usd is None or self.contract_size is None:
+                raise ValueError(f"comisión por lote incompleta para {self.symbol}")
+            if self.quote_currency == "USD":
+                notional_usd = float(self.contract_size) * pd.to_numeric(
+                    close, errors="coerce"
+                )
+            elif self.base_currency == "USD":
+                notional_usd = pd.Series(
+                    float(self.contract_size), index=index, dtype=float
+                )
+            else:
+                raise ValueError(
+                    f"conversión de comisión no soportada para {self.symbol}"
+                )
+            if (notional_usd <= 0).any():
+                raise ValueError(
+                    f"precio inválido para convertir comisión de {self.symbol}"
+                )
+            return float(self.commission_per_lot_usd) / notional_usd * 10_000.0
+        raise ValueError(f"tipo de comisión desconocido para {self.symbol}")
 
 
 def _load(path: Path | None = None) -> dict:
@@ -62,9 +85,15 @@ def asset_costs(symbol: str, path: Path | None = None) -> AssetCost:
     return AssetCost(
         symbol=str(symbol).upper(),
         verified=verified,
+        commission_type=str(item.get("commission_type") or "per_lot_usd"),
         commission_per_lot_usd=(
             float(item["commission_per_lot_usd"])
             if verified and item.get("commission_per_lot_usd") is not None
+            else None
+        ),
+        commission_percent_per_side=(
+            float(item["commission_percent_per_side"])
+            if verified and item.get("commission_percent_per_side") is not None
             else None
         ),
         commission_side=item.get("commission_side") if verified else None,
@@ -73,17 +102,27 @@ def asset_costs(symbol: str, path: Path | None = None) -> AssetCost:
             if verified and item.get("contract_size") is not None
             else None
         ),
+        base_currency=item.get("base_currency") if verified else None,
         quote_currency=item.get("quote_currency") if verified else None,
         source=item.get("source") if verified else None,
         source_date=item.get("source_date") if verified else None,
         effective_from=item.get("effective_from") if verified else None,
         source_url=item.get("source_url") if verified else None,
-        slippage_optimistic_bps=float(slippage.get("optimistic_bps", 0.5)),
-        slippage_conservative_bps=float(slippage.get("conservative_bps", 2.0)),
+        slippage_optimistic_bps=float(
+            item.get("slippage_optimistic_bps", slippage.get("optimistic_bps", 0.5))
+        ),
+        slippage_conservative_bps=float(
+            item.get(
+                "slippage_conservative_bps", slippage.get("conservative_bps", 2.0)
+            )
+        ),
         slippage_assumption=str(
-            slippage.get(
-                "assumption",
-                "Slippage explícito por lado; no se infiere de la comisión.",
+            item.get(
+                "slippage_assumption",
+                slippage.get(
+                    "assumption",
+                    "Slippage explícito por lado; no se infiere de la comisión.",
+                ),
             )
         ).strip(),
     )

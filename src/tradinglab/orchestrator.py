@@ -81,16 +81,21 @@ def _load_bots_file(path: Path) -> list[BotSpec]:
     bots = []
     for item in raw.get("bots", []):
         yaml_enabled = bool(item.get("enabled", False))
+        profile = item.get("profile")
+        universe = [
+            str(t) if profile == "intraday_fx" else str(t).upper()
+            for t in item.get("universe", [])
+        ]
         bots.append(
             BotSpec(
                 id=item["id"],
                 type=item.get("type", "deterministic"),
                 strategy=item["strategy"],
-                universe=[str(t).upper() for t in item.get("universe", [])],
+                universe=universe,
                 timeframe=item.get("timeframe", "1d"),
                 enabled=effective_enabled(DEFAULT_DB, item["id"], yaml_enabled),
                 yaml_enabled=yaml_enabled,
-                profile=item.get("profile"),
+                profile=profile,
                 cluster=item.get("cluster"),
                 account=str(item.get("account") or "paper_main"),
                 params=item.get("params", {}) or {},

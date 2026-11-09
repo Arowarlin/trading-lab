@@ -31,13 +31,32 @@ def test_offset_por_periodo_cambia_en_dst_eeuu() -> None:
     index = _server_index(
         [
             "2025-03-03 00:00",  # lunes servidor, aún GMT+2
+            "2025-03-07 23:45",
             "2025-03-10 00:00",  # lunes servidor, ya GMT+3
+            "2025-03-14 23:45",
             "2025-10-27 00:00",  # lunes servidor, aún GMT+3
+            "2025-10-31 23:45",
             "2025-11-03 00:00",  # lunes servidor, ya GMT+2
+            "2025-11-07 23:45",
         ]
     )
     offsets = infer_bar_offsets(index, "M15")
-    assert offsets.tolist() == pytest.approx([2.0, 3.0, 3.0, 2.0])
+    assert offsets.tolist() == pytest.approx(
+        [2.0, 2.0, 3.0, 3.0, 3.0, 3.0, 2.0, 2.0]
+    )
+
+
+def test_apertura_18_et_para_metales_e_indices() -> None:
+    index = _server_index(
+        [
+            "2025-03-03 01:00",  # apertura 18:00 ET = 23:00 UTC; servidor +2
+            "2025-03-07 23:45",
+            "2025-03-10 01:00",  # apertura 18:00 ET = 22:00 UTC; servidor +3
+            "2025-03-14 23:45",
+        ]
+    )
+    offsets = infer_bar_offsets(index, "M15")
+    assert offsets.tolist() == pytest.approx([2.0, 2.0, 3.0, 3.0])
 
 
 def test_misma_apertura_utc_antes_y_despues_del_cambio() -> None:
@@ -47,18 +66,27 @@ def test_misma_apertura_utc_antes_y_despues_del_cambio() -> None:
         [
             "2025-03-03 00:00",
             "2025-03-05 10:00",
+            "2025-03-07 23:00",
             "2025-03-10 00:00",
             "2025-03-12 11:00",
+            "2025-03-14 23:00",
         ]
     )
     offsets = infer_bar_offsets(index, "H1")
     utc = (index - pd.to_timedelta(offsets.to_numpy(), unit="h")).to_list()
     assert utc[1] == pd.Timestamp("2025-03-05 08:00", tz="UTC")
-    assert utc[3] == pd.Timestamp("2025-03-12 08:00", tz="UTC")
+    assert utc[4] == pd.Timestamp("2025-03-12 08:00", tz="UTC")
 
 
 def test_offset_periods_resume_tramos() -> None:
-    index = _server_index(["2025-03-03 00:00", "2025-03-10 00:00"])
+    index = _server_index(
+        [
+            "2025-03-03 00:00",
+            "2025-03-07 23:45",
+            "2025-03-10 00:00",
+            "2025-03-14 23:45",
+        ]
+    )
     offsets = infer_bar_offsets(index, "M15")
     periods = offset_periods(index, offsets)
     assert [row["offset"] for row in periods] == [2.0, 3.0]
@@ -70,8 +98,10 @@ def test_rates_aplica_offset_por_barra(monkeypatch) -> None:
     stamps = [
         pd.Timestamp("2025-03-03 00:00", tz="UTC").timestamp(),
         pd.Timestamp("2025-03-05 10:00", tz="UTC").timestamp(),
+        pd.Timestamp("2025-03-07 23:45", tz="UTC").timestamp(),
         pd.Timestamp("2025-03-10 00:00", tz="UTC").timestamp(),
         pd.Timestamp("2025-03-12 11:00", tz="UTC").timestamp(),
+        pd.Timestamp("2025-03-14 23:45", tz="UTC").timestamp(),
     ]
     dtype = [
         ("time", "i8"),
@@ -111,7 +141,7 @@ def test_rates_aplica_offset_por_barra(monkeypatch) -> None:
     monkeypatch.setattr(broker, "_require", lambda: fake)
     monkeypatch.setattr(broker, "symbol_spec", lambda symbol: {})
 
-    frame = broker.rates("EURUSD", "M15", count=4)
+    frame = broker.rates("EURUSD", "M15", count=6)
     assert frame.index[1] == pd.Timestamp("2025-03-05 08:00", tz="UTC")
-    assert frame.index[3] == pd.Timestamp("2025-03-12 08:00", tz="UTC")
+    assert frame.index[4] == pd.Timestamp("2025-03-12 08:00", tz="UTC")
     assert [row["offset"] for row in broker.rate_offset_periods] == [2.0, 3.0]

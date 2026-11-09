@@ -50,7 +50,7 @@ def discover(
                 try:
                     spec = broker.symbol_spec(candidate)
                     if spec and spec.get("symbol"):
-                        symbol = str(spec["symbol"]).upper()
+                        symbol = str(spec["symbol"])
                         break
                 except Exception:
                     continue
@@ -92,7 +92,7 @@ def allowed_symbols(
     *,
     profile: str = INTRADAY_FX_PROFILE,
 ) -> set[str]:
-    return {str(row["broker_symbol"]).upper() for row in aliases(db_path, profile=profile)}
+    return {str(row["broker_symbol"]) for row in aliases(db_path, profile=profile)}
 
 
 def symbol_allowed(
@@ -104,7 +104,7 @@ def symbol_allowed(
     """True si el símbolo puede abrirse dentro del perfil; nunca bloquea cierres."""
     if profile != INTRADAY_FX_PROFILE:
         return True, None
-    allowed = allowed_symbols(db_path, profile=profile)
+    allowed = {item.upper() for item in allowed_symbols(db_path, profile=profile)}
     symbol_upper = str(symbol or "").strip().upper()
     if symbol_upper in allowed:
         return True, None

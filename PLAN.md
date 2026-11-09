@@ -849,7 +849,39 @@ etapa.
   (WARN conocido del modelo); `lab f13 config-check` OK antes y después con el
   mismo hash `54b420360f17c75d…`. Sin activar bots, sin órdenes y sin tocar
   `bots.yaml`, `lab.yaml`, `prop.yaml` ni `f13.yaml`.
-- Etapas 3-7: pendientes de confirmación. El push se hace al cerrar esta etapa.
+
+### Etapa 3 — Costes calibrados y validación por activo
+
+- [x] **Costes por activo**
+  - Forex EURUSD/USDJPY: **2,50 USD/lote/lado** (FTMO Trading Update
+    25-Sep-2025, vigente 29-Sep-2025; 0,217/0,250 bps).
+  - Metales XAUUSD: **0,0007 % del volumen/lado** (misma tabla; 0,070 bps).
+  - Índices US100.cash: **0** (FTMO “Zero Commissions on Indices”,
+    2025-08-01/2025-11-04).
+  - Spread real por hora medido por activo y slippage explícito 0,5/2,0 bps
+    por lado (optimista/conservador).
+- [x] **Datos y offset por activo**
+  - 50.000 barras M15 por activo. La detección semanal elige apertura 17:00
+    o 18:00 ET según el cierre del viernes: forex 22:00/21:00 UTC,
+    metales/índices 23:00/22:00 UTC.
+- [x] **Validación por activo**
+
+  | Activo | Familias | DSR n | PBO | WF | Pasan | Mejor neto | Equilibrio | Calibrado |
+  |---|---|---|---|---|---|---|---|---|
+  | EURUSD | range_reversal, london_pullback | 57 | 0,0 % | fallido | 0/24 | −5,86 | 0,23 | 3,07 |
+  | USDJPY | session_trend, tokyo_breakout | 81 | 2,1 % | fallido | 0/24 | −4,03 | 0,14 | 2,28 |
+  | XAUUSD | asian_rev, overlap_breakout | 93 | 8,5 % | fallido | 0/12 | −0,23 | 1,61 | 2,08 |
+  | US100.cash | orb_ny, trend_intraday | 117 | 37,2 % | fallido | 0/24 | −0,28 | 1,57 | 2,01 |
+
+  - **0/84 variantes pasan**. XAUUSD y US100.cash se acercan, pero el coste
+    calibrado supera el de equilibrio; US100 además incumple PBO (<30 %).
+  - Cada variante quedó en `strategy_trials`; el contador único DSR terminó
+    en **117**. Informes por activo en
+    `reports/research/intraday_<ACTIVO>/intraday.md` y `.json`.
+- Evidencia: tests de costes/familias/informes + suite completa; `ruff`
+  limpio; `lab doctor` OK; `lab f13 config-check` sin cambios. Sin activar
+  bots, sin órdenes y sin relajar umbrales.
+- Etapas 4-7: pendientes de confirmación.
 
 ---
 
@@ -932,5 +964,6 @@ etapa.
 | 2026-11-08 | 9.5 costes calibrados | `pytest tests/test_intraday.py tests/test_console_shell.py -q` -> 20 passed; comision oficial FTMO 2.50 USD/lote/lado; spread horario + slippage opt/cons; tabla Sharpe 0/0.5/1/2/3 y equilibrio |
 | 2026-11-08 | Cementerio Etapa 1 | `pytest tests/test_trials.py tests/test_intraday.py -q` -> 18 passed; `pytest -q` -> 436 passed; strategy_trials (fallidas tambien), contador DSR 5->33, aviso de familia descartada, presupuesto config/research_budget.yaml, f13 config-check OK |
 | 2026-11-09 | Universo Etapa 2 | `pytest tests/test_asset_aliases.py tests/test_intraday_bots.py -q` -> 7 passed; `pytest -q` -> 443 passed; alias MT5 US100.CASH/XAUUSD/EURUSD/USDJPY; guard rechaza aperturas fuera del universo; 8 bots intrad?a enabled:false |
+| 2026-11-09 | Validacion Etapa 3 | `pytest tests/test_intraday.py tests/test_mt5_offsets.py tests/test_asset_aliases.py tests/test_intraday_bots.py -q` -> 28 passed; `pytest -q` -> 448 passed; 4 activos M15, costes por activo, 0/84 pasan, DSR 117, informes por activo |
 | 2026-11-08 | UI formato/metricas | `pytest tests/test_console_js.py tests/test_console_shell.py -q` -> 11 passed; `pytest -q` -> 416 passed; gauges restantes, cero negativo, moneda agrupada, salud parcial, performers y regimen compacto |
 |  |  |  |

@@ -4791,7 +4791,7 @@ def research_intraday_cmd(
     out: str = typer.Option(None, "--out"),
 ) -> None:
     """Valida estrategias intradía sobre caché MT5 (DSR/PBO/WF/regímenes)."""
-    from .intraday import INTRADAY_GRIDS, load_bars, run_intraday, write
+    from .intraday import families_for_symbol, load_bars, run_intraday, write
     from .trials import budget_status, discarded_warning
 
     settings = get_settings()
@@ -4811,7 +4811,7 @@ def research_intraday_cmd(
             "Usa --force para continuar o espera a la semana siguiente.[/red]"
         )
         raise typer.Exit(1)
-    for family in INTRADAY_GRIDS:
+    for family in families_for_symbol(symbol):
         warning = discarded_warning(
             DEFAULT_DB,
             family=family,

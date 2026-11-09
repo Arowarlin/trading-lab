@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -9,12 +11,21 @@ from tradinglab.intraday import (
     backtest_intraday,
     break_even_cost_bps,
     cache_metadata,
+    families_for_symbol,
     load_bars,
+    london_pullback,
     opening_range_breakout,
+    orb_ny,
+    overlap_breakout,
+    range_reversal,
     render_markdown,
     run_intraday,
     save_bars,
+    session_trend,
+    tokyo_breakout,
+    trend_intraday,
     trend_pullback,
+    write,
 )
 from tradinglab.intraday_costs import asset_costs
 
@@ -104,11 +115,60 @@ def test_costes_eurusd_oficiales():
     assert float(bps.iloc[0]) == pytest.approx(2.50 / 110_000 * 10_000, rel=1e-6)
 
 
+def test_costes_por_tipo_de_activo():
+    usdjpy = asset_costs("USDJPY")
+    assert usdjpy.verified is True
+    assert float(usdjpy.commission_bps(pd.Series([150.0])).iloc[0]) == pytest.approx(
+        2.50 / 100_000 * 10_000, rel=1e-6
+    )
+    xau = asset_costs("XAUUSD")
+    assert xau.verified is True
+    assert float(xau.commission_bps(pd.Series([2400.0])).iloc[0]) == pytest.approx(
+        0.07, rel=1e-6
+    )
+    nasdaq = asset_costs("US100.CASH")
+    assert nasdaq.verified is True
+    assert float(nasdaq.commission_bps(pd.Series([20_000.0])).iloc[0]) == 0.0
+
+
+def test_familias_por_activo():
+    assert families_for_symbol("US100.CASH") == ("orb_ny", "trend_intraday")
+    assert families_for_symbol("XAUUSD") == ("asian_rev", "overlap_breakout")
+    assert families_for_symbol("EURUSD") == ("range_reversal", "london_pullback")
+    assert families_for_symbol("USDJPY") == ("session_trend", "tokyo_breakout")
+
+
+def test_nuevas_familias_generan_targets():
+    df = _bars(days=45)
+    for fn in (
+        range_reversal,
+        orb_ny,
+        trend_intraday,
+        overlap_breakout,
+        london_pullback,
+        session_trend,
+        tokyo_breakout,
+    ):
+        result = fn(df)
+        assert len(result.target) == len(df)
+        assert result.target.abs().max() <= 1.0
+
+
+def test_write_guarda_informe_por_activo(tmp_path):
+    df = _bars(days=30)
+    report = run_intraday(df, symbol="EURUSD", paths=10)
+    files = write(report, tmp_path)
+    assert Path(files["json"]).exists()
+    assert Path(files["asset_json"]).exists()
+    assert "EURUSD" in Path(files["asset_json"]).name
+    assert "EURUSD" in Path(files["asset_md"]).name
+
+
 def test_simbolo_sin_comision_verificada_no_inventa():
-    cost = asset_costs("XAUUSD")
+    cost = asset_costs("BTCUSD")
     assert cost.verified is False
     with pytest.raises(RuntimeError, match="sin verificar"):
-        run_intraday(_bars(days=3), symbol="XAUUSD", paths=5)
+        run_intraday(_bars(days=3), symbol="BTCUSD", paths=5)
 
 
 def test_break_even_cost_bps_sintetico():

@@ -1,25 +1,61 @@
 # Costes por activo. No usar un valor global para comisiones.
-# Fuente oficial: FTMO, "Trading Update | 25 Sep 2025".
-# https://ftmo.com/en/blog/trading-updates/trading-update-25-sep-2025/
-# Forex: 2.50 USD por lote y lado, vigente desde 2025-09-29.
-# Verificado el 2026-11-08 contra la tabla publicada.
+# Fuentes oficiales:
+# - Forex/Exotics: FTMO, "Trading Update | 25 Sep 2025", 2.50 USD/lote/lado,
+#   vigente desde 2025-09-29.
+#   https://ftmo.com/en/blog/trading-updates/trading-update-25-sep-2025/
+# - Metals CFD: misma tabla, 0.0007% del volumen por lado desde 2025-09-29.
+# - Índices: FTMO, "Zero Commissions on Indices", publicado 2025-08-01 y
+#   actualizado 2025-11-04; todos los símbolos de índice, comisión 0.
+#   https://ftmo.com/en/blog/zero-commissions-on-indices/
+# Verificado el 2026-11-09 contra las tablas publicadas.
 assets:
   EURUSD:
     verified: true
+    commission_type: per_lot_usd
     commission_per_lot_usd: 2.50
     commission_side: per_side
     contract_size: 100000
+    base_currency: EUR
     quote_currency: USD
     source: "FTMO Trading Update | 25 Sep 2025"
     source_date: "2025-09-25"
     effective_from: "2025-09-29"
     source_url: "https://ftmo.com/en/blog/trading-updates/trading-update-25-sep-2025/"
+  USDJPY:
+    verified: true
+    commission_type: per_lot_usd
+    commission_per_lot_usd: 2.50
+    commission_side: per_side
+    contract_size: 100000
+    base_currency: USD
+    quote_currency: JPY
+    source: "FTMO Trading Update | 25 Sep 2025"
+    source_date: "2025-09-25"
+    effective_from: "2025-09-29"
+    source_url: "https://ftmo.com/en/blog/trading-updates/trading-update-25-sep-2025/"
+  XAUUSD:
+    verified: true
+    commission_type: percent_of_volume
+    commission_percent_per_side: 0.0007
+    commission_side: per_side
+    source: "FTMO Trading Update | 25 Sep 2025 (Metals CFD)"
+    source_date: "2025-09-25"
+    effective_from: "2025-09-29"
+    source_url: "https://ftmo.com/en/blog/trading-updates/trading-update-25-sep-2025/"
+  US100.CASH:
+    verified: true
+    commission_type: zero
+    commission_side: per_side
+    source: "FTMO Zero Commissions on Indices"
+    source_date: "2025-08-01"
+    source_updated: "2025-11-04"
+    effective_from: "2025-08-01"
+    source_url: "https://ftmo.com/en/blog/zero-commissions-on-indices/"
 
-# Supuesto explícito de slippage por lado, en bps.
+# Supuesto explícito de slippage por lado, en bps (global y por activo).
 slippage:
   optimistic_bps: 0.5
   conservative_bps: 2.0
   assumption: >-
-    Órdenes a mercado en EURUSD M15. Optimista: 0.5 bps por lado
-    (~0.55 pips a 1.10). Conservador: 2.0 bps por lado (~2.2 pips).
-    No incluye huecos de apertura ni fines de semana.
+    Órdenes a mercado en M15. Optimista: 0.5 bps por lado. Conservador:
+    2.0 bps por lado. No incluye huecos de apertura ni fines de semana.
