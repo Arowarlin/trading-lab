@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
+import numpy as np
+import pandas as pd
 import pytest
 
 from tradinglab.execution.mt5 import MT5Broker, MT5Error, normalize_volume
@@ -39,6 +43,77 @@ def test_to_utc_subtracts_server_offset():
     ts = 1_793_929_184
     expected = datetime.fromtimestamp(ts, tz=timezone.utc) - timedelta(hours=2)
     assert broker._to_utc(ts) == expected
+
+
+def test_copy_ticks_etiqueta_utc_con_offset_semanal(monkeypatch):
+    bar_stamps = [
+        pd.Timestamp("2025-03-03 00:00", tz="UTC").timestamp(),
+        pd.Timestamp("2025-03-07 23:45", tz="UTC").timestamp(),
+        pd.Timestamp("2025-03-10 00:00", tz="UTC").timestamp(),
+        pd.Timestamp("2025-03-14 23:45", tz="UTC").timestamp(),
+    ]
+    bar_dtype = [
+        ("time", "i8"),
+        ("open", "f8"),
+        ("high", "f8"),
+        ("low", "f8"),
+        ("close", "f8"),
+        ("tick_volume", "f8"),
+        ("spread", "f8"),
+    ]
+    bars = np.array(
+        [(stamp, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0) for stamp in bar_stamps],
+        dtype=bar_dtype,
+    )
+    tick_dtype = [("time", "i8"), ("bid", "f8"), ("ask", "f8")]
+    ticks = np.array(
+        [
+            (pd.Timestamp("2025-03-05 10:00", tz="UTC").timestamp(), 1.1000, 1.1002),
+            (pd.Timestamp("2025-03-12 11:00", tz="UTC").timestamp(), 1.2000, 1.2003),
+            (pd.Timestamp("2025-03-05 11:00", tz="UTC").timestamp(), 1.1001, 1.1000),
+            (pd.Timestamp("2025-03-05 12:00", tz="UTC").timestamp(), 0.0, 0.0),
+        ],
+        dtype=tick_dtype,
+    )
+
+    class FakeMT5:
+        TIMEFRAME_M15 = 15
+        COPY_TICKS_ALL = 2
+
+        def __init__(self):
+            self.flags = None
+
+        @staticmethod
+        def copy_rates_range(symbol, timeframe, date_from, date_to):
+            return bars
+
+        def copy_ticks_range(self, symbol, date_from, date_to, flags):
+            self.flags = flags
+            return ticks
+
+        @staticmethod
+        def last_error():
+            return (0, "ok")
+
+    fake = FakeMT5()
+    broker = MT5Broker(server_utc_offset_hours=2, dry_run=True)
+    broker._connected = True
+    monkeypatch.setattr(broker, "_require", lambda: fake)
+    monkeypatch.setattr(broker, "symbol_spec", lambda symbol: {})
+
+    frame = broker.copy_ticks(
+        "EURUSD",
+        datetime(2025, 3, 5, tzinfo=timezone.utc),
+        datetime(2025, 3, 12, 23, 59, tzinfo=timezone.utc),
+    )
+
+    assert fake.flags == FakeMT5.COPY_TICKS_ALL
+    assert list(frame.columns) == ["ts", "bid", "ask"]
+    assert len(frame) == 2
+    assert frame.iloc[0]["ts"] == pd.Timestamp("2025-03-05 08:00", tz="UTC")
+    assert frame.iloc[1]["ts"] == pd.Timestamp("2025-03-12 08:00", tz="UTC")
+    assert frame.iloc[0]["bid"] == pytest.approx(1.1000)
+    assert frame.iloc[0]["ask"] == pytest.approx(1.1002)
 
 
 # ---------------------------------------------------------- guard de identidad

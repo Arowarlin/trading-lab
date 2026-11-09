@@ -20,6 +20,7 @@ from .accounts import (
     load_accounts,
     rules_for_account,
 )
+from .habits import detect as detect_habits
 from .metrics import (
     RISK_OF_RUIN_ASSUMPTIONS,
     metrics_warning,
@@ -55,6 +56,8 @@ class ClosedTrade:
     entry_order_id: int
     exit_order_id: int
     exit_fill_id: int
+    risk_usd: float | None = None
+    r_multiple: float | None = None
 
 
 def _zone(name: str | None) -> ZoneInfo:
@@ -164,11 +167,18 @@ def _read_fills(db_path: str | Path) -> tuple[list[sqlite3.Row], dict]:
         diagnostics["error"] = str(exc)[:300]
         return [], diagnostics
     try:
+        order_columns = {
+            row["name"]
+            for row in connection.execute("PRAGMA table_info(orders)").fetchall()
+        }
+        risk_expr = "o.risk_usd" if "risk_usd" in order_columns else "NULL"
+        stop_expr = "o.stop_price" if "stop_price" in order_columns else "NULL"
         total = connection.execute("SELECT COUNT(*) AS n FROM fills").fetchone()["n"]
         rows = connection.execute(
             "SELECT f.id AS fill_id, f.ts AS fill_ts, f.qty AS fill_qty, "
             "f.price AS fill_price, f.commission AS commission, "
-            "o.id AS order_id, o.ts AS order_ts, o.ticker, o.side, o.bot "
+            "o.id AS order_id, o.ts AS order_ts, o.ticker, o.side, o.bot, "
+            f"{risk_expr} AS risk_usd, {stop_expr} AS stop_price "
             "FROM fills f JOIN orders o ON o.id = f.order_id "
             "ORDER BY f.ts, f.id"
         ).fetchall()
@@ -214,6 +224,16 @@ def load_closed_trades(
                     "fee_per_unit": commission / qty,
                     "ts": str(row["fill_ts"]),
                     "order_id": int(row["order_id"]),
+                    "risk_usd": (
+                        float(row["risk_usd"])
+                        if row["risk_usd"] is not None
+                        else None
+                    ),
+                    "stop_price": (
+                        float(row["stop_price"])
+                        if row["stop_price"] is not None
+                        else None
+                    ),
                 }
             )
             continue
@@ -224,6 +244,8 @@ def load_closed_trades(
         consumed_qty = 0.0
         cost_basis = 0.0
         buy_fees = 0.0
+        entry_risk = 0.0
+        has_risk = False
         entry_ts: str | None = None
         entry_order_id: int | None = None
         queue = lots.setdefault(key, [])
@@ -233,6 +255,10 @@ def load_closed_trades(
             consumed_qty += take
             cost_basis += take * float(lot["price"])
             buy_fees += take * float(lot["fee_per_unit"])
+            lot_qty = float(lot["qty"])
+            if lot.get("risk_usd") is not None and lot_qty > 0:
+                entry_risk += float(lot["risk_usd"]) * (take / lot_qty)
+                has_risk = True
             if entry_ts is None or str(lot["ts"]) < entry_ts:
                 entry_ts = str(lot["ts"])
                 entry_order_id = int(lot["order_id"])
@@ -279,6 +305,12 @@ def load_closed_trades(
                 entry_order_id=int(entry_order_id or row["order_id"]),
                 exit_order_id=int(row["order_id"]),
                 exit_fill_id=int(row["fill_id"]),
+                risk_usd=round(entry_risk, 6) if has_risk else None,
+                r_multiple=(
+                    round(pnl / entry_risk, 6)
+                    if has_risk and entry_risk > 0
+                    else None
+                ),
             )
         )
 
@@ -468,6 +500,15 @@ def summarize(
             "profit_factor": None,
             "expectancy": None,
             "expectancy_pct": None,
+            "r_n": 0,
+            "r_coverage": None,
+            "r_total": None,
+            "r_expectancy": None,
+            "r_win_rate": None,
+            "r_avg_win": None,
+            "r_avg_loss": None,
+            "r_payoff": None,
+            "r_distribution": _distribution([]),
             "avg_win": None,
             "avg_loss": None,
             "payoff": None,
@@ -500,6 +541,13 @@ def summarize(
 
     pnls = [trade.pnl for trade in trades]
     returns = [trade.return_pct for trade in trades]
+    r_values = [
+        float(trade.r_multiple)
+        for trade in trades
+        if trade.r_multiple is not None
+    ]
+    r_wins = [value for value in r_values if value > 0]
+    r_losses = [value for value in r_values if value < 0]
     wins = [value for value in pnls if value > 0]
     losses = [value for value in pnls if value < 0]
     net = sum(pnls)
@@ -534,6 +582,27 @@ def summarize(
         ),
         "expectancy": round(net / len(trades), 6),
         "expectancy_pct": round(sum(returns) / len(returns), 8),
+        "r_n": len(r_values),
+        "r_coverage": round(len(r_values) / len(trades), 6),
+        "r_total": round(sum(r_values), 6) if r_values else None,
+        "r_expectancy": (
+            round(sum(r_values) / len(r_values), 6) if r_values else None
+        ),
+        "r_win_rate": (
+            round(len(r_wins) / len(r_values), 6) if r_values else None
+        ),
+        "r_avg_win": (
+            round(sum(r_wins) / len(r_wins), 6) if r_wins else None
+        ),
+        "r_avg_loss": (
+            round(sum(r_losses) / len(r_losses), 6) if r_losses else None
+        ),
+        "r_payoff": (
+            round((sum(r_wins) / len(r_wins)) / abs(sum(r_losses) / len(r_losses)), 6)
+            if r_wins and r_losses
+            else None
+        ),
+        "r_distribution": _distribution(r_values),
         "avg_win": round(gross_profit / len(wins), 6) if wins else None,
         "avg_loss": round(gross_loss / len(losses), 6) if losses else None,
         "payoff": (
@@ -723,6 +792,7 @@ def build_journal(
         "groups": group_summaries(filtered, group_by, accounts),
         "by_account": group_summaries(filtered, "account", accounts),
         "by_bot": group_summaries(filtered, "bot", accounts),
+        "habits": detect_habits(filtered),
         "multiverse": multiverse_by_account(db_path, filtered, accounts),
         "trades": [asdict(trade) for trade in reversed(filtered[-limit:])],
         "total_trades": len(filtered),

@@ -58,6 +58,7 @@ from .botlab import (
     restore_bot,
 )
 from .config import DEFAULT_DB, ROOT, Settings, get_settings
+from .cushion import DEFAULT_THRESHOLDS, load_thresholds
 from .drift import build_drift
 from .exports import list_exports, preview_file
 from .health import score_account, time_weighted_return
@@ -911,6 +912,13 @@ class LabData:
                 }
             )
 
+        try:
+            cushion_thresholds = load_thresholds()
+        except Exception:
+            cushion_thresholds = {
+                section: dict(values)
+                for section, values in DEFAULT_THRESHOLDS.items()
+            }
         return {
             "generated_at": _now(),
             "limit_meta": [dict(item) for item in LIMIT_META],
@@ -921,6 +929,7 @@ class LabData:
             "clusters": self._fund_clusters(definitions),
             "exposure": self._fund_exposure(accounts_info),
             "killswitch": self.killswitch_status(),
+            "cushion_thresholds": cushion_thresholds,
         }
 
     def _fund_usage(
@@ -1348,6 +1357,10 @@ class LabData:
             "rollover_utc": rules.rollover_utc,
             "rollover_blackout_min": rules.rollover_blackout_min,
             "verify_against_contract": rules.verify_against_contract,
+            "enabled": rules.enabled,
+            "template": rules.template,
+            "automation_allowed": rules.automation_allowed,
+            "automation_note": rules.automation_note,
         }
 
     @staticmethod

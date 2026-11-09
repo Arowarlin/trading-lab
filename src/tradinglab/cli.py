@@ -719,6 +719,9 @@ def run(
         console.print(f"[yellow]DRY RUN[/yellow] · se habría enviado {delta:+d} {ticker.upper()} @ {price:,.2f}")
         return
 
+    risk_per_share = max(
+        atr_value * settings.risk.atr_stop_mult, price * 0.005
+    )
     fill = broker.submit_market(
         ticker.upper(),
         delta,
@@ -726,6 +729,8 @@ def run(
         bot=f"{ticker.upper()}:{strategy}",
         reason=f"target={target:.2f}",
         run_id=run_id,
+        risk_usd=abs(delta) * risk_per_share if delta > 0 else None,
+        stop_price=price - risk_per_share if delta > 0 else None,
     )
     console.print(f"[green]Ejecutado[/green] {fill}")
     broker.mark_to_market({ticker.upper(): price})
@@ -1157,8 +1162,17 @@ def agent_run(
         console.print(f"[yellow]DRY RUN[/yellow] · se habría enviado {delta:+d} {ticker.upper()} @ {price:,.2f}")
         return
 
+    risk_per_share = max(
+        atr_value * settings.risk.atr_stop_mult, price * 0.005
+    )
     fill = broker.submit_market(
-        ticker.upper(), delta, price, bot=f"agent-{mode}", reason=f"rating={rating}"
+        ticker.upper(),
+        delta,
+        price,
+        bot=f"agent-{mode}",
+        reason=f"rating={rating}",
+        risk_usd=abs(delta) * risk_per_share if delta > 0 else None,
+        stop_price=price - risk_per_share if delta > 0 else None,
     )
     with connect(DEFAULT_DB) as con:
         con.execute(
@@ -1252,6 +1266,59 @@ def status() -> None:
             title=f"Cuenta paper · modo {settings.mode}",
         )
     )
+
+    try:
+        from .cushion import STATE_LABELS, STYLE_BY_STATE
+        from .cushion import evaluate as cushion_evaluate
+
+        try:
+            equity_series = broker.equity_series()
+        except Exception:
+            equity_series = None
+        cushion = cushion_evaluate(
+            equity_series,
+            settings.risk,
+            current=float(snap["equity"]),
+            tz=settings.timezone,
+        )
+    except Exception as exc:
+        cushion = None
+        console.print(f"[dim]Colchón de riesgo: sin datos ({exc})[/dim]")
+
+    if cushion is not None:
+        t = Table(title="Colchón de riesgo (informativo)")
+        t.add_column("Límite")
+        t.add_column("Estado", justify="center")
+        t.add_column("Uso del límite", justify="right")
+        t.add_column("Resta (% equity)", justify="right")
+        t.add_column("Resta USD", justify="right")
+        t.add_column("Límite (% equity)", justify="right")
+        for band in (cushion.daily, cushion.drawdown):
+            style = STYLE_BY_STATE.get(band.state, "dim")
+            label = STATE_LABELS.get(band.state, band.state)
+            state_cell = (
+                f"[{style}]{label}[/{style}]"
+                if style != "dim"
+                else f"[dim]{label}[/dim]"
+            )
+            if band.state == "no_data":
+                t.add_row(band.label, state_cell, "sin datos", "sin datos", "sin datos", "sin datos")
+                continue
+            t.add_row(
+                band.label,
+                state_cell,
+                f"{band.used_fraction:.0%}",
+                f"{band.remaining_pct:.2%}",
+                f"{band.remaining_usd:,.2f}",
+                f"{band.limit_pct:.2%}",
+            )
+        console.print(t)
+        console.print(
+            "[dim]Informativo: no bloquea. El kill-switch/guard de riesgo sigue "
+            "siendo el único que decide.[/dim]"
+        )
+        if cushion.warning:
+            console.print(f"[yellow]{cushion.warning}[/yellow]")
 
     if snap["positions"]:
         t = Table(title="Posiciones")
@@ -1542,6 +1609,24 @@ def journal_cmd(
     t.add_row("Win rate", _fmt_pct(summary["win_rate"]) if summary["win_rate"] is not None else "sin datos")
     t.add_row("Profit factor", f"{summary['profit_factor']:.2f}" if summary["profit_factor"] is not None else "sin datos")
     t.add_row("Expectancy", f"{summary['expectancy']:,.2f}" if summary["expectancy"] is not None else "sin datos")
+    t.add_row(
+        "R total",
+        f"{summary['r_total']:+.2f} R"
+        if summary["r_total"] is not None
+        else "sin datos",
+    )
+    t.add_row(
+        "R expectancy",
+        f"{summary['r_expectancy']:+.2f} R"
+        if summary["r_expectancy"] is not None
+        else "sin datos",
+    )
+    t.add_row(
+        "R cobertura",
+        _fmt_pct(summary["r_coverage"])
+        if summary["r_coverage"] is not None
+        else "sin datos",
+    )
     t.add_row("Sharpe", f"{summary['sharpe']:.2f}" if summary["sharpe"] is not None else "sin datos")
     t.add_row("Sortino", f"{summary['sortino']:.2f}" if summary["sortino"] is not None else "sin datos")
     t.add_row("Calmar", f"{summary['calmar']:.2f}" if summary["calmar"] is not None else "sin datos")
@@ -1586,9 +1671,74 @@ def journal_cmd(
         d.add_row(label, f"{value:.4%}" if key not in ("n",) and value is not None else ("sin datos" if value is None else str(value)))
     console.print(d)
 
+    r_dist = summary["r_distribution"]
+    r = Table(title="Distribución de R-múltiplos")
+    r.add_column("Estadístico", style="bold")
+    r.add_column("Valor", justify="right")
+    for label, key in (
+        ("N con R", "n"),
+        ("Mín", "min"),
+        ("P5", "p5"),
+        ("P25", "p25"),
+        ("Mediana", "median"),
+        ("P75", "p75"),
+        ("P95", "p95"),
+        ("Máx", "max"),
+        ("Media", "mean"),
+        ("Desv. típica", "stdev"),
+    ):
+        value = r_dist[key]
+        r.add_row(
+            label,
+            f"{value:+.2f} R"
+            if key != "n" and value is not None
+            else ("sin datos" if value is None else str(value)),
+        )
+    console.print(r)
+
+    habits = payload.get("habits") or {}
+    revenge = habits.get("revenge") or {}
+    overtrading = habits.get("overtrading") or {}
+    h = Table(title="Detectores de conducta (informativo)")
+    h.add_column("Detector", style="bold")
+    h.add_column("Eventos", justify="right")
+    h.add_column("Detalle", overflow="fold")
+    revenge_events = revenge.get("events") or []
+    if revenge_events:
+        revenge_detail = "; ".join(
+            f"{str(event.get('entry'))[:19]} +{event['minutes']:.0f} min "
+            f"riesgo {event['risk_usd']:.2f} > {event['previous_risk_usd']:.2f}"
+            for event in revenge_events[:3]
+        )
+    else:
+        revenge_detail = "sin señales"
+    h.add_row(
+        "Revenge trading",
+        str(revenge.get("count", 0)),
+        f"{revenge_detail} · ventana {float(revenge.get('window_minutes', 0)):.0f} min",
+    )
+    overtrading_days = overtrading.get("days") or []
+    if overtrading_days:
+        overtrading_detail = "; ".join(
+            f"{row['day']}: {row['trades']} > {row['threshold']}"
+            for row in overtrading_days[:3]
+        )
+    else:
+        overtrading_detail = "sin señales"
+    median = overtrading.get("median")
+    median_text = "sin datos" if median is None else f"{float(median):.2f}"
+    h.add_row(
+        "Overtrading",
+        str(overtrading.get("count", 0)),
+        f"{overtrading_detail} · mediana {median_text} · "
+        f"umbral {overtrading.get('threshold', 'sin datos')}",
+    )
+    console.print(h)
+    console.print("[dim]Informativo: no bloquea operaciones.[/dim]")
+
     group_rows = payload["groups"]
     g = Table(title=f"Agrupado por {group_by}")
-    for col in ("Grupo", "N", "Neto", "Retorno", "Win", "PF", "Exp.", "Sharpe", "MaxDD", "Muestra"):
+    for col in ("Grupo", "N", "Neto", "Retorno", "Win", "PF", "Exp.", "R total", "Sharpe", "MaxDD", "Muestra"):
         g.add_column(col, justify="left" if col == "Grupo" else "right")
     for row in group_rows:
         g.add_row(
@@ -1599,6 +1749,7 @@ def journal_cmd(
             _fmt_pct(row["win_rate"]) if row["win_rate"] is not None else "sin datos",
             f"{row['profit_factor']:.2f}" if row["profit_factor"] is not None else "sin datos",
             f"{row['expectancy']:,.2f}" if row["expectancy"] is not None else "sin datos",
+            f"{row['r_total']:+.2f}" if row["r_total"] is not None else "sin datos",
             f"{row['sharpe']:.2f}" if row["sharpe"] is not None else "sin datos",
             _fmt_pct(row["max_drawdown"]) if row["max_drawdown"] is not None else "sin datos",
             "ok" if row["sample_ok"] else f"N<{MIN_SAMPLE}",
@@ -1606,7 +1757,21 @@ def journal_cmd(
     console.print(g)
 
     t2 = Table(title=f"Últimas {len(payload['trades'])} operaciones cerradas")
-    for col in ("Salida", "Bot", "Cuenta", "Perfil", "Activo", "Qty", "Entrada", "Salida", "PnL", "Ret.", "Horas"):
+    for col in (
+        "Salida",
+        "Bot",
+        "Cuenta",
+        "Perfil",
+        "Activo",
+        "Qty",
+        "Entrada",
+        "Salida",
+        "PnL",
+        "Ret.",
+        "Riesgo",
+        "R",
+        "Horas",
+    ):
         t2.add_column(col, justify="left" if col in ("Salida", "Bot", "Cuenta", "Perfil", "Activo") else "right")
     for trade in payload["trades"]:
         t2.add_row(
@@ -1620,6 +1785,8 @@ def journal_cmd(
             f"{trade['exit_price']:,.5f}",
             f"{trade['pnl']:,.2f}",
             _fmt_pct(trade["return_pct"]),
+            f"{trade['risk_usd']:,.2f}" if trade["risk_usd"] is not None else "sin datos",
+            f"{trade['r_multiple']:+.2f} R" if trade["r_multiple"] is not None else "sin datos",
             f"{trade['holding_hours']:.1f}" if trade["holding_hours"] is not None else "sin datos",
         )
     console.print(t2)
@@ -4256,7 +4423,20 @@ def mt5_order(
         tp = entry + sign * tp_pips * pip if tp_pips else None
 
         signed = lots if side == "buy" else -lots
-        result = broker.submit_market(symbol, signed, sl=sl, tp=tp, reason="cli mt5 order")
+        risk_usd = (
+            lots * inst.risk_per_lot(sl_pips * pip, quote_rate=qr)
+            if sl_pips
+            else None
+        )
+        result = broker.submit_market(
+            symbol,
+            signed,
+            sl=sl,
+            tp=tp,
+            reason="cli mt5 order",
+            risk_usd=risk_usd,
+            stop_price=sl,
+        )
     finally:
         broker.shutdown()
 
@@ -4695,6 +4875,52 @@ def ticks_spread_cmd(
     console.print(table)
 
 
+@ticks_app.command("broker-spread")
+def ticks_broker_spread_cmd(
+    symbol: str = typer.Argument("EURUSD", help="EURUSD, USDJPY, XAUUSD, US100.cash…"),
+    days: int = typer.Option(7, "--days", help="Días hacia atrás de ticks MT5"),
+    out: Path = typer.Option(None, "--out", help="Directorio de reports/research"),
+) -> None:
+    """Mide el spread efectivo del bróker con ticks MT5. Solo lectura."""
+    from .broker_costs import collect_broker, merge_broker_report
+
+    settings = get_settings()
+    broker = _mt5(settings, dry_run=True)
+    try:
+        result = collect_broker(
+            symbol,
+            days,
+            broker.copy_ticks,
+            db_path=DEFAULT_DB,
+        )
+    except Exception as exc:
+        console.print(f"[red]No se pudo medir el spread del bróker:[/red] {exc}")
+        raise typer.Exit(1)
+    finally:
+        broker.shutdown()
+    report = merge_broker_report(result, out_dir=Path(out) if out else ROOT / "reports" / "research")
+    summary = result.get("summary") or {}
+    table = Table(title=f"Spread bróker · {result['symbol']} · {days} días")
+    table.add_column("Campo", style="bold")
+    table.add_column("Valor", justify="right")
+    table.add_row("Estado", str(summary.get("status") or "sin datos"))
+    table.add_row("Ticks", f"{int(summary.get('n_ticks') or 0):,}")
+    table.add_row(
+        "Mediana bps",
+        "sin datos" if summary.get("median_bps") is None else f"{float(summary['median_bps']):.3f}",
+    )
+    table.add_row(
+        "P75 bps",
+        "sin datos" if summary.get("p75_bps") is None else f"{float(summary['p75_bps']):.3f}",
+    )
+    table.add_row("Horas con datos", str(int(summary.get("hours_with_data") or 0)))
+    console.print(table)
+    console.print(f"[green]Informe[/green] · {Path(out) if out else ROOT / 'reports' / 'research'}")
+    console.print("[dim]Solo datos; no se ha enviado ninguna orden.[/dim]")
+    if report.get("symbols", {}).get(result["symbol"], {}).get("status") == "sin datos":
+        console.print("[yellow]Sin datos: no hay ticks del bróker; no se rellena con Dukascopy.[/yellow]")
+
+
 @mt5_app.command("aliases")
 def mt5_aliases_cmd() -> None:
     """Descubre los símbolos del broker para el universo intradía y los guarda."""
@@ -4930,6 +5156,8 @@ def mt5_run(
             tp=tp,
             bot=f"forex:{strategy}",
             reason=f"target={target:+.0f}",
+            risk_usd=float(lots) * float(risk_per_lot),
+            stop_price=sl,
         )
         console.print(f"[green]Ejecutado[/green] {result}")
         _record_signal(
@@ -6120,14 +6348,26 @@ def portfolio_simulate_cmd(
 def research_costs_cmd(
     top: int = typer.Option(10, "--top"),
     out: str = typer.Option(None, "--out"),
+    source: str = typer.Option(
+        "broker", "--source", help="Spread: broker o dukascopy"
+    ),
 ) -> None:
-    """Sensibilidad del top de research a comisión y slippage."""
+    """Sensibilidad del top de research a comisión, slippage y spread."""
     from .costs import run_costs, write
 
+    selected = str(source or "").strip().lower()
+    if selected not in {"broker", "dukascopy"}:
+        console.print("[red]--source debe ser broker o dukascopy[/red]")
+        raise typer.Exit(2)
     settings = get_settings()
     report_dir = Path(out) if out else ROOT / "reports" / "research"
     try:
-        payload = run_costs(report_dir, cache_dir=settings.data.cache_dir, top=top)
+        payload = run_costs(
+            report_dir,
+            cache_dir=settings.data.cache_dir,
+            top=top,
+            source=selected,
+        )
     except Exception as exc:
         console.print(f"[red]No se pudo calcular la sensibilidad:[/red] {exc}")
         raise typer.Exit(1)
@@ -6135,11 +6375,108 @@ def research_costs_cmd(
     console.print(
         Panel(
             f"{len(payload['results'])} variantes · "
-            f"frágiles {payload['fragile_count']} · escenarios {', '.join(payload['scenarios'])}",
+            f"frágiles {payload['fragile_count']} · "
+            f"sin datos {payload.get('sin_datos_count', 0)} · "
+            f"spread {selected}",
             title="Sensibilidad a costes",
         )
     )
     console.print(f"[green]Tabla generada[/green] · {files['md']} · {files['json']}")
+
+
+@app.command("research-intraday-broker")
+def research_intraday_broker_cmd(
+    paths: int = typer.Option(500, "--paths"),
+    out: str = typer.Option(None, "--out"),
+) -> None:
+    """Recalcula la etapa 3 con spread bróker p75; no crea trials."""
+    from .broker_costs import recalculate_stage3
+
+    reports_dir = Path(out) if out else ROOT / "reports" / "research"
+    try:
+        result = recalculate_stage3(reports_dir=reports_dir, paths=paths)
+    except Exception as exc:
+        console.print(f"[red]No se pudo recalcular con coste bróker:[/red] {exc}")
+        raise typer.Exit(1)
+    comparison = result["comparison"]
+    table = Table(title="Coste bróker vs equilibrio")
+    for col in ("Activo", "Bróker p75", "Coste cons.", "Equilibrio", "Margen"):
+        table.add_column(col, justify="right" if col != "Activo" else "left")
+    for row in comparison.get("rows") or []:
+        table.add_row(
+            str(row["symbol"]),
+            "sin datos" if row.get("broker_p75_bps") is None else f"{row['broker_p75_bps']:.3f}",
+            "sin datos" if row.get("broker_cost_bps") is None else f"{row['broker_cost_bps']:.2f}",
+            "sin cruce" if row.get("breakeven_bps") is None else f"{row['breakeven_bps']:.2f}",
+            "sin datos" if row.get("margin") is None else ("sí" if row["margin"] else "no"),
+        )
+    console.print(table)
+    for row in comparison.get("rows") or []:
+        console.print(f"- {row['sentence']}")
+    if result.get("errors"):
+        console.print("[yellow]Avisos:[/yellow] " + "; ".join(result["errors"]))
+    console.print(
+        f"[green]Informes[/green] · {reports_dir} · "
+        "sin trials nuevos; DSR sin cambios."
+    )
+
+
+@app.command("research-caja-ny")
+def research_caja_ny_cmd(
+    mc_paths: int = typer.Option(500, "--mc-paths"),
+    out: str = typer.Option(None, "--out"),
+) -> None:
+    """Ejecuta caja_ny con eventos y registra sus variantes; sin órdenes."""
+    from .event_families import run_caja_ny
+
+    try:
+        report = run_caja_ny(
+            mc_paths=mc_paths,
+            out_dir=Path(out) if out else None,
+        )
+    except Exception as exc:
+        console.print(f"[red]No se pudo ejecutar caja_ny:[/red] {exc}")
+        raise typer.Exit(1)
+    table = Table(title="Caja NY · eventos")
+    for col in (
+        "Stop",
+        "Trades",
+        "Sharpe bruto",
+        "Sharpe neto",
+        "Coste bps/op",
+        "Equilibrio",
+        "PBO",
+        "WF",
+        "DSR",
+        "Pasa",
+    ):
+        table.add_column(col, overflow="fold")
+    for row in report["variants"]:
+        table.add_row(
+            str(row["params"]["stop_rule"]),
+            str(row["trades"]),
+            f"{row['gross_sharpe']:.2f}",
+            f"{row['net_sharpe']:.2f}",
+            f"{row['effective_cost_bps']:.2f}",
+            "sin cruce"
+            if row["breakeven_bps"] is None
+            else f"{row['breakeven_bps']:.2f}",
+            "sin datos" if row["pbo"] is None else f"{row['pbo']:.2f}",
+            str(row["wf_verdict"]),
+            f"{row['dsr']:.2f}",
+            "sí" if row["passed"] else "no",
+        )
+    console.print(table)
+    counters = report["counters"]
+    console.print(
+        f"DSR: {counters['before']} → {counters['after']} · "
+        f"trials: {counters['trials_before']} → {counters['trials_after']}"
+    )
+    console.print(
+        f"Veredicto: {'PASA' if report['passed'] else 'NO PASA'} · "
+        + ("; ".join(report["reasons"]) if report["reasons"] else "sin motivos")
+    )
+    console.print(f"[green]Informe[/green] · {report['files']['md']}")
 
 
 # ==================================================================== Futuros

@@ -12,7 +12,12 @@ import pandas as pd
 
 from ..db import connect, utcnow
 from ..instruments import Instrument, InstrumentError, get_instrument
-from .mt5_offsets import infer_bar_offsets, offset_periods
+from .mt5_offsets import (
+    infer_bar_offsets,
+    map_offsets,
+    offset_periods,
+    weekly_offsets,
+)
 
 
 class MT5Error(RuntimeError):
@@ -431,6 +436,94 @@ class MT5Broker:
         cols = ["open", "high", "low", "close", "volume", "spread"]
         return df[[c for c in cols if c in df.columns]].astype(float)
 
+    def copy_ticks(
+        self,
+        symbol: str,
+        desde: datetime,
+        hasta: datetime,
+    ) -> pd.DataFrame:
+        """Ticks del bróker en UTC, etiquetados con el offset semanal.
+
+        Solo lectura: usa ``copy_ticks_range`` con ``COPY_TICKS_ALL``. El offset
+        de cada semana se infiere de barras M15 alrededor del rango (el mismo
+        método que ``rates``), no de un offset global. Devuelve ``ts`` UTC,
+        ``bid`` y ``ask``; los ticks inválidos (bid/ask <= 0 o ask < bid) se
+        descartan. Si no hay ticks, devuelve un DataFrame vacío.
+        """
+        if not isinstance(desde, datetime) or not isinstance(hasta, datetime):
+            raise MT5Error("desde y hasta deben ser datetime")
+        if desde.tzinfo is None:
+            desde = desde.replace(tzinfo=timezone.utc)
+        if hasta.tzinfo is None:
+            hasta = hasta.replace(tzinfo=timezone.utc)
+        desde = desde.astimezone(timezone.utc)
+        hasta = hasta.astimezone(timezone.utc)
+        if hasta <= desde:
+            raise MT5Error("hasta debe ser posterior a desde")
+
+        mt5 = self._require()
+        self.symbol_spec(symbol)
+        offset = float(self._server_offset)
+
+        # Barras M15 holgadas para confirmar apertura/cierre semanal y DST.
+        bar_from = desde - timedelta(days=14)
+        bar_to = hasta + timedelta(days=2)
+        bars = mt5.copy_rates_range(
+            symbol,
+            mt5.TIMEFRAME_M15,
+            bar_from + timedelta(hours=offset),
+            bar_to + timedelta(hours=offset),
+        )
+        if bars is None or len(bars) == 0:
+            raise MT5Error(
+                f"sin barras M15 para inferir el offset semanal de {symbol}"
+            )
+        bar_frame = pd.DataFrame(bars)
+        if "time" not in bar_frame.columns:
+            raise MT5Error(f"barras sin columna time para {symbol}")
+        server_bars = pd.to_datetime(bar_frame["time"], unit="s", utc=True)
+        try:
+            offsets = infer_bar_offsets(server_bars, "M15")
+        except ValueError as exc:
+            raise MT5Error(
+                f"No se pudo inferir el offset semanal de {symbol}: {exc}"
+            ) from exc
+        self.rate_offset_periods = offset_periods(server_bars, offsets)
+        weekly = weekly_offsets(server_bars, offsets)
+
+        # La API interpreta las fechas en hora del servidor. Se añade el offset
+        # actual y un día de margen; luego se filtra por UTC real.
+        pad = timedelta(days=1)
+        raw = mt5.copy_ticks_range(
+            symbol,
+            desde + timedelta(hours=offset) - pad,
+            hasta + timedelta(hours=offset) + pad,
+            mt5.COPY_TICKS_ALL,
+        )
+        if raw is None or len(raw) == 0:
+            return pd.DataFrame(columns=["ts", "bid", "ask"])
+        frame = pd.DataFrame(raw)
+        if "time" in frame.columns:
+            server_ticks = pd.to_datetime(frame["time"], unit="s", utc=True)
+        elif "time_msc" in frame.columns:
+            server_ticks = pd.to_datetime(frame["time_msc"], unit="ms", utc=True)
+        else:
+            raise MT5Error(f"ticks sin columna time/time_msc para {symbol}")
+        mapped = map_offsets(server_ticks, weekly)
+        frame["ts"] = pd.DatetimeIndex(server_ticks) - pd.to_timedelta(
+            mapped.to_numpy(), unit="h"
+        )
+        frame = frame[["ts", "bid", "ask"]].copy()
+        frame["bid"] = pd.to_numeric(frame["bid"], errors="coerce")
+        frame["ask"] = pd.to_numeric(frame["ask"], errors="coerce")
+        frame = frame[
+            (frame["bid"] > 0)
+            & (frame["ask"] > 0)
+            & (frame["ask"] >= frame["bid"])
+        ]
+        frame = frame[(frame["ts"] >= desde) & (frame["ts"] <= hasta)]
+        return frame.sort_values("ts").drop_duplicates("ts").reset_index(drop=True)
+
     def positions(self, symbol: str | None = None) -> list[dict]:
         mt5 = self._require()
         raw = mt5.positions_get(symbol=symbol) if symbol else mt5.positions_get()
@@ -519,6 +612,8 @@ class MT5Broker:
         bot: str = "manual",
         reason: str = "",
         run_id: int | None = None,
+        risk_usd: float | None = None,
+        stop_price: float | None = None,
     ) -> dict:
         """Envía una orden a mercado. `volume` positivo = compra, negativo = venta."""
         if volume == 0:
@@ -609,6 +704,8 @@ class MT5Broker:
                     bot=bot,
                     reason=reason,
                     run_id=run_id,
+                    risk_usd=risk_usd,
+                    stop_price=stop_price,
                 )
             if result.retcode != mt5.TRADE_RETCODE_INVALID_FILL:
                 raise MT5Error(
@@ -618,7 +715,21 @@ class MT5Broker:
 
         raise MT5Error(f"No se pudo enviar la orden: {last_error}")
 
-    def _record(self, *, result, spec, side, vol, sl, tp, bot, reason, run_id) -> dict:
+    def _record(
+        self,
+        *,
+        result,
+        spec,
+        side,
+        vol,
+        sl,
+        tp,
+        bot,
+        reason,
+        run_id,
+        risk_usd=None,
+        stop_price=None,
+    ) -> dict:
         payload = {
             "ok": True,
             "dry_run": False,
@@ -638,7 +749,8 @@ class MT5Broker:
                 with connect(self.db_path) as con:
                     con.execute(
                         "INSERT INTO orders(ts, ticker, side, qty, order_type, status, broker_id, "
-                        "bot, reason, run_id) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                        "bot, reason, run_id, risk_usd, stop_price) "
+                        "VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
                         (
                             utcnow(),
                             spec["symbol"],
@@ -650,6 +762,8 @@ class MT5Broker:
                             bot,
                             reason,
                             run_id,
+                            None if risk_usd is None else float(risk_usd),
+                            None if stop_price is None else float(stop_price),
                         ),
                     )
             except Exception:
@@ -750,6 +864,31 @@ class MT5Broker:
 
     def equity_series(self, days: int = 180) -> pd.Series:
         return self.balance_curve(days)
+
+
+def copy_ticks(symbol: str, desde: datetime, hasta: datetime) -> pd.DataFrame:
+    """Ticks del bróker en UTC. Solo lectura.
+
+    Llama a ``mt5.copy_ticks_range`` con ``COPY_TICKS_ALL`` y devuelve las
+    columnas exactas ``ts`` (UTC, tz-aware), ``bid`` y ``ask``, ordenadas por
+    ``ts``. Si MT5 devuelve ``None`` o vacío, devuelve un DataFrame vacío con
+    esas columnas; no lanza excepción, no rellena datos y no escribe en disco.
+    """
+    mt5 = _mt5()
+    raw = mt5.copy_ticks_range(symbol, desde, hasta, mt5.COPY_TICKS_ALL)
+    columns = ["ts", "bid", "ask"]
+    if raw is None or len(raw) == 0:
+        return pd.DataFrame(columns=columns)
+    frame = pd.DataFrame(raw)
+    stamps = pd.to_datetime(frame["time"], unit="s", utc=True)
+    out = pd.DataFrame(
+        {
+            "ts": stamps,
+            "bid": pd.to_numeric(frame["bid"], errors="coerce"),
+            "ask": pd.to_numeric(frame["ask"], errors="coerce"),
+        }
+    )
+    return out.sort_values("ts").reset_index(drop=True)
 
 
 def _require_mt5(connected: bool):

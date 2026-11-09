@@ -89,6 +89,22 @@ def test_backtest_usa_spread_de_ticks_por_hora():
     assert result["spread_reliable"] is True
 
 
+def test_backtest_spread_override_label_y_reliable():
+    df = _bars(days=2).drop(columns=["spread"])
+    target = opening_range_breakout(df).target
+    result = backtest_intraday(
+        df,
+        target,
+        timeframe="M15",
+        spread_override_bps=2.0,
+        spread_override_reliable=True,
+        spread_label="broker: MT5 ticks p75",
+    )
+    assert result["spread_source"] == "broker: MT5 ticks p75"
+    assert result["spread_reliable"] is True
+    assert result["spread_bps_median"] == pytest.approx(2.0)
+
+
 def test_run_intraday_atribuye_spread_de_ticks():
     df = _bars(days=30).drop(columns=["spread"])
     hourly = pd.Series({hour: 1.5 for hour in range(24)})
@@ -156,7 +172,11 @@ def test_costes_por_tipo_de_activo():
 
 
 def test_familias_por_activo():
-    assert families_for_symbol("US100.CASH") == ("orb_ny", "trend_intraday")
+    assert families_for_symbol("US100.CASH") == (
+        "orb_ny",
+        "trend_intraday",
+        "caja_ny",
+    )
     assert families_for_symbol("XAUUSD") == ("asian_rev", "overlap_breakout")
     assert families_for_symbol("EURUSD") == ("range_reversal", "london_pullback")
     assert families_for_symbol("USDJPY") == ("session_trend", "tokyo_breakout")
@@ -229,6 +249,47 @@ def test_run_intraday_registra_las_variantes_probadas(tmp_path):
     assert all(row["reason"] for row in rows if row["outcome"] == "failed")
     assert all(row["hypothesis"] for row in rows)
     assert all(row["run_id"] == report["run_id"] for row in rows)
+
+
+def test_recalculo_no_cambia_contador_dsr(tmp_path):
+    from tradinglab.learning import count_tests
+    from tradinglab.trials import record_trial
+
+    db = tmp_path / "lab.db"
+    record_trial(
+        db,
+        family="seed",
+        hypothesis="seed",
+        symbol="EURUSD",
+        outcome="failed",
+        source="sweep",
+    )
+    before = count_tests(db)
+    df = _bars(days=30).drop(columns=["spread"])
+    report = run_intraday(
+        df,
+        symbol="EURUSD",
+        paths=5,
+        families=("range_reversal",),
+        db_path=db,
+        record=False,
+        dsr_n_trials=before,
+        spread_override_bps=2.0,
+        spread_override_reliable=True,
+        spread_label="broker: MT5 ticks p75",
+        recalculation={"enabled": True, "reason": "test sintético"},
+    )
+    assert report["trials_recorded"] == 0
+    assert report["dsr_n_trials"] == before
+    assert report["recalculation"]["dsr_counter_unchanged"] is True
+    assert report["recalculation"]["strategy_trials_before"] == before
+    assert report["recalculation"]["strategy_trials_after"] == before
+    assert count_tests(db) == before
+    assert report["cost_model"]["spread"]["source"] == "broker: MT5 ticks p75"
+    assert report["cost_model"]["spread"]["stat"] == "p75"
+    markdown = render_markdown(report)
+    assert "Recálculo de coste" in markdown
+    assert "no se crearon trials nuevos" in markdown
 
 
 def test_tres_estrategias_generan_targets():

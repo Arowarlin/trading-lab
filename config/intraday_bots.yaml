@@ -32,6 +32,20 @@ bots:
     params: {session: "NY"}
     grid: {fast: [20, 50], slow: [100, 200], pullback_atr: [0.25, 0.5], max_hold: [8, 16]}
     description: "Tendencia intradía de Nueva York sobre US100.cash."
+  - id: nasdaq-caja-ny
+    type: deterministic
+    profile: intraday_fx
+    cluster: intraday_fx
+    account: ftmo_demo
+    strategy: caja_ny
+    family: caja_ny
+    universe: [US100.cash]
+    timeframe: M5
+    enabled: false
+    exposure: 0.25
+    params: {session: "NY", execution: "events"}
+    grid: {range_start: ["09:15"], range_end: ["09:35"], stop_rule: ["range", "atr_0.5", "atr_1.0", "atr_1.5"], force_exit: ["15:45"], max_trades_per_day: [1]}
+    description: "Caja de apertura NY con ruptura y retroceso limitado; investigación por eventos, disabled."
   # Oro
   - id: gold-asian-rev
     type: deterministic

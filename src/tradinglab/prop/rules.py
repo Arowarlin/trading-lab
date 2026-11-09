@@ -55,6 +55,12 @@ class PropRules:
 
     verify_against_contract: bool = True
     notes: str = ""
+    # Plantillas de firma: una plantilla no debe usarse como firma activa.
+    enabled: bool = True
+    template: bool = False
+    # None = no verificado; False = prohibido; True = permitido.
+    automation_allowed: bool | None = None
+    automation_note: str = ""
 
     # ------------------------------------------------------------------ importes
 
@@ -84,21 +90,42 @@ class PropRules:
 
     def describe(self) -> str:
         target = f"{self.profit_target_pct:.1%}" if self.profit_target_pct else "sin objetivo"
-        return (
+        text = (
             f"{self.firm} {self.program} · {self.phase} · ${self.account_size:,.0f} · "
             f"objetivo {target} · diario {self.max_daily_loss_pct:.1%} · "
             f"máximo {self.max_loss_pct:.1%} ({self.max_loss_mode}) · "
             f"colchón {self.buffer_pct:.0%}"
         )
+        if self.template:
+            text += " · PLANTILLA inactiva"
+        if self.automation_allowed is False:
+            text += " · automatización prohibida"
+        elif self.automation_allowed is True:
+            text += " · automatización permitida"
+        return text
 
 
 # --------------------------------------------------------------------- presets
+
+TEMPLATES_FILE = CONFIG_DIR / "prop_templates.yaml"
+
 
 def _load_yaml(path: Path | None = None) -> dict:
     path = path or CONFIG_DIR / "prop.yaml"
     if not path.exists():
         return {}
     return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+
+
+def _firms(path: Path | None = None) -> dict:
+    """Firmas activas + plantillas inactivas; prop.yaml siempre tiene prioridad."""
+    active = _load_yaml(path).get("firms") or {}
+    if path is not None:
+        return active
+    templates = _load_yaml(TEMPLATES_FILE).get("firms") or {}
+    merged = dict(templates)
+    merged.update(active)
+    return merged
 
 
 def from_yaml(
@@ -109,12 +136,13 @@ def from_yaml(
     path: Path | None = None,
     buffer_pct: float | None = None,
 ) -> PropRules:
-    """Carga una firma desde config/prop.yaml y aplica los valores de la fase."""
-    data = _load_yaml(path)
-    firms = data.get("firms") or {}
+    """Carga una firma desde config/prop.yaml o config/prop_templates.yaml."""
+    firms = _firms(path)
     entry = firms.get(firm.lower()) or firms.get(firm)
     if not entry:
-        raise KeyError(f"Firma '{firm}' no está en config/prop.yaml")
+        raise KeyError(
+            f"Firma '{firm}' no está en config/prop.yaml ni en prop_templates.yaml"
+        )
 
     phases = entry.get("phases") or {}
     phase_data = phases.get(phase)
@@ -126,6 +154,14 @@ def from_yaml(
     merged.pop("phases", None)
     merged.pop("defaults", None)
 
+    for key in (
+        "enabled",
+        "template",
+        "automation_allowed",
+        "automation_note",
+    ):
+        if key in entry:
+            merged[key] = entry[key]
     merged.setdefault("program", entry.get("program", "2-step"))
     merged["firm"] = entry.get("display_name", firm.upper())
     merged["phase"] = phase
@@ -158,4 +194,12 @@ def ftmo(account_size: float = 100_000.0, phase: Phase = "challenge", **override
     return PropRules(**defaults)
 
 
-__all__ = ["Phase", "LossMode", "DailyBase", "PropRules", "from_yaml", "ftmo"]
+__all__ = [
+    "DailyBase",
+    "LossMode",
+    "Phase",
+    "PropRules",
+    "TEMPLATES_FILE",
+    "from_yaml",
+    "ftmo",
+]

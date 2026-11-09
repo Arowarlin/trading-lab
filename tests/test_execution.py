@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from tradinglab.db import init_db
+from tradinglab.db import connect, init_db
 from tradinglab.execution.paper import PaperBroker
 from tradinglab.orchestrator import load_bots
 
@@ -25,6 +25,21 @@ def test_paper_broker_roundtrip(tmp_path):
     broker.submit_market("XYZ", -10, 110.0, bot="test")
     assert broker.positions() == []
     assert len(broker.equity_series()) >= 2
+
+
+def test_paper_broker_guarda_riesgo_inicial(tmp_path):
+    db = tmp_path / "lab.db"
+    init_db(db)
+    broker = PaperBroker(db, starting_cash=10_000, commission_bps=0, slippage_bps=0)
+    broker.submit_market(
+        "XYZ", 10, 100.0, bot="test", risk_usd=50.0, stop_price=95.0
+    )
+    with connect(db) as con:
+        row = con.execute(
+            "SELECT risk_usd, stop_price FROM orders ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+    assert row["risk_usd"] == pytest.approx(50.0)
+    assert row["stop_price"] == pytest.approx(95.0)
 
 
 def test_paper_broker_rejects_oversell(tmp_path):

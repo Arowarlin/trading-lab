@@ -1,0 +1,14 @@
+# Detectores de conducta sobre operaciones cerradas.
+#
+# Son informativos: NO bloquean operaciones. Solo describen patrones en el
+# journal para revisarlos con calma.
+#
+# revenge: una operación abierta menos de `window_minutes` después de cerrar
+#          una pérdida y con un riesgo inicial mayor que el de esa pérdida.
+# overtrading: un día con más operaciones que `min_trades` y que
+#          `median_multiple` veces la mediana diaria de operaciones.
+revenge:
+  window_minutes: 30
+overtrading:
+  min_trades: 4
+  median_multiple: 2.0

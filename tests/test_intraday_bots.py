@@ -17,6 +17,7 @@ from tradinglab.strategies.base import StrategyResult
 INTRADAY_IDS = {
     "nasdaq-orb-ny",
     "nasdaq-trend-intraday",
+    "nasdaq-caja-ny",
     "gold-asian-rev",
     "gold-overlap-breakout",
     "eurusd-range-reversal",
@@ -117,18 +118,22 @@ def _prepare(monkeypatch, tmp_path, target: float) -> None:
 def test_load_bots_incluye_intraday_sin_tocar_bots_yaml():
     specs = load_bots()
     intra = [spec for spec in specs if spec.profile == "intraday_fx"]
-    assert len(intra) == 8
+    assert len(intra) == 9
     assert INTRADAY_IDS <= {spec.id for spec in intra}
     assert all(not spec.enabled for spec in intra)
     assert all(spec.yaml_enabled is False for spec in intra)
     assert any(spec.id == "trend-spy" for spec in specs)
     for spec in intra:
-        assert spec.timeframe == "M15"
+        if spec.id == "nasdaq-caja-ny":
+            assert spec.timeframe == "M5"
+        else:
+            assert spec.timeframe == "M15"
         assert spec.family
         assert spec.grid
         assert spec.universe and all(t in ALLOWED_SYMBOLS for t in spec.universe)
+    assert sum(1 for spec in intra if spec.timeframe == "M5") == 1
     # Los parámetros no se comparten entre activos.
-    assert len({json.dumps(spec.grid, sort_keys=True) for spec in intra}) == 8
+    assert len({json.dumps(spec.grid, sort_keys=True) for spec in intra}) == 9
 
 
 def test_guard_bloquea_apertura_fuera_del_universo(monkeypatch, tmp_path):

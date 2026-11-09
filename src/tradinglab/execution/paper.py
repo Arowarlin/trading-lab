@@ -78,6 +78,8 @@ class PaperBroker:
         bot: str = "manual",
         reason: str = "",
         run_id: int | None = None,
+        risk_usd: float | None = None,
+        stop_price: float | None = None,
     ) -> dict:
         if qty == 0:
             raise ValueError("qty no puede ser 0")
@@ -105,9 +107,21 @@ class PaperBroker:
                 raise RuntimeError(f"no puedes vender {abs(qty)} de {ticker}; tienes {held_qty:g}")
 
             cur = con.execute(
-                "INSERT INTO orders(ts, ticker, side, qty, order_type, status, bot, reason, run_id) "
-                "VALUES(?,?,?,?,?,?,?,?,?)",
-                (utcnow(), ticker, side, abs(qty), "market", "filled", bot, reason, run_id),
+                "INSERT INTO orders(ts, ticker, side, qty, order_type, status, bot, reason, run_id, "
+                "risk_usd, stop_price) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+                (
+                    utcnow(),
+                    ticker,
+                    side,
+                    abs(qty),
+                    "market",
+                    "filled",
+                    bot,
+                    reason,
+                    run_id,
+                    None if risk_usd is None else float(risk_usd),
+                    None if stop_price is None else float(stop_price),
+                ),
             )
             order_id = int(cur.lastrowid)
 

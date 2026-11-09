@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import sqlite3
 import threading
 import urllib.request
 from datetime import date, timedelta
@@ -35,11 +36,24 @@ def _fill(
     price: float,
     ts: str,
     commission: float = 0.0,
+    risk_usd: float | None = None,
+    stop_price: float | None = None,
 ) -> int:
     cursor = con.execute(
-        "INSERT INTO orders(ts, ticker, side, qty, order_type, status, bot, reason) "
-        "VALUES(?,?,?,?,?,?,?,?)",
-        (ts, ticker, side, qty, "market", "filled", bot, "test"),
+        "INSERT INTO orders(ts, ticker, side, qty, order_type, status, bot, reason, "
+        "risk_usd, stop_price) VALUES(?,?,?,?,?,?,?,?,?,?)",
+        (
+            ts,
+            ticker,
+            side,
+            qty,
+            "market",
+            "filled",
+            bot,
+            "test",
+            risk_usd,
+            stop_price,
+        ),
     )
     order_id = int(cursor.lastrowid)
     con.execute(
@@ -64,6 +78,8 @@ def _trade(
     profile: str | None = "swing_equity",
     ticker: str = "SPY",
     hour: int = 15,
+    risk_usd: float | None = None,
+    r_multiple: float | None = None,
 ) -> ClosedTrade:
     stamp = f"{day}T{hour:02d}:00:00+00:00"
     return ClosedTrade(
@@ -85,6 +101,8 @@ def _trade(
         entry_order_id=1,
         exit_order_id=2,
         exit_fill_id=2,
+        risk_usd=risk_usd,
+        r_multiple=r_multiple,
     )
 
 
@@ -145,6 +163,148 @@ def test_fifo_reconstruye_operaciones_y_no_escribe(tmp_path: Path) -> None:
     assert fx.profile == "intraday_fx"
 
 
+def test_r_multiple_desde_riesgo_inicial(tmp_path: Path) -> None:
+    db = _db(tmp_path)
+    with connect(db) as con:
+        _fill(
+            con,
+            bot="trend-spy",
+            ticker="SPY",
+            side="buy",
+            qty=10,
+            price=100.0,
+            ts="2026-01-05T15:00:00+00:00",
+            risk_usd=50.0,
+            stop_price=95.0,
+        )
+        _fill(
+            con,
+            bot="trend-spy",
+            ticker="SPY",
+            side="sell",
+            qty=10,
+            price=110.0,
+            ts="2026-01-06T15:00:00+00:00",
+        )
+    trades, _ = load_closed_trades(db, tz="UTC")
+    assert len(trades) == 1
+    trade = trades[0]
+    assert trade.pnl == pytest.approx(100.0)
+    assert trade.risk_usd == pytest.approx(50.0)
+    assert trade.r_multiple == pytest.approx(2.0)
+
+
+def test_r_multiple_prorratea_salidas_parciales(tmp_path: Path) -> None:
+    db = _db(tmp_path)
+    with connect(db) as con:
+        _fill(
+            con,
+            bot="trend-spy",
+            ticker="SPY",
+            side="buy",
+            qty=10,
+            price=100.0,
+            ts="2026-01-05T15:00:00+00:00",
+            risk_usd=50.0,
+            stop_price=95.0,
+        )
+        _fill(
+            con,
+            bot="trend-spy",
+            ticker="SPY",
+            side="sell",
+            qty=5,
+            price=110.0,
+            ts="2026-01-06T15:00:00+00:00",
+        )
+        _fill(
+            con,
+            bot="trend-spy",
+            ticker="SPY",
+            side="sell",
+            qty=5,
+            price=90.0,
+            ts="2026-01-07T15:00:00+00:00",
+        )
+    trades, _ = load_closed_trades(db, tz="UTC")
+    assert len(trades) == 2
+    assert trades[0].risk_usd == pytest.approx(25.0)
+    assert trades[0].r_multiple == pytest.approx(2.0)
+    assert trades[1].risk_usd == pytest.approx(25.0)
+    assert trades[1].r_multiple == pytest.approx(-2.0)
+
+
+def test_sin_riesgo_inicial_r_es_sin_datos(tmp_path: Path) -> None:
+    db = _db(tmp_path)
+    with connect(db) as con:
+        _fill(
+            con,
+            bot="trend-spy",
+            ticker="SPY",
+            side="buy",
+            qty=1,
+            price=100.0,
+            ts="2026-01-05T15:00:00+00:00",
+        )
+        _fill(
+            con,
+            bot="trend-spy",
+            ticker="SPY",
+            side="sell",
+            qty=1,
+            price=110.0,
+            ts="2026-01-06T15:00:00+00:00",
+        )
+    trades, _ = load_closed_trades(db, tz="UTC")
+    assert trades[0].risk_usd is None
+    assert trades[0].r_multiple is None
+    summary = summarize(trades, load_accounts())
+    assert summary["r_n"] == 0
+    assert summary["r_total"] is None
+    assert summary["r_coverage"] == 0.0
+
+
+def test_summary_agrega_r_multiplos() -> None:
+    accounts = load_accounts()
+    start = date(2026, 1, 5)
+    trades = [
+        _trade((start + timedelta(days=0)).isoformat(), 100.0, risk_usd=50.0, r_multiple=2.0),
+        _trade((start + timedelta(days=1)).isoformat(), -50.0, risk_usd=50.0, r_multiple=-1.0),
+        _trade((start + timedelta(days=2)).isoformat(), 25.0, risk_usd=50.0, r_multiple=0.5),
+    ]
+    summary = summarize(trades, accounts)
+    assert summary["r_n"] == 3
+    assert summary["r_coverage"] == pytest.approx(1.0)
+    assert summary["r_total"] == pytest.approx(1.5)
+    assert summary["r_expectancy"] == pytest.approx(0.5)
+    assert summary["r_win_rate"] == pytest.approx(2 / 3)
+    assert summary["r_avg_win"] == pytest.approx(1.25)
+    assert summary["r_avg_loss"] == pytest.approx(-1.0)
+    assert summary["r_payoff"] == pytest.approx(1.25)
+    assert summary["r_distribution"]["n"] == 3
+
+
+def test_init_db_migra_orders_con_riesgo(tmp_path: Path) -> None:
+    db = tmp_path / "old.db"
+    with sqlite3.connect(db) as con:
+        con.execute(
+            "CREATE TABLE orders ("
+            "id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT NOT NULL, "
+            "ticker TEXT NOT NULL, side TEXT NOT NULL, qty REAL NOT NULL, "
+            "order_type TEXT NOT NULL DEFAULT 'market', limit_price REAL, "
+            "status TEXT NOT NULL, broker_id TEXT, bot TEXT, reason TEXT, "
+            "run_id INTEGER)"
+        )
+    init_db(db)
+    with connect(db) as con:
+        columns = {
+            row["name"]
+            for row in con.execute("PRAGMA table_info(orders)").fetchall()
+        }
+    assert "risk_usd" in columns
+    assert "stop_price" in columns
+
+
 def test_build_journal_filtros_y_agrupacion(tmp_path: Path, monkeypatch) -> None:
     db = _db(tmp_path)
     with connect(db) as con:
@@ -168,6 +328,8 @@ def test_build_journal_filtros_y_agrupacion(tmp_path: Path, monkeypatch) -> None
     payload = build_journal(db, tz="UTC", group_by="account")
     assert payload["read_only"] is True
     assert payload["total_trades"] == 2
+    assert payload["habits"]["informative"] is True
+    assert payload["habits"]["blocking"] is False
     assert payload["filters_available"]["accounts"] == ["ftmo_demo", "paper_main"]
     accounts = {row["key"]: row for row in payload["by_account"]}
     assert accounts["paper_main"]["n"] == 1

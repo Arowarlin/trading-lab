@@ -1,0 +1,15 @@
+# Semáforo informativo del colchón de riesgo.
+#
+# No bloquea operaciones: el kill-switch y el guard de cuenta siguen siendo
+# los únicos que deciden. Este archivo solo define cuándo el semáforo pasa de
+# verde a ámbar y de ámbar a rojo.
+#
+# Los valores son la fracción del límite ya consumida:
+#   0.50 = 50 % del límite usado; 0.80 = 80 % del límite usado.
+# Debe cumplirse 0 <= amber_at_used < red_at_used <= 1.
+daily:
+  amber_at_used: 0.50
+  red_at_used: 0.80
+drawdown:
+  amber_at_used: 0.50
+  red_at_used: 0.80

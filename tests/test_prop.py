@@ -156,6 +156,30 @@ def test_topstep_50k_preset_es_plantilla_inactiva():
     assert from_yaml("ftmo", "challenge", 100_000).firm == "FTMO"
 
 
+def test_plantillas_apex_lucid_y_myfundedfutures_inactivas():
+    apex = from_yaml("apex", "challenge", 50_000)
+    assert apex.template is True
+    assert apex.enabled is False
+    assert apex.automation_allowed is False
+    assert "automatizados" in apex.automation_note.lower()
+    assert "bots/ea" in apex.automation_note.lower()
+    assert "automatización prohibida" in apex.describe()
+
+    for firm in ("lucid", "myfundedfutures"):
+        rules = from_yaml(firm, "challenge", 50_000)
+        assert rules.template is True
+        assert rules.enabled is False
+        assert rules.automation_allowed is None
+        assert "no verificada" in rules.automation_note.lower()
+        assert rules.profit_target_pct == pytest.approx(0.06)
+
+    # La firma activa sigue intacta.
+    ftmo = from_yaml("ftmo", "challenge", 100_000)
+    assert ftmo.template is False
+    assert ftmo.enabled is True
+    assert ftmo.automation_allowed is None
+
+
 def test_state_from_equity_splits_by_reset_timezone():
     idx = pd.to_datetime(
         ["2026-11-03 23:00", "2026-11-04 01:00", "2026-11-04 12:00", "2026-11-05 01:00"]

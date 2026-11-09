@@ -536,6 +536,12 @@ def status_text(config: TelegramConfig) -> str:
     except Exception:
         lines.append("- F13: Sin datos")
     try:
+        from .cushion import evaluate_from_db, summary_line
+
+        lines.append(f"- {summary_line(evaluate_from_db(DEFAULT_DB))}")
+    except Exception:
+        lines.append("- Colchón riesgo: sin datos")
+    try:
         from .db import connect
 
         with connect(DEFAULT_DB) as con:

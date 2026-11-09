@@ -92,6 +92,8 @@ class AlpacaBroker:
         bot: str = "manual",
         reason: str = "",
         run_id: int | None = None,
+        risk_usd: float | None = None,
+        stop_price: float | None = None,
     ) -> dict:
         from alpaca.trading.enums import OrderSide, TimeInForce
         from alpaca.trading.requests import MarketOrderRequest
@@ -125,8 +127,8 @@ class AlpacaBroker:
             try:
                 with connect(self.db_path) as con:
                     con.execute(
-                        "INSERT INTO orders(ts, ticker, side, qty, order_type, status, broker_id, bot, reason, run_id) "
-                        "VALUES(?,?,?,?,?,?,?,?,?,?)",
+                        "INSERT INTO orders(ts, ticker, side, qty, order_type, status, broker_id, bot, reason, run_id, "
+                        "risk_usd, stop_price) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
                         (
                             utcnow(),
                             result["ticker"],
@@ -138,6 +140,8 @@ class AlpacaBroker:
                             bot,
                             reason,
                             run_id,
+                            None if risk_usd is None else float(risk_usd),
+                            None if stop_price is None else float(stop_price),
                         ),
                     )
             except Exception:

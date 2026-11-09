@@ -46,7 +46,9 @@ CREATE TABLE IF NOT EXISTS orders (
     broker_id TEXT,
     bot TEXT,
     reason TEXT,
-    run_id INTEGER
+    run_id INTEGER,
+    risk_usd REAL,
+    stop_price REAL
 );
 
 CREATE TABLE IF NOT EXISTS fills (
@@ -445,6 +447,19 @@ CREATE INDEX IF NOT EXISTS idx_strategy_trials_symbol_ts
     ON strategy_trials(symbol, ts);
 CREATE INDEX IF NOT EXISTS idx_strategy_trials_run
     ON strategy_trials(run_id);
+CREATE TABLE IF NOT EXISTS broker_spreads (
+    symbol TEXT NOT NULL,
+    hour_utc INTEGER NOT NULL,
+    median_bps REAL,
+    p75_bps REAL,
+    n_ticks INTEGER NOT NULL,
+    from_ts TEXT,
+    to_ts TEXT,
+    source TEXT NOT NULL,
+    PRIMARY KEY(symbol, hour_utc, source)
+);
+CREATE INDEX IF NOT EXISTS idx_broker_spreads_symbol
+    ON broker_spreads(symbol, source);
 CREATE TABLE IF NOT EXISTS asset_aliases (
     canonical TEXT PRIMARY KEY,
     broker_symbol TEXT NOT NULL,
@@ -598,6 +613,7 @@ def init_db(path: str | Path) -> None:
         _migrate_bot_evaluations(con)
         _migrate_decision_outcomes(con)
         _migrate_llm_calls(con)
+        _migrate_orders(con)
 
 
 def _migrate_equity(con: sqlite3.Connection) -> None:
@@ -620,6 +636,17 @@ def _migrate_equity(con: sqlite3.Connection) -> None:
             CREATE INDEX IF NOT EXISTS idx_equity_ts ON equity(ts);
             """
         )
+
+
+def _migrate_orders(con: sqlite3.Connection) -> None:
+    """Añade el riesgo inicial a órdenes antiguas sin recrear la tabla."""
+    columns = [
+        row["name"] for row in con.execute("PRAGMA table_info(orders)").fetchall()
+    ]
+    if columns and "risk_usd" not in columns:
+        con.execute("ALTER TABLE orders ADD COLUMN risk_usd REAL")
+    if columns and "stop_price" not in columns:
+        con.execute("ALTER TABLE orders ADD COLUMN stop_price REAL")
 
 
 def _migrate_bot_evaluations(con: sqlite3.Connection) -> None:

@@ -41,6 +41,9 @@ def run_costs(
     *,
     cache_dir: str | Path = ROOT / "data" / "cache",
     top: int = 10,
+    source: str = "none",
+    db_path: str | Path | None = None,
+    ticks_dir: str | Path | None = None,
 ) -> dict:
     report_dir = Path(report_dir)
     latest_path = report_dir / "latest.json"
@@ -51,6 +54,10 @@ def run_costs(
     cfg = latest.get("config") or {}
     start = str(cfg.get("start") or "2015-01-01")
     end = str(cfg.get("end") or date.today().isoformat())
+    selected_source = str(source or "none").strip().lower()
+    if selected_source not in {"none", "broker", "dukascopy"}:
+        raise ValueError("source debe ser broker, dukascopy o none")
+    spread_cache: dict[str, dict] = {}
     rows = []
     data_cache: dict[str, pd.DataFrame] = {}
     for rank, result in enumerate(results, 1):
@@ -58,6 +65,28 @@ def run_costs(
         strategy = str(result.get("strategy"))
         params = result.get("params") or {}
         exposure = float(result.get("exposure") or 1.0)
+        spread_bps = 0.0
+        spread_source = "none"
+        spread_method = None
+        data_ok = True
+        if selected_source in {"broker", "dukascopy"}:
+            if symbol not in spread_cache:
+                from .broker_costs import DB_PATH, TICKS_DIR, source_spread
+
+                spread_cache[symbol] = source_spread(
+                    symbol,
+                    selected_source,
+                    db_path=db_path or DB_PATH,
+                    ticks_dir=ticks_dir or TICKS_DIR,
+                )
+            item = spread_cache[symbol]
+            spread_method = item.get("method")
+            if item.get("p75_bps") is None:
+                data_ok = False
+                spread_source = "sin datos"
+            else:
+                spread_bps = float(item["p75_bps"])
+                spread_source = selected_source
         if symbol not in data_cache:
             data_cache[symbol] = data_mod.fetch(symbol, start, end, cache_dir)
         df = data_cache[symbol]
@@ -68,14 +97,18 @@ def run_costs(
                 df,
                 sig.target,
                 starting_cash=100_000,
-                commission_bps=commission,
+                commission_bps=commission + spread_bps,
                 slippage_bps=slippage,
             )
             metrics = _metrics(bt.returns * exposure)
             metrics["num_trades"] = int(bt.metrics.get("num_trades") or 0)
+            metrics["spread_bps"] = spread_bps
             scenarios[name] = metrics
         base = scenarios["base"]["total_return"]
         stress = scenarios["stress"]["total_return"]
+        fragile = None
+        if data_ok:
+            fragile = bool(base <= 0 or stress <= 0 or (base > 0 and stress <= 0))
         rows.append(
             {
                 "rank": rank,
@@ -83,8 +116,12 @@ def run_costs(
                 "strategy": strategy,
                 "params": params,
                 "exposure": exposure,
+                "spread_bps": spread_bps,
+                "spread_source": spread_source,
+                "spread_method": spread_method,
+                "data_ok": data_ok,
                 "scenarios": scenarios,
-                "fragile": bool(base <= 0 or stress <= 0 or (base > 0 and stress <= 0)),
+                "fragile": fragile,
                 "cost_drag": float(base - stress),
             }
         )
@@ -93,9 +130,14 @@ def run_costs(
         "source": str(latest_path),
         "start": start,
         "end": end,
-        "scenarios": {k: {"commission_bps": v[0], "slippage_bps": v[1]} for k, v in SCENARIOS.items()},
+        "spread_source": selected_source,
+        "scenarios": {
+            k: {"commission_bps": v[0], "slippage_bps": v[1]}
+            for k, v in SCENARIOS.items()
+        },
         "results": rows,
-        "fragile_count": sum(1 for row in rows if row["fragile"]),
+        "fragile_count": sum(1 for row in rows if row["fragile"] is True),
+        "sin_datos_count": sum(1 for row in rows if not row["data_ok"]),
     }
 
 
@@ -106,22 +148,26 @@ def render_markdown(payload: dict) -> str:
         f"- Fuente: {payload['source']}",
         f"- Muestra: {payload['start']} → {payload['end']}",
         f"- Escenarios: {', '.join(payload['scenarios'])}",
+        f"- Spread: {payload.get('spread_source', 'none')}",
         f"- Frágiles: {payload['fragile_count']}/{len(payload['results'])}",
+        f"- Sin datos de spread: {payload.get('sin_datos_count', 0)}/{len(payload['results'])}",
         "",
         "> Solo informativo. Un edge que desaparece con costes realistas no se propone.",
         "",
-        "| # | Variante | Base | Doble | Estrés | Zero | Fragil |",
-        "|---|---|---|---|---|---|---|",
+        "| # | Variante | Base | Doble | Estrés | Zero | Spread | Fragil |",
+        "|---|---|---|---|---|---|---|---|",
     ]
     for row in payload["results"]:
         base = row["scenarios"]["base"]["total_return"]
         double = row["scenarios"]["double"]["total_return"]
         stress = row["scenarios"]["stress"]["total_return"]
         zero = row["scenarios"]["zero"]["total_return"]
+        spread = "sin datos" if not row.get("data_ok", True) else f"{row.get('spread_bps', 0.0):.2f}"
+        fragile = "sin datos" if row.get("fragile") is None else ("sí" if row["fragile"] else "no")
         label = f"{row['symbol']} · {row['strategy']} · {json.dumps(row['params'], ensure_ascii=False, sort_keys=True)}"
         lines.append(
             f"| {row['rank']} | {label} | {base:.1%} | {double:.1%} | "
-            f"{stress:.1%} | {zero:.1%} | {'sí' if row['fragile'] else 'no'} |"
+            f"{stress:.1%} | {zero:.1%} | {spread} | {fragile} |"
         )
     lines.append("")
     return "\n".join(lines)

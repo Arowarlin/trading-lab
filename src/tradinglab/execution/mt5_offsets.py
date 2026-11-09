@@ -179,6 +179,53 @@ def infer_bar_offsets(
     return offsets
 
 
+def weekly_offsets(
+    server_index: pd.DatetimeIndex,
+    offsets: pd.Series,
+) -> dict[date, float]:
+    """Offset dominante por semana ISO, para etiquetar ticks con su semana."""
+    index = pd.DatetimeIndex(server_index)
+    if index.tz is None:
+        index = index.tz_localize("UTC")
+    if len(index) != len(offsets):
+        raise ValueError("server_index y offsets deben tener la misma longitud")
+    frame = pd.DataFrame(
+        {"server": index, "offset": pd.to_numeric(offsets, errors="coerce")}
+    ).dropna()
+    frame["week"] = [_week_start(ts) for ts in frame["server"]]
+    return {
+        week: float(group["offset"].iloc[0])
+        for week, group in frame.groupby("week", sort=True)
+    }
+
+
+def map_offsets(
+    server_index: pd.DatetimeIndex,
+    weekly: dict[date, float],
+) -> pd.Series:
+    """Offset semanal para cada timestamp; rellena semanas ausentes con la más cercana."""
+    if not weekly:
+        raise ValueError("sin offsets semanales")
+    index = pd.DatetimeIndex(server_index)
+    if index.tz is None:
+        index = index.tz_localize("UTC")
+    weeks = sorted(weekly)
+    values: list[float] = []
+    for ts in index:
+        week = _week_start(ts)
+        if week in weekly:
+            values.append(float(weekly[week]))
+            continue
+        nearest = min(weeks, key=lambda item: abs((item - week).days))
+        values.append(float(weekly[nearest]))
+    return pd.Series(
+        values,
+        index=index,
+        dtype=float,
+        name="server_offset_hours",
+    )
+
+
 def offset_periods(
     server_index: pd.DatetimeIndex,
     offsets: pd.Series,

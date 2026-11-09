@@ -494,9 +494,17 @@ def run_bot(
             actions.append(action)
             continue
 
+        entry_risk = abs(delta) * risk_per_share if delta > 0 else None
+        entry_stop = price - risk_per_share if delta > 0 else None
         try:
             order = broker.submit_market(
-                ticker, delta, price, bot=spec.id, reason=f"target={target:.2f}"
+                ticker,
+                delta,
+                price,
+                bot=spec.id,
+                reason=f"target={target:.2f}",
+                risk_usd=entry_risk,
+                stop_price=entry_stop,
             )
             action.status = "ejecutado"
             action.order = order

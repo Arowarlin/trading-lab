@@ -847,6 +847,7 @@ class OperatorService:
                 "qty": qty,
                 "price": price,
                 "sl": sl,
+                "risk_usd": risk_usd,
             }
             return {"summary": summary, "payload": payload}
         finally:
@@ -1017,6 +1018,8 @@ class OperatorService:
                     payload["price"],
                     bot="console",
                     reason=f"operator:{payload['sl']:.6f}",
+                    risk_usd=payload.get("risk_usd"),
+                    stop_price=payload["sl"],
                 )
             else:
                 order = broker.submit_market(
@@ -1025,6 +1028,8 @@ class OperatorService:
                     sl=payload["sl"],
                     bot="console",
                     reason="operator",
+                    risk_usd=payload.get("risk_usd"),
+                    stop_price=payload["sl"],
                 )
             return {"ok": True, "order": order}
         finally:

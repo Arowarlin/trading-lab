@@ -1,0 +1,144 @@
+# Plantillas de reglas de firmas INACTIVAS.
+#
+# Este archivo NO entra en el hash de F13 y no cambia la firma activa (FTMO).
+# Se carga como fallback de config/prop.yaml: si una firma no está allí, se
+# busca aquí. Las plantillas tienen enabled:false y template:true.
+#
+# Verifica CADA valor en el contrato vigente antes de usar cualquier plantilla.
+# La activación de una firma es un cambio manual en config/lab.yaml -> prop.firm.
+
+firms:
+  # --- PLANTILLA Apex 50K: INACTIVA. ---
+  # Apex prohíbe los sistemas totalmente automatizados. No usar esta plantilla
+  # con bots/EA sin confirmar por escrito la política de la cuenta.
+  apex:
+    display_name: Apex Trader Funding
+    program: apex-50k
+    enabled: false
+    template: true
+    automation_allowed: false
+    automation_note: >
+      Apex prohíbe los sistemas totalmente automatizados (bots/EA). La
+      automatización parcial o asistida también debe confirmarse por escrito
+      con la firma antes de usarla. Esta plantilla es solo documentación.
+    verify_against_contract: true
+    defaults:
+      max_loss_mode: trailing_intraday
+      daily_loss_mode: equity
+      buffer_pct: 0.15
+      reset_time: "17:00"
+      reset_tz: America/Chicago
+      max_lots: 5
+      max_positions: 3
+      max_open_risk_pct: 0.01
+      weekend_holding: false
+      news_blackout_min: 0
+      friday_cutoff_hour: 16
+      rollover_utc: "22:00"
+      rollover_blackout_min: 15
+      consistency_pct: null
+      notes: >
+        PLANTILLA Apex 50K. Valores orientativos: objetivo 6% ($3.000), máximo
+        5% ($2.500) trailing intraday, diario 2% ($1.000), reset 17:00
+        America/Chicago. La automatización está PROHIBIDA: no activar bots.
+        Verificar el contrato vigente antes de cualquier uso.
+    phases:
+      challenge:
+        profit_target_pct: 0.06
+        max_daily_loss_pct: 0.02
+        max_loss_pct: 0.05
+        min_trading_days: 5
+      funded:
+        profit_target_pct: 0.0
+        max_daily_loss_pct: 0.02
+        max_loss_pct: 0.05
+        min_trading_days: 0
+
+  # --- PLANTILLA Lucid 50K: INACTIVA. ---
+  # La política de automatización NO está verificada: no se asume permitida.
+  lucid:
+    display_name: Lucid Trading
+    program: lucid-50k
+    enabled: false
+    template: true
+    automation_allowed: null
+    automation_note: >
+      Política de automatización no verificada. Confirmar por escrito con Lucid
+      antes de conectar bots o sistemas automáticos. No se asume permitida.
+    verify_against_contract: true
+    defaults:
+      max_loss_mode: trailing_eod
+      daily_loss_mode: balance
+      buffer_pct: 0.15
+      reset_time: "17:00"
+      reset_tz: America/Chicago
+      max_lots: 5
+      max_positions: 3
+      max_open_risk_pct: 0.01
+      weekend_holding: false
+      news_blackout_min: 0
+      friday_cutoff_hour: 16
+      rollover_utc: "22:00"
+      rollover_blackout_min: 15
+      consistency_pct: 0.50
+      notes: >
+        PLANTILLA Lucid 50K. Valores orientativos: objetivo 6% ($3.000), máximo
+        4% ($2.000), diario 2% ($1.000), consistencia 50%, reset 17:00
+        America/Chicago. Verificar trailing, noticias, fin de semana y
+        automatización en el contrato vigente.
+    phases:
+      challenge:
+        profit_target_pct: 0.06
+        max_daily_loss_pct: 0.02
+        max_loss_pct: 0.04
+        min_trading_days: 5
+      funded:
+        profit_target_pct: 0.0
+        max_daily_loss_pct: 0.02
+        max_loss_pct: 0.04
+        min_trading_days: 0
+
+  # --- PLANTILLA MyFundedFutures 50K: INACTIVA. ---
+  # La política de automatización NO está verificada: no se asume permitida.
+  myfundedfutures:
+    display_name: MyFundedFutures
+    program: mff-50k
+    enabled: false
+    template: true
+    automation_allowed: null
+    automation_note: >
+      Política de automatización no verificada. Confirmar por escrito con
+      MyFundedFutures antes de conectar bots o sistemas automáticos. No se
+      asume permitida.
+    verify_against_contract: true
+    defaults:
+      max_loss_mode: trailing_eod
+      daily_loss_mode: balance
+      buffer_pct: 0.15
+      reset_time: "17:00"
+      reset_tz: America/Chicago
+      max_lots: 5
+      max_positions: 3
+      max_open_risk_pct: 0.01
+      weekend_holding: false
+      news_blackout_min: 0
+      friday_cutoff_hour: 16
+      rollover_utc: "22:00"
+      rollover_blackout_min: 15
+      consistency_pct: 0.50
+      notes: >
+        PLANTILLA MyFundedFutures 50K. Valores orientativos: objetivo 6%
+        ($3.000), máximo 4% ($2.000), diario 2% ($1.000), consistencia 50%,
+        reset 17:00 America/Chicago. Verificar trailing, noticias, fin de
+        semana y automatización en el contrato vigente.
+    phases:
+      challenge:
+        profit_target_pct: 0.06
+        max_daily_loss_pct: 0.02
+        max_loss_pct: 0.04
+        min_trading_days: 5
+      funded:
+        profit_target_pct: 0.0
+        max_daily_loss_pct: 0.02
+        max_loss_pct: 0.04
+        min_trading_days: 0

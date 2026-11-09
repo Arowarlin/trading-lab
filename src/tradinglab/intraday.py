@@ -10,6 +10,7 @@ from __future__ import annotations
 import itertools
 import json
 import uuid
+from datetime import time
 from pathlib import Path
 
 import numpy as np
@@ -39,10 +40,17 @@ INTRADAY_GRIDS = {
     "london_pullback": {"fast": [20, 50], "slow": [100, 200], "pullback_atr": [0.25, 0.5], "max_hold": [8, 16]},
     "session_trend": {"fast": [20, 50], "slow": [100, 200], "pullback_atr": [0.25, 0.5], "max_hold": [8, 16]},
     "tokyo_breakout": {"range_bars": [4, 8], "buffer_atr": [0.1, 0.25], "max_hold": [4, 12]},
+    "caja_ny": {
+        "range_start": ["09:15"],
+        "range_end": ["09:35"],
+        "stop_rule": ["range", "atr_0.5", "atr_1.0", "atr_1.5"],
+        "force_exit": ["15:45"],
+        "max_trades_per_day": [1],
+    },
 }
 ASSET_FAMILIES = {
-    "US100.CASH": ("orb_ny", "trend_intraday"),
-    "NASDAQ": ("orb_ny", "trend_intraday"),
+    "US100.CASH": ("orb_ny", "trend_intraday", "caja_ny"),
+    "NASDAQ": ("orb_ny", "trend_intraday", "caja_ny"),
     "XAUUSD": ("asian_rev", "overlap_breakout"),
     "EURUSD": ("range_reversal", "london_pullback"),
     "USDJPY": ("session_trend", "tokyo_breakout"),
@@ -90,12 +98,29 @@ FAMILY_HYPOTHESES = {
         "Ruptura tras la sesión de Tokio: el rango asiático se rompe al abrir "
         "Europa."
     ),
+    "caja_ny": (
+        "Caja de apertura de Nueva York: tras el rango 09:15-09:35 NY, la "
+        "ruptura con retroceso limitado al borde roto tiene ventaja si el stop "
+        "está fuera del rango o a N×ATR."
+    ),
 }
 
 
 def families_for_symbol(symbol: str) -> tuple[str, ...]:
     """Familias asignadas al activo (todas si no está en el mapa)."""
     return ASSET_FAMILIES.get(str(symbol).upper(), tuple(INTRADAY_GRIDS))
+
+
+# Modo de ejecución por familia. Serie es el predeterminado y ninguna familia
+# existente cambia: solo una que se declare aquí como "events" usa el motor de
+# eventos de forma explícita.
+FAMILY_EXECUTION_MODES = {name: "series" for name in INTRADAY_GRIDS}
+FAMILY_EXECUTION_MODES["caja_ny"] = "events"
+
+
+def family_execution_mode(family: str) -> str:
+    """Modo declarado por la familia; serie si no declara eventos."""
+    return FAMILY_EXECUTION_MODES.get(str(family), "series")
 
 
 def _bars_per_year(timeframe: str) -> float:
@@ -256,6 +281,8 @@ def backtest_intraday(
     point: float = 0.0001,
     spread_override_bps: float | None = None,
     tick_spread_bps: pd.Series | None = None,
+    spread_override_reliable: bool | None = None,
+    spread_label: str | None = None,
 ) -> dict:
     """Retorno neto con costes por spread horario, slippage y comisión.
 
@@ -275,6 +302,11 @@ def backtest_intraday(
         spread = observed_spread
     else:
         spread = pd.Series(float(spread_override_bps), index=df.index)
+        if spread_override_reliable is not None:
+            reliable = bool(spread_override_reliable)
+    spread_source = spread_label or (
+        "ticks" if tick_spread_bps is not None else "mt5_bars"
+    )
     commission = _cost_series(commission_bps, df.index)
     optimistic = (
         float(slippage_bps)
@@ -311,7 +343,8 @@ def backtest_intraday(
         "spread_bps_median": float(spread.median()) if len(spread) else 0.0,
         "spread_observed_bps_median": float(observed_spread.median()) if len(observed_spread) else 0.0,
         "spread_override_bps": spread_override_bps,
-        "spread_source": "ticks" if tick_spread_bps is not None else "mt5_bars",
+        "spread_source": spread_source,
+        "spread_label": spread_label,
         "spread_tick_hours": (
             int(len(tick_spread_bps)) if tick_spread_bps is not None else 0
         ),
@@ -324,6 +357,225 @@ def backtest_intraday(
         "sharpe_conservative": sharpe,
         "slippage_optimistic_bps": optimistic,
     }
+
+
+def run_event_backtest(
+    bars: pd.DataFrame,
+    orders: list[dict],
+    *,
+    point: float = 0.01,
+    commission_bps: float = 1.0,
+    spread_bps: float = 10.0,
+    slippage_bps: float = 5.0,
+    fill_pessimism_points: int = 0,
+    max_trades_per_day: int = 1,
+    force_exit_time: time | None = None,
+    session_offset_hours: float = 0.0,
+) -> dict:
+    """Ejecuta órdenes limitadas con el modo de eventos (opt-in).
+
+    El modo de serie de ``run_intraday`` no cambia. Este motor solo se usa
+    cuando una familia lo declara explícitamente como ``"events"``.
+
+    Reglas: una compra limitada exige ``low < level`` estricto (y ``high >
+    level`` para una venta); stop y objetivo en la misma barra resuelven a
+    stop; la entrada y el objetivo no pagan spread, mientras stop y salida
+    forzada pagan spread y slippage completos; la comisión se paga por lado;
+    ``fill_pessimism_points`` exige superar el nivel por X puntos; se limita
+    ``max_trades_per_day``; y ``force_exit_time`` se convierte a UTC con el
+    offset semanal de sesión. Una orden con ``type="market"`` entra al open
+    de la primera barra activa y paga spread + slippage completos; las
+    órdenes sin ``type`` siguen siendo limitadas.
+    """
+    raw_orders = list(orders or [])
+    if point <= 0:
+        raise ValueError("point debe ser > 0")
+    if fill_pessimism_points < 0:
+        raise ValueError("fill_pessimism_points no puede ser negativo")
+    if max_trades_per_day < 0:
+        raise ValueError("max_trades_per_day no puede ser negativo")
+    if bars is None or len(bars) == 0:
+        return {"trades": [], "expired": len(raw_orders), "ignored": 0}
+
+    frame = bars.copy()
+    if not isinstance(frame.index, pd.DatetimeIndex):
+        frame.index = pd.to_datetime(frame.index, utc=True)
+    elif frame.index.tz is None:
+        frame.index = frame.index.tz_localize("UTC")
+    else:
+        frame.index = frame.index.tz_convert("UTC")
+    frame = frame.sort_index()
+    for column in ("open", "high", "low", "close"):
+        if column not in frame.columns:
+            raise ValueError(f"falta columna {column} en bars")
+
+    commission = float(commission_bps)
+    spread = float(spread_bps)
+    slippage = float(slippage_bps)
+    pessimism = float(fill_pessimism_points) * float(point)
+    prepared: list[dict] = []
+    for raw in raw_orders:
+        side = str(raw.get("side") or "").strip().lower()
+        if side not in {"buy", "sell"}:
+            raise ValueError(f"lado inválido: {raw.get('side')!r}")
+        entry_type = str(raw.get("type") or raw.get("entry_type") or "limit").lower()
+        if entry_type not in {"limit", "market"}:
+            raise ValueError(f"tipo de entrada inválido: {entry_type!r}")
+        required = ["stop", "created_at", "expires_at"]
+        if entry_type == "limit":
+            required.append("level")
+        for key in required:
+            if key not in raw:
+                raise ValueError(f"orden sin {key}")
+        target = raw.get("target")
+        target = None if target is None else float(target)
+        created = pd.Timestamp(raw["created_at"])
+        expires = pd.Timestamp(raw["expires_at"])
+        created = (
+            created.tz_localize("UTC")
+            if created.tzinfo is None
+            else created.tz_convert("UTC")
+        )
+        expires = (
+            expires.tz_localize("UTC")
+            if expires.tzinfo is None
+            else expires.tz_convert("UTC")
+        )
+        prepared.append(
+            {
+                "side": side,
+                "entry_type": entry_type,
+                "level": (
+                    float(raw["level"]) if raw.get("level") is not None else None
+                ),
+                "stop": float(raw["stop"]),
+                "target": target,
+                "created_at": created,
+                "expires_at": expires,
+            }
+        )
+
+    trades: list[dict] = []
+    expired = 0
+    ignored = 0
+    pending = list(prepared)
+    open_positions: list[dict] = []
+    trades_by_day: dict = {}
+
+    def costs(*, add_spread: bool) -> dict:
+        return {
+            "commission_bps": commission,
+            "spread_bps": spread if add_spread else 0.0,
+            "slippage_bps": slippage if add_spread else 0.0,
+        }
+
+    def force_deadline(ts: pd.Timestamp) -> pd.Timestamp | None:
+        if force_exit_time is None:
+            return None
+        deadline = pd.Timestamp.combine(ts.date(), force_exit_time)
+        if deadline.tzinfo is None:
+            deadline = deadline.tz_localize("UTC")
+        return deadline - pd.Timedelta(hours=float(session_offset_hours))
+
+    def exit_for(position: dict, bar: pd.Series, ts: pd.Timestamp):
+        target = position.get("target")
+        if position["side"] == "buy":
+            stop_hit = float(bar["low"]) <= position["stop"]
+            target_hit = target is not None and float(bar["high"]) >= target
+        else:
+            stop_hit = float(bar["high"]) >= position["stop"]
+            target_hit = target is not None and float(bar["low"]) <= target
+        if stop_hit:
+            return "stop", position["stop"], costs(add_spread=True)
+        if target_hit:
+            return "target", target, costs(add_spread=False)
+        deadline = force_deadline(ts)
+        if deadline is not None and ts >= deadline:
+            return "force_exit", float(bar["close"]), costs(add_spread=True)
+        return None
+
+    def close(position: dict, exit_info: tuple, ts: pd.Timestamp) -> dict:
+        reason, price, exit_costs = exit_info
+        return {
+            "side": position["side"],
+            "entry_time": position["entry_time"],
+            "entry_price": position["entry_price"],
+            "exit_time": ts,
+            "exit_price": float(price),
+            "exit_reason": reason,
+            "entry_costs": position["entry_costs"],
+            "exit_costs": exit_costs,
+        }
+
+    def limit_touched(order: dict, bar: pd.Series) -> bool:
+        if order["entry_type"] == "market":
+            return True
+        if order["side"] == "buy":
+            return float(bar["low"]) < order["level"] - pessimism
+        return float(bar["high"]) > order["level"] + pessimism
+
+    for ts, bar in frame.iterrows():
+        # Órdenes cuya ventana terminó antes de esta barra: expiran.
+        remaining = []
+        for order in pending:
+            if order["expires_at"] < ts:
+                expired += 1
+            else:
+                remaining.append(order)
+        pending = remaining
+
+        # Posiciones abiertas: stop, objetivo o salida forzosa.
+        for position in list(open_positions):
+            exit_info = exit_for(position, bar, ts)
+            if exit_info is not None:
+                trades.append(close(position, exit_info, ts))
+                open_positions.remove(position)
+
+        # Órdenes pendientes activas en esta barra.
+        remaining = []
+        for order in pending:
+            if order["created_at"] >= ts:
+                remaining.append(order)
+                continue
+            day = ts.date()
+            if trades_by_day.get(day, 0) >= max_trades_per_day:
+                ignored += 1
+                continue
+            if not limit_touched(order, bar):
+                remaining.append(order)
+                continue
+            entry_price = (
+                float(bar["open"])
+                if order["entry_type"] == "market"
+                else order["level"]
+            )
+            position = {
+                "side": order["side"],
+                "entry_time": ts,
+                "entry_price": entry_price,
+                "stop": order["stop"],
+                "target": order["target"],
+                "entry_costs": costs(add_spread=order["entry_type"] == "market"),
+            }
+            trades_by_day[day] = trades_by_day.get(day, 0) + 1
+            exit_info = exit_for(position, bar, ts)
+            if exit_info is not None:
+                trades.append(close(position, exit_info, ts))
+            else:
+                open_positions.append(position)
+        pending = remaining
+
+        # Una orden que vence en esta barra no pasa a la siguiente.
+        remaining = []
+        for order in pending:
+            if order["expires_at"] <= ts:
+                expired += 1
+            else:
+                remaining.append(order)
+        pending = remaining
+
+    expired += len(pending)
+    return {"trades": trades, "expired": expired, "ignored": ignored}
 
 
 def _session_mask(index: pd.DatetimeIndex, start_hour: int, end_hour: int) -> pd.Series:
@@ -596,16 +848,23 @@ def run_intraday(
     slippage_optimistic_bps: float | None = None,
     spread_override_bps: float | None = None,
     tick_spread_bps: pd.Series | None = None,
+    spread_override_reliable: bool | None = None,
+    spread_label: str | None = None,
     db_path: str | Path | None = None,
     run_id: str | None = None,
     lesson_id: int | None = None,
     record: bool = True,
     families: tuple[str, ...] | None = None,
+    dsr_n_trials: int | None = None,
+    recalculation: dict | None = None,
 ) -> dict:
     """Valida las estrategias intradía con los controles existentes."""
+    if recalculation is not None and record:
+        raise ValueError("un recalculo de coste no puede registrar trials")
     profile = get_profile("intraday_fx")
     if profile is None:
         raise RuntimeError("falta perfil intraday_fx")
+    trials_before = count_tests(db_path) if db_path is not None else None
     asset = asset_costs(symbol)
     if commission_bps is None:
         if not asset.verified:
@@ -629,6 +888,9 @@ def run_intraday(
         else float(commission)
     )
     selected_families = tuple(families) if families else families_for_symbol(symbol)
+    selected_families = tuple(
+        name for name in selected_families if family_execution_mode(name) == "series"
+    )
     unknown = [name for name in selected_families if name not in INTRADAY_GRIDS]
     if unknown:
         raise ValueError(f"familias intradía desconocidas: {', '.join(unknown)}")
@@ -648,6 +910,8 @@ def run_intraday(
                 point=point,
                 spread_override_bps=spread_override_bps,
                 tick_spread_bps=tick_spread_bps,
+                spread_override_reliable=spread_override_reliable,
+                spread_label=spread_label,
             )
             key = f"{name}|{json.dumps(params, sort_keys=True)}"
             returns_by_id[key] = bt["returns"]
@@ -672,8 +936,10 @@ def run_intraday(
 
     sr_values = [row["metrics"]["sharpe"] for row in outcomes]
     sr_std = float(np.std(sr_values, ddof=1)) if len(sr_values) > 1 else 0.0
-    n_trials_dsr = len(outcomes) + (
-        count_tests(db_path) if db_path is not None else 0
+    n_trials_dsr = (
+        int(dsr_n_trials)
+        if dsr_n_trials is not None
+        else len(outcomes) + (count_tests(db_path) if db_path is not None else 0)
     )
     for row in outcomes:
         row["dsr"] = deflated_sharpe(
@@ -806,6 +1072,26 @@ def run_intraday(
                 lesson_id=lesson_id,
             )
             recorded += 1
+
+    trials_after = count_tests(db_path) if db_path is not None else None
+    recalc_info = None
+    if recalculation is not None:
+        recalc_info = dict(recalculation)
+        recalc_info.update(
+            {
+                "strategy_trials_before": trials_before,
+                "strategy_trials_after": trials_after,
+                "dsr_counter_unchanged": trials_before == trials_after,
+                "dsr_n_trials": n_trials_dsr,
+                "trials_recorded": recorded,
+            }
+        )
+        if trials_before != trials_after:
+            raise RuntimeError(
+                "el recalculo modifico el contador DSR "
+                f"({trials_before} -> {trials_after})"
+            )
+
     return {
         "symbol": symbol,
         "timeframe": timeframe,
@@ -813,6 +1099,7 @@ def run_intraday(
         "profile": profile.id,
         "run_id": run,
         "trials_recorded": recorded,
+        "recalculation": recalc_info,
         "window": {"start": window_start, "end": window_end},
         "dsr_n_trials": n_trials_dsr,
         "families": list(selected_families),
@@ -843,14 +1130,23 @@ def run_intraday(
             },
             "spread": {
                 "source": (
-                    "Dukascopy ticks: mediana por hora"
-                    if tick_spread_bps is not None
-                    else "MT5 bars: columna spread, mediana por hora"
+                    spread_label
+                    or (
+                        "Dukascopy ticks: mediana por hora"
+                        if tick_spread_bps is not None
+                        else "MT5 bars: columna spread, mediana por hora"
+                    )
+                ),
+                "stat": (
+                    "p75"
+                    if spread_label and "p75" in str(spread_label).lower()
+                    else "mediana"
                 ),
                 "hourly": True,
                 "tick_hours": (
                     int(len(tick_spread_bps)) if tick_spread_bps is not None else 0
                 ),
+                "override_bps": spread_override_bps,
                 "median_bps": (
                     float(np.median([row["spread_bps_median"] for row in outcomes]))
                     if outcomes
@@ -895,7 +1191,7 @@ def render_markdown(report: dict) -> str:
         "",
         f"- Símbolo: {report['symbol']} · {report['timeframe']}",
         f"- Barras: {report['bars']['rows']:,} · {report['bars']['start']} → {report['bars']['end']} · {report['bars']['years']} años",
-        f"- Perfil: {report['profile']} · DSR n_trials={report['n_trials']}",
+        f"- Perfil: {report['profile']} · DSR n_trials={report.get('dsr_n_trials', report['n_trials'])}",
         f"- Spread realista: {'sí' if report['spread_reliable'] else 'NO — resultados no confiables'}",
         (
             f"- Comisión: {commission_bps:.3f} bps/lado · "
@@ -903,7 +1199,7 @@ def render_markdown(report: dict) -> str:
             f"{' · ' + str(commission.get('source_date')) if commission.get('source_date') else ''}"
         ),
         (
-            f"- Spread: {spread_bps:.3f} bps (mediana; {spread_model.get('source') or 'sin datos'})"
+            f"- Spread: {spread_bps:.3f} bps ({spread_model.get('stat', 'mediana')}; {spread_model.get('source') or 'sin datos'})"
             if spread_bps is not None
             else "- Spread: sin datos"
         ),
@@ -928,6 +1224,20 @@ def render_markdown(report: dict) -> str:
         "| Estrategia | Parámetros | Trades | Sharpe | MaxDD | DSR | WF | Régimen | Spread | Pasa |",
         "|---|---|---|---|---|---|---|---|---|---|",
     ]
+    recalc = report.get("recalculation")
+    if recalc:
+        unchanged = bool(recalc.get("dsr_counter_unchanged"))
+        insert_at = lines.index("## Estrategias")
+        lines[insert_at:insert_at] = [
+            "## Recálculo de coste",
+            "",
+            f"- Motivo: {recalc.get('reason') or 'recalculo de coste'}",
+            f"- Spread bróker p75: {recalc.get('broker_spread_bps')} bps",
+            f"- DSR n_trials original: {recalc.get('original_dsr_n_trials')} · usado: {recalc.get('dsr_n_trials')}",
+            f"- `strategy_trials`: {recalc.get('strategy_trials_before')} → {recalc.get('strategy_trials_after')} · sin cambios: {'sí' if unchanged else 'NO'}",
+            "- Mismas variantes; **no se crearon trials nuevos**.",
+            "",
+        ]
     for row in report["outcomes"]:
         lines.append(
             f"| {row['strategy']} | `{row['params']}` | {row['metrics']['num_trades']} | "
@@ -1007,6 +1317,7 @@ def write(report: dict, out_dir: str | Path = ROOT / "reports" / "research") -> 
 
 __all__ = [
     "DEFAULT_HORIZONS",
+    "FAMILY_EXECUTION_MODES",
     "INTRADAY_GRIDS",
     "STRATEGIES",
     "asian_range_reversal",
@@ -1014,9 +1325,11 @@ __all__ = [
     "break_even_cost_bps",
     "cache_file",
     "cache_metadata",
+    "family_execution_mode",
     "load_bars",
     "opening_range_breakout",
     "render_markdown",
+    "run_event_backtest",
     "run_intraday",
     "save_bars",
     "trend_pullback",
