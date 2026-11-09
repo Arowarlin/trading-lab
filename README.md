@@ -363,9 +363,10 @@ real: los tests usan runners simulados.
   errores saneados en `lite_model_comparisons`; **no cambia el modelo por
   defecto**. `lab llm report` agrega acuerdo y confianza; con menos de 30
   comparaciones marca muestra insuficiente.
-- Primera comparación real con el MoE `qwen/qwen3-30b-a3b` (2026-11-09, SPY):
-  ambos **Hold**; confianza 58% vs 60%; 224,4 s vs 78,6 s; acuerdo 100%.
-  Muestra n=1 < 30: sin conclusión y sin cambiar el default.
+- Comparaciones reales con el MoE `qwen/qwen3-30b-a3b` (2026-11-09,
+  SPY/QQQ/NVDA): ambos **Hold** en los tres; confianza media 62% vs 60%;
+  latencia 190-235 s vs 71-79 s; acuerdo 100%. Muestra n=3 < 30: sin
+  conclusión y sin cambiar el default.
 
 ```powershell
 lab llm status
