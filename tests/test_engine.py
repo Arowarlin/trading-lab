@@ -2,6 +2,7 @@
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from tradinglab.backtest import run
 from tradinglab.risk import RiskSettings, kill_switch, size_position
@@ -91,6 +92,69 @@ def test_backtest_short_loses_when_price_rises():
     bt = run(df, target, starting_cash=10_000, commission_bps=0, slippage_bps=0)
     assert bt.equity.iloc[-1] < 10_000
     assert (bt.equity > 0).all()
+
+
+def test_backtest_cierra_fuera_de_sesion_sin_lookahead():
+    idx = pd.DatetimeIndex(
+        [
+            pd.Timestamp("2026-01-05 09:00", tz="UTC"),
+            pd.Timestamp("2026-01-05 10:00", tz="UTC"),
+            pd.Timestamp("2026-01-05 16:00", tz="UTC"),
+            pd.Timestamp("2026-01-05 17:00", tz="UTC"),
+        ]
+    )
+    close = np.array([100.0, 100.0, 100.0, 100.0])
+    df = pd.DataFrame(
+        {
+            "open": close,
+            "high": close,
+            "low": close,
+            "close": close,
+            "volume": 1_000.0,
+        },
+        index=idx,
+    )
+    target = pd.Series(1.0, index=idx)
+    bt = run(
+        df,
+        target,
+        starting_cash=10_000,
+        commission_bps=0,
+        slippage_bps=0,
+        session=("09:30", "16:30"),
+        session_tz="UTC",
+    )
+    assert len(bt.trades) == 2
+    assert list(bt.trades["side"]) == ["buy", "sell"]
+    assert bt.exposure < 1.0
+    assert bt.equity.iloc[-1] == pytest.approx(10_000.0)
+
+
+def test_backtest_flat_dates_cierra_para_rollover():
+    idx = pd.date_range("2026-01-04 10:00", periods=4, freq="D", tz="UTC")
+    close = np.array([100.0, 100.0, 100.0, 100.0])
+    df = pd.DataFrame(
+        {
+            "open": close,
+            "high": close,
+            "low": close,
+            "close": close,
+            "volume": 1_000.0,
+        },
+        index=idx,
+    )
+    target = pd.Series(1.0, index=idx)
+    bt = run(
+        df,
+        target,
+        starting_cash=10_000,
+        commission_bps=0,
+        slippage_bps=0,
+        flat_dates=["2026-01-06"],
+    )
+    assert list(bt.trades["side"]) == ["buy", "sell", "buy"]
+    sell = bt.trades[bt.trades["side"] == "sell"].iloc[0]
+    assert str(sell["ts"].date()) == "2026-01-06"
 
 
 def test_size_position_respects_cap():

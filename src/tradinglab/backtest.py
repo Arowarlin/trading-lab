@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass, field
+from datetime import time as dt_time
+from zoneinfo import ZoneInfo
 
 import numpy as np
 import pandas as pd
@@ -8,6 +11,44 @@ import pandas as pd
 from .metrics import metrics_warning, recovery_factor, risk_of_ruin, system_quality_number
 
 TRADING_DAYS = 252
+
+
+def _parse_clock(value: str) -> dt_time:
+    try:
+        hour, minute = str(value).split(":", 1)
+        return dt_time(int(hour), int(minute))
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"hora inválida: {value}") from exc
+
+
+def _session_bounds(session: tuple[str, str] | None) -> tuple[dt_time, dt_time] | None:
+    if session is None:
+        return None
+    if len(session) != 2:
+        raise ValueError("session debe ser (inicio, fin)")
+    start, end = _parse_clock(session[0]), _parse_clock(session[1])
+    if start == end:
+        raise ValueError("session no puede tener inicio igual a fin")
+    return start, end
+
+
+def _local_stamp(value, timezone_name: str) -> pd.Timestamp:
+    stamp = pd.Timestamp(value)
+    if stamp.tzinfo is None:
+        stamp = stamp.tz_localize("UTC")
+    return stamp.tz_convert(ZoneInfo(timezone_name))
+
+
+def _inside_session(
+    local: pd.Timestamp, bounds: tuple[dt_time, dt_time] | None
+) -> bool:
+    if bounds is None:
+        return True
+    start, end = bounds
+    clock = local.time()
+    if start < end:
+        return start <= clock <= end
+    return clock >= start or clock <= end
 
 
 @dataclass
@@ -29,12 +70,19 @@ def run(
     commission_bps: float = 1.0,
     slippage_bps: float = 5.0,
     max_gross: float = 1.0,
+    session: tuple[str, str] | None = None,
+    session_tz: str = "UTC",
+    flat_dates: Iterable[str] | None = None,
 ) -> BacktestResult:
     """Backtest long/short, sin apalancamiento, ejecución en la apertura siguiente.
 
     `target` va de -1 (corto a plena exposición) a +1 (largo). `max_gross`
     limita la exposición bruta para no simular apalancamiento accidental.
     Costes: comisión y slippage en puntos básicos sobre el nocional.
+
+    `session` opcional (p. ej. ``("09:30", "16:00")``) fuerza objetivo 0 fuera
+    de la ventana local; `flat_dates` fuerza objetivo 0 en días completos
+    (rollover/vencimiento). Así se evita mantener posiciones fuera de sesión.
     """
     df = df.copy()
     tgt = (
@@ -44,6 +92,8 @@ def run(
         .fillna(0.0)
     )
     pos_target = tgt.shift(1).fillna(0.0)
+    bounds = _session_bounds(session)
+    flat = {str(value) for value in (flat_dates or [])}
 
     cash = float(starting_cash)
     shares = 0.0  # negativo = corto
@@ -53,13 +103,20 @@ def run(
     realized: list[float] = []
     realized_days: list[str] = []
     realized_returns: list[float] = []
+    effective_exposure: list[float] = []
 
     for dt, bar in df.iterrows():
         px_open = float(bar["open"])
         if px_open <= 0 or not np.isfinite(px_open):
             continue
 
-        desired = float(pos_target.loc[dt])
+        local = _local_stamp(dt, session_tz)
+        force_flat = local.date().isoformat() in flat
+        if force_flat or not _inside_session(local, bounds):
+            desired = 0.0
+        else:
+            desired = float(pos_target.loc[dt])
+        effective_exposure.append(abs(desired))
         equity_open = cash + shares * px_open
         desired_shares = (desired * equity_open) / px_open
         delta = desired_shares - shares
@@ -120,16 +177,19 @@ def run(
 
     eq = pd.DataFrame(rows).set_index("ts")["equity"].astype(float)
     rets = eq.pct_change().fillna(0.0)
-    metrics = compute_metrics(
-        eq, rets, realized, float(pos_target.abs().mean()), realized_returns
+    exposure = (
+        float(np.mean(effective_exposure))
+        if effective_exposure
+        else float(pos_target.abs().mean())
     )
+    metrics = compute_metrics(eq, rets, realized, exposure, realized_returns)
 
     return BacktestResult(
         equity=eq,
         returns=rets,
         trades=pd.DataFrame(trades),
         metrics=metrics,
-        exposure=float(pos_target.abs().mean()),
+        exposure=exposure,
         trade_pnls=realized,
         trade_days=realized_days,
         trade_returns=realized_returns,
