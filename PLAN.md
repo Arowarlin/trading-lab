@@ -787,6 +787,45 @@ operador ni datos. Inventario base en `docs/ui_inventory.json` y test
 
 ---
 
+## Bloque 2026-11-08 — Cementerio de estrategias (etapas 1-7)
+
+Reglas del bloque: sin activar bots, sin órdenes, sin dinero real, sin tocar
+`.env`, sin push, sin cambiar el modo de Telegram, sin borrar nada, sin relajar
+umbrales y sin mover módulos. `lab f13 config-check` antes y después de cada
+etapa.
+
+### Etapa 1 — Registro de todo lo probado y contador DSR
+
+- [x] **Tabla `strategy_trials`**
+  - Familia, hipótesis, activo, parámetros, fecha, resultado, motivo de
+    descarte, fuente, `run_id`, `lesson_id` y fingerprint de familia+ventana.
+  - Se guardan **también las fallidas**.
+- [x] **Contador único del DSR**
+  - `count_tests` = lecciones + trials de Optuna + lecturas de holdout +
+    `strategy_trials` + bots incubados (hook; 0 hasta la etapa de ciclo de vida).
+- [x] **Aviso de reoptimización**
+  - Si la familia ya se descartó sobre la misma ventana, avisa antes de
+    repetir: EURUSD 2024-11-04→2026-11-08 deja 8 `orb`, 16 `pullback` y 4
+    `asian_rev` descartados.
+- [x] **Presupuesto semanal por activo**
+  - `config/research_budget.yaml` (nuevo): 5 intentos por activo y semana ISO;
+    `lab research-intraday` se detiene al agotarlo salvo `--force`.
+- [x] **Hipótesis en `lessons`**
+  - Las hipótesis nuevas (humanas o de Qwen) nacen como `proposed`; Qwen solo
+    redacta y nunca ejecuta (test).
+- [x] **Registro real**
+  - Barrido EURUSD M15: 28 variantes registradas (run `c7fd4e2c7fd0`), contador
+    DSR 5 → 33, presupuesto EURUSD 1/5.
+  - `lab research-trials` lista el cementerio, el presupuesto y el contador.
+- Evidencia: `pytest tests/test_trials.py tests/test_intraday.py -q` → 18
+  passed; suite completa **436 passed**; `ruff` limpio; `lab doctor` OK (WARN
+  conocido del modelo configurado); `lab f13 config-check` OK antes y después
+  con el mismo hash `54b420360f17c75d…`. Sin bots activados, sin órdenes y sin
+  tocar `bots.yaml`, `lab.yaml`, `prop.yaml` ni `f13.yaml`.
+- Etapas 2-7: pendientes de confirmación; el push va al final del bloque.
+
+---
+
 ## Registro de evidencias
 
 | Fecha | Tarea | Comando / evidencia |
@@ -864,5 +903,6 @@ operador ni datos. Inventario base en `docs/ui_inventory.json` y test
 | 2026-11-08 | 9.5 inicial (NO FIABLE: offset constante) | `lab mt5 status` -> offset +2.00 detectado; M15 50k + H1 20k; `lab research-intraday` -> 0/28, WF fallido, spread real; sin activar bots |
 | 2026-11-08 | 9.5 offset corregido | `pytest tests/test_mt5_offsets.py tests/test_intraday.py -q` -> 11 passed; offset por periodo +2/+3 (5 tramos M15, 8 H1); neto mejor -6.78, bruto +1.34, equilibrio 0.32 vs calibrado 3.72 bps; 0/28; WF fallido |
 | 2026-11-08 | 9.5 costes calibrados | `pytest tests/test_intraday.py tests/test_console_shell.py -q` -> 20 passed; comision oficial FTMO 2.50 USD/lote/lado; spread horario + slippage opt/cons; tabla Sharpe 0/0.5/1/2/3 y equilibrio |
+| 2026-11-08 | Cementerio Etapa 1 | `pytest tests/test_trials.py tests/test_intraday.py -q` -> 18 passed; `pytest -q` -> 436 passed; strategy_trials (fallidas tambien), contador DSR 5->33, aviso de familia descartada, presupuesto config/research_budget.yaml, f13 config-check OK |
 | 2026-11-08 | UI formato/metricas | `pytest tests/test_console_js.py tests/test_console_shell.py -q` -> 11 passed; `pytest -q` -> 416 passed; gauges restantes, cero negativo, moneda agrupada, salud parcial, performers y regimen compacto |
 |  |  |  |

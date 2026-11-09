@@ -706,6 +706,43 @@ una sesión de 08:00 UTC siga siendo 08:00 UTC y el coste de equilibrio.
 Futuros intradía: perfil definido y proveedor ProjectX como **stub**; no se
 implementa descarga de pago. Ver `docs/fase6_futuros_intradia.md`.
 
+### Cementerio de estrategias y presupuesto (etapa 1)
+
+Todo lo que se prueba queda registrado en la tabla `strategy_trials`, **también
+lo fallido**:
+
+| Campo | Contenido |
+|---|---|
+| `family` | familia de estrategia (`ORB`, `PULLBACK`, `ASIAN_REV`…) |
+| `hypothesis` | por qué debería funcionar |
+| `symbol` | activo probado |
+| `params` | parámetros exactos |
+| `ts` / `window_start` / `window_end` | fecha y ventana evaluada |
+| `result` | métricas, DSR, PBO, WF, régimen y curva de costes |
+| `outcome` / `reason` | `passed`/`failed` y **motivo de descarte** |
+| `source` / `run_id` / `lesson_id` | origen, pasada y lección asociada |
+
+- El **contador único del DSR** (`count_tests`) suma lecciones, trials de
+  Optuna, lecturas del holdout, cada fila de `strategy_trials` y los bots
+  incubados. Después del barrido EURUSD M15 pasó de 5 a **33** pruebas.
+- **Aviso de reoptimización**: si la familia ya se descartó sobre la misma
+  ventana, `lab research-intraday` avisa antes de repetir.
+- **Presupuesto semanal por activo**: `config/research_budget.yaml`
+  (5 intentos por activo y semana ISO). Agotado, el comando se detiene salvo
+  `--force`.
+- **Hipótesis nuevas**: nacen en `lessons` como `proposed` (`lab lessons add
+  --author qwen|humano`); Qwen solo redacta y nunca ejecuta.
+
+```powershell
+lab research-trials              # cementerio, presupuesto y contador DSR
+lab research-trials --symbol EURUSD --limit 50
+```
+
+Evidencia: `pytest tests/test_trials.py tests/test_intraday.py -q` → **18
+passed**; suite completa **436 passed**; `ruff` limpio; `lab doctor` OK;
+`lab f13 config-check` OK antes y después de la etapa (hash
+`54b420360f17c75d…` sin cambios).
+
 ---
 
 ## 6d. Fondo personal: cuentas, límites y panel

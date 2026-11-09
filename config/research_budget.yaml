@@ -1,0 +1,11 @@
+# Presupuesto de intentos de investigación por activo y semana ISO.
+# Un "intento" es una pasada de barrido (run_id) sobre un activo.
+# No cambia ningún umbral de DSR, PBO o walk-forward: solo limita cuánto se
+# puede reoptimizar el mismo activo cada semana.
+max_attempts_per_week_per_asset: 5
+warn_on_discarded_family: true
+assets:
+  EURUSD: 5
+  USDJPY: 5
+  XAUUSD: 5
+  NASDAQ: 5

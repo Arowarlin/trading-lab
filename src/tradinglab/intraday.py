@@ -9,19 +9,22 @@ from __future__ import annotations
 
 import itertools
 import json
+import uuid
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
-from .config import ROOT
+from .config import DEFAULT_DB, ROOT
 from .indicators import atr, ema
 from .intraday_costs import asset_costs
+from .learning import get_lesson
 from .profiles import get_profile
 from .prop.rules import from_yaml
 from .prop.simulator import monte_carlo
 from .research import deflated_sharpe
 from .strategies.base import StrategyResult
+from .trials import record_trial
 from .validation import cscv_pbo, returns_matrix
 from .walkforward import regime_gate, regime_report, walk_forward
 
@@ -32,6 +35,20 @@ INTRADAY_GRIDS = {
 }
 DEFAULT_HORIZONS = (22, 44, 120)
 COST_GRID_BPS = (0.0, 0.5, 1.0, 2.0, 3.0)
+FAMILY_HYPOTHESES = {
+    "orb": (
+        "Ruptura del rango de apertura: la continuación de la momentum tras la "
+        "apertura de Londres/NY tiene ventaja en M15."
+    ),
+    "pullback": (
+        "Tendencia intradía con retroceso a la media: los retrocesos dentro de "
+        "la tendencia ofrecen mejor precio de entrada."
+    ),
+    "asian_rev": (
+        "Reversión del rango asiático: el rango formado en la sesión asiática "
+        "suele revertirse al inicio de la sesión europea."
+    ),
+}
 
 
 def _bars_per_year(timeframe: str) -> float:
@@ -368,6 +385,38 @@ def _aligned(series: dict[str, pd.Series]) -> tuple[np.ndarray, list[str]] | Non
     return returns_matrix({k: frame[k].to_numpy(dtype=float) for k in frame.columns})
 
 
+def _failure_reason(
+    row: dict,
+    *,
+    profile,
+    pbo: dict | None,
+    wf_verdict: str,
+) -> str:
+    """Motivo de descarte de una variante (vacío si pasó)."""
+    if row.get("passed"):
+        return ""
+    parts: list[str] = []
+    metrics = row.get("metrics") or {}
+    if int(metrics.get("num_trades", 0)) < profile.validation.min_trades:
+        parts.append(
+            f"trades {int(metrics.get('num_trades', 0))} < {profile.validation.min_trades}"
+        )
+    dsr = row.get("dsr")
+    if dsr is None or dsr < profile.validation.min_dsr:
+        parts.append(f"DSR {(dsr or 0):.0%} < {profile.validation.min_dsr:.0%}")
+    if pbo is None:
+        parts.append("PBO sin datos")
+    elif pbo.get("pbo", 1.0) > profile.validation.max_pbo:
+        parts.append(f"PBO {pbo['pbo']:.0%} > {profile.validation.max_pbo:.0%}")
+    if wf_verdict != "ok":
+        parts.append(f"WF {wf_verdict}")
+    if not (row.get("regime_gate") or {}).get("passed"):
+        parts.append("régimen no aprobado")
+    if not row.get("spread_reliable"):
+        parts.append("spread no fiable")
+    return "; ".join(parts)
+
+
 def run_intraday(
     df: pd.DataFrame,
     *,
@@ -379,6 +428,10 @@ def run_intraday(
     slippage_bps: float | None = None,
     slippage_optimistic_bps: float | None = None,
     spread_override_bps: float | None = None,
+    db_path: str | Path | None = None,
+    run_id: str | None = None,
+    lesson_id: int | None = None,
+    record: bool = True,
 ) -> dict:
     """Valida las estrategias intradía con los controles existentes."""
     profile = get_profile("intraday_fx")
@@ -497,6 +550,12 @@ def run_intraday(
             # Diagnóstico: nunca cuenta como candidato que avanza.
             row["passed_zero_cost_diagnostic"] = row["passed"]
             row["passed"] = False
+        row["failure_reason"] = _failure_reason(
+            row,
+            profile=profile,
+            pbo=pbo,
+            wf_verdict=wf.verdict() if wf else "sin datos",
+        )
 
     rules = [from_yaml("ftmo", "challenge", 100_000), from_yaml("topstep", "challenge", 50_000)]
     mc = []
@@ -527,11 +586,53 @@ def run_intraday(
         for row in outcomes
         if row["calibrated_cost_bps"] is not None
     ]
+    run = run_id or uuid.uuid4().hex[:12]
+    window_start = str(df.index[0].date()) if len(df.index) else None
+    window_end = str(df.index[-1].date()) if len(df.index) else None
+    lesson_hypothesis = ""
+    if lesson_id is not None:
+        lesson = get_lesson(db_path or DEFAULT_DB, lesson_id)
+        lesson_hypothesis = str(lesson.get("hypothesis") or "")
+    recorded = 0
+    if record and db_path is not None:
+        for row in outcomes:
+            record_trial(
+                db_path,
+                family=row["strategy"],
+                hypothesis=lesson_hypothesis
+                or FAMILY_HYPOTHESES.get(
+                    row["strategy"], f"Familia intradía {row['strategy']}."
+                ),
+                symbol=symbol,
+                params=row["params"],
+                window_start=window_start,
+                window_end=window_end,
+                result={
+                    "metrics": row["metrics"],
+                    "dsr": row.get("dsr"),
+                    "pbo": row.get("pbo"),
+                    "wf_verdict": row.get("wf_verdict"),
+                    "regime_passed": (row.get("regime_gate") or {}).get("passed"),
+                    "calibrated_cost_bps": row.get("calibrated_cost_bps"),
+                    "breakeven_cost_bps": row.get("breakeven_cost_bps"),
+                    "cost_curve_bps": row.get("cost_curve_bps"),
+                    "passed": row.get("passed"),
+                },
+                outcome="passed" if row.get("passed") else "failed",
+                reason=row.get("failure_reason", ""),
+                source="lesson" if lesson_id is not None else "sweep",
+                run_id=run,
+                lesson_id=lesson_id,
+            )
+            recorded += 1
     return {
         "symbol": symbol,
         "timeframe": timeframe,
         "bars": cache_metadata(df, timeframe),
         "profile": profile.id,
+        "run_id": run,
+        "trials_recorded": recorded,
+        "window": {"start": window_start, "end": window_end},
         "costs": {
             "commission_bps_median": commission_median,
             "commission_source": commission_source,

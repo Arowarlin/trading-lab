@@ -371,6 +371,30 @@ CREATE TABLE IF NOT EXISTS holdout_reads (
 );
 CREATE INDEX IF NOT EXISTS idx_holdout_reads_hash
     ON holdout_reads(config_hash);
+CREATE TABLE IF NOT EXISTS strategy_trials (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts TEXT NOT NULL,
+    family TEXT NOT NULL,
+    hypothesis TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    params TEXT NOT NULL,
+    window_start TEXT,
+    window_end TEXT,
+    result TEXT,
+    outcome TEXT NOT NULL DEFAULT 'failed',
+    reason TEXT,
+    source TEXT NOT NULL DEFAULT 'humano',
+    run_id TEXT,
+    lesson_id INTEGER,
+    fingerprint TEXT,
+    counted INTEGER NOT NULL DEFAULT 1
+);
+CREATE INDEX IF NOT EXISTS idx_strategy_trials_family
+    ON strategy_trials(family, symbol, fingerprint);
+CREATE INDEX IF NOT EXISTS idx_strategy_trials_symbol_ts
+    ON strategy_trials(symbol, ts);
+CREATE INDEX IF NOT EXISTS idx_strategy_trials_run
+    ON strategy_trials(run_id);
 
 CREATE TABLE IF NOT EXISTS model_registry (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

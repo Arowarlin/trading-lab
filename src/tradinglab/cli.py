@@ -4749,10 +4749,17 @@ def research_intraday_cmd(
     zero_spread: bool = typer.Option(
         False, "--zero-spread", help="Diagnóstico: coste de spread 0"
     ),
+    force: bool = typer.Option(
+        False, "--force", help="Permite exceder el presupuesto semanal del activo"
+    ),
+    lesson_id: int = typer.Option(
+        None, "--lesson-id", help="Hipótesis tomada de una lección (Qwen o humano)"
+    ),
     out: str = typer.Option(None, "--out"),
 ) -> None:
     """Valida estrategias intradía sobre caché MT5 (DSR/PBO/WF/regímenes)."""
-    from .intraday import load_bars, run_intraday, write
+    from .intraday import INTRADAY_GRIDS, load_bars, run_intraday, write
+    from .trials import budget_status, discarded_warning
 
     settings = get_settings()
     try:
@@ -4760,6 +4767,27 @@ def research_intraday_cmd(
     except FileNotFoundError as exc:
         console.print(f"[red]{exc}[/red] Ejecuta: lab mt5 fetch {symbol} --timeframe {timeframe}")
         raise typer.Exit(1)
+
+    window_start = str(df.index[0].date()) if len(df.index) else None
+    window_end = str(df.index[-1].date()) if len(df.index) else None
+    budget = budget_status(DEFAULT_DB, symbol)
+    if budget["exceeded"] and not force:
+        console.print(
+            f"[red]Presupuesto semanal agotado para {budget['symbol']}: "
+            f"{budget['used']}/{budget['limit']} intentos ({budget['week']}). "
+            "Usa --force para continuar o espera a la semana siguiente.[/red]"
+        )
+        raise typer.Exit(1)
+    for family in INTRADAY_GRIDS:
+        warning = discarded_warning(
+            DEFAULT_DB,
+            family=family,
+            symbol=symbol,
+            window_start=window_start,
+            window_end=window_end,
+        )
+        if warning:
+            console.print(f"[yellow]{warning}[/yellow]")
     try:
         report = run_intraday(
             df,
@@ -4771,11 +4799,14 @@ def research_intraday_cmd(
             slippage_bps=slippage_bps,
             slippage_optimistic_bps=slippage_optimistic_bps,
             spread_override_bps=0.0 if zero_spread else None,
+            db_path=DEFAULT_DB,
+            lesson_id=lesson_id,
         )
     except Exception as exc:
         console.print(f"[red]{exc}[/red]")
         raise typer.Exit(1) from exc
     files = write(report, Path(out) if out else ROOT / "reports" / "research")
+    budget_after = budget_status(DEFAULT_DB, symbol)
     best = max(
         report["outcomes"],
         key=lambda row: row["metrics"]["sharpe"],
@@ -4830,12 +4861,63 @@ def research_intraday_cmd(
             f"Spread confiable: {'sí' if report['spread_reliable'] else 'NO'}\n"
             f"{cost_text}\n"
             f"{best_text}\n"
-            f"{pbo_text}",
+            f"{pbo_text}\n"
+            f"Trials registradas: {report.get('trials_recorded', 0)} "
+            f"· run {report.get('run_id', '—')}\n"
+            f"Presupuesto {budget_after['symbol']}: "
+            f"{budget_after['used']}/{budget_after['limit']} intentos "
+            f"({budget_after['week']})",
             title="Intradía FX/CFD",
         )
     )
     console.print(
         f"Pasan {report['passed']}/{len(report['outcomes'])} · {files['md']}"
+    )
+
+
+@app.command("research-trials")
+def research_trials_cmd(
+    symbol: str = typer.Option(None, "--symbol"),
+    family: str = typer.Option(None, "--family"),
+    limit: int = typer.Option(20, "--limit"),
+) -> None:
+    """Registro de estrategias probadas (cementerio) y presupuesto semanal."""
+    from .learning import count_tests
+    from .trials import budget_config, budget_status, list_trials
+
+    rows = list_trials(DEFAULT_DB, symbol=symbol, family=family, limit=limit)
+    t = Table(title="Estrategias probadas (cementerio)")
+    for col in ("Fecha", "Familia", "Activo", "Resultado", "Motivo", "Fuente"):
+        t.add_column(col, overflow="fold")
+    for row in rows:
+        t.add_row(
+            str(row["ts"])[:19],
+            str(row["family"]),
+            str(row["symbol"]),
+            str(row["outcome"]),
+            str(row["reason"] or "—"),
+            str(row["source"]),
+        )
+    console.print(t)
+
+    config = budget_config()
+    symbols = sorted({str(row["symbol"]) for row in rows}) or sorted(config["assets"])
+    budget = Table(title="Presupuesto semanal por activo")
+    for col in ("Activo", "Semana", "Intentos", "Límite", "Restante", "Fuente"):
+        budget.add_column(col, overflow="fold")
+    for item in symbols:
+        status = budget_status(DEFAULT_DB, item)
+        budget.add_row(
+            status["symbol"],
+            status["week"],
+            str(status["used"]),
+            str(status["limit"]),
+            str(status["remaining"]),
+            status["source"],
+        )
+    console.print(budget)
+    console.print(
+        f"[dim]Pruebas DSR (contador único): {count_tests(DEFAULT_DB)}[/dim]"
     )
 
 

@@ -16,6 +16,7 @@ from .accounts import load_accounts, own_limits, set_limits
 from .config import Settings
 from .db import connect, init_db, utcnow
 from .runtime import record_console_action
+from .trials import count_incubated
 
 AUTHORS = {"qwen", "humano"}
 STATUSES = {"proposed", "approved", "rejected"}
@@ -162,6 +163,12 @@ def list_lessons(
 
 
 def count_tests(db_path: str | Path, settings: Settings | None = None) -> int:
+    """Contador único de pruebas del DSR.
+
+    Suman las lecciones, los trials de Optuna, las lecturas del holdout, cada
+    intento registrado en `strategy_trials` (también los fallidos) y los bots
+    incubados.
+    """
     init_learning(db_path, settings)
     with connect(db_path) as con:
         lessons = con.execute("SELECT COUNT(*) AS n FROM lesson_tests").fetchone()["n"]
@@ -171,7 +178,16 @@ def count_tests(db_path: str | Path, settings: Settings | None = None) -> int:
         holdout = con.execute(
             "SELECT COUNT(*) AS n FROM holdout_reads"
         ).fetchone()["n"]
-    return int(lessons) + int(trials) + int(holdout)
+        strategies = con.execute(
+            "SELECT COUNT(*) AS n FROM strategy_trials"
+        ).fetchone()["n"]
+    return (
+        int(lessons)
+        + int(trials)
+        + int(holdout)
+        + int(strategies)
+        + count_incubated(db_path)
+    )
 
 
 def holdout_usage(

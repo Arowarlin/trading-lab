@@ -132,6 +132,21 @@ def test_curva_de_costes_y_modelo():
     assert "Coste de equilibrio" in render_markdown(report)
 
 
+def test_run_intraday_registra_las_variantes_probadas(tmp_path):
+    from tradinglab.trials import list_trials
+
+    db = tmp_path / "lab.db"
+    df = _bars(days=30)
+    report = run_intraday(df, paths=10, db_path=db)
+    assert report["trials_recorded"] == len(report["outcomes"])
+    rows = list_trials(db)
+    assert len(rows) == report["trials_recorded"]
+    assert {row["outcome"] for row in rows} <= {"passed", "failed"}
+    assert all(row["reason"] for row in rows if row["outcome"] == "failed")
+    assert all(row["hypothesis"] for row in rows)
+    assert all(row["run_id"] == report["run_id"] for row in rows)
+
+
 def test_tres_estrategias_generan_targets():
     df = _bars()
     for fn in (opening_range_breakout, trend_pullback, asian_range_reversal):
