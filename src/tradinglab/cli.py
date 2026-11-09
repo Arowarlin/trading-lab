@@ -97,6 +97,10 @@ lifecycle_app = typer.Typer(
     no_args_is_help=True,
     help="Incubadora: estados, criterios congelados y reporte forward.",
 )
+ticks_app = typer.Typer(
+    no_args_is_help=True,
+    help="Ticks Dukascopy: descarga, parquet y métricas de spread.",
+)
 llm_app = typer.Typer(
     no_args_is_help=True,
     help="LLM local: validación de esquema y comparación de modelos lite.",
@@ -122,6 +126,7 @@ app.add_typer(operator_app, name="operator")
 app.add_typer(risk_budget_app, name="risk-budget")
 app.add_typer(lifecycle_app, name="lifecycle")
 app.add_typer(llm_app, name="llm")
+app.add_typer(ticks_app, name="ticks")
 app.add_typer(lessons_app, name="lessons")
 app.add_typer(reports_app, name="reports")
 app.add_typer(markets_app, name="markets")
@@ -4247,6 +4252,91 @@ def mt5_fetch_cmd(
 
 
 # ==================================================================== Fondeo
+
+@ticks_app.command("fetch")
+def ticks_fetch_cmd(
+    symbol: str = typer.Argument("EURUSD", help="EURUSD, USDJPY, XAUUSD…"),
+    day: str = typer.Option(..., "--day", help="YYYY-MM-DD"),
+    hours: str = typer.Option("0-23", "--hours", help="0-23 o 8-16,20"),
+    point: float = typer.Option(None, "--point", help="Escala de precio si no está en el mapa"),
+    out: Path = typer.Option(None, "--out", help="Directorio de parquet"),
+    retries: int = typer.Option(2, "--retries"),
+) -> None:
+    """Descarga ticks Dukascopy y los guarda en parquet. No envía órdenes."""
+    from .data.ticks import (
+        TickError,
+        fetch_day,
+        parse_hours,
+        save_ticks,
+        summarize_ticks,
+    )
+
+    try:
+        target_day = date.fromisoformat(day)
+    except ValueError as exc:
+        console.print(f"[red]Fecha inválida:[/red] {day}")
+        raise typer.Exit(2) from exc
+    try:
+        selected = parse_hours(hours)
+        frame = fetch_day(
+            symbol,
+            target_day,
+            hours=selected,
+            point=point,
+            retries=max(0, retries),
+        )
+    except TickError as exc:
+        console.print(f"[red]Dukascopy:[/red] {exc}")
+        raise typer.Exit(1) from exc
+    if frame.empty:
+        console.print(
+            "[yellow]Sin datos: mercado cerrado o archivo vacío en las horas pedidas.[/yellow]"
+        )
+        return
+    try:
+        path = save_ticks(frame, symbol, target_day, out_dir=out)
+    except TickError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(1) from exc
+    summary = summarize_ticks(frame)
+    table = Table(title=f"Ticks Dukascopy · {symbol.upper()} · {target_day}")
+    table.add_column("Campo", style="bold")
+    table.add_column("Valor", justify="right")
+    table.add_row("Ticks", f"{summary['ticks']:,}")
+    table.add_row("Inicio UTC", str(summary["start"]))
+    table.add_row("Fin UTC", str(summary["end"]))
+    table.add_row("Spread mediano", f"{summary['median_spread']:.5f}")
+    table.add_row("Spread p95", f"{summary['p95_spread']:.5f}")
+    table.add_row("Spread mediano (bps)", f"{summary['median_spread_bps']:.2f}")
+    table.add_row("Parquet", str(path))
+    console.print(table)
+    console.print("[dim]Solo datos; no se ha enviado ninguna orden.[/dim]")
+
+
+@ticks_app.command("summary")
+def ticks_summary_cmd(
+    symbol: str = typer.Argument("EURUSD"),
+    day: str = typer.Option(..., "--day", help="YYYY-MM-DD"),
+    out: Path = typer.Option(None, "--out", help="Directorio de parquet"),
+) -> None:
+    """Resume un parquet de ticks ya descargado."""
+    from .data.ticks import summarize_ticks
+
+    try:
+        target_day = date.fromisoformat(day)
+    except ValueError as exc:
+        console.print(f"[red]Fecha inválida:[/red] {day}")
+        raise typer.Exit(2) from exc
+    base = Path(out) if out else ROOT / "data" / "cache" / "ticks"
+    path = base / f"{symbol.upper()}_{target_day:%Y%m%d}.parquet"
+    if not path.exists():
+        console.print(f"[yellow]Sin datos: no existe {path}[/yellow]")
+        return
+    summary = summarize_ticks(pd.read_parquet(path))
+    for key, value in summary.items():
+        console.print(f"{key}: {value}")
+    console.print(f"[dim]{path}[/dim]")
+
 
 @mt5_app.command("aliases")
 def mt5_aliases_cmd() -> None:
