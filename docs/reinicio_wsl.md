@@ -8,8 +8,9 @@ Fecha: 2026-11-09.
   (UID 1000, sudo), versión predeterminada 2.
 - `C:\Users\PC\.wslconfig` activa `networkingMode=mirrored`; LM Studio está en
   `http://127.0.0.1:1234/v1` con `qwen3.8-27b`.
-- Trading-R1 0.1.1 en `/home/pc/.venv-r1`; `TR1_VLLM_*` y el `PATH` del venv
-  quedan en `~/.bashrc` y `~/.profile`. TUI verificada.
+- Trading-R1 0.1.1 en `/home/pc/.venv-r1`; `TR1_VLLM_*`, `~/.venv-r1/bin` y
+  `~/.bun/bin` (bun 1.4.4 nativo) quedan en `~/.bashrc` y `~/.profile`. TUI
+  verificada.
 - La tarea `TradingLab-Resume` reabre Windows Terminal y la sesión exacta
   `ses_e5220563affelHrJU9DmgfjCb3` de OpenCode al iniciar sesión, como máximo
   una vez por arranque. Lanza `scripts/resume_terminal.ps1` con `-File` para
@@ -31,7 +32,9 @@ wsl --install -d Ubuntu-24.04 --no-launch --web-download
 El OOBE de Ubuntu creó el usuario `pc`. Después, dentro de Ubuntu:
 
 ```bash
+sudo apt-get update && sudo apt-get install -y unzip
 curl -LsSf https://astral.sh/uv/install.sh | sh
+curl -fsSL https://bun.sh/install | bash
 uv venv --python 3.12 ~/.venv-r1
 uv pip install --python ~/.venv-r1/bin/python trading-r1
 ```

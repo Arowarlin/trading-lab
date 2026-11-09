@@ -1599,17 +1599,20 @@ Opciones, en orden recomendado:
    `C:\Users\PC\.wslconfig` activa `networkingMode=mirrored`, necesario para
    llegar a LM Studio en `127.0.0.1:1234` desde WSL. El entorno queda en
    `~/.bashrc` y `~/.profile` (`TR1_PROFILE=vllm`, `TR1_VLLM_BASE_URL`,
-   `TR1_VLLM_MODEL` y `~/.venv-r1/bin` en `PATH`).
+   `TR1_VLLM_MODEL`, `~/.venv-r1/bin` y `~/.bun/bin` en `PATH`).
    ```bash
    trading-r1 --profile vllm
    ```
    Reinstalación limpia dentro de Ubuntu:
    ```bash
+   sudo apt-get update && sudo apt-get install -y unzip
    curl -LsSf https://astral.sh/uv/install.sh | sh
+   curl -fsSL https://bun.sh/install | bash
    uv venv --python 3.12 ~/.venv-r1
    uv pip install --python ~/.venv-r1/bin/python trading-r1
    ```
-   Verificado: `/v1/models` y una inferencia real devolvieron HTTP 200.
+   Verificado: `/v1/models`, una inferencia real (HTTP 200) y la TUI con
+   bun 1.4.4 nativo.
 
 2. Contenedor Linux (requiere Docker Desktop, no instalado).
 

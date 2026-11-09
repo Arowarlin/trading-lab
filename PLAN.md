@@ -1066,9 +1066,9 @@ etapa.
   - WSL2 instalado: WSL 3.0.3, Ubuntu 24.04.5 LTS, usuario `pc` (UID 1000,
     sudo) y versión predeterminada 2. `networkingMode=mirrored` en
     `C:\Users\PC\.wslconfig` para alcanzar LM Studio en `127.0.0.1:1234`.
-  - Trading-R1 0.1.1 en `~/.venv-r1`, perfil `vllm` con `qwen3.8-27b`;
-    inferencia real HTTP 200 y TUI verificada. Pendiente: informe pre-market
-    y envío real por Telegram desde Trading-R1.
+  - Trading-R1 0.1.1 en `~/.venv-r1`, perfil `vllm` con `qwen3.8-27b` y bun
+    1.4.4 nativo en `~/.bun/bin`; inferencia real HTTP 200 y TUI verificada.
+    Pendiente: informe pre-market y envío real por Telegram desde Trading-R1.
   - Fallback nativo `lab premarket` con Qwen, datos, calendario y Telegram;
     no usa Trading-R1 ni envía órdenes.
   - `TradingLab-Resume` reabrirá Windows Terminal y la sesión exacta de OpenCode
@@ -1175,5 +1175,5 @@ etapa.
 | 2026-11-09 | CLI/OAuth/readiness | `pytest -q` -> 531 passed; `lab backtest --session`, `lab futures stitch`, `lab tradestation auth-url|exchange`, `lab readiness` |
 | 2026-11-08 | UI formato/metricas | `pytest tests/test_console_js.py tests/test_console_shell.py -q` -> 11 passed; `pytest -q` -> 416 passed; gauges restantes, cero negativo, moneda agrupada, salud parcial, performers y regimen compacto |
 | 2026-11-09 | Fix reapertura tras reinicio | `pytest -q --basetemp=...` -> 531 passed; `ruff` limpio; `lab doctor` OK; `resume_after_reboot.ps1` omite si ya corrió en el arranque; `wt.exe` ya no parte el comando por `;` |
-| 2026-11-09 | WSL2 + Trading-R1 | WSL 3.0.3, Ubuntu 24.04.5, usuario pc; Trading-R1 0.1.1 en ~/.venv-r1; mirrored + LM Studio HTTP 200; TUI viva |
+| 2026-11-09 | WSL2 + Trading-R1 | WSL 3.0.3, Ubuntu 24.04.5, usuario pc; Trading-R1 0.1.1 en ~/.venv-r1; bun 1.4.4 nativo; mirrored + LM Studio HTTP 200; TUI viva |
 |  |  |  |
