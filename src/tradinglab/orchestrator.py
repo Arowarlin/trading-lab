@@ -22,6 +22,7 @@ from .portfolio import load_clusters
 from .profiles import BotProfile, load_profiles
 from .prop.guard import AccountLimits, AccountSnapshot, PropGuard, evaluate_account
 from .risk import check_order, size_position
+from .risk_budget import assess_open, news_blackout
 from .runtime import effective_enabled
 from .session import session_block
 from .strategies import STRATEGIES
@@ -327,6 +328,40 @@ def run_bot(
                     severity="warning",
                 )
                 continue
+
+        if delta > 0:
+            budget_check = assess_open(
+                DEFAULT_DB,
+                symbol=ticker,
+                side="buy" if delta > 0 else "sell",
+                proposed_risk_usd=abs(delta) * risk_per_share,
+                equity=snap["equity"],
+                positions=snap.get("positions") or [],
+                limits=limits,
+                bot=spec.id,
+            )
+            if not budget_check["allowed"]:
+                action.status = "bloqueado"
+                action.detail = budget_check["reason"]
+                actions.append(action)
+                send_alert(
+                    "risk_budget_block",
+                    f"{spec.id}/{ticker}: {budget_check['reason']}",
+                    severity="warning",
+                )
+                continue
+            if spec.profile == "intraday_fx":
+                news = news_blackout(DEFAULT_DB, ticker)
+                if news["blocked"]:
+                    action.status = "bloqueado"
+                    action.detail = f"noticias: {news['reason']}"
+                    actions.append(action)
+                    send_alert(
+                        "news_blackout",
+                        f"{spec.id}/{ticker}: {news['reason']}",
+                        severity="warning",
+                    )
+                    continue
 
         if delta > 0:
             # Reevaluar SIEMPRE antes de cada apertura. Los cierres/reducciones

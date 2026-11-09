@@ -403,6 +403,26 @@ CREATE TABLE IF NOT EXISTS asset_aliases (
     discovered_at TEXT NOT NULL,
     source TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS risk_slice_overrides (
+    bot TEXT PRIMARY KEY,
+    asset TEXT NOT NULL,
+    slice_pct REAL NOT NULL,
+    updated_at TEXT NOT NULL,
+    updated_by TEXT,
+    reason TEXT
+);
+CREATE TABLE IF NOT EXISTS risk_slice_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts TEXT NOT NULL,
+    asset TEXT NOT NULL,
+    bot TEXT NOT NULL,
+    old_slice_pct REAL,
+    new_slice_pct REAL NOT NULL,
+    action TEXT NOT NULL,
+    actor TEXT,
+    reason TEXT,
+    reverted_at TEXT
+);
 
 CREATE TABLE IF NOT EXISTS model_registry (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

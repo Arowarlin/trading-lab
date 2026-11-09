@@ -900,6 +900,38 @@ se activó ningún bot.
 
 ---
 
+### Presupuesto de riesgo por activo (etapa 4)
+
+`config/risk_budget.yaml` define, por activo, el **riesgo abierto** (1,00 %),
+la **rebanada inicial** por bot (0,25 %) y la **máxima** (0,50 %); el clúster
+USD tiene un tope del 1,50 %.
+
+- El guard suma el riesgo **firmado** por activo: largos positivos y cortos
+  negativos se compensan. Rechaza aperturas que superen el presupuesto del
+  activo, la rebanada del bot o el tope total (siempre ≤ límite efectivo
+  firma/propio). **Cierres y reducciones nunca se bloquean.**
+- **Clúster USD**: EURUSD largo y USDJPY corto comparten dirección; muestra la
+  exposición neta y el peor caso con todos los stops.
+- **Apagón de noticias**: `macro_events` filtrado por eventos USD (CPI, NFP,
+  FOMC, PCE, Fed…) y BoJ/JPY para USDJPY, ventana ±30 min. Sin datos →
+  “sin datos”; no se inventan eventos.
+- **Rebanadas**: bajar es inmediato; subir exige operador armado y
+  confirmación, se rechaza para el bot F13 congelado y queda en historial
+  reversible.
+
+```powershell
+lab risk-budget status
+lab risk-budget set --asset EURUSD --bot eurusd-range-reversal --slice-pct 0.001
+lab risk-budget set --asset EURUSD --bot eurusd-range-reversal --slice-pct 0.002 --armed --confirm
+lab risk-budget revert <history_id>
+lab risk-budget news --symbol EURUSD
+```
+
+Evidencia: `pytest tests/test_risk_budget.py tests/test_intraday_bots.py -q`
+→ **14 passed**; suite completa **458 passed**; `ruff` limpio; `lab doctor` OK.
+
+---
+
 ## 6e. Diario de operaciones (etapa 1)
 
 **Solo lectura sobre `lab.db`.** No crea tablas ni escribe. Reconstruye

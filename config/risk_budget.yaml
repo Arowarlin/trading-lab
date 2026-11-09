@@ -1,0 +1,34 @@
+# Presupuesto de riesgo abierto por activo (fracción del equity de la cuenta).
+# La rebanada por bot empieza en initial_slice_pct; subirla exige operador
+# armado, confirmación e historial. Bajarla es inmediato.
+defaults:
+  open_risk_pct: 0.01
+  max_bot_slice_pct: 0.005
+  initial_slice_pct: 0.0025
+assets:
+  NASDAQ:
+    symbol: US100.cash
+    open_risk_pct: 0.01
+    max_bot_slice_pct: 0.005
+    initial_slice_pct: 0.0025
+  XAUUSD:
+    symbol: XAUUSD
+    open_risk_pct: 0.01
+    max_bot_slice_pct: 0.005
+    initial_slice_pct: 0.0025
+  EURUSD:
+    symbol: EURUSD
+    open_risk_pct: 0.01
+    max_bot_slice_pct: 0.005
+    initial_slice_pct: 0.0025
+  USDJPY:
+    symbol: USDJPY
+    open_risk_pct: 0.01
+    max_bot_slice_pct: 0.005
+    initial_slice_pct: 0.0025
+
+# EURUSD largo y USDJPY corto comparten exposición corta al USD.
+usd_cluster:
+  name: USD
+  members: [EURUSD, USDJPY]
+  max_open_risk_pct: 0.015

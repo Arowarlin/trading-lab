@@ -881,7 +881,35 @@ etapa.
 - Evidencia: tests de costes/familias/informes + suite completa; `ruff`
   limpio; `lab doctor` OK; `lab f13 config-check` sin cambios. Sin activar
   bots, sin órdenes y sin relajar umbrales.
-- Etapas 4-7: pendientes de confirmación.
+
+### Etapa 4 — Presupuesto de riesgo neto por activo
+
+- [x] **`config/risk_budget.yaml`**
+  - Riesgo abierto por activo **1,00 %**, rebanada inicial por bot **0,25 %**
+    y máxima **0,50 %**. Clúster USD con tope **1,50 %**.
+- [x] **Guard neto**
+  - Riesgo firmado por activo: largos positivos, cortos negativos; se
+    compensan antes de comparar con el presupuesto.
+  - Tope total de riesgo abierto = mínimo del límite efectivo de cuenta
+    (firma/propio); el guard rechaza aperturas que lo superen. Cierres y
+    reducciones nunca se bloquean.
+  - Clúster USD: EURUSD largo y USDJPY corto comparten dirección; se muestra
+    el peor caso con todos los stops.
+  - Integrado en `run_bot` y en la previsualización de órdenes del operador.
+- [x] **Apagón de noticias**
+  - `macro_events` filtrado por palabras USD (CPI, NFP, FOMC, PCE, Fed…) y
+    BoJ/JPY para USDJPY, con ventana ±30 min. Sin datos → “sin datos”, no
+    bloquea por invención.
+- [x] **Rebanadas**
+  - `risk_slice_overrides` + `risk_slice_history`. Bajar es inmediato; subir
+    exige operador armado + confirmación, se rechaza para el bot F13
+    congelado y se puede revertir por id de historial.
+  - CLI: `lab risk-budget status|set|revert|news`.
+- Evidencia: `pytest tests/test_risk_budget.py tests/test_intraday_bots.py -q`
+  → 14 passed; suite completa **458 passed**; `ruff` limpio; `lab doctor` OK;
+  `lab f13 config-check` OK (hash `54b420360f17c75d…` sin cambios). Sin
+  activar bots, sin órdenes y sin tocar los YAML prohibidos.
+- Etapas 5-7: pendientes.
 
 ---
 
@@ -965,5 +993,6 @@ etapa.
 | 2026-11-08 | Cementerio Etapa 1 | `pytest tests/test_trials.py tests/test_intraday.py -q` -> 18 passed; `pytest -q` -> 436 passed; strategy_trials (fallidas tambien), contador DSR 5->33, aviso de familia descartada, presupuesto config/research_budget.yaml, f13 config-check OK |
 | 2026-11-09 | Universo Etapa 2 | `pytest tests/test_asset_aliases.py tests/test_intraday_bots.py -q` -> 7 passed; `pytest -q` -> 443 passed; alias MT5 US100.CASH/XAUUSD/EURUSD/USDJPY; guard rechaza aperturas fuera del universo; 8 bots intrad?a enabled:false |
 | 2026-11-09 | Validacion Etapa 3 | `pytest tests/test_intraday.py tests/test_mt5_offsets.py tests/test_asset_aliases.py tests/test_intraday_bots.py -q` -> 28 passed; `pytest -q` -> 448 passed; 4 activos M15, costes por activo, 0/84 pasan, DSR 117, informes por activo |
+| 2026-11-09 | Riesgo Etapa 4 | `pytest tests/test_risk_budget.py tests/test_intraday_bots.py -q` -> 14 passed; `pytest -q` -> 458 passed; budget 1%/0.25%/0.5%, neto por activo, cluster USD, news blackout, slices con historial y F13 lock |
 | 2026-11-08 | UI formato/metricas | `pytest tests/test_console_js.py tests/test_console_shell.py -q` -> 11 passed; `pytest -q` -> 416 passed; gauges restantes, cero negativo, moneda agrupada, salud parcial, performers y regimen compacto |
 |  |  |  |

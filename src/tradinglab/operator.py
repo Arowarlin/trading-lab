@@ -755,6 +755,28 @@ class OperatorService:
                     )
             else:
                 risk_usd = qty * risk_per_unit
+            from .risk_budget import assess_open, news_blackout
+
+            budget = assess_open(
+                self.db_path,
+                symbol=ticker,
+                side=side,
+                proposed_risk_usd=risk_usd,
+                equity=equity,
+                positions=positions,
+                limits=limits,
+                bot=None,
+            )
+            if not budget["allowed"]:
+                raise OperatorError(
+                    f"presupuesto de riesgo: {budget['reason']}", 409
+                )
+            if account.pocket == "intraday_fx":
+                news = news_blackout(self.db_path, ticker)
+                if news["blocked"]:
+                    raise OperatorError(
+                        f"apagón de noticias: {news['reason']}", 409
+                    )
             if rules.max_positions and len(positions) >= rules.max_positions:
                 raise OperatorError(
                     f"máximo de posiciones alcanzado ({rules.max_positions})", 409

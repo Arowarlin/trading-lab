@@ -93,6 +93,10 @@ telegram_app = typer.Typer(
     no_args_is_help=True,
     help="Telegram remoto: setup, estado y puente de control.",
 )
+risk_budget_app = typer.Typer(
+    no_args_is_help=True,
+    help="Riesgo neto por activo, clúster USD y rebanadas por bot.",
+)
 library_app = typer.Typer(
     no_args_is_help=True,
     help="Biblioteca de conocimiento: fichas de herramientas y metodologías.",
@@ -107,6 +111,7 @@ app.add_typer(bots_app, name="bots")
 app.add_typer(decisions_app, name="decisions")
 app.add_typer(fund_app, name="fund")
 app.add_typer(operator_app, name="operator")
+app.add_typer(risk_budget_app, name="risk-budget")
 app.add_typer(lessons_app, name="lessons")
 app.add_typer(reports_app, name="reports")
 app.add_typer(markets_app, name="markets")
@@ -4952,6 +4957,139 @@ def research_trials_cmd(
     console.print(
         f"[dim]Pruebas DSR (contador único): {count_tests(DEFAULT_DB)}[/dim]"
     )
+
+
+@risk_budget_app.command("status")
+def risk_budget_status_cmd() -> None:
+    """Muestra presupuestos por activo, rebanadas y clúster USD."""
+    from .risk_budget import (
+        load_budget,
+        slice_history,
+        slice_overrides,
+        usd_cluster_state,
+    )
+
+    budget = load_budget()
+    t = Table(title="Presupuesto de riesgo por activo")
+    for col in ("Activo", "Símbolo", "Riesgo abierto", "Rebanada inicial", "Rebanada máx."):
+        t.add_column(col, overflow="fold")
+    for canonical, item in sorted(budget["assets"].items()):
+        t.add_row(
+            canonical,
+            str(item.get("symbol") or ""),
+            f"{float(item['open_risk_pct']):.2%}",
+            f"{float(item['initial_slice_pct']):.2%}",
+            f"{float(item['max_bot_slice_pct']):.2%}",
+        )
+    console.print(t)
+
+    overrides = slice_overrides(DEFAULT_DB)
+    if overrides:
+        o = Table(title="Rebanadas modificadas")
+        for col in ("Bot", "Activo", "Rebanada", "Actualizado", "Motivo"):
+            o.add_column(col, overflow="fold")
+        for row in overrides:
+            o.add_row(
+                str(row["bot"]),
+                str(row["asset"]),
+                f"{float(row['slice_pct']):.2%}",
+                str(row["updated_at"])[:19],
+                str(row["reason"] or ""),
+            )
+        console.print(o)
+    cluster = usd_cluster_state([], budget)
+    console.print(
+        f"[dim]Clúster {cluster['name']}: miembros "
+        f"{', '.join(budget['usd_cluster']['members'])} · tope "
+        f"{cluster['cap_pct']:.2%} · riesgo neto actual sin datos de posiciones[/dim]"
+    )
+    history = slice_history(DEFAULT_DB, limit=5)
+    if history:
+        h = Table(title="Últimos cambios de rebanada")
+        for col in ("ID", "Fecha", "Bot", "Acción", "Antes", "Después"):
+            h.add_column(col, overflow="fold")
+        for row in history:
+            h.add_row(
+                str(row["id"]),
+                str(row["ts"])[:19],
+                str(row["bot"]),
+                str(row["action"]),
+                "—" if row["old_slice_pct"] is None else f"{float(row['old_slice_pct']):.2%}",
+                f"{float(row['new_slice_pct']):.2%}",
+            )
+        console.print(h)
+
+
+@risk_budget_app.command("set")
+def risk_budget_set_cmd(
+    asset: str = typer.Option(..., "--asset"),
+    bot: str = typer.Option(..., "--bot"),
+    slice_pct: float = typer.Option(..., "--slice-pct", help="Fracción, p. ej. 0.0025"),
+    reason: str = typer.Option("", "--reason"),
+    confirm: bool = typer.Option(False, "--confirm"),
+    armed: bool = typer.Option(
+        False, "--armed", help="Operador armado (la consola pasa la sesión real)"
+    ),
+) -> None:
+    """Baja una rebanada al instante; subirla exige --armed --confirm."""
+    from .risk_budget import RiskBudgetError, set_bot_slice
+
+    try:
+        row = set_bot_slice(
+            DEFAULT_DB,
+            asset=asset,
+            bot=bot,
+            slice_pct=slice_pct,
+            reason=reason,
+            armed=armed,
+            confirm=confirm,
+        )
+    except RiskBudgetError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2) from exc
+    console.print(
+        f"[green]Rebanada {row['action']}[/green] · {row['bot']} · "
+        f"{row['old_slice_pct']:.2%} → {row['new_slice_pct']:.2%}"
+    )
+
+
+@risk_budget_app.command("revert")
+def risk_budget_revert_cmd(
+    history_id: int = typer.Argument(...),
+) -> None:
+    """Revierte un cambio de rebanada por su id de historial."""
+    from .risk_budget import RiskBudgetError, revert_slice
+
+    try:
+        result = revert_slice(DEFAULT_DB, history_id)
+    except RiskBudgetError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2) from exc
+    console.print(f"[green]Revertido[/green] · historial #{result['history_id']}")
+
+
+@risk_budget_app.command("news")
+def risk_budget_news_cmd(
+    symbol: str = typer.Option("EURUSD", "--symbol"),
+    at: str = typer.Option(None, "--at", help="ISO 8601; por defecto ahora"),
+) -> None:
+    """Comprueba el apagón de noticias de un activo con macro_events."""
+    from .risk_budget import news_blackout
+
+    moment = None
+    if at:
+        try:
+            moment = datetime.fromisoformat(at)
+        except ValueError as exc:
+            console.print(f"[red]fecha inválida:[/red] {at}")
+            raise typer.Exit(2) from exc
+        if moment.tzinfo is None:
+            moment = moment.replace(tzinfo=timezone.utc)
+    result = news_blackout(DEFAULT_DB, symbol, now=moment)
+    status = "BLOQUEADO" if result["blocked"] else "OK"
+    console.print(f"{symbol}: {status} · {result['reason']}")
+    if not result["data_ok"]:
+        console.print("[yellow]Sin datos de macro_events.[/yellow]")
 
 
 @app.command("research-clusters")

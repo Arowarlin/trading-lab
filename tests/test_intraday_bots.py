@@ -186,6 +186,57 @@ def test_guard_nunca_bloquea_cierre(monkeypatch, tmp_path):
     assert "universo" not in actions[0].detail
 
 
+def test_guard_presupuesto_y_noticias_bloquean_apertura(monkeypatch, tmp_path):
+    _prepare(monkeypatch, tmp_path, target=1.0)
+    spec = BotSpec(
+        id="intra-xau",
+        type="deterministic",
+        strategy="trend",
+        universe=["XAUUSD"],
+        timeframe="M15",
+        enabled=True,
+        profile="intraday_fx",
+        account="paper_main",
+        params={},
+        family="overlap_breakout",
+        grid={"range_bars": [4, 8]},
+    )
+    monkeypatch.setattr(
+        orch,
+        "assess_open",
+        lambda *a, **k: {"allowed": False, "reason": "presupuesto test"},
+    )
+    actions = run_bot(
+        spec,
+        _settings(),
+        FakeBroker(),
+        dry_run=True,
+        profile=SimpleNamespace(max_risk_pct=0.35, max_trades_per_day=3),
+    )
+    assert actions[0].status == "bloqueado"
+    assert "presupuesto" in actions[0].detail
+
+    monkeypatch.setattr(
+        orch,
+        "assess_open",
+        lambda *a, **k: {"allowed": True, "reason": "ok"},
+    )
+    monkeypatch.setattr(
+        orch,
+        "news_blackout",
+        lambda *a, **k: {"blocked": True, "reason": "CPI"},
+    )
+    actions = run_bot(
+        spec,
+        _settings(),
+        FakeBroker(),
+        dry_run=True,
+        profile=SimpleNamespace(max_risk_pct=0.35, max_trades_per_day=3),
+    )
+    assert actions[0].status == "bloqueado"
+    assert "noticias" in actions[0].detail
+
+
 def test_operador_rechaza_orden_fuera_del_universo_intraday(tmp_path, monkeypatch):
     db = tmp_path / "lab.db"
     init_db(db)
