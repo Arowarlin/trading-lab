@@ -10,6 +10,7 @@ import yaml
 
 from .accounts import AccountDefinition, effective_limits, load_accounts, rules_for_account
 from .alerts import send as send_alert
+from .asset_aliases import symbol_allowed
 from .config import DEFAULT_DB, ROOT, Settings
 from .data import fetch
 from .db import connect, utcnow
@@ -27,6 +28,7 @@ from .strategies import STRATEGIES
 
 BOTS_FILE = ROOT / "config" / "bots.yaml"
 ARCHIVE_FILE = ROOT / "config" / "bots_archive.yaml"
+INTRADAY_BOTS_FILE = ROOT / "config" / "intraday_bots.yaml"
 
 
 @dataclass
@@ -45,6 +47,8 @@ class BotSpec:
     exposure: float = 1.0
     archived: bool = False
     yaml_enabled: bool = False
+    family: str | None = None
+    grid: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -69,8 +73,9 @@ def load_archive_ids(path: Path | None = None) -> set[str]:
     return {str(x) for x in raw.get("archived", [])}
 
 
-def load_bots(path: Path | None = None) -> list[BotSpec]:
-    path = path or BOTS_FILE
+def _load_bots_file(path: Path) -> list[BotSpec]:
+    if not path.exists():
+        return []
     raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     archived = load_archive_ids()
     bots = []
@@ -81,7 +86,7 @@ def load_bots(path: Path | None = None) -> list[BotSpec]:
                 id=item["id"],
                 type=item.get("type", "deterministic"),
                 strategy=item["strategy"],
-                universe=[t.upper() for t in item.get("universe", [])],
+                universe=[str(t).upper() for t in item.get("universe", [])],
                 timeframe=item.get("timeframe", "1d"),
                 enabled=effective_enabled(DEFAULT_DB, item["id"], yaml_enabled),
                 yaml_enabled=yaml_enabled,
@@ -92,9 +97,16 @@ def load_bots(path: Path | None = None) -> list[BotSpec]:
                 description=item.get("description", ""),
                 exposure=float(item.get("exposure", 1.0)),
                 archived=item["id"] in archived,
+                family=item.get("family"),
+                grid=item.get("grid", {}) or {},
             )
         )
     return bots
+
+
+def load_bots(path: Path | None = None) -> list[BotSpec]:
+    """Catálogo de bots.yaml más los bots intradía declarados en un archivo propio."""
+    return _load_bots_file(path or BOTS_FILE) + _load_bots_file(INTRADAY_BOTS_FILE)
 
 
 def _filtered_params(func, params: dict) -> dict:
@@ -157,6 +169,23 @@ def run_bot(
 ) -> list[BotAction]:
     """Evalúa un bot sobre su universo y ejecuta (o simula) los cambios."""
     if spec.strategy not in STRATEGIES:
+        if spec.profile == "intraday_fx":
+            # Familia intradía declarada en la Etapa 2: el motor diario no la
+            # ejecuta todavía. Se bloquea la apertura, nunca se lanza una orden.
+            symbol = spec.universe[0] if spec.universe else "?"
+            return [
+                BotAction(
+                    spec.id,
+                    symbol,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0,
+                    0,
+                    "bloqueado",
+                    "familia intradía pendiente de implementación (Etapa 3)",
+                )
+            ]
         raise ValueError(f"Estrategia desconocida en bot {spec.id}: {spec.strategy}")
 
     from datetime import date, timedelta
@@ -280,6 +309,19 @@ def run_bot(
         if delta == 0:
             actions.append(action)
             continue
+
+        if delta > 0 and spec.profile == "intraday_fx":
+            allowed, reason = symbol_allowed(DEFAULT_DB, ticker)
+            if not allowed:
+                action.status = "bloqueado"
+                action.detail = f"universo intraday_fx: {reason}"
+                actions.append(action)
+                send_alert(
+                    "universe_block",
+                    f"{spec.id}/{ticker}: {reason}",
+                    severity="warning",
+                )
+                continue
 
         if delta > 0:
             # Reevaluar SIEMPRE antes de cada apertura. Los cierres/reducciones

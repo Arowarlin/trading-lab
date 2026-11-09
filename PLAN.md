@@ -822,7 +822,34 @@ etapa.
   conocido del modelo configurado); `lab f13 config-check` OK antes y después
   con el mismo hash `54b420360f17c75d…`. Sin bots activados, sin órdenes y sin
   tocar `bots.yaml`, `lab.yaml`, `prop.yaml` ni `f13.yaml`.
-- Etapas 2-7: pendientes de confirmación; el push va al final del bloque.
+### Etapa 2 — Universo bloqueado y un bot distinto por activo
+
+- [x] **Alias reales del broker**
+  - Descubiertos en MT5 (no supuestos) y guardados en `asset_aliases`:
+    `NASDAQ→US100.CASH`, `XAUUSD→XAUUSD`, `EURUSD→EURUSD`,
+    `USDJPY→USDJPY`.
+  - `lab mt5 aliases` descubre y persiste; el perfil `intraday_fx` solo
+    admite esos cuatro símbolos.
+- [x] **Guard de universo**
+  - El orquestador bloquea aperturas (`delta > 0`) de cualquier símbolo fuera
+    del universo `intraday_fx`; cierres y reducciones nunca se bloquean.
+  - El modo operador aplica la misma restricción al previsualizar una orden
+    sobre una cuenta con bolsillo `intraday_fx`.
+- [x] **Bots intradía declarados**
+  - `config/intraday_bots.yaml` (nuevo): 8 bots, todos `enabled:false`,
+    `profile: intraday_fx`, `timeframe: M15`, con familia y rejilla propia por
+    activo; no se comparten parámetros entre activos.
+  - Nasdaq: `orb_ny`, `trend_intraday`. XAUUSD: `asian_rev`,
+    `overlap_breakout`. EURUSD: `range_reversal`, `london_pullback`. USDJPY:
+    `session_trend`, `tokyo_breakout`.
+  - `load_bots` carga `bots.yaml` + `intraday_bots.yaml`; `bots.yaml` no se
+    tocó. Las familias aún no implementadas se bloquean sin lanzar órdenes.
+- Evidencia: `pytest tests/test_asset_aliases.py tests/test_intraday_bots.py -q`
+  → 7 passed; suite completa **443 passed**; `ruff` limpio; `lab doctor` OK
+  (WARN conocido del modelo); `lab f13 config-check` OK antes y después con el
+  mismo hash `54b420360f17c75d…`. Sin activar bots, sin órdenes y sin tocar
+  `bots.yaml`, `lab.yaml`, `prop.yaml` ni `f13.yaml`.
+- Etapas 3-7: pendientes de confirmación. El push se hace al cerrar esta etapa.
 
 ---
 
@@ -904,5 +931,6 @@ etapa.
 | 2026-11-08 | 9.5 offset corregido | `pytest tests/test_mt5_offsets.py tests/test_intraday.py -q` -> 11 passed; offset por periodo +2/+3 (5 tramos M15, 8 H1); neto mejor -6.78, bruto +1.34, equilibrio 0.32 vs calibrado 3.72 bps; 0/28; WF fallido |
 | 2026-11-08 | 9.5 costes calibrados | `pytest tests/test_intraday.py tests/test_console_shell.py -q` -> 20 passed; comision oficial FTMO 2.50 USD/lote/lado; spread horario + slippage opt/cons; tabla Sharpe 0/0.5/1/2/3 y equilibrio |
 | 2026-11-08 | Cementerio Etapa 1 | `pytest tests/test_trials.py tests/test_intraday.py -q` -> 18 passed; `pytest -q` -> 436 passed; strategy_trials (fallidas tambien), contador DSR 5->33, aviso de familia descartada, presupuesto config/research_budget.yaml, f13 config-check OK |
+| 2026-11-09 | Universo Etapa 2 | `pytest tests/test_asset_aliases.py tests/test_intraday_bots.py -q` -> 7 passed; `pytest -q` -> 443 passed; alias MT5 US100.CASH/XAUUSD/EURUSD/USDJPY; guard rechaza aperturas fuera del universo; 8 bots intrad?a enabled:false |
 | 2026-11-08 | UI formato/metricas | `pytest tests/test_console_js.py tests/test_console_shell.py -q` -> 11 passed; `pytest -q` -> 416 passed; gauges restantes, cero negativo, moneda agrupada, salud parcial, performers y regimen compacto |
 |  |  |  |

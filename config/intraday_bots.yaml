@@ -1,0 +1,121 @@
+# Bots intradía (Etapa 2). Todos enabled:false; el orquestador los carga además
+# de config/bots.yaml. Un activo puede tener varias familias; los parámetros
+# no se comparten entre activos (cada bot declara su propia rejilla acotada).
+# Los símbolos vienen del broker (tabla asset_aliases), no se suponen.
+bots:
+  # Nasdaq (índice)
+  - id: nasdaq-orb-ny
+    type: deterministic
+    profile: intraday_fx
+    cluster: intraday_fx
+    account: ftmo_demo
+    strategy: orb_ny
+    family: orb_ny
+    universe: [US100.cash]
+    timeframe: M15
+    enabled: false
+    exposure: 0.25
+    params: {session: "NY"}
+    grid: {range_bars: [4, 8], buffer_atr: [0.1, 0.25], max_hold: [8, 16]}
+    description: "Ruptura del rango de apertura de Nueva York sobre US100.cash."
+  - id: nasdaq-trend-intraday
+    type: deterministic
+    profile: intraday_fx
+    cluster: intraday_fx
+    account: ftmo_demo
+    strategy: trend_intraday
+    family: trend_intraday
+    universe: [US100.cash]
+    timeframe: M15
+    enabled: false
+    exposure: 0.25
+    params: {session: "NY"}
+    grid: {fast: [20, 50], slow: [100, 200], trend_atr: [0.25, 0.5], max_hold: [8, 16]}
+    description: "Tendencia intradía de Nueva York sobre US100.cash."
+  # Oro
+  - id: gold-asian-rev
+    type: deterministic
+    profile: intraday_fx
+    cluster: intraday_fx
+    account: ftmo_demo
+    strategy: asian_rev
+    family: asian_rev
+    universe: [XAUUSD]
+    timeframe: M15
+    enabled: false
+    exposure: 0.25
+    params: {}
+    grid: {buffer_atr: [0.1, 0.3], max_hold: [8, 16]}
+    description: "Reversión del rango asiático sobre XAUUSD."
+  - id: gold-overlap-breakout
+    type: deterministic
+    profile: intraday_fx
+    cluster: intraday_fx
+    account: ftmo_demo
+    strategy: overlap_breakout
+    family: overlap_breakout
+    universe: [XAUUSD]
+    timeframe: M15
+    enabled: false
+    exposure: 0.25
+    params: {session: "LondonNY"}
+    grid: {range_bars: [4, 8], buffer_atr: [0.1, 0.25], max_hold: [4, 8]}
+    description: "Ruptura en el solape Londres/NY sobre XAUUSD."
+  # EURUSD
+  - id: eurusd-range-reversal
+    type: deterministic
+    profile: intraday_fx
+    cluster: intraday_fx
+    account: ftmo_demo
+    strategy: range_reversal
+    family: range_reversal
+    universe: [EURUSD]
+    timeframe: M15
+    enabled: false
+    exposure: 0.25
+    params: {session: "London"}
+    grid: {lookback: [12, 24], entry_z: [1.5, 2.0], max_hold: [8, 16]}
+    description: "Reversión en rango durante Londres sobre EURUSD."
+  - id: eurusd-london-pullback
+    type: deterministic
+    profile: intraday_fx
+    cluster: intraday_fx
+    account: ftmo_demo
+    strategy: london_pullback
+    family: london_pullback
+    universe: [EURUSD]
+    timeframe: M15
+    enabled: false
+    exposure: 0.25
+    params: {session: "London"}
+    grid: {fast: [20, 50], slow: [100, 200], pullback_atr: [0.25, 0.5], max_hold: [8, 16]}
+    description: "Tendencia con retroceso en Londres sobre EURUSD."
+  # USDJPY
+  - id: usdjpy-session-trend
+    type: deterministic
+    profile: intraday_fx
+    cluster: intraday_fx
+    account: ftmo_demo
+    strategy: session_trend
+    family: session_trend
+    universe: [USDJPY]
+    timeframe: M15
+    enabled: false
+    exposure: 0.25
+    params: {session: "TokyoLondon"}
+    grid: {fast: [20, 50], slow: [100, 200], session_min_bars: [12, 24], max_hold: [8, 16]}
+    description: "Tendencia con filtro de sesión sobre USDJPY."
+  - id: usdjpy-tokyo-breakout
+    type: deterministic
+    profile: intraday_fx
+    cluster: intraday_fx
+    account: ftmo_demo
+    strategy: tokyo_breakout
+    family: tokyo_breakout
+    universe: [USDJPY]
+    timeframe: M15
+    enabled: false
+    exposure: 0.25
+    params: {session: "Tokyo"}
+    grid: {range_bars: [4, 8], buffer_atr: [0.1, 0.25], max_hold: [4, 12]}
+    description: "Ruptura tras la sesión de Tokio sobre USDJPY."

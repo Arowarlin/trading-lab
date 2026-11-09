@@ -743,6 +743,41 @@ passed**; suite completa **436 passed**; `ruff` limpio; `lab doctor` OK;
 `lab f13 config-check` OK antes y después de la etapa (hash
 `54b420360f17c75d…` sin cambios).
 
+### Universo intradía y bots declarados (etapa 2)
+
+El perfil `intraday_fx` queda limitado a cuatro activos. Los nombres exactos
+se **descubren en MT5** y se guardan en la tabla `asset_aliases`:
+
+| Canónico | Símbolo broker | Clase |
+|---|---|---|
+| NASDAQ | `US100.CASH` | índice |
+| XAUUSD | `XAUUSD` | metales |
+| EURUSD | `EURUSD` | forex |
+| USDJPY | `USDJPY` | forex |
+
+```powershell
+lab mt5 aliases     # descubre y guarda los alias (solo lectura de mercado)
+```
+
+- El guard rechaza **aperturas** de cualquier otro símbolo en `intraday_fx`,
+  tanto en el orquestador como al previsualizar una orden del modo operador.
+  **Cierres y reducciones nunca se bloquean.**
+- `config/intraday_bots.yaml` (nuevo) declara **8 bots** con
+  `enabled: false`, `profile: intraday_fx`, `timeframe: M15`, familia y
+  rejilla propia por activo:
+  - Nasdaq: `orb_ny`, `trend_intraday`.
+  - XAUUSD: `asian_rev`, `overlap_breakout`.
+  - EURUSD: `range_reversal`, `london_pullback`.
+  - USDJPY: `session_trend`, `tokyo_breakout`.
+- `load_bots` carga `bots.yaml` **más** `intraday_bots.yaml`; no se tocó
+  `bots.yaml`. Los bots siguen desactivados y las familias pendientes se
+  bloquean sin enviar órdenes.
+
+Evidencia: `pytest tests/test_asset_aliases.py tests/test_intraday_bots.py -q`
+→ **7 passed**; suite completa **443 passed**; `ruff` limpio; `lab doctor` OK;
+`lab f13 config-check` OK antes y después (hash `54b420360f17c75d…` sin
+cambios).
+
 ---
 
 ## 6d. Fondo personal: cuentas, límites y panel

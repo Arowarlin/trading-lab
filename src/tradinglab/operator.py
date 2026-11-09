@@ -654,6 +654,12 @@ class OperatorService:
         ticker = str(params.get("ticker") or "").strip().upper()
         if not re.match(r"^[A-Z0-9.\-=^]{1,12}$", ticker):
             raise OperatorError("ticker inválido", 400)
+        if account.pocket == "intraday_fx":
+            from .asset_aliases import symbol_allowed
+
+            allowed, reason = symbol_allowed(self.db_path, ticker)
+            if not allowed:
+                raise OperatorError(reason, 409)
         side = str(params.get("side") or "").lower()
         if side not in {"buy", "sell"}:
             raise OperatorError("side debe ser buy o sell", 400)

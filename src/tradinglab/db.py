@@ -395,6 +395,14 @@ CREATE INDEX IF NOT EXISTS idx_strategy_trials_symbol_ts
     ON strategy_trials(symbol, ts);
 CREATE INDEX IF NOT EXISTS idx_strategy_trials_run
     ON strategy_trials(run_id);
+CREATE TABLE IF NOT EXISTS asset_aliases (
+    canonical TEXT PRIMARY KEY,
+    broker_symbol TEXT NOT NULL,
+    asset_class TEXT NOT NULL,
+    profile TEXT NOT NULL,
+    discovered_at TEXT NOT NULL,
+    source TEXT NOT NULL
+);
 
 CREATE TABLE IF NOT EXISTS model_registry (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

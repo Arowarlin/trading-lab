@@ -3818,6 +3818,39 @@ def mt5_fetch_cmd(
 
 # ==================================================================== Fondeo
 
+@mt5_app.command("aliases")
+def mt5_aliases_cmd() -> None:
+    """Descubre los símbolos del broker para el universo intradía y los guarda."""
+    from .asset_aliases import aliases, canonical_symbols, discover
+
+    settings = get_settings()
+    broker = _mt5(settings, dry_run=True)
+    try:
+        discovered = discover(DEFAULT_DB, broker)
+    except Exception as exc:
+        console.print(f"[red]No se pudo descubrir el universo MT5:[/red] {exc}")
+        raise typer.Exit(1)
+    finally:
+        broker.shutdown()
+    t = Table(title="Alias de activos (descubiertos en MT5)")
+    for col in ("Canónico", "Símbolo broker", "Clase", "Perfil", "Descubierto"):
+        t.add_column(col, overflow="fold")
+    for row in aliases(DEFAULT_DB):
+        t.add_row(
+            str(row["canonical"]),
+            str(row["broker_symbol"]),
+            str(row["asset_class"]),
+            str(row["profile"]),
+            str(row["discovered_at"])[:19],
+        )
+    console.print(t)
+    missing = [c for c in canonical_symbols() if c not in discovered]
+    if missing:
+        console.print(
+            f"[yellow]Sin alias descubierto para: {', '.join(missing)}[/yellow]"
+        )
+
+
 @mt5_app.command("run")
 def mt5_run(
     symbol: str = typer.Argument("EURUSD", help="Par o instrumento"),
