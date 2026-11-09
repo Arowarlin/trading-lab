@@ -52,6 +52,9 @@ const code = [
   extractFunction("gaugeCardHtml"),
   extractFunction("cushionTone"),
   extractFunction("cushionStatus"),
+  extractConst("ASSET_ALIASES"),
+  extractFunction("assetGroup"),
+  extractFunction("sameAsset"),
 ].join("\n");
 
 const test = `
@@ -64,7 +67,10 @@ const groupedMoney = money(9973.51);
 const zeroMoney = money(-0.001);
 const gaugeEmpty = gaugeCardHtml({key:"daily", label:"Colchón diario", available:true, used:0, value:"100%", note:"", tone:"ok", status:"HOLGADO", aria:"x"});
 const gaugeLimit = gaugeCardHtml({key:"daily", label:"Colchón diario", available:true, used:0.8, value:"20%", note:"", tone:"bad", status:cushionStatus(0.8), aria:"x"});
-console.log(JSON.stringify({zeroPct, zeroPctRaw, zeroTone, positiveTone, negativeTone, groupedMoney, zeroMoney, gaugeEmpty, gaugeLimit, status08: cushionStatus(0.8), tone08: cushionTone(0.8)}));
+const aliasUS = sameAsset("US100.cash", "NASDAQ");
+const aliasGold = sameAsset("GOLD", "XAUUSD");
+const aliasNo = sameAsset("SPY", "QQQ");
+console.log(JSON.stringify({zeroPct, zeroPctRaw, zeroTone, positiveTone, negativeTone, groupedMoney, zeroMoney, gaugeEmpty, gaugeLimit, status08: cushionStatus(0.8), tone08: cushionTone(0.8), aliasUS, aliasGold, aliasNo}));
 `;
 
 new Function(code + test)();
@@ -100,3 +106,10 @@ def test_gauge_dibuja_lo_que_queda() -> None:
     assert "AL LÍMITE" in result["gaugeLimit"]
     assert result["status08"] == "AL LÍMITE"
     assert result["tone08"] == "bad"
+
+
+def test_alias_de_activo_en_la_vista_por_activo() -> None:
+    result = _run_js()
+    assert result["aliasUS"] is True
+    assert result["aliasGold"] is True
+    assert result["aliasNo"] is False

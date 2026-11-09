@@ -306,11 +306,40 @@ def test_decisions_resume_rating(tmp_path: Path, monkeypatch) -> None:
     assert decision["total"] == 1
     assert decision["rows"][0]["rating"] == "Buy"
     assert decision["rows"][0]["hit_rate_20d"] == pytest.approx(1.0)
+    assert decision["by_source"][0]["source"] == "lite"
+    assert decision["by_source"][0]["n"] == 1
     comparison = data.decisions_compare()
     assert comparison["matched_n"] == 1
     assert comparison["matched_llm_mean_20d"] == pytest.approx(0.10)
     assert comparison["matched_buy_hold_mean_20d"] == pytest.approx(0.10)
     assert comparison["matched_trend_mean_20d"] == pytest.approx(0.10)
+
+
+def test_agent_comparisons_y_lifecycle_web(tmp_path: Path) -> None:
+    db = tmp_path / "lab.db"
+    init_db(db)
+    with connect(db) as con:
+        con.execute(
+            "INSERT INTO agent_comparisons"
+            "(ts, ticker, decision_date, lite_rating, deep_rating, agreement) "
+            "VALUES(?,?,?,?,?,?)",
+            (utcnow(), "SPY", "2026-01-05", "Buy", "Buy", 1),
+        )
+        con.execute(
+            "INSERT INTO lifecycle_bots"
+            "(bot, asset, state, created_at, updated_at, evidence) "
+            "VALUES(?,?,?,?,?,?)",
+            ("bot-x", "EURUSD", "candidato", utcnow(), utcnow(), "{}"),
+        )
+    data = _data(tmp_path, db=db)
+    comparisons = data.agent_comparisons()
+    assert comparisons["n"] == 1
+    assert comparisons["agreement_rate"] == pytest.approx(1.0)
+    lifecycle = data.lifecycle()
+    assert lifecycle["count"] == 1
+    assert lifecycle["bots"][0]["bot"] == "bot-x"
+    assert lifecycle["max_concurrent"] == 3
+    assert lifecycle["config"]["criteria"]["min_trades"] == 10
 
 
 def test_repo_audit_licencias(tmp_path: Path) -> None:
@@ -439,6 +468,8 @@ def test_overview_datos_para_dashboard(tmp_path: Path) -> None:
     bots = {bot["id"]: bot for bot in overview["bots"]}
     assert bots["trend-spy"]["evaluation"]["sharpe"] == pytest.approx(1.03)
     assert bots["trend-spy"]["evaluation"]["total_return"] == pytest.approx(0.81)
+    assert "agent_comparisons" in overview
+    assert "lifecycle" in overview
 
 
 def test_servidor_http_responde(tmp_path: Path) -> None:
@@ -466,6 +497,7 @@ def test_servidor_http_responde(tmp_path: Path) -> None:
         assert overview["meta"]["build"] == health["build"]
         assert overview["account"]["equity"] == pytest.approx(100_000.0)
         assert "market" in overview and "calendar" in overview and "repos" in overview
+        assert "agent_comparisons" in overview and "lifecycle" in overview
 
         for path in ("/api/market", "/api/calendar", "/api/decisions", "/api/decisions/compare", "/api/repos", "/api/research/horizons", "/api/research/intraday", "/api/research/clusters", "/api/research/portfolio", "/api/research/costs", "/api/instruments", "/api/markets", "/api/models"):
             with urllib.request.urlopen(f"{base}{path}", timeout=5) as response:

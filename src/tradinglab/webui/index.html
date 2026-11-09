@@ -1110,8 +1110,10 @@
       <div class="nav-label">Principal</div>
       <button class="nav-btn active" data-view="overview" title="Dashboard"><span class="ico">◈</span> Dashboard</button>
       <button class="nav-btn" data-view="market" title="Mercado"><span class="ico">▥</span> Mercado</button>
+      <button class="nav-btn" data-view="asset" title="Activo"><span class="ico">◫</span> Activo</button>
       <div class="nav-label">Laboratorio</div>
       <button class="nav-btn" data-view="bots" title="Bots"><span class="ico">⚙</span> Bots</button>
+      <button class="nav-btn" data-view="incubation" title="Incubadora"><span class="ico">⚗</span> Incubadora</button>
       <button class="nav-btn" data-view="research" title="Research"><span class="ico">⌁</span> Research</button>
       <button class="nav-btn" data-view="agents" title="Agentes"><span class="ico">✦</span> Agentes</button>
       <div class="nav-label">Portafolios</div>
@@ -1332,6 +1334,38 @@
         <div class="panel">
           <div class="panel-head"><h2>Breadth de la watchlist</h2><span class="muted tiny">1 día</span></div>
           <div id="market-breadth"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================ ACTIVO -->
+    <section class="view" id="view-asset">
+      <div class="panel" style="margin-bottom:14px">
+        <div class="panel-head"><h2>Ficha por activo</h2><span class="muted tiny" id="asset-meta"></span></div>
+        <div class="action-bar" style="margin-bottom:0">
+          <select class="input" id="asset-select" aria-label="Activo" style="min-width:190px"></select>
+          <span class="muted tiny">Precio, bots, decisiones y ciclo de vida desde la caché y SQLite. Sin llamadas externas ni órdenes.</span>
+        </div>
+      </div>
+      <div class="stats" id="asset-stats"></div>
+      <div class="grid-2 equal" style="margin-bottom:14px">
+        <div class="panel">
+          <div class="panel-head"><h2>Precio y tendencia</h2><span class="muted tiny">caché local</span></div>
+          <div id="asset-chart"></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h2>Bots del activo</h2><span class="muted tiny">enabled + evaluación</span></div>
+          <div id="asset-bots"></div>
+        </div>
+      </div>
+      <div class="grid-2 equal">
+        <div class="panel">
+          <div class="panel-head"><h2>Decisiones lite/deep</h2><span class="muted tiny">runs locales</span></div>
+          <div id="asset-agents"></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h2>Incubadora del activo</h2><span class="muted tiny">solo medición</span></div>
+          <div id="asset-lifecycle"></div>
         </div>
       </div>
     </section>
@@ -1638,9 +1672,33 @@
         <div id="agents-table"></div>
       </div>
 
+      <div class="panel" style="margin-bottom:14px">
+        <div class="panel-head"><h2>Comparación lite vs deep</h2><span class="muted tiny" id="agent-compare-meta"></span></div>
+        <div id="agent-compare"></div>
+        <div class="note">Solo cuenta el forward (las pasadas retrospectivas se excluyen). Con menos de 30 comparaciones: muestra insuficiente; no se inventan conclusiones.</div>
+      </div>
+
       <div class="panel">
         <div class="panel-head"><h2>Runs deep (TradingAgents)</h2><span class="muted tiny">logs/deep_*.log</span></div>
         <div id="deep-logs"></div>
+      </div>
+    </section>
+
+    <!-- ========================================================== INCUBADORA -->
+    <section class="view" id="view-incubation">
+      <div class="note" style="margin:0 0 14px">
+        <strong>Incubadora.</strong> Mide bots en paper con criterios congelados al entrar.
+        No activa bots, no envía órdenes y no existe ningún estado de dinero real.
+        La decisión final de promover o rechazar es humana.
+      </div>
+      <div class="stats" id="incubation-stats"></div>
+      <div class="panel" style="margin-bottom:14px">
+        <div class="panel-head"><h2>Bots en ciclo de vida</h2><span class="muted tiny" id="incubation-meta"></span></div>
+        <div id="incubation-table"></div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h2>Historial de estados</h2><span class="muted tiny">lifecycle_events</span></div>
+        <div id="incubation-events"></div>
       </div>
     </section>
 
@@ -1655,6 +1713,10 @@
       <div class="panel" style="margin-bottom:14px">
         <div class="panel-head"><h2>Por rating</h2><span class="muted tiny" id="decisions-meta"></span></div>
         <div id="decisions-table"></div>
+      </div>
+      <div class="panel" style="margin-bottom:14px">
+        <div class="panel-head"><h2>Por fuente lite/deep</h2><span class="muted tiny" id="decisions-sources-meta"></span></div>
+        <div id="decisions-sources"></div>
       </div>
       <div class="panel">
         <div class="panel-head">
@@ -1868,6 +1930,7 @@ const S = {
   calendar: null,
   decisions: null,
   repos: null,
+  assetSymbol: null,
   view: "overview",
   pnlMonth: null,
   pnlData: null,
@@ -1890,7 +1953,9 @@ const S = {
 const TITLES = {
   overview: ["Dashboard", "Estado general, balance, performers y PnL"],
   market: ["Mercado", "Watchlist desde caché local, breadth y calendario macro"],
+  asset: ["Activo", "Ficha por activo: precio, bots, decisiones y ciclo de vida"],
   bots: ["Bots", "Catálogo, estado y últimas señales"],
+  incubation: ["Incubadora", "Ciclo de vida, criterios congelados y propuesta forward"],
   research: ["Research", "PBO, walk-forward, regímenes y propuestas"],
   agents: ["Agentes", "TradingAgents lite/deep y sus decisiones"],
   accounts: ["Cuentas", "Paper, Alpaca, MT5 y futuros"],
@@ -2172,6 +2237,8 @@ function switchView(view, updateHash = true) {
   if (view === "overview") requestAnimationFrame(drawEquity);
   if (view === "market") renderMarket();
   if (view === "market") renderMarketCatalog();
+  if (view === "asset") renderAsset();
+  if (view === "incubation") renderIncubation();
   if (view === "agents") renderMarketAgents();
   if (view === "fund") renderFund();
   if (view === "journal") loadJournal();
@@ -2340,6 +2407,8 @@ async function loadAll(manual = false) {
       renderSala();
       renderResearch();
       renderLogs();
+      renderAsset();
+      renderIncubation();
     }
   }
   if (riskResult.status === "fulfilled") {
@@ -4731,10 +4800,11 @@ function renderAgents() {
   const runs = S.overview?.agents || [];
   $("#agents-count").textContent = `${runs.length} runs`;
   $("#agents-table").innerHTML = grid(
-    [{ label: "Fecha" }, { label: "Modo" }, { label: "Ticker" }, { label: "Rating" }, { label: "Confianza", num: true }, { label: "Horizonte", num: true }, { label: "Duración", num: true }, { label: "Modelo" }, { label: "" }],
+    [{ label: "Fecha" }, { label: "Modo" }, { label: "Analistas" }, { label: "Ticker" }, { label: "Rating" }, { label: "Confianza", num: true }, { label: "Horizonte", num: true }, { label: "Duración", num: true }, { label: "Modelo" }, { label: "" }],
     runs.map((r, i) => [
       esc(dateTime(r.generated_at)),
       `<span class="tag ${r.mode === "deep" ? "purple" : "blue"}">${esc(r.mode)}</span>`,
+      esc(Array.isArray(r.analysts) ? r.analysts.join(", ") : (r.analysts || (r.mode === "deep" ? "sin datos" : "lite"))),
       `<b>${esc(r.ticker)}</b>`,
       ratingTag(r.rating),
       r.confidence != null ? pct(r.confidence, 0) : "—",
@@ -4763,6 +4833,48 @@ function renderAgents() {
         <pre style="white-space:pre-wrap; color:#aebdcd; font-size:11px; margin:10px 0 0">${esc(l.tail)}</pre>
       </details>`).join("");
   }
+  renderAgentComparison();
+}
+
+function renderAgentComparison() {
+  const data = S.overview?.agent_comparisons;
+  const host = $("#agent-compare");
+  if (!host) return;
+  const meta = $("#agent-compare-meta");
+  if (!data || data.error) {
+    if (meta) meta.textContent = data?.error || "sin datos";
+    host.innerHTML = `<div class="empty">Sin datos: no hay comparaciones lite/deep.</div>`;
+    return;
+  }
+  if (meta) {
+    meta.textContent = data.n
+      ? `${data.n} comparaciones · acuerdo ${pct(data.agreement_rate, 0)}`
+      : "sin comparaciones";
+  }
+  if (!data.n) {
+    host.innerHTML = `<div class="empty">Sin datos: no hay comparaciones forward. Se generan con <code>lab agent-compare TICKER</code>.</div>`;
+    return;
+  }
+  const matrix = data.matrix || {};
+  const columns = Array.from(new Set(Object.values(matrix).flatMap((row) => Object.keys(row)))).sort();
+  const matrixRows = Object.keys(matrix).sort().map((lite) => [
+    `<b>${esc(lite)}</b>`,
+    ...columns.map((deep) => num(matrix[lite][deep] || 0, 0)),
+  ]);
+  const sourceRows = (data.by_source || []).map((row) => [
+    `<span class="tag ${row.source === "deep" ? "purple" : "blue"}">${esc(row.source)}</span>`,
+    num(row.n, 0), num(row.n_20d, 0), pct(row.mean_20d, 2), pct(row.hit_rate_20d, 1),
+    row.insufficient ? `<span class="tag yellow">insuficiente</span>` : `<span class="tag green">ok</span>`,
+  ]);
+  host.innerHTML = `
+    <div class="stats" style="margin-bottom:12px">
+      <div class="stat"><div class="label">Acuerdo</div><div class="value">${pct(data.agreement_rate, 0)}</div></div>
+      <div class="stat"><div class="label">Diferencia media objetivo</div><div class="value">${data.mean_target_diff == null ? "Sin datos" : num(data.mean_target_diff, 2)}</div></div>
+      <div class="stat"><div class="label">Muestra</div><div class="value ${data.insufficient ? "warn" : "pos"}">${data.insufficient ? "insuficiente" : "ok"}</div></div>
+    </div>
+    ${grid([{ label: "Lite → deep" }, ...columns.map((column) => ({ label: column, num: true }))], matrixRows, { empty: "Sin datos." })}
+    <div class="panel-head" style="margin-top:14px"><h2>Por fuente</h2><span class="muted tiny">forward 20d</span></div>
+    ${grid([{ label: "Fuente" }, { label: "N", num: true }, { label: "N 20d", num: true }, { label: "20d", num: true }, { label: "Hit 20d", num: true }, { label: "Muestra" }], sourceRows, { empty: "Sin datos." })}`;
 }
 
 function showAgent(index) {
@@ -5080,6 +5192,202 @@ function renderMarketCatalog() {
   );
 }
 
+const ASSET_ALIASES = {
+  NASDAQ: ["NASDAQ", "US100.CASH", "NAS100.CASH", "USTEC", "US100"],
+  XAUUSD: ["XAUUSD", "GOLD"],
+  EURUSD: ["EURUSD"],
+  USDJPY: ["USDJPY"],
+};
+
+function assetGroup(symbol) {
+  const target = String(symbol || "").toUpperCase();
+  for (const [canonical, aliases] of Object.entries(ASSET_ALIASES)) {
+    if (canonical === target || aliases.includes(target)) return canonical;
+  }
+  return target;
+}
+
+function sameAsset(left, right) {
+  return assetGroup(left) === assetGroup(right);
+}
+
+function assetSymbols() {
+  const groups = new Map();
+  const add = (value) => {
+    const symbol = String(value || "").toUpperCase();
+    if (!symbol) return;
+    const group = assetGroup(symbol);
+    if (!groups.has(group)) groups.set(group, symbol);
+  };
+  (S.market?.rows || []).forEach((row) => add(row.symbol));
+  (S.overview?.agents || []).forEach((run) => add(run.ticker));
+  (S.overview?.lifecycle?.bots || []).forEach((row) => add(row.asset));
+  (S.overview?.bots || []).forEach((bot) => (bot.universe || []).forEach(add));
+  return Array.from(groups.values()).sort();
+}
+
+function lifecycleStateTag(state) {
+  const value = String(state || "sin datos");
+  const cls = value === "promovible" ? "green" : value === "incubando" ? "blue" : value === "evaluado" ? "yellow" : value === "rechazado" ? "red" : "";
+  return `<span class="tag ${cls}">${esc(value)}</span>`;
+}
+
+function renderAsset() {
+  const select = $("#asset-select");
+  const symbols = assetSymbols();
+  const meta = $("#asset-meta");
+  if (!select) return;
+  if (!symbols.length) {
+    select.innerHTML = "";
+    if (meta) meta.textContent = "sin activos";
+    ["#asset-stats", "#asset-chart", "#asset-bots", "#asset-agents", "#asset-lifecycle"].forEach((id) => {
+      const node = $(id);
+      if (node) node.innerHTML = `<div class="empty">Sin datos.</div>`;
+    });
+    return;
+  }
+  const current = symbols.find((symbol) => sameAsset(symbol, S.assetSymbol)) || symbols[0];
+  S.assetSymbol = current;
+  select.innerHTML = symbols.map((symbol) => `<option value="${esc(symbol)}" ${symbol === current ? "selected" : ""}>${esc(symbol)}</option>`).join("");
+  select.value = current;
+
+  const row = (S.market?.rows || []).find((item) => sameAsset(item.symbol, current));
+  const bots = (S.overview?.bots || []).filter((bot) => (bot.universe || []).some((symbol) => sameAsset(symbol, current)));
+  const agents = (S.overview?.agents || []).filter((run) => sameAsset(run.ticker, current));
+  const lifecycle = (S.overview?.lifecycle?.bots || []).filter((item) => sameAsset(item.asset, current));
+
+  if (meta) {
+    meta.textContent = row
+      ? `${row.symbol} · ${row.as_of || "sin fecha"} · ${row.source_file || "caché"}`
+      : `${current} · sin precio en caché local`;
+  }
+  $("#asset-stats").innerHTML = [
+    { label: "Precio", value: row ? money(row.close) : "Sin datos" },
+    { label: "1d", value: row ? pct(row.return_1d, 2) : "Sin datos", cls: row && row.return_1d >= 0 ? "pos" : row ? "neg" : "" },
+    { label: "5d", value: row ? pct(row.return_5d, 2) : "Sin datos", cls: row && row.return_5d >= 0 ? "pos" : row ? "neg" : "" },
+    { label: "20d", value: row ? pct(row.return_20d, 2) : "Sin datos", cls: row && row.return_20d >= 0 ? "pos" : row ? "neg" : "" },
+    { label: "Tendencia", value: row ? row.trend : "Sin datos" },
+    { label: "Datos", value: row ? (row.stale_days == null ? "sin fecha" : `${row.stale_days} d`) : "Sin datos", cls: row && row.stale_days > 3 ? "neg" : "" },
+  ].map((stat) => `<div class="stat"><div class="label">${esc(stat.label)}</div><div class="value ${stat.cls || ""}" style="font-size:${stat.label === "Precio" ? "20px" : "16px"}">${esc(stat.value)}</div></div>`).join("");
+
+  $("#asset-chart").innerHTML = row
+    ? `<div class="detail-hero">
+        <div><div class="big">${money(row.close)}</div><div class="sub">${esc(row.as_of || "sin fecha")} · ${esc(row.trend || "mixed")}</div></div>
+        <div><div class="sub">60 sesiones</div><div>${sparkline(row.spark, 520, 110)}</div></div>
+      </div>
+      <div class="detail-grid" style="margin-top:10px">
+        <span class="k">SMA20</span><span>${money(row.sma20)}</span>
+        <span class="k">SMA50</span><span>${money(row.sma50)}</span>
+        <span class="k">SMA200</span><span>${money(row.sma200)}</span>
+        <span class="k">Archivo</span><span class="mono tiny">${esc(row.source_file || "—")}</span>
+      </div>`
+    : `<div class="empty">Sin datos de precio: no hay parquet de ${esc(current)} en la caché local.</div>`;
+
+  $("#asset-bots").innerHTML = grid(
+    [{ label: "Bot" }, { label: "Perfil" }, { label: "Estado" }, { label: "Estrategia" }, { label: "Última señal" }, { label: "Sharpe", num: true }],
+    bots.map((bot) => {
+      const action = (bot.last_actions || [])[0];
+      const evaluation = bot.evaluation || {};
+      return [
+        `<b>${esc(bot.id)}</b>`,
+        esc(bot.profile || "—"),
+        bot.enabled ? `<span class="tag green">on</span>` : `<span class="tag">off</span>`,
+        esc(bot.strategy || "—"),
+        action ? `${statusTag(action.status)}<div class="muted tiny">${esc(action.detail || "")}</div>` : `<span class="muted tiny">sin señal</span>`,
+        evaluation.sharpe == null ? "—" : num(evaluation.sharpe, 2),
+      ];
+    }),
+    { empty: "Sin bots asignados a este activo." }
+  );
+
+  $("#asset-agents").innerHTML = grid(
+    [{ label: "Fecha" }, { label: "Modo" }, { label: "Rating" }, { label: "Confianza", num: true }, { label: "Duración", num: true }, { label: "Analistas" }, { label: "Modelo" }],
+    agents.map((run) => [
+      esc(dateTime(run.generated_at)),
+      `<span class="tag ${run.mode === "deep" ? "purple" : "blue"}">${esc(run.mode)}</span>`,
+      ratingTag(run.rating),
+      run.confidence == null ? "—" : pct(run.confidence, 0),
+      run.elapsed_s == null ? "—" : num(run.elapsed_s, 0) + " s",
+      esc(Array.isArray(run.analysts) ? run.analysts.join(", ") : (run.analysts || (run.mode === "deep" ? "sin datos" : "lite"))),
+      esc(run.model || "—"),
+    ]),
+    { empty: "Sin decisiones lite/deep para este activo." }
+  );
+
+  $("#asset-lifecycle").innerHTML = grid(
+    [{ label: "Estado" }, { label: "Progreso", num: true }, { label: "Trades", num: true }, { label: "Sharpe", num: true }, { label: "Deriva" }, { label: "Slippage p95", num: true }, { label: "Propuesta" }],
+    lifecycle.map((item) => {
+      const metrics = item.metrics || {};
+      const drift = item.drift || {};
+      return [
+        lifecycleStateTag(item.state),
+        `${num(item.progress_pct, 0)}%`,
+        num(metrics.n_trades, 0),
+        metrics.sharpe == null ? "—" : num(metrics.sharpe, 2),
+        esc(drift.status || "sin datos"),
+        item.slippage_p95_bps == null ? "—" : num(item.slippage_p95_bps, 2) + " bps",
+        item.proposal ? esc(item.proposal) : `<span class="muted tiny">${esc((item.failures || []).join("; ") || "en ventana")}</span>`,
+      ];
+    }),
+    { empty: "Sin datos: este activo no está en la incubadora." }
+  );
+}
+
+function renderIncubation() {
+  const data = S.overview?.lifecycle;
+  const meta = $("#incubation-meta");
+  if (!data || data.error) {
+    if (meta) meta.textContent = data?.error || "sin datos";
+    ["#incubation-stats", "#incubation-table", "#incubation-events"].forEach((id) => {
+      const node = $(id);
+      if (node) node.innerHTML = `<div class="empty">Sin datos.</div>`;
+    });
+    return;
+  }
+  if (meta) meta.textContent = `${data.count || 0} bots · máximo ${data.max_concurrent || 3} incubando`;
+  $("#incubation-stats").innerHTML = [
+    { label: "En ciclo", value: fmtInt.format(data.count || 0) },
+    { label: "Incubando", value: fmtInt.format(data.incubating || 0), cls: "pos" },
+    { label: "Evaluados", value: fmtInt.format(data.evaluated || 0) },
+    { label: "Promovibles", value: fmtInt.format(data.promotable || 0), cls: data.promotable ? "pos" : "" },
+    { label: "Límite", value: fmtInt.format(data.max_concurrent || 3) },
+  ].map((stat) => `<div class="stat"><div class="label">${esc(stat.label)}</div><div class="value ${stat.cls || ""}">${esc(stat.value)}</div></div>`).join("");
+
+  const rows = (data.bots || []).map((item) => {
+    const metrics = item.metrics || {};
+    const drift = item.drift || {};
+    return [
+      `<b>${esc(item.bot)}</b><div class="muted tiny">${esc(item.asset)}</div>`,
+      lifecycleStateTag(item.state),
+      `${num(item.progress_pct, 0)}%<div class="muted tiny">${item.start_date || "—"} → ${item.end_date || "—"}</div>`,
+      num(metrics.n_trades, 0),
+      metrics.sharpe == null ? "—" : num(metrics.sharpe, 2),
+      esc(drift.status || "sin datos"),
+      num(item.guard_breaches, 0),
+      item.proposal ? `<span class="tag ${item.proposal === "promovible" ? "green" : "red"}">${esc(item.proposal)}</span>` : `<span class="muted tiny">en ventana</span>`,
+      `<span class="muted tiny">${esc((item.failures || []).join("; ") || "—")}</span>`,
+    ];
+  });
+  $("#incubation-table").innerHTML = grid(
+    [{ label: "Bot" }, { label: "Estado" }, { label: "Progreso", num: true }, { label: "Trades", num: true }, { label: "Sharpe", num: true }, { label: "Deriva" }, { label: "Brechas", num: true }, { label: "Propuesta" }, { label: "Motivos", wrap: true }],
+    rows,
+    { empty: "Sin datos: no hay bots en la incubadora. Se registran con lab lifecycle." }
+  );
+
+  const eventRows = (data.events || []).map((event) => [
+    esc(dateTime(event.ts)),
+    `<b>${esc(event.bot)}</b>`,
+    `${esc(event.from_state || "—")} → ${esc(event.to_state)}`,
+    esc(event.actor || "—"),
+    `<span class="muted tiny">${esc(event.reason || "—")}</span>`,
+  ]);
+  $("#incubation-events").innerHTML = grid(
+    [{ label: "Fecha" }, { label: "Bot" }, { label: "Transición" }, { label: "Actor" }, { label: "Motivo", wrap: true }],
+    eventRows,
+    { empty: "Sin eventos de ciclo de vida." }
+  );
+}
+
 function renderMarket() {
   const m = S.market;
   if (!m) return;
@@ -5208,6 +5516,24 @@ function renderDecisions() {
     { label: "Rating" }, { label: "N", num: true }, { label: "1d", num: true }, { label: "5d", num: true },
     { label: "20d", num: true }, { label: "Hit 20d", num: true }, { label: "Muestra" },
   ], tableRows, { empty: d.error || "Sin decisiones con retorno a 20 días. Ejecuta lab decisions update." });
+
+  const sources = d.by_source || [];
+  const sourcesMeta = $("#decisions-sources-meta");
+  if (sourcesMeta) {
+    sourcesMeta.textContent = sources.length
+      ? `${sources.length} fuentes · mínimo ${d.min_sample || 30} retornos 20d`
+      : "sin datos";
+  }
+  const sourceRows = sources.map((row) => [
+    `<span class="tag ${row.source === "deep" ? "purple" : "blue"}">${esc(row.source)}</span>`,
+    num(row.n, 0), num(row.n_20d, 0), pct(row.mean_1d, 2), pct(row.mean_5d, 2), pct(row.mean_20d, 2),
+    pct(row.hit_rate_20d, 1), row.insufficient ? `<span class="tag yellow">insuficiente</span>` : `<span class="tag green">ok</span>`,
+  ]);
+  $("#decisions-sources").innerHTML = grid([
+    { label: "Fuente" }, { label: "N", num: true }, { label: "N 20d", num: true },
+    { label: "1d", num: true }, { label: "5d", num: true }, { label: "20d", num: true },
+    { label: "Hit 20d", num: true }, { label: "Muestra" },
+  ], sourceRows, { empty: "Sin datos por fuente." });
 
   const total = Math.max(1, d.total || 0);
   $("#decisions-baselines").innerHTML = rows.length ? rows.map((r) => `
@@ -6138,6 +6464,10 @@ function init() {
   $("#operator-action").addEventListener("change", () => updateOperatorFields(true));
   $("#operator-pin").addEventListener("keydown", (event) => { if (event.key === "Enter") armOperator(); });
   $("#decisions-compare").addEventListener("click", loadDecisionCompare);
+  $("#asset-select").addEventListener("change", (event) => {
+    S.assetSymbol = event.target.value;
+    renderAsset();
+  });
   $("#reload-logs").addEventListener("click", () => { S.selectedLog = null; loadAll(true); });
   $("#modal-close").addEventListener("click", closeModal);
   $("#modal").addEventListener("click", (event) => { if (event.target.id === "modal") closeModal(); });

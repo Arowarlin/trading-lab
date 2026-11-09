@@ -400,6 +400,8 @@ class LabData:
             "market": self.market(),
             "calendar": self.calendar(),
             "decisions": self.decisions(),
+            "agent_comparisons": self.agent_comparisons(),
+            "lifecycle": self.lifecycle(),
             "repos": self.repo_audit(),
             "logs": self.logs(limit=40),
             "action": self.action_status(),
@@ -1955,23 +1957,108 @@ class LabData:
     # --------------------------------------------------------------- decisiones
 
     def decisions(self) -> dict:
-        from .decisions import report
+        from .decisions import report, report_by_source
 
         def collect() -> dict:
-            out = {"rows": [], "total": 0, "min_sample": 30, "error": None}
+            out = {
+                "rows": [],
+                "by_source": [],
+                "total": 0,
+                "min_sample": 30,
+                "error": None,
+            }
             if not self.db_path.exists():
                 out["error"] = "sin base de datos"
                 return out
             try:
                 rows = report(self.db_path)
+                by_source = report_by_source(self.db_path)
             except Exception as exc:
                 out["error"] = str(exc)[:240]
                 return out
             out["rows"] = rows
+            out["by_source"] = by_source
             out["total"] = sum(int(row.get("n") or 0) for row in rows)
             return out
 
         return self.cache.get("decisions", 60.0, collect)
+
+    def agent_comparisons(self) -> dict:
+        """Acuerdo lite/deep y procedencia por fuente; solo lectura."""
+        from .agent_compare import report
+
+        def collect() -> dict:
+            out = {
+                "n": 0,
+                "agreement_rate": None,
+                "matrix": {},
+                "mean_target_diff": None,
+                "by_source": [],
+                "insufficient": True,
+                "sample_warning": "sin comparaciones",
+                "error": None,
+            }
+            if not self.db_path.exists():
+                out["error"] = "sin base de datos"
+                return out
+            try:
+                out.update(report(self.db_path))
+            except Exception as exc:
+                out["error"] = str(exc)[:240]
+            return out
+
+        return self.cache.get("agent_comparisons", 60.0, collect)
+
+    def lifecycle(self) -> dict:
+        """Incubadora: estados, métricas forward y eventos; no activa bots."""
+        from .lifecycle import events, load_config, status
+
+        def collect() -> dict:
+            out = {
+                "bots": [],
+                "events": [],
+                "count": 0,
+                "incubating": 0,
+                "evaluated": 0,
+                "promotable": 0,
+                "max_concurrent": 3,
+                "config": {},
+                "error": None,
+            }
+            if not self.db_path.exists():
+                out["error"] = "sin base de datos"
+                return out
+            try:
+                config = load_config()
+                rows = status(self.db_path, settings=self.settings)
+                history = events(self.db_path, limit=20)
+            except Exception as exc:
+                out["error"] = str(exc)[:240]
+                return out
+            out.update(
+                {
+                    "bots": rows,
+                    "events": history,
+                    "count": len(rows),
+                    "incubating": sum(
+                        1 for row in rows if row.get("state") == "incubando"
+                    ),
+                    "evaluated": sum(
+                        1 for row in rows if row.get("state") == "evaluado"
+                    ),
+                    "promotable": sum(
+                        1 for row in rows if row.get("state") == "promovible"
+                    ),
+                    "max_concurrent": config["max_concurrent"],
+                    "config": {
+                        "gate": config["gate"],
+                        "criteria": config["criteria"],
+                    },
+                }
+            )
+            return out
+
+        return self.cache.get("lifecycle", 60.0, collect)
 
     def decisions_compare(self) -> dict:
         """Comparación LLM/buy&hold/trend bajo demanda; cachea 5 minutos."""

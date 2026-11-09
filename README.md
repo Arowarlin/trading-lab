@@ -1090,8 +1090,8 @@ La barra lateral es oscura, **colapsable** (icono-only) y recuerda el estado en
 
 | Sección | Vistas |
 |---|---|
-| **Principal** | Dashboard, Mercado |
-| **Laboratorio** | Bots, Research, Agentes |
+| **Principal** | Dashboard, Mercado, Activo |
+| **Laboratorio** | Bots, Incubadora, Research, Agentes |
 | **Portafolios** | Cuentas, Fondo, Diario |
 | **Riesgo y fondeo** | Riesgo, Operador |
 | **Inteligencia** | Sala, Decisiones |
@@ -1127,13 +1127,34 @@ salen de `/api/overview` y `/api/operator` ya existentes: no se añadió ninguna
 ruta ni endpoint.
 
 Inventario congelado en [`docs/ui_inventory.json`](docs/ui_inventory.json):
-15 vistas, 232 ids, 34 llamadas `/api/*`, 6 secciones y 15 pestañas. El test
+17 vistas, 267 ids, 34 llamadas `/api/*`, 6 secciones y 17 pestañas. El test
 `test_inventario_ui_base_sigue_completo` falla si desaparece una vista, pestaña,
-id o llamada. Capturas Chrome de las 15 pestañas antes/después en
+id o llamada; las dos vistas nuevas se añadieron sin retirar ninguna anterior.
+Capturas Chrome de las 15 pestañas originales antes/después en
 `reports/ui/` (ignorado por git).
 
 Evidencia: `pytest tests/test_console_shell.py -q` → **5 passed**; suite completa
 **410 passed**; `ruff` limpio; `lab doctor` OK.
+
+### Etapa 7 · Activo, incubadora y lite/deep
+
+- **Activo** unifica en una ficha el precio de la caché local, tendencia, bots
+  asignados (con última señal y Sharpe), decisiones lite/deep y ciclo de vida.
+  Los alias `US100.cash`/`NASDAQ` y `GOLD`/`XAUUSD` se agrupan; si no hay
+  parquet, el precio se muestra como **Sin datos**.
+- **Incubadora** muestra estados, progreso, trades, Sharpe forward, deriva,
+  brechas, propuesta y el historial `lifecycle_events`. Es solo lectura: no
+  activa bots ni envía órdenes.
+- **Agentes** etiqueta cada run como `lite` o `deep`, muestra sus analistas y
+  añade acuerdo, matriz lite→deep y tabla por fuente. **Decisiones** añade el
+  desglose por fuente con N total y N con retorno a 20 días.
+- No se añadió ninguna ruta `/api/*`: la vista usa `/api/overview` y
+  `/api/market`; `overview` incorpora `lifecycle` y `agent_comparisons`.
+
+Evidencia: `pytest tests/test_web.py tests/test_console_shell.py
+tests/test_console_js.py tests/test_agent_compare.py tests/test_lifecycle.py -q`
+→ **46 passed**; suite completa **477 passed**; `ruff` limpio; `lab doctor` OK
+con WARN conocidos; `lab f13 config-check` OK (hash sin cambios).
 
 **Etapa 2 · Componentes.** Tarjetas KPI con delta y mini-sparkline de series
 reales (equity, retorno, PnL y drawdown; “sin serie” cuando el payload no

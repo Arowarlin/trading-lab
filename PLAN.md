@@ -957,7 +957,30 @@ etapa.
   `ruff` limpio; `lab doctor` OK con WARN conocidos; `lab f13 config-check`
   OK (hash sin cambios); `lab agent-compare --report` → sin datos. No se
   lanzó ningún deep real: los tests usan runners simulados. Sin órdenes.
-- Etapa 7: pendiente.
+
+### Etapa 7 — Vista por activo, incubadora y etiquetas lite/deep
+
+- [x] **Vista Activo**
+  - Selector que agrupa alias (`US100.cash`/`NASDAQ`, `GOLD`/`XAUUSD`) y reúne
+    precio/tendencia de la caché local, bots asignados, decisiones lite/deep y
+    ciclo de vida del activo. Sin parquet → **Sin datos**.
+- [x] **Pestaña Incubadora**
+  - Estados, progreso, trades, Sharpe forward, deriva, brechas, propuesta,
+    motivos e historial `lifecycle_events`. Solo lectura: no activa ni opera.
+- [x] **Lite/deep y procedencia**
+  - Agentes etiqueta el modo, muestra analistas y añade acuerdo, matriz
+    lite→deep y tabla por fuente. Decisiones añade N total, N con retorno 20d,
+    retornos, hit rate y muestra insuficiente por fuente.
+- [x] **Compatibilidad**
+  - Se conservan las 15 vistas, ids y rutas `/api/*` anteriores; no se añadió
+    ningún endpoint. `overview` incorpora `lifecycle` y `agent_comparisons`.
+  - Inventario actualizado a **17 vistas, 267 ids, 34 llamadas API, 6 secciones
+    y 17 pestañas**; el test lo verifica sin retirar entradas previas.
+- Evidencia: `pytest tests/test_web.py tests/test_console_shell.py
+  tests/test_console_js.py tests/test_agent_compare.py
+  tests/test_lifecycle.py -q` → 46 passed; suite completa **477 passed**;
+  `ruff` limpio; `lab doctor` OK con WARN conocidos; `lab f13 config-check`
+  OK (hash sin cambios). Sin activar bots, sin órdenes y sin abrir deep real.
 
 ---
 
@@ -1044,5 +1067,6 @@ etapa.
 | 2026-11-09 | Riesgo Etapa 4 | `pytest tests/test_risk_budget.py tests/test_intraday_bots.py -q` -> 14 passed; `pytest -q` -> 458 passed; budget 1%/0.25%/0.5%, neto por activo, cluster USD, news blackout, slices con historial y F13 lock |
 | 2026-11-09 | Incubadora Etapa 5 | `pytest tests/test_lifecycle.py -q` -> 7 passed; `pytest -q` -> 465 passed; estados, gate, criterios congelados, reporte forward y limite concurrente; sin activar bots |
 | 2026-11-09 | Procedencia Etapa 6 | `pytest tests/test_agent_compare.py tests/test_decisions.py tests/test_scripts.py -q` -> 19 passed; `pytest -q` -> 474 passed; comparacion lite/deep, procedencia, reporte por fuente y scripts nocturnos sin registrar |
+| 2026-11-09 | UI Etapa 7 | `pytest tests/test_web.py tests/test_console_shell.py tests/test_console_js.py tests/test_agent_compare.py tests/test_lifecycle.py -q` -> 46 passed; `pytest -q` -> 477 passed; vista Activo, Incubadora, lite/deep y desglose por fuente; 17 vistas/267 ids/34 API sin retirar las anteriores |
 | 2026-11-08 | UI formato/metricas | `pytest tests/test_console_js.py tests/test_console_shell.py -q` -> 11 passed; `pytest -q` -> 416 passed; gauges restantes, cero negativo, moneda agrupada, salud parcial, performers y regimen compacto |
 |  |  |  |

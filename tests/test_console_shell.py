@@ -35,7 +35,9 @@ def test_barra_lateral_con_secciones_y_todas_las_vistas() -> None:
     assert views == {
         "overview",
         "market",
+        "asset",
         "bots",
+        "incubation",
         "research",
         "agents",
         "accounts",
@@ -86,6 +88,36 @@ def test_dashboard_tiene_kpis_balance_performers_y_calendario() -> None:
         "computeDailyPnl",
     ):
         assert marker in text
+
+
+def test_vista_activo_incubadora_y_comparacion_lite_deep() -> None:
+    text = INDEX.read_text(encoding="utf-8")
+    for marker in (
+        'id="view-asset"',
+        'id="asset-select"',
+        'id="asset-stats"',
+        'id="asset-chart"',
+        'id="asset-bots"',
+        'id="asset-agents"',
+        'id="asset-lifecycle"',
+        "function renderAsset()",
+        "function renderIncubation()",
+        "function assetGroup(",
+        "function sameAsset(",
+        'id="view-incubation"',
+        'id="incubation-stats"',
+        'id="incubation-table"',
+        'id="incubation-events"',
+        'id="agent-compare"',
+        "function renderAgentComparison()",
+        "agent_comparisons",
+        'id="decisions-sources"',
+        "d.by_source",
+        "Incubadora",
+        "Comparación lite vs deep",
+        "No activa bots, no envía órdenes",
+    ):
+        assert marker in text, marker
 
 
 def test_consola_local_sin_cdns_ni_frameworks() -> None:
