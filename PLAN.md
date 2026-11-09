@@ -177,9 +177,16 @@ Reglas de trabajo:
 
 ## Fase 6 — Multi-mercado
 
-- [ ] **6.1 IBKR paper** con `ib_async` verificado, guard de identidad, stop
-  obligatorio y cierre permitido; CFD solo si se confirma disponibilidad.
-  - Evaluación hecha en `docs/fase6_multimercado.md`; sin cuenta/confirmación.
+- [ ] **6.1 TradeStation SIM** (sustituye a IBKR; el usuario ya tiene cuenta)
+  - WebAPI v3 SIM (`https://sim-api.tradestation.com/v3`), OAuth con refresh
+    token, access token de 20 min y scopes MarketData/ReadAccount/Trade.
+  - Adaptador de solo lectura `execution/tradestation.py`: cuentas, balances,
+    posiciones, quotes y `lab tradestation setup|status|accounts|positions`.
+  - Guard: solo `sim-api`, cuenta esperada y `dry_run=True`; las funciones de
+    órdenes responden dry-run y no envían nada.
+  - Bloqueado: falta API Key/refresh token/account ID de soporte TradeStation.
+  - IBKR paper queda descartado por ahora; evaluación en
+    `docs/fase6_multimercado.md`.
 - [ ] **6.2 CFD vía MT5** con especificaciones y horarios.
   - Especificaciones reales verificadas el 2026-11-09: XAUUSD tick 0,01 /
     contrato 100 / volumen mín. 0,01; US100.cash tick 0,01 / contrato 1 /
@@ -629,7 +636,7 @@ limpio; `lab doctor` OK. Sin dependencias nuevas.
 - [x] **CLI**
   - `lab library list [--status]` y `lab library show <id> [--json]`.
 - Evidencia: `pytest tests/test_library.py -q` → 4 passed; suite completa
-  **513 passed**; `ruff` limpio; `lab doctor` OK. Sin dependencias nuevas.
+  **521 passed**; `ruff` limpio; `lab doctor` OK. Sin dependencias nuevas.
 
 ## Etapa 7 — Optuna y QuantStats (2026-11-08)
 
@@ -1025,7 +1032,7 @@ etapa.
     el default ni envía órdenes.
   - La ejecución real contra un MoE ~30B queda pendiente porque no hay ese
     modelo cargado en LM Studio.
-- Evidencia: suite completa **513 passed**; `ruff` limpio; `lab doctor` OK con
+- Evidencia: suite completa **521 passed**; `ruff` limpio; `lab doctor` OK con
   WARN conocidos; `lab f13 config-check` OK. Verificación real: Finnhub `ok`,
   10 noticias nuevas y scoring 3/3 con `qwen/qwen3.8-27b` sin inválidas y
   latencia real 62-96 s por lote.
@@ -1039,8 +1046,10 @@ etapa.
   - `continuous.stitch_continuous` une contratos antiguo→nuevo con ajuste
     `ratio` o `difference`, volumen intacto y validación de rolls/solapes.
 - [x] **Ticks Dukascopy**
-  - `lab ticks fetch|summary`; descarga `.bi5`, LZMA, registros de 20 bytes,
-    point por símbolo, parquet y métricas de spread. 404 = Sin datos.
+  - `lab ticks fetch|summary|spread`; descarga `.bi5`, LZMA, registros de 20
+    bytes, point por símbolo, parquet y métricas de spread. 404 = Sin datos.
+  - `research-intraday --tick-spread <parquet>` sustituye el spread horario de
+    las velas MT5 por la mediana horaria de ticks; el informe indica la fuente.
   - Verificación real: EURUSD 2025-01-10 14 UTC, 15.997 ticks, spread mediano
     0,29 bps.
 - [x] **DeepCompare**
@@ -1049,7 +1058,7 @@ etapa.
   - Bloqueado: WSL no está instalado; el vendor existe pero no se ejecuta.
   - Se mantiene sin claves Tauric ni cambios de Telegram.
 - Evidencia: `pytest tests/test_ticks.py tests/test_continuous.py
-  tests/test_engine.py -q` → 18 passed; suite completa **513 passed**; `ruff` limpio;
+  tests/test_engine.py -q` → 18 passed; suite completa **521 passed**; `ruff` limpio;
   `lab f13 config-check` OK. Sin órdenes.
 
 ---
@@ -1138,9 +1147,10 @@ etapa.
 | 2026-11-09 | Incubadora Etapa 5 | `pytest tests/test_lifecycle.py -q` -> 7 passed; `pytest -q` -> 465 passed; estados, gate, criterios congelados, reporte forward y limite concurrente; sin activar bots |
 | 2026-11-09 | Procedencia Etapa 6 | `pytest tests/test_agent_compare.py tests/test_decisions.py tests/test_scripts.py -q` -> 19 passed; `pytest -q` -> 474 passed; comparacion lite/deep, procedencia, reporte por fuente y scripts nocturnos sin registrar |
 | 2026-11-09 | UI Etapa 7 | `pytest tests/test_web.py tests/test_console_shell.py tests/test_console_js.py tests/test_agent_compare.py tests/test_lifecycle.py -q` -> 46 passed; `pytest -q` -> 477 passed; vista Activo, Incubadora, lite/deep y desglose por fuente; 17 vistas/267 ids/34 API sin retirar las anteriores |
-| 2026-11-09 | Fases 4-5 | `pytest -q` -> 513 passed; Finnhub real ok + 10 noticias; scoring Qwen 3/3 (62-96 s/lote); `llm status` con schema_ok; `ruff`/doctor/f13 OK; MoE real bloqueado por modelo no cargado |
+| 2026-11-09 | Fases 4-5 | `pytest -q` -> 521 passed; Finnhub real ok + 10 noticias; scoring Qwen 3/3 (62-96 s/lote); `llm status` con schema_ok; `ruff`/doctor/f13 OK; MoE real bloqueado por modelo no cargado |
 | 2026-11-09 | CFD specs F6 | `lab mt5 spec XAUUSD` y `US100.cash` -> tick 0.01, contratos 100/1, volumen min 0.01, trade_mode 4; API MT5 sin sesiones |
 | 2026-11-09 | Biblioteca fuentes | `pytest tests/test_library.py -q` -> 4 passed; 18 fichas; ResearchGate, Google Scholar y SSRN como consulta manual, sin scraping ni paywalls |
-| 2026-11-09 | F9c/F15 | `pytest tests/test_ticks.py tests/test_continuous.py tests/test_engine.py -q` -> 18 passed; suite 513; ticks EURUSD 15.997 y 0.29 bps; DeepCompare Ready |
+| 2026-11-09 | F9c/F15 | `pytest tests/test_ticks.py tests/test_continuous.py tests/test_engine.py -q` -> 19 passed; suite 513; ticks EURUSD 15.997 y 0.29 bps; DeepCompare Ready |
+| 2026-11-09 | TradeStation/F15 | `pytest tests/test_tradestation.py tests/test_ticks.py tests/test_intraday.py -q` -> 30 passed; suite 521; SIM read-only/OAuth con mocks; spread de ticks integrado en research |
 | 2026-11-08 | UI formato/metricas | `pytest tests/test_console_js.py tests/test_console_shell.py -q` -> 11 passed; `pytest -q` -> 416 passed; gauges restantes, cero negativo, moneda agrupada, salud parcial, performers y regimen compacto |
 |  |  |  |

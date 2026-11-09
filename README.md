@@ -496,6 +496,25 @@ recomendado para validar lógica antes de tocar Alpaca.
 > Las claves son de paper: no mueven dinero. Aun así, no las publiques ni las
 > subas a git. Si alguna vez generas claves live, trátalas como dinero.
 
+### TradeStation SIM (preparado, esperando API Key)
+
+TradeStation será la alternativa a IBKR para acciones/ETF, opciones y futuros.
+Su WebAPI v3 tiene un entorno SIM real:
+
+```text
+https://sim-api.tradestation.com/v3
+```
+
+El adaptador ya está en **solo lectura**: refresh OAuth, cuentas, balances,
+posiciones y quotes. `lab tradestation setup` guarda Client ID, Client Secret,
+refresh token y Account ID en **keyring**; `status`, `accounts` y `positions`
+comprueban la conexión. Las funciones de órdenes solo responden `dry_run` y no
+envían nada.
+
+Bloqueado hasta que soporte TradeStation habilite la API Key. La cuenta de
+trading por sí sola no basta. No se asume forex en esta API; para FX/CFD se
+mantiene MT5 demo.
+
 ---
 
 ## 6. Forex, MT5 y cuentas de fondeo (FTMO)
@@ -2192,7 +2211,7 @@ lab library show dsr
 ```
 
 Evidencia: `pytest tests/test_library.py -q` → **4 passed**; suite completa
-**513 passed**; `ruff` limpio; `lab doctor` OK. Sin dependencias nuevas ni
+**521 passed**; `ruff` limpio; `lab doctor` OK. Sin dependencias nuevas ni
 automatización de scraping.
 
 ---
@@ -2254,6 +2273,8 @@ descomprime (LZMA), decodifica registros de 20 bytes y guarda un parquet en
 lab ticks fetch EURUSD --day 2025-01-10 --hours 14
 lab ticks fetch USDJPY --day 2025-01-10 --hours 8-16
 lab ticks summary EURUSD --day 2025-01-10
+lab ticks spread EURUSD --day 2025-01-10
+lab research-intraday --symbol EURUSD --tick-spread data/cache/ticks/EURUSD_20250110.parquet
 ```
 
 - Precio = entero × point del símbolo; `--point` permite símbolos fuera del
@@ -2269,7 +2290,7 @@ rollover/vencimiento. `continuous.stitch_continuous` une contratos ajustando
 el salto por ratio o diferencia; los tests cubren ambos métodos.
 
 Evidencia: `pytest tests/test_ticks.py tests/test_continuous.py
-tests/test_engine.py -q` → **18 passed**; suite completa **513 passed**;
+tests/test_engine.py -q` → **18 passed**; suite completa **521 passed**;
 `ruff` limpio. Sin descarga de datos de pago ni órdenes.
 
 ---
@@ -2291,7 +2312,8 @@ tests/test_engine.py -q` → **18 passed**; suite completa **513 passed**;
 6. **F7** Trading-R1 en WSL para el informe pre-market + Telegram → ⏳ WSL no
    instalado; no se puede ejecutar todavía.
 7. ~~**F15** datos de ticks Dukascopy para modelar spread real en forex~~ → ✅
-   descarga y decodificación `.bi5`; falta integrar el spread en research.
+   descarga, decodificación e integración del spread horario en research;
+   pendiente repetir el barrido real con el nuevo modelo de costes.
 
 ---
 
