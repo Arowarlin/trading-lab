@@ -142,6 +142,10 @@ def test_trading_r1_premarket_runner_sin_ordenes():
     assert "/research" in script
     assert "Invoke-RestMethod" in script
     assert "PreflightOnly" in script
+    assert "premarket --no-llm" in script
+    assert "premarket_input" in script
+    assert "No llames" in script
+    assert "UTF8.GetBytes" in script
     assert "telegram send" in script
     assert "qwen3.8-27b" in script
     assert "Sin datos" in script

@@ -1068,10 +1068,13 @@ etapa.
     `C:\Users\PC\.wslconfig` para alcanzar LM Studio en `127.0.0.1:1234`.
   - Trading-R1 0.1.1 en `~/.venv-r1`, perfil `vllm` con `qwen3.8-27b` y bun
     1.4.4 nativo en `~/.bun/bin`; inferencia real HTTP 200 y TUI verificada.
-    Pendiente: informe pre-market y envío real por Telegram desde Trading-R1.
+    Validado 2026-11-09: informe pre-market en 1 ronda y envío real por
+    Telegram con `lab telegram send`; el canal nativo de Trading-R1 sigue sin
+    configurar para no duplicar el token.
   - Runner `scripts/trading_r1_premarket.ps1` (`-PreflightOnly`, `-Send`):
-    consulta `/research`, guarda MD/JSON en `reports/premarket/` y usa
-    `lab telegram send`. No envía órdenes.
+    genera datos locales con `lab premarket --no-llm`, pide a Trading-R1 solo
+    la redacción (sin web/herramientas), guarda MD/JSON en
+    `reports/premarket/` y usa `lab telegram send`. No envía órdenes.
   - Fallback nativo `lab premarket` con Qwen, datos, calendario y Telegram;
     no usa Trading-R1 ni envía órdenes.
   - `TradingLab-Resume` reabrirá Windows Terminal y la sesión exacta de OpenCode
@@ -1180,4 +1183,5 @@ etapa.
 | 2026-11-09 | Fix reapertura tras reinicio | `pytest -q --basetemp=...` -> 531 passed; `ruff` limpio; `lab doctor` OK; `resume_after_reboot.ps1` omite si ya corrió en el arranque; `wt.exe` ya no parte el comando por `;` |
 | 2026-11-09 | WSL2 + Trading-R1 | WSL 3.0.3, Ubuntu 24.04.5, usuario pc; Trading-R1 0.1.1 en ~/.venv-r1; bun 1.4.4 nativo; mirrored + LM Studio HTTP 200; TUI viva |
 | 2026-11-09 | Runner Trading-R1 | `.\scripts\trading_r1_premarket.ps1 -PreflightOnly` -> backend 8765 + qwen3.8-27b OK; `pytest tests/test_scripts.py tests/test_docs.py -q` -> 16 passed |
+| 2026-11-09 | Trading-R1 premarket | 1 ronda, 2354 chars, datos locales, `Sin datos` donde falta; Telegram enviado; reporte en `reports/premarket/` |
 |  |  |  |

@@ -1,11 +1,11 @@
-# Informe pre-market con Trading-R1 en WSL2. Research en paper; no envia ordenes.
-# Requiere el backend de Trading-R1 vivo: TUI abierta o `trading-r1 serve`.
+# Informe pre-market con Trading-R1 en WSL2 usando datos locales de TradingLab.
+# Research en paper; no envia ordenes. No usa web ni herramientas del agente.
 param(
     [switch]$PreflightOnly,
     [switch]$Send,
     [string]$Tickers = "SPY,QQQ,NVDA",
     [string]$Profile = "vllm",
-    [string]$Mode = "auto"
+    [string]$Mode = "analytical"
 )
 
 $ErrorActionPreference = "Stop"
@@ -21,6 +21,7 @@ New-Item -ItemType Directory -Force -Path $logDir, $reportDir | Out-Null
 
 $stamp = Get-Date -Format "yyyyMMdd_HHmmss"
 $log = Join-Path $logDir "trading_r1_premarket_$stamp.log"
+$input = Join-Path $logDir "premarket_input_$stamp.md"
 $md = Join-Path $reportDir "premarket_trading_r1_$stamp.md"
 $json = Join-Path $reportDir "premarket_trading_r1_$stamp.json"
 
@@ -49,6 +50,9 @@ function Get-LmStudioModels {
 }
 
 Write-Log "trading-r1 premarket start"
+if (-not (Test-Path $lab)) {
+    throw "No existe $lab"
+}
 $backend = Get-TradingR1Backend
 Write-Log "backend OK: $($backend.url) (pid $($backend.pid))"
 
@@ -59,26 +63,39 @@ if ($modelIds -notcontains "qwen3.8-27b") {
 }
 Write-Log "LM Studio OK: qwen3.8-27b disponible"
 
-if ($PreflightOnly) {
-    Write-Log "PreflightOnly: backend y LM Studio OK; sin LLM ni Telegram."
-    Write-Output "Preflight OK: $($backend.url) + qwen3.8-27b"
-    exit 0
-}
-
-$date = Get-Date -Format "yyyy-MM-dd"
 $tickerList = @($Tickers -split "," | ForEach-Object { $_.Trim().ToUpper() } | Where-Object { $_ })
 if ($tickerList.Count -eq 0) {
     throw "No hay tickers en -Tickers"
 }
 $sections = $tickerList -join ", "
 
+Write-Log "generando datos locales con lab premarket --no-llm"
+& $lab premarket --no-llm --tickers $Tickers --out $input *>> $log
+if ($LASTEXITCODE -ne 0 -or -not (Test-Path $input)) {
+    throw "lab premarket --no-llm fallo con codigo $LASTEXITCODE"
+}
+$data = Get-Content -Path $input -Raw -Encoding UTF8
+Write-Log "datos locales OK: $input ($($data.Length) chars)"
+
+if ($PreflightOnly) {
+    Write-Log "PreflightOnly: backend, LM Studio y datos locales OK; sin LLM ni Telegram."
+    Write-Output "Preflight OK: $($backend.url) + qwen3.8-27b + $input"
+    exit 0
+}
+
+$date = Get-Date -Format "yyyy-MM-dd"
 $question = @"
-Genera un informe pre-market breve (maximo 700 palabras) para $sections con fecha $date.
-Para cada activo incluye, solo si puedes verificarlo con tus herramientas: ultimo precio o cierre disponible y su fecha/hora, variacion reciente, niveles tecnicos clave y catalizadores o noticias de hoy.
-Incluye una seccion de eventos macro relevantes de hoy y otra de riesgos.
-Si un dato no esta disponible o no puedes verificarlo, escribe exactamente "Sin datos"; no inventes precios, niveles ni historicos.
-No des ordenes ni recomendaciones de compra/venta: es investigacion en paper.
-Devuelve Markdown con secciones: Resumen, $sections, Eventos, Riesgos, Sin datos.
+Redacta un informe pre-market breve en Markdown usando SOLO los datos verificados de TradingLab que aparecen abajo.
+No llames a ninguna herramienta, no navegues y no inventes cifras. Si un dato no aparece, escribe exactamente "Sin datos".
+
+Datos verificados de TradingLab:
+$data
+
+Requisitos:
+- Maximo 500 palabras.
+- Secciones: Resumen, $sections, Eventos, Riesgos, Sin datos.
+- Para cada activo usa precio, variacion 1d/5d/20d y tendencia solo si estan en la tabla.
+- No des ordenes ni recomendaciones de compra/venta: es research en paper.
 "@
 
 $payload = @{
@@ -87,6 +104,7 @@ $payload = @{
     profile = $Profile
     stream = $false
 } | ConvertTo-Json -Depth 5
+$bodyBytes = [Text.Encoding]::UTF8.GetBytes($payload)
 
 $headers = @{ Authorization = "Bearer $($backend.token)" }
 Write-Log "research start: profile=$Profile mode=$Mode tickers=$sections"
@@ -95,7 +113,7 @@ $response = Invoke-RestMethod `
     -Method Post `
     -Headers $headers `
     -ContentType "application/json; charset=utf-8" `
-    -Body $payload `
+    -Body $bodyBytes `
     -TimeoutSec 900
 
 if (-not $response.text) {
@@ -106,7 +124,7 @@ $utf8 = New-Object System.Text.UTF8Encoding($false)
 $rawJson = $response | ConvertTo-Json -Depth 8
 [IO.File]::WriteAllText($json, $rawJson, $utf8)
 
-$header = "# Pre-market Trading-R1 - $((Get-Date).ToUniversalTime().ToString("yyyy-MM-dd HH:mm UTC"))`r`n`r`nPerfil: $Profile. Research en paper; sin ordenes.`r`n`r`n"
+$header = "# Pre-market Trading-R1 - $((Get-Date).ToUniversalTime().ToString("yyyy-MM-dd HH:mm UTC"))`r`n`r`nPerfil: $Profile. Datos: TradingLab (cache local). Research en paper; sin ordenes.`r`n`r`n"
 [IO.File]::WriteAllText($md, $header + $response.text.Trim() + "`r`n", $utf8)
 
 Write-Log "research OK: termination=$($response.termination) rounds=$($response.rounds) chars=$($response.text.Length)"

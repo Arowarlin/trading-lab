@@ -63,6 +63,7 @@ Con el backend de Trading-R1 vivo (TUI abierta o `trading-r1 serve`):
 .\scripts\trading_r1_premarket.ps1 -Send
 ```
 
-El runner consulta `POST /research`, guarda Markdown y JSON en
+El runner genera los datos con `lab premarket --no-llm`, pide a Trading-R1
+solo la redacción (sin web ni herramientas), guarda Markdown y JSON en
 `reports/premarket/` y, con `-Send`, envía el Markdown con
 `lab telegram send`. No envía órdenes.

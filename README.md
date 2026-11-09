@@ -1604,7 +1604,8 @@ Opciones, en orden recomendado:
    trading-r1 --profile vllm
    ```
    Runner no interactivo (requiere el backend vivo: TUI abierta o
-   `trading-r1 serve`):
+   `trading-r1 serve`). Genera los datos con `lab premarket --no-llm` y pide a
+   Trading-R1 solo la redacción, sin web ni herramientas:
    ```powershell
    .\scripts\trading_r1_premarket.ps1 -PreflightOnly
    .\scripts\trading_r1_premarket.ps1 -Send
