@@ -1,0 +1,25 @@
+# Costes por activo. No usar un valor global para comisiones.
+# Fuente oficial: FTMO, "Trading Update | 25 Sep 2025".
+# https://ftmo.com/en/blog/trading-updates/trading-update-25-sep-2025/
+# Forex: 2.50 USD por lote y lado, vigente desde 2025-09-29.
+# Verificado el 2026-11-08 contra la tabla publicada.
+assets:
+  EURUSD:
+    verified: true
+    commission_per_lot_usd: 2.50
+    commission_side: per_side
+    contract_size: 100000
+    quote_currency: USD
+    source: "FTMO Trading Update | 25 Sep 2025"
+    source_date: "2025-09-25"
+    effective_from: "2025-09-29"
+    source_url: "https://ftmo.com/en/blog/trading-updates/trading-update-25-sep-2025/"
+
+# Supuesto explícito de slippage por lado, en bps.
+slippage:
+  optimistic_bps: 0.5
+  conservative_bps: 2.0
+  assumption: >-
+    Órdenes a mercado en EURUSD M15. Optimista: 0.5 bps por lado
+    (~0.55 pips a 1.10). Conservador: 2.0 bps por lado (~2.2 pips).
+    No incluye huecos de apertura ni fines de semana.

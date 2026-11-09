@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from tradinglab.intraday import (
     asian_range_reversal,
     backtest_intraday,
+    break_even_cost_bps,
     cache_metadata,
     load_bars,
     opening_range_breakout,
@@ -14,6 +16,7 @@ from tradinglab.intraday import (
     save_bars,
     trend_pullback,
 )
+from tradinglab.intraday_costs import asset_costs
 
 
 def _bars(days: int = 60, spread: bool = True) -> pd.DataFrame:
@@ -84,10 +87,49 @@ def test_run_intraday_marca_costes_cero():
         paths=10,
         commission_bps=0.0,
         slippage_bps=0.0,
+        slippage_optimistic_bps=0.0,
         spread_override_bps=0.0,
     )
     assert report["costs"]["diagnostic_zero_costs"] is True
     assert "Diagnóstico zero-cost" in render_markdown(report)
+
+
+def test_costes_eurusd_oficiales():
+    cost = asset_costs("EURUSD")
+    assert cost.verified is True
+    assert cost.commission_per_lot_usd == pytest.approx(2.50)
+    assert cost.commission_side == "per_side"
+    assert "2025-09-25" in (cost.source_date or "")
+    bps = cost.commission_bps(pd.Series([1.10]))
+    assert float(bps.iloc[0]) == pytest.approx(2.50 / 110_000 * 10_000, rel=1e-6)
+
+
+def test_simbolo_sin_comision_verificada_no_inventa():
+    cost = asset_costs("XAUUSD")
+    assert cost.verified is False
+    with pytest.raises(RuntimeError, match="sin verificar"):
+        run_intraday(_bars(days=3), symbol="XAUUSD", paths=5)
+
+
+def test_break_even_cost_bps_sintetico():
+    gross = pd.Series([0.002 if index % 2 == 0 else 0.001 for index in range(200)])
+    turnover = pd.Series(1.0, index=gross.index)
+    # media 0.0015 => 15 bps de coste uniforme llevan el Sharpe a 0
+    assert break_even_cost_bps(gross, turnover, "M15") == pytest.approx(15.0, abs=0.1)
+
+
+def test_curva_de_costes_y_modelo():
+    df = _bars(days=30)
+    report = run_intraday(df, paths=10)
+    model = report["cost_model"]
+    assert model["commission"]["verified"] is True
+    assert model["commission"]["source_date"] == "2025-09-25"
+    assert model["slippage"]["optimistic_bps"] == pytest.approx(0.5)
+    assert model["slippage"]["conservative_bps"] == pytest.approx(2.0)
+    row = report["outcomes"][0]
+    assert set(row["cost_curve_bps"]) == {"0.0", "0.5", "1.0", "2.0", "3.0"}
+    assert row["calibrated_cost_bps"] > 0
+    assert "Coste de equilibrio" in render_markdown(report)
 
 
 def test_tres_estrategias_generan_targets():

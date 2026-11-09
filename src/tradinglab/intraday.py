@@ -16,6 +16,7 @@ import pandas as pd
 
 from .config import ROOT
 from .indicators import atr, ema
+from .intraday_costs import asset_costs
 from .profiles import get_profile
 from .prop.rules import from_yaml
 from .prop.simulator import monte_carlo
@@ -30,6 +31,7 @@ INTRADAY_GRIDS = {
     "asian_rev": {"buffer_atr": [0.1, 0.3], "max_hold": [8, 16]},
 }
 DEFAULT_HORIZONS = (22, 44, 120)
+COST_GRID_BPS = (0.0, 0.5, 1.0, 2.0, 3.0)
 
 
 def _bars_per_year(timeframe: str) -> float:
@@ -38,6 +40,63 @@ def _bars_per_year(timeframe: str) -> float:
     if timeframe.upper() == "H1":
         return 252 * 24
     return 252
+
+
+def _sharpe_returns(returns: pd.Series, timeframe: str) -> float:
+    std = float(returns.std(ddof=1)) if len(returns) > 1 else 0.0
+    if std <= 0:
+        return 0.0
+    return float(returns.mean() / std * np.sqrt(_bars_per_year(timeframe)))
+
+
+def _sharpe_at_cost(
+    gross: pd.Series,
+    turnover: pd.Series,
+    timeframe: str,
+    cost_bps: float,
+) -> float:
+    net = gross - turnover * float(cost_bps) / 10_000.0
+    return _sharpe_returns(net, timeframe)
+
+
+def _cost_curve(
+    gross: pd.Series,
+    turnover: pd.Series,
+    timeframe: str,
+    grid: tuple[float, ...] = COST_GRID_BPS,
+) -> dict[str, float]:
+    return {
+        str(cost): _sharpe_at_cost(gross, turnover, timeframe, cost)
+        for cost in grid
+    }
+
+
+def break_even_cost_bps(
+    gross: pd.Series,
+    turnover: pd.Series,
+    timeframe: str,
+    *,
+    upper: float = 200.0,
+) -> float | None:
+    """Coste uniforme por unidad de turnover donde el Sharpe neto cruza 0.
+
+    Si el Sharpe bruto ya es <= 0, no hay coste de equilibrio positivo: 0.0.
+    """
+    if _sharpe_at_cost(gross, turnover, timeframe, 0.0) <= 0:
+        return 0.0
+    low = 0.0
+    high = float(upper)
+    while _sharpe_at_cost(gross, turnover, timeframe, high) > 0 and high < 10_000:
+        high *= 2.0
+    if _sharpe_at_cost(gross, turnover, timeframe, high) > 0:
+        return None
+    for _ in range(80):
+        middle = (low + high) / 2.0
+        if _sharpe_at_cost(gross, turnover, timeframe, middle) > 0:
+            low = middle
+        else:
+            high = middle
+    return (low + high) / 2.0
 
 
 def cache_file(cache_dir: str | Path, symbol: str, timeframe: str) -> Path:
@@ -96,13 +155,20 @@ def _spread_bps(df: pd.DataFrame, point: float) -> tuple[pd.Series, bool]:
     return mapped, reliable
 
 
+def _cost_series(value: float | pd.Series, index: pd.Index) -> pd.Series:
+    if isinstance(value, pd.Series):
+        return value.reindex(index).astype(float).ffill().bfill()
+    return pd.Series(float(value), index=index, dtype=float)
+
+
 def backtest_intraday(
     df: pd.DataFrame,
     target: pd.Series,
     *,
     timeframe: str = "M15",
-    commission_bps: float = 1.0,
+    commission_bps: float | pd.Series = 1.0,
     slippage_bps: float = 2.0,
+    slippage_optimistic_bps: float | None = None,
     point: float = 0.0001,
     spread_override_bps: float | None = None,
 ) -> dict:
@@ -120,12 +186,28 @@ def backtest_intraday(
         spread = observed_spread
     else:
         spread = pd.Series(float(spread_override_bps), index=df.index)
-    cost_bps = float(commission_bps) + float(slippage_bps) + spread
+    commission = _cost_series(commission_bps, df.index)
+    optimistic = (
+        float(slippage_bps)
+        if slippage_optimistic_bps is None
+        else float(slippage_optimistic_bps)
+    )
+    cost_bps = commission + float(slippage_bps) + spread
+    cost_optimistic = commission + optimistic + spread
     net = gross - turnover * cost_bps / 10_000.0
+    net_optimistic = gross - turnover * cost_optimistic / 10_000.0
     equity = (1.0 + net).cumprod()
     std = float(net.std(ddof=1)) if len(net) > 1 else 0.0
     ann = _bars_per_year(timeframe)
     sharpe = float(net.mean() / std * np.sqrt(ann)) if std > 0 else 0.0
+    sharpe_optimistic = _sharpe_returns(net_optimistic, timeframe)
+    weights = turnover.clip(lower=0.0)
+    weight_sum = float(weights.sum())
+    calibrated_cost = (
+        float((cost_bps * weights).sum() / weight_sum)
+        if weight_sum > 0
+        else float(cost_bps.median())
+    )
     drawdown = equity / equity.cummax() - 1.0
     return {
         "returns": net,
@@ -141,6 +223,13 @@ def backtest_intraday(
         "spread_observed_bps_median": float(observed_spread.median()) if len(observed_spread) else 0.0,
         "spread_override_bps": spread_override_bps,
         "spread_reliable": reliable,
+        "commission_bps_median": float(commission.median()) if len(commission) else 0.0,
+        "calibrated_cost_bps": calibrated_cost,
+        "breakeven_cost_bps": break_even_cost_bps(gross, turnover, timeframe),
+        "cost_curve_bps": _cost_curve(gross, turnover, timeframe),
+        "sharpe_optimistic": sharpe_optimistic,
+        "sharpe_conservative": sharpe,
+        "slippage_optimistic_bps": optimistic,
     }
 
 
@@ -286,14 +375,37 @@ def run_intraday(
     timeframe: str = "M15",
     paths: int = 500,
     point: float = 0.0001,
-    commission_bps: float = 1.0,
-    slippage_bps: float = 2.0,
+    commission_bps: float | None = None,
+    slippage_bps: float | None = None,
+    slippage_optimistic_bps: float | None = None,
     spread_override_bps: float | None = None,
 ) -> dict:
     """Valida las estrategias intradía con los controles existentes."""
     profile = get_profile("intraday_fx")
     if profile is None:
         raise RuntimeError("falta perfil intraday_fx")
+    asset = asset_costs(symbol)
+    if commission_bps is None:
+        if not asset.verified:
+            raise RuntimeError(
+                f"comisión sin verificar para {symbol}: no se inventa la cifra"
+            )
+        commission = asset.commission_bps(df["close"])
+        commission_source = asset.source or "sin verificar"
+        commission_verified = True
+    else:
+        commission = float(commission_bps)
+        commission_source = "override diagnóstico"
+        commission_verified = False
+    if slippage_bps is None:
+        slippage_bps = asset.slippage_conservative_bps
+    if slippage_optimistic_bps is None:
+        slippage_optimistic_bps = asset.slippage_optimistic_bps
+    commission_median = (
+        float(commission.median())
+        if isinstance(commission, pd.Series)
+        else float(commission)
+    )
     outcomes = []
     returns_by_id: dict[str, pd.Series] = {}
     for name, grid in INTRADAY_GRIDS.items():
@@ -303,8 +415,9 @@ def run_intraday(
                 df,
                 result.target,
                 timeframe=timeframe,
-                commission_bps=commission_bps,
+                commission_bps=commission,
                 slippage_bps=slippage_bps,
+                slippage_optimistic_bps=slippage_optimistic_bps,
                 point=point,
                 spread_override_bps=spread_override_bps,
             )
@@ -316,7 +429,14 @@ def run_intraday(
                     "params": params,
                     "metrics": bt["metrics"],
                     "spread_bps_median": bt["spread_bps_median"],
+                    "spread_observed_bps_median": bt["spread_observed_bps_median"],
                     "spread_reliable": bt["spread_reliable"],
+                    "commission_bps_median": bt["commission_bps_median"],
+                    "calibrated_cost_bps": bt["calibrated_cost_bps"],
+                    "breakeven_cost_bps": bt["breakeven_cost_bps"],
+                    "cost_curve_bps": bt["cost_curve_bps"],
+                    "sharpe_optimistic": bt["sharpe_optimistic"],
+                    "sharpe_conservative": bt["sharpe_conservative"],
                 }
             )
 
@@ -368,6 +488,15 @@ def run_intraday(
             and gate.passed
             and row["spread_reliable"]
         )
+        if (
+            spread_override_bps == 0
+            and commission_median == 0
+            and slippage_bps == 0
+            and slippage_optimistic_bps == 0
+        ):
+            # Diagnóstico: nunca cuenta como candidato que avanza.
+            row["passed_zero_cost_diagnostic"] = row["passed"]
+            row["passed"] = False
 
     rules = [from_yaml("ftmo", "challenge", 100_000), from_yaml("topstep", "challenge", 50_000)]
     mc = []
@@ -393,18 +522,63 @@ def run_intraday(
                         "breach_rate": sim["breach_rate"],
                     }
                 )
+    calibrated_values = [
+        row["calibrated_cost_bps"]
+        for row in outcomes
+        if row["calibrated_cost_bps"] is not None
+    ]
     return {
         "symbol": symbol,
         "timeframe": timeframe,
         "bars": cache_metadata(df, timeframe),
         "profile": profile.id,
         "costs": {
-            "commission_bps": float(commission_bps),
+            "commission_bps_median": commission_median,
+            "commission_source": commission_source,
+            "commission_verified": commission_verified,
             "slippage_bps": float(slippage_bps),
+            "slippage_optimistic_bps": float(slippage_optimistic_bps),
             "spread_override_bps": spread_override_bps,
             "diagnostic_zero_costs": spread_override_bps == 0
-            and commission_bps == 0
-            and slippage_bps == 0,
+            and commission_median == 0
+            and slippage_bps == 0
+            and slippage_optimistic_bps == 0,
+        },
+        "cost_model": {
+            "symbol": symbol,
+            "commission": {
+                "verified": commission_verified,
+                "per_lot_usd": asset.commission_per_lot_usd,
+                "side": asset.commission_side,
+                "source": commission_source,
+                "source_date": asset.source_date,
+                "effective_from": asset.effective_from,
+                "source_url": asset.source_url,
+                "median_bps": commission_median,
+                "verified_at": "2026-11-08",
+            },
+            "spread": {
+                "source": "MT5 bars: columna spread, mediana por hora",
+                "hourly": True,
+                "median_bps": (
+                    float(np.median([row["spread_bps_median"] for row in outcomes]))
+                    if outcomes
+                    else None
+                ),
+                "reliable": all(row["spread_reliable"] for row in outcomes),
+            },
+            "slippage": {
+                "optimistic_bps": float(slippage_optimistic_bps),
+                "conservative_bps": float(slippage_bps),
+                "assumption": asset.slippage_assumption,
+            },
+            "calibrated_cost_bps_median": (
+                float(np.median(calibrated_values)) if calibrated_values else None
+            ),
+            "breakeven_definition": (
+                "bps uniformes por unidad de turnover a los que el Sharpe neto "
+                "cruza 0; 0 si el Sharpe bruto ya es <= 0"
+            ),
         },
         "spread_reliable": all(row["spread_reliable"] for row in outcomes),
         "pbo": pbo,
@@ -418,6 +592,13 @@ def run_intraday(
 
 
 def render_markdown(report: dict) -> str:
+    costs = report.get("costs") or {}
+    model = report.get("cost_model") or {}
+    commission = model.get("commission") or {}
+    spread_model = model.get("spread") or {}
+    slippage = model.get("slippage") or {}
+    commission_bps = costs.get("commission_bps_median")
+    spread_bps = spread_model.get("median_bps")
     lines = [
         "# Investigación intradía forex/CFD",
         "",
@@ -426,14 +607,23 @@ def render_markdown(report: dict) -> str:
         f"- Perfil: {report['profile']} · DSR n_trials={report['n_trials']}",
         f"- Spread realista: {'sí' if report['spread_reliable'] else 'NO — resultados no confiables'}",
         (
-            f"- Costes: comisión {report.get('costs', {}).get('commission_bps', 1.0):g} bps"
-            f" + slippage {report.get('costs', {}).get('slippage_bps', 2.0):g} bps"
-            f" + spread {report.get('costs', {}).get('spread_override_bps') if report.get('costs', {}).get('spread_override_bps') is not None else 'observado'}"
+            f"- Comisión: {commission_bps:.3f} bps/lado · "
+            f"{commission.get('source') or 'sin verificar'}"
+            f"{' · ' + str(commission.get('source_date')) if commission.get('source_date') else ''}"
+        ),
+        (
+            f"- Spread: {spread_bps:.3f} bps (mediana; {spread_model.get('source') or 'sin datos'})"
+            if spread_bps is not None
+            else "- Spread: sin datos"
+        ),
+        (
+            f"- Slippage: optimista {slippage.get('optimistic_bps')} bps / "
+            f"conservador {slippage.get('conservative_bps')} bps por lado"
         ),
         (
             "- **Diagnóstico zero-cost: no usar para aprobar estrategias.**"
-            if report.get("costs", {}).get("diagnostic_zero_costs")
-            else "- Modelo de costes normal."
+            if costs.get("diagnostic_zero_costs")
+            else "- Modelo de costes calibrado; el avance usa el escenario conservador."
         ),
         f"- PBO: {report['pbo']['pbo']:.1%}" if report.get("pbo") else "- PBO: sin datos",
         f"- Walk-forward: {report['walk_forward_verdict']}",
@@ -455,6 +645,31 @@ def render_markdown(report: dict) -> str:
             f"{'ok' if row['regime_gate']['passed'] else 'no'} | "
             f"{'sí' if row['spread_reliable'] else 'no'} | "
             f"{'sí' if row['passed'] else 'no'} |"
+        )
+    def _cost_text(value: float | None) -> str:
+        return "—" if value is None else f"{value:.2f}"
+
+    lines += [
+        "",
+        "## Coste de equilibrio",
+        "",
+        "> Coste uniforme en bps por unidad de turnover. 0 bps = bruto; "
+        "el avance solo usa el escenario conservador.",
+        "",
+        "| Estrategia | Parámetros | 0 bps | 0.5 bps | 1 bps | 2 bps | 3 bps | Equilibrio | Calibrado | Pasa |",
+        "|---|---|---|---|---|---|---|---|---|---|",
+    ]
+    for row in report["outcomes"]:
+        curve = row.get("cost_curve_bps") or {}
+        breakeven = row.get("breakeven_cost_bps")
+        lines.append(
+            f"| {row['strategy']} | `{row['params']}` | "
+            f"{_cost_text(curve.get('0.0'))} | {_cost_text(curve.get('0.5'))} | "
+            f"{_cost_text(curve.get('1.0'))} | {_cost_text(curve.get('2.0'))} | "
+            f"{_cost_text(curve.get('3.0'))} | "
+            f"{'sin cruce' if breakeven is None else f'{breakeven:.2f}'} | "
+            f"{_cost_text(row.get('calibrated_cost_bps'))} | "
+            f"{'sí' if row.get('passed') else 'no'} |"
         )
     lines += [
         "",
@@ -488,6 +703,7 @@ __all__ = [
     "STRATEGIES",
     "asian_range_reversal",
     "backtest_intraday",
+    "break_even_cost_bps",
     "cache_file",
     "cache_metadata",
     "load_bars",

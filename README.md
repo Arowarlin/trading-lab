@@ -648,19 +648,32 @@ El informe anterior, generado con offset constante, queda conservado como
 **no fiable: offset constante** en
 `reports/research/intraday_offset_constante.json` y `.md`; no se borró.
 
-Resultado con el offset corregido:
+Resultado con el offset corregido y costes calibrados:
 
 - `lab research-intraday --symbol EURUSD --timeframe M15`: **0/28 pasan**;
-  mejor Sharpe neto **−8,19**, PBO 0,0 % con `prob_oos_loss=100 %` y
+  mejor Sharpe neto **−6,78**, PBO 0,0 % con `prob_oos_loss=100 %` y
   walk-forward **fallido**.
-- Variante de diagnóstico con comisión, slippage y spread en cero: mejor
-  Sharpe bruto **+1,34** (pullback), pero PBO **39,4 %**, walk-forward
-  fallido y régimen no aprobado; 0/28 pasan.
-- La misma pullback pasa de +1,34 bruto a −24,79 neto; la mejor neta (ORB)
-  tiene bruto −0,91. **Los costes explican el desplome neto, pero no hay edge
-  bruto robusto**; la alineación de sesiones ya está verificada.
+- Comisión **EURUSD**: **2,50 USD/lote/lado** según la tabla oficial de FTMO
+  (“Trading Update | 25 Sep 2025”, publicada el 2025-09-25, vigente desde
+  2025-09-29):
+  https://ftmo.com/en/blog/trading-updates/trading-update-25-sep-2025/
+  El coste mediano resultante es **0,217 bps/lado**.
+- Spread real por hora: mediana **0,853 bps** en M15.
+- Slippage explícito por lado: **optimista 0,5 bps** / **conservador 2,0 bps**
+  (órdenes a mercado; no incluye huecos de apertura ni fines de semana).
+- **Coste de equilibrio** (bps uniformes por unidad de turnover donde el
+  Sharpe neto cruza 0): mejor variante **0,32 bps**; coste calibrado mediano
+  **3,72 bps**. La tabla del informe y de Research muestra Sharpe a
+  **0 / 0,5 / 1 / 2 / 3 bps** por variante.
+- Variante de diagnóstico sin costes: mejor Sharpe bruto **+1,34**, pero PBO
+  **39,4 %**, walk-forward fallido y régimen no aprobado; 0/28 pasan.
+- La pullback de mejor bruto pasa de +1,34 a −24,79 neto; la mejor neta (ORB)
+  tiene bruto −0,91. **Los costes explican el desplome neto y el equilibrio
+  está muy por debajo del coste calibrado; no hay edge bruto robusto**.
+  La alineación de sesiones ya está verificada.
 
 No se relajó ningún umbral, no se activó ningún bot y no se enviaron órdenes.
+Un candidato solo avanza con el escenario conservador; 0 bps es diagnóstico.
 
 ```powershell
 # datos corregidos por periodo
@@ -670,23 +683,25 @@ lab research-intraday --symbol EURUSD --timeframe M15
 
 # diagnóstico de costes (no usar para aprobar)
 lab research-intraday --symbol EURUSD --timeframe M15 `
-  --commission-bps 0 --slippage-bps 0 --zero-spread `
-  --out reports/research/intraday_zero_costs
+  --commission-bps 0 --slippage-bps 0 --slippage-optimistic-bps 0 `
+  --zero-spread --out reports/research/intraday_zero_costs
 ```
 
 - Cachea velas ya corregidas a UTC en `data/cache/mt5/EURUSD_M15.parquet`.
-- Modela spread por hora desde la columna `spread`, más slippage conservador y
-  comisión. Si no hay spread realista, marca `spread_reliable=false` y los
-  resultados como **no confiables**.
+- `config/costs.yaml` contiene la comisión oficial por activo y el supuesto de
+  slippage. Si falta la comisión de un activo, se marca **sin verificar** y no
+  se inventa: `run_intraday` no continúa con ese símbolo.
+- Modela spread por hora desde la columna `spread`. Si no hay spread realista,
+  marca `spread_reliable=false` y los resultados como **no confiables**.
 - Estrategias: ruptura de rango de apertura (Londres/NY), tendencia con
   retroceso y reversión del rango asiático; cada una con rejilla acotada.
 - Pasa por DSR, PBO, walk-forward y regímenes con los mismos umbrales; reporta
   trades y cuántas pasan (puede ser cero). Monte Carlo a 22/44/120 días.
 
 Evidencia: `pytest tests/test_mt5_offsets.py tests/test_intraday.py -q` →
-**11 passed**; suite completa **423 passed**; `ruff` limpio; `lab doctor` OK.
-Los tests sintéticos cubren el cambio de hora de EE. UU. (offset +2/+3) y que
-una sesión de 08:00 UTC siga siendo 08:00 UTC antes y después del cambio.
+**15 passed**; suite completa **428 passed**; `ruff` limpio; `lab doctor` OK.
+Los tests sintéticos cubren el cambio de hora de EE. UU. (offset +2/+3), que
+una sesión de 08:00 UTC siga siendo 08:00 UTC y el coste de equilibrio.
 
 Futuros intradía: perfil definido y proveedor ProjectX como **stub**; no se
 implementa descarga de pago. Ver `docs/fase6_futuros_intradia.md`.
@@ -759,7 +774,7 @@ La tabla también está en **Research → Resultados por perfil**.
 | Perfil | Estado | Retorno | Sharpe | MaxDD | Pasa FTMO 120d | Breach | Nota |
 |---|---|---|---|---|---|---|---|
 | `swing_equity` | validado | 81.1% | 1.03 | -9.2% | 70.6% | 3.5% | cartera de 3 bots; 0/10 variantes frágiles a 2/20 bps |
-| `intraday_fx` | validado · sin edge | — | — | — | — | — | offset por periodo; neto mejor −8,19 / bruto +1,34; 0/28; WF fallido; PBO bruto 39,4% |
+| `intraday_fx` | validado · sin edge | — | — | — | — | — | offset por periodo; neto mejor −6,78 / bruto +1,34; equilibrio 0,32 vs calibrado 3,72 bps; 0/28; WF fallido |
 | `intraday_futures` | stub | — | — | — | — | — | ProjectX sin credenciales/suscripción; proxy diario ES=F/NQ=F |
 
 ### Etapa 5 completada y corregida (intradía forex/CFD)
@@ -770,12 +785,16 @@ borrarla. La versión corregida infiere +2/+3 por semana desde los bordes
 semanales y confirma las transiciones de EE. UU. (apertura 22:00 UTC en
 invierno, 21:00 en verano). Datos: M15 50.000 barras y H1 20.000, spread real.
 
-Con la conversión corregida, **0/28 variantes pasan**, el mejor Sharpe neto es
-**−8,19**, el walk-forward falla y el PBO neto es 0,0 % con
-`prob_oos_loss=100%`. La variante de diagnóstico sin costes da un mejor Sharpe
-bruto **+1,34**, pero PBO 39,4 % y walk-forward fallido: los costes explican el
-desplome neto, pero el bruto tampoco es un edge robusto. No se relajó ningún
-umbral y no se activó ningún bot.
+Con la conversión corregida y costes calibrados, **0/28 variantes pasan**, el
+mejor Sharpe neto es **−6,78**, el walk-forward falla y el PBO neto es 0,0 %
+con `prob_oos_loss=100%`. La comisión oficial de EURUSD es 2,50 USD/lote/lado
+(0,217 bps/lado), el spread real mediano es 0,853 bps y el slippage conservador
+es 2,0 bps/lado. El **coste de equilibrio** de la mejor variante es **0,32 bps**
+frente a un coste calibrado mediano de **3,72 bps**: el margen es negativo.
+La variante sin costes da un mejor Sharpe bruto **+1,34**, pero PBO 39,4 % y
+walk-forward fallido: los costes explican el desplome neto, pero el bruto
+tampoco es un edge robusto. Solo avanza el escenario conservador; no se relajó
+ningún umbral y no se activó ningún bot.
 
 ### Resumen final de decisiones
 

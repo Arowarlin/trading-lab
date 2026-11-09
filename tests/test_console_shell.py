@@ -162,6 +162,20 @@ def test_componentes_v3_presentes() -> None:
         assert marker in text, marker
 
 
+def test_research_muestra_coste_de_equilibrio() -> None:
+    text = INDEX.read_text(encoding="utf-8")
+    for marker in (
+        "Coste de equilibrio",
+        "0.5 bps",
+        "cost_curve_bps",
+        "breakeven_cost_bps",
+        "calibrated_cost_bps",
+        "SIN VERIFICAR",
+        "slippage opt",
+    ):
+        assert marker in text, marker
+
+
 def test_formato_gauges_performers_y_regimen() -> None:
     text = INDEX.read_text(encoding="utf-8")
     for marker in (

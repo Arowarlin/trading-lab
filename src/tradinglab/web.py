@@ -1608,9 +1608,15 @@ class LabData:
         spread_ok = intraday.get("spread_reliable")
         if intraday.get("outcomes"):
             fx_status = "validado" if spread_ok else "no confiable"
+            model = intraday.get("cost_model") or {}
+            commission = model.get("commission") or {}
+            calibrated = model.get("calibrated_cost_bps_median")
             fx_note = (
                 f"{passed}/{trials} variantes pasan; spread "
-                f"{'realista' if spread_ok else 'no realista'}."
+                f"{'realista' if spread_ok else 'no realista'}; comisión "
+                f"{'verificada' if commission.get('verified') else 'SIN VERIFICAR'}; "
+                f"coste calibrado "
+                f"{'sin datos' if calibrated is None else f'{calibrated:.2f} bps'}."
             )
         else:
             fx_status = "pendiente"

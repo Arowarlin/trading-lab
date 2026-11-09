@@ -4737,8 +4737,15 @@ def research_intraday_cmd(
     timeframe: str = typer.Option("M15", "--timeframe"),
     paths: int = typer.Option(500, "--paths"),
     point: float = typer.Option(0.0001, "--point"),
-    commission_bps: float = typer.Option(1.0, "--commission-bps"),
-    slippage_bps: float = typer.Option(2.0, "--slippage-bps"),
+    commission_bps: float | None = typer.Option(
+        None, "--commission-bps", help="Override diagnóstico; por defecto, tabla por activo"
+    ),
+    slippage_bps: float | None = typer.Option(
+        None, "--slippage-bps", help="Slippage conservador por lado"
+    ),
+    slippage_optimistic_bps: float | None = typer.Option(
+        None, "--slippage-optimistic-bps", help="Slippage optimista por lado"
+    ),
     zero_spread: bool = typer.Option(
         False, "--zero-spread", help="Diagnóstico: coste de spread 0"
     ),
@@ -4753,16 +4760,21 @@ def research_intraday_cmd(
     except FileNotFoundError as exc:
         console.print(f"[red]{exc}[/red] Ejecuta: lab mt5 fetch {symbol} --timeframe {timeframe}")
         raise typer.Exit(1)
-    report = run_intraday(
-        df,
-        symbol=symbol,
-        timeframe=timeframe,
-        paths=paths,
-        point=point,
-        commission_bps=commission_bps,
-        slippage_bps=slippage_bps,
-        spread_override_bps=0.0 if zero_spread else None,
-    )
+    try:
+        report = run_intraday(
+            df,
+            symbol=symbol,
+            timeframe=timeframe,
+            paths=paths,
+            point=point,
+            commission_bps=commission_bps,
+            slippage_bps=slippage_bps,
+            slippage_optimistic_bps=slippage_optimistic_bps,
+            spread_override_bps=0.0 if zero_spread else None,
+        )
+    except Exception as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(1) from exc
     files = write(report, Path(out) if out else ROOT / "reports" / "research")
     best = max(
         report["outcomes"],
@@ -4775,10 +4787,36 @@ def research_intraday_cmd(
         else "Mejor Sharpe: sin datos"
     )
     costs = report.get("costs") or {}
+    model = report.get("cost_model") or {}
+    slippage = model.get("slippage") or {}
+    commission_median = costs.get("commission_bps_median") or 0.0
+    source = costs.get("commission_source") or "sin verificar"
+    verified = "sí" if costs.get("commission_verified") else "NO"
+    calibrated = model.get("calibrated_cost_bps_median")
+    break_even_row = max(
+        (
+            row
+            for row in report["outcomes"]
+            if row.get("breakeven_cost_bps") is not None
+        ),
+        key=lambda row: row["breakeven_cost_bps"],
+        default=None,
+    )
+    break_even = (
+        break_even_row.get("breakeven_cost_bps") if break_even_row else None
+    )
+    break_even_label = (
+        f"{break_even:.2f} bps ({break_even_row['strategy']})"
+        if break_even is not None
+        else "sin cruce"
+    )
     cost_text = (
-        f"Costes: comisión {costs.get('commission_bps', 0):g} bps · "
-        f"slippage {costs.get('slippage_bps', 0):g} bps · "
-        f"spread {'0' if costs.get('spread_override_bps') == 0 else 'observado'} bps"
+        f"Comisión: {commission_median:.3f} bps/lado · {source} · verificada={verified}\n"
+        f"Slippage: opt {slippage.get('optimistic_bps', 0):g} / "
+        f"cons {slippage.get('conservative_bps', 0):g} bps · "
+        f"spread {'0' if costs.get('spread_override_bps') == 0 else 'observado'} bps\n"
+        f"Mejor equilibrio: {break_even_label} · "
+        f"calibrado mediano: {'—' if calibrated is None else f'{calibrated:.2f}'} bps"
     )
     pbo_text = (
         f"PBO: {report['pbo']['pbo']:.1%}"

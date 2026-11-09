@@ -5592,8 +5592,12 @@ function renderIntraday(i) {
     if (meta) meta.textContent = "sin tabla";
     return;
   }
+  const model = i.cost_model || {};
+  const commission = model.commission || {};
+  const slippage = model.slippage || {};
+  const verified = Boolean(commission.verified);
   if (meta) {
-    meta.textContent = `${i.symbol} · ${i.timeframe} · ${i.bars?.rows || 0} barras · ${i.bars?.years || 0} años · spread ${i.spread_reliable ? "ok" : "NO confiable"}`;
+    meta.textContent = `${i.symbol} · ${i.timeframe} · ${i.bars?.rows || 0} barras · ${i.bars?.years || 0} años · spread ${i.spread_reliable ? "ok" : "NO confiable"} · comisión ${verified ? "verificada" : "SIN VERIFICAR"}`;
   }
   const rows = (i.outcomes || []).map((r) => [
     `<b>${esc(r.strategy)}</b> <span class="muted tiny">${esc(paramsText(r.params))}</span>`,
@@ -5606,12 +5610,38 @@ function renderIntraday(i) {
     r.spread_reliable ? `<span class="tag green">sí</span>` : `<span class="tag red">no</span>`,
     r.passed ? `<span class="tag green">sí</span>` : `<span class="tag">no</span>`,
   ]);
+  const costRows = (i.outcomes || []).map((r) => {
+    const curve = r.cost_curve_bps || {};
+    const breakeven = r.breakeven_cost_bps;
+    return [
+      `<b>${esc(r.strategy)}</b> <span class="muted tiny">${esc(paramsText(r.params))}</span>`,
+      num(curve["0.0"], 2),
+      num(curve["0.5"], 2),
+      num(curve["1.0"], 2),
+      num(curve["2.0"], 2),
+      num(curve["3.0"], 2),
+      breakeven === null || breakeven === undefined ? "sin cruce" : num(breakeven, 2),
+      num(r.calibrated_cost_bps, 2),
+      r.passed ? `<span class="tag green">sí</span>` : `<span class="tag">no</span>`,
+    ];
+  });
+  const sourceText = verified
+    ? `${esc(commission.source || "sin fuente")} · ${esc(commission.source_date || "sin fecha")}`
+    : "<b>SIN VERIFICAR: no se inventa la comisión.</b>";
+  const calibrated = model.calibrated_cost_bps_median;
   box.innerHTML = `<div class="note" style="margin:0 0 8px">Pasan <b>${fmtInt.format(i.passed || 0)}</b> / ${fmtInt.format((i.outcomes || []).length)} · PBO ${pct(i.pbo?.pbo, 1)} · WF ${esc(i.walk_forward_verdict || "—")} · DSR n=${fmtInt.format(i.n_trials || 0)}. ${i.spread_reliable ? "" : "<b>Sin spread realista: resultados no confiables.</b>"}</div>` +
     grid([
       { label: "Estrategia" }, { label: "Trades", num: true }, { label: "Sharpe", num: true },
       { label: "MaxDD", num: true }, { label: "DSR", num: true }, { label: "WF" },
       { label: "Régimen" }, { label: "Spread" }, { label: "Pasa" },
-    ], rows, { empty: "sin datos" });
+    ], rows, { empty: "sin datos" }) +
+    `<div class="panel-head" style="margin-top:14px"><h2>Coste de equilibrio</h2><span class="muted tiny">${calibrated == null ? "sin datos" : `calibrado ${num(calibrated, 2)} bps`}</span></div>` +
+    `<div class="note" style="margin:0 0 8px">Comisión ${num(commission.median_bps, 3)} bps/lado · ${sourceText} · slippage opt ${num(slippage.optimistic_bps, 1)} / cons ${num(slippage.conservative_bps, 1)} bps. El avance usa solo el escenario conservador.</div>` +
+    grid([
+      { label: "Estrategia" }, { label: "0 bps", num: true }, { label: "0.5 bps", num: true },
+      { label: "1 bps", num: true }, { label: "2 bps", num: true }, { label: "3 bps", num: true },
+      { label: "Equilibrio", num: true }, { label: "Calibrado", num: true }, { label: "Pasa" },
+    ], costRows, { empty: "sin datos" });
 }
 
 function showResearchDetail(row) {

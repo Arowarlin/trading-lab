@@ -292,14 +292,21 @@ real, sin tocar `.env` y sin borrar archivos.
     H1: 20.000 barras, 2023-08-21 14:00 → 2026-11-08 23:00 UTC, 8 tramos.
     Parquet UTC sin duplicados, `NaN` ni OHLC inválido; spread mediano 1/2
     puntos y `spread_reliable=True`.
-  - Neto corregido: **0/28 pasan**, mejor Sharpe **−8,19**, PBO 0,0 % con
+  - Neto corregido: **0/28 pasan**, mejor Sharpe **−6,78**, PBO 0,0 % con
     `prob_oos_loss=100 %`, walk-forward fallido.
+  - Costes por activo: comisión EURUSD **2,50 USD/lote/lado** de la tabla
+    oficial de FTMO (“Trading Update | 25 Sep 2025”, 2025-09-25, vigente
+    2025-09-29; **0,217 bps/lado**), spread real horario (0,853 bps mediana)
+    y slippage explícito optimista 0,5 / conservador 2,0 bps por lado.
+  - Coste de equilibrio: mejor variante **0,32 bps**, coste calibrado mediano
+    **3,72 bps**; tabla de Sharpe a 0/0,5/1/2/3 bps en informe y Research.
   - Diagnóstico sin costes: mejor bruto **+1,34**, pero PBO 39,4 % y WF
-    fallido; la misma pullback cae a −24,79 neto y la mejor neta (ORB) tiene
-    bruto −0,91. Los costes explican el desplome, sin edge bruto robusto.
+    fallido; la pullback cae a −24,79 neto y la mejor neta (ORB) tiene bruto
+    −0,91. Los costes explican el desplome y el equilibrio es menor que el
+    coste calibrado; sin edge bruto robusto.
   - Alineación verificada: aperturas semanales 22:00 UTC (invierno) y 21:00
-    UTC (verano). No se relajó ningún umbral, no se activó ningún bot y no se
-    enviaron órdenes.
+    UTC (verano). Solo avanza el escenario conservador. No se relajó ningún
+    umbral, no se activó ningún bot y no se enviaron órdenes.
 - [x] **9.6 Documentación** — 2026-11-07
   - README 6d con cuentas, reglas, seguridad, panel, resultados por perfil y
     estado de la etapa 5; tabla por perfil también en Research.
@@ -855,6 +862,7 @@ operador ni datos. Inventario base en `docs/ui_inventory.json` y test
 | 2026-11-08 | UI v3 Etapa 3 | `pytest tests/test_console_shell.py -q` -> 7 passed; `pytest -q` -> 412 passed; equity SVG con cruz/marcas/bandas, heatmaps PnL y correlacion, sin curvas inventadas |
 | 2026-11-08 | UI v3 Etapa 4 | `pytest tests/test_console_shell.py -q` -> 8 passed; `pytest -q` -> 413 passed; foco visible, skip-link, aria-current, flechas, Ctrl+K, responsive 390px y refresco 8s sin re-render |
 | 2026-11-08 | 9.5 inicial (NO FIABLE: offset constante) | `lab mt5 status` -> offset +2.00 detectado; M15 50k + H1 20k; `lab research-intraday` -> 0/28, WF fallido, spread real; sin activar bots |
-| 2026-11-08 | 9.5 offset corregido | `pytest tests/test_mt5_offsets.py tests/test_intraday.py -q` -> 11 passed; offset por periodo +2/+3 (5 tramos M15, 8 H1); neto mejor -8.19, bruto +1.34; 0/28; WF fallido |
+| 2026-11-08 | 9.5 offset corregido | `pytest tests/test_mt5_offsets.py tests/test_intraday.py -q` -> 11 passed; offset por periodo +2/+3 (5 tramos M15, 8 H1); neto mejor -6.78, bruto +1.34, equilibrio 0.32 vs calibrado 3.72 bps; 0/28; WF fallido |
+| 2026-11-08 | 9.5 costes calibrados | `pytest tests/test_intraday.py tests/test_console_shell.py -q` -> 20 passed; comision oficial FTMO 2.50 USD/lote/lado; spread horario + slippage opt/cons; tabla Sharpe 0/0.5/1/2/3 y equilibrio |
 | 2026-11-08 | UI formato/metricas | `pytest tests/test_console_js.py tests/test_console_shell.py -q` -> 11 passed; `pytest -q` -> 416 passed; gauges restantes, cero negativo, moneda agrupada, salud parcial, performers y regimen compacto |
 |  |  |  |
