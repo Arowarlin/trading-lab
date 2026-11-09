@@ -8,7 +8,11 @@ Fecha: 2026-11-09.
 - `wsl --status` sigue fallando hasta reiniciar.
 - La tarea `TradingLab-Resume` reabrirá Windows Terminal y la sesión exacta
   `ses_e5220563affelHrJU9DmgfjCb3` de OpenCode después del login.
-- La descarga de Qwen3-30B-A3B se reanuda con:
+- `scripts/reboot_after_download.ps1` espera a que termine la descarga del MoE y
+programa el reinicio con 120 s de aviso; si el modelo no aparece, no reinicia.
+Si hay que cancelar: `shutdown /a`.
+
+La descarga de Qwen3-30B-A3B se reanuda con:
   `lms get qwen/qwen3-30b-a3b@q4_k_m -y --gguf`.
 - Los datos están en `E:\trading-lab\data\lab.db` y las cachés en
   `E:\trading-lab\data\cache`; no están en la unidad del sistema.

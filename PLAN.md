@@ -636,7 +636,7 @@ limpio; `lab doctor` OK. Sin dependencias nuevas.
 - [x] **CLI**
   - `lab library list [--status]` y `lab library show <id> [--json]`.
 - Evidencia: `pytest tests/test_library.py -q` → 4 passed; suite completa
-  **527 passed**; `ruff` limpio; `lab doctor` OK. Sin dependencias nuevas.
+  **528 passed**; `ruff` limpio; `lab doctor` OK. Sin dependencias nuevas.
 
 ## Etapa 7 — Optuna y QuantStats (2026-11-08)
 
@@ -1032,7 +1032,7 @@ etapa.
     el default ni envía órdenes.
   - La ejecución real contra un MoE ~30B queda pendiente porque no hay ese
     modelo cargado en LM Studio.
-- Evidencia: suite completa **527 passed**; `ruff` limpio; `lab doctor` OK con
+- Evidencia: suite completa **528 passed**; `ruff` limpio; `lab doctor` OK con
   WARN conocidos; `lab f13 config-check` OK. Verificación real: Finnhub `ok`,
   10 noticias nuevas y scoring 3/3 con `qwen/qwen3.8-27b` sin inválidas y
   latencia real 62-96 s por lote.
@@ -1063,7 +1063,7 @@ etapa.
     tras el reinicio; guía en `docs/reinicio_wsl.md`.
   - Se mantiene sin claves Tauric ni cambios de Telegram.
 - Evidencia: `pytest tests/test_ticks.py tests/test_continuous.py
-  tests/test_engine.py -q` → 18 passed; suite completa **527 passed**; `ruff` limpio;
+  tests/test_engine.py -q` → 18 passed; suite completa **528 passed**; `ruff` limpio;
   `lab f13 config-check` OK. Sin órdenes.
 
 ---
@@ -1152,7 +1152,7 @@ etapa.
 | 2026-11-09 | Incubadora Etapa 5 | `pytest tests/test_lifecycle.py -q` -> 7 passed; `pytest -q` -> 465 passed; estados, gate, criterios congelados, reporte forward y limite concurrente; sin activar bots |
 | 2026-11-09 | Procedencia Etapa 6 | `pytest tests/test_agent_compare.py tests/test_decisions.py tests/test_scripts.py -q` -> 19 passed; `pytest -q` -> 474 passed; comparacion lite/deep, procedencia, reporte por fuente y scripts nocturnos sin registrar |
 | 2026-11-09 | UI Etapa 7 | `pytest tests/test_web.py tests/test_console_shell.py tests/test_console_js.py tests/test_agent_compare.py tests/test_lifecycle.py -q` -> 46 passed; `pytest -q` -> 477 passed; vista Activo, Incubadora, lite/deep y desglose por fuente; 17 vistas/267 ids/34 API sin retirar las anteriores |
-| 2026-11-09 | Fases 4-5 | `pytest -q` -> 527 passed; Finnhub real ok + 10 noticias; scoring Qwen 3/3 (62-96 s/lote); `llm status` con schema_ok; `ruff`/doctor/f13 OK; MoE real bloqueado por modelo no cargado |
+| 2026-11-09 | Fases 4-5 | `pytest -q` -> 528 passed; Finnhub real ok + 10 noticias; scoring Qwen 3/3 (62-96 s/lote); `llm status` con schema_ok; `ruff`/doctor/f13 OK; MoE real bloqueado por modelo no cargado |
 | 2026-11-09 | CFD specs F6 | `lab mt5 spec XAUUSD` y `US100.cash` -> tick 0.01, contratos 100/1, volumen min 0.01, trade_mode 4; API MT5 sin sesiones |
 | 2026-11-09 | Biblioteca fuentes | `pytest tests/test_library.py -q` -> 4 passed; 18 fichas; ResearchGate, Google Scholar y SSRN como consulta manual, sin scraping ni paywalls |
 | 2026-11-09 | F9c/F15 | `pytest tests/test_ticks.py tests/test_continuous.py tests/test_engine.py -q` -> 19 passed; suite 513; ticks EURUSD 15.997 y 0.29 bps; DeepCompare Ready |

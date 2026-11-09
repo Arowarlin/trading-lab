@@ -2226,7 +2226,7 @@ lab library show dsr
 ```
 
 Evidencia: `pytest tests/test_library.py -q` → **4 passed**; suite completa
-**527 passed**; `ruff` limpio; `lab doctor` OK. Sin dependencias nuevas ni
+**528 passed**; `ruff` limpio; `lab doctor` OK. Sin dependencias nuevas ni
 automatización de scraping.
 
 ---
@@ -2305,7 +2305,7 @@ rollover/vencimiento. `continuous.stitch_continuous` une contratos ajustando
 el salto por ratio o diferencia; los tests cubren ambos métodos.
 
 Evidencia: `pytest tests/test_ticks.py tests/test_continuous.py
-tests/test_engine.py -q` → **18 passed**; suite completa **527 passed**;
+tests/test_engine.py -q` → **18 passed**; suite completa **528 passed**;
 `ruff` limpio. Sin descarga de datos de pago ni órdenes.
 
 ---

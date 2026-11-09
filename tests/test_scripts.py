@@ -97,6 +97,16 @@ def test_premarket_scripts_nativos_sin_trading_r1():
     assert "sin ordenes" in register.lower()
 
 
+def test_reboot_after_download_no_reinicia_sin_modelo():
+    script = (ROOT / "scripts" / "reboot_after_download.ps1").read_text(
+        encoding="utf-8"
+    )
+    assert "qwen3-30b-a3b" in script
+    assert "shutdown.exe /r /t 120" in script
+    assert "no aparece; no se reinicia" in script
+    assert "shutdown /a" in script
+
+
 def test_resume_after_reboot_reabre_sesion_exacta():
     resume = (ROOT / "scripts" / "resume_after_reboot.ps1").read_text(
         encoding="utf-8"
