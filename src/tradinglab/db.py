@@ -82,7 +82,9 @@ CREATE TABLE IF NOT EXISTS llm_calls (
     completion_tokens INTEGER,
     latency_ms INTEGER,
     ok INTEGER NOT NULL,
-    error TEXT
+    error TEXT,
+    schema_ok INTEGER,
+    schema_error TEXT
 );
 
 CREATE TABLE IF NOT EXISTS events (
@@ -220,6 +222,27 @@ CREATE TABLE IF NOT EXISTS agent_comparisons (
     lite_error TEXT,
     deep_error TEXT,
     UNIQUE(ticker, decision_date, retrospective)
+);
+
+CREATE TABLE IF NOT EXISTS lite_model_comparisons (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts TEXT NOT NULL,
+    ticker TEXT NOT NULL,
+    decision_date TEXT NOT NULL,
+    model_a TEXT NOT NULL,
+    model_b TEXT NOT NULL,
+    rating_a TEXT,
+    confidence_a REAL,
+    elapsed_a REAL,
+    rating_b TEXT,
+    confidence_b REAL,
+    elapsed_b REAL,
+    agreement INTEGER,
+    prompt_hash_a TEXT,
+    prompt_hash_b TEXT,
+    error_a TEXT,
+    error_b TEXT,
+    UNIQUE(ticker, decision_date, model_a, model_b)
 );
 
 CREATE TABLE IF NOT EXISTS news_items (
@@ -574,6 +597,7 @@ def init_db(path: str | Path) -> None:
         _migrate_equity(con)
         _migrate_bot_evaluations(con)
         _migrate_decision_outcomes(con)
+        _migrate_llm_calls(con)
 
 
 def _migrate_equity(con: sqlite3.Connection) -> None:
@@ -617,6 +641,17 @@ def _migrate_decision_outcomes(con: sqlite3.Connection) -> None:
         con.execute("ALTER TABLE decision_outcomes ADD COLUMN analysts TEXT")
     if columns and "duration_s" not in columns:
         con.execute("ALTER TABLE decision_outcomes ADD COLUMN duration_s REAL")
+
+
+def _migrate_llm_calls(con: sqlite3.Connection) -> None:
+    """Añade el resultado de validación de esquema sin perder llamadas."""
+    columns = [
+        row["name"] for row in con.execute("PRAGMA table_info(llm_calls)").fetchall()
+    ]
+    if columns and "schema_ok" not in columns:
+        con.execute("ALTER TABLE llm_calls ADD COLUMN schema_ok INTEGER")
+    if columns and "schema_error" not in columns:
+        con.execute("ALTER TABLE llm_calls ADD COLUMN schema_error TEXT")
 
 
 def log_event(path: str | Path, level: str, source: str, message: str, data: str | None = None) -> None:

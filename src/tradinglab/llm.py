@@ -8,11 +8,99 @@ from typing import Any
 import httpx
 
 from .config import LLMSettings
-from .db import connect, utcnow
+from .db import connect, init_db, utcnow
 
 
 class LLMError(RuntimeError):
     pass
+
+
+class LLMSchemaError(LLMError):
+    pass
+
+
+def _type_name(value: Any) -> str:
+    if value is None:
+        return "null"
+    if isinstance(value, bool):
+        return "boolean"
+    if isinstance(value, int):
+        return "integer"
+    if isinstance(value, float):
+        return "number"
+    if isinstance(value, str):
+        return "string"
+    if isinstance(value, list):
+        return "array"
+    if isinstance(value, dict):
+        return "object"
+    return type(value).__name__
+
+
+def _matches_type(value: Any, expected: str) -> bool:
+    if expected == "object":
+        return isinstance(value, dict)
+    if expected == "array":
+        return isinstance(value, list)
+    if expected == "string":
+        return isinstance(value, str)
+    if expected == "integer":
+        return isinstance(value, int) and not isinstance(value, bool)
+    if expected == "number":
+        return isinstance(value, (int, float)) and not isinstance(value, bool)
+    if expected == "boolean":
+        return isinstance(value, bool)
+    if expected == "null":
+        return value is None
+    return True
+
+
+def validate_schema(value: Any, schema: dict, path: str = "$") -> None:
+    """Valida el subconjunto de JSON Schema usado por los agentes."""
+    if not isinstance(schema, dict):
+        return
+    expected = schema.get("type")
+    if isinstance(expected, list):
+        if not any(_matches_type(value, item) for item in expected):
+            raise LLMSchemaError(f"{path}: se esperaba {expected}, llegó {_type_name(value)}")
+    elif expected and not _matches_type(value, str(expected)):
+        raise LLMSchemaError(
+            f"{path}: se esperaba {expected}, llegó {_type_name(value)}"
+        )
+    if "enum" in schema and value not in schema["enum"]:
+        raise LLMSchemaError(f"{path}: valor fuera del enum")
+    if isinstance(value, str):
+        if "maxLength" in schema and len(value) > int(schema["maxLength"]):
+            raise LLMSchemaError(f"{path}: texto demasiado largo")
+        if "minLength" in schema and len(value) < int(schema["minLength"]):
+            raise LLMSchemaError(f"{path}: texto demasiado corto")
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        if "minimum" in schema and value < schema["minimum"]:
+            raise LLMSchemaError(f"{path}: valor por debajo del mínimo")
+        if "maximum" in schema and value > schema["maximum"]:
+            raise LLMSchemaError(f"{path}: valor por encima del máximo")
+    if isinstance(value, dict):
+        required = schema.get("required") or []
+        for key in required:
+            if key not in value:
+                raise LLMSchemaError(f"{path}: falta {key}")
+        properties = schema.get("properties") or {}
+        if schema.get("additionalProperties") is False:
+            extra = set(value) - set(properties)
+            if extra:
+                raise LLMSchemaError(f"{path}: campos no permitidos: {sorted(extra)}")
+        for key, child in properties.items():
+            if key in value:
+                validate_schema(value[key], child, f"{path}.{key}")
+    if isinstance(value, list):
+        if "minItems" in schema and len(value) < int(schema["minItems"]):
+            raise LLMSchemaError(f"{path}: demasiados pocos elementos")
+        if "maxItems" in schema and len(value) > int(schema["maxItems"]):
+            raise LLMSchemaError(f"{path}: demasiados elementos")
+        item_schema = schema.get("items")
+        if isinstance(item_schema, dict):
+            for index, item in enumerate(value):
+                validate_schema(item, item_schema, f"{path}[{index}]")
 
 
 class LLMClient:
@@ -21,6 +109,19 @@ class LLMClient:
     def __init__(self, cfg: LLMSettings, db_path: str | Path | None = None) -> None:
         self.cfg = cfg
         self.db_path = Path(db_path) if db_path else None
+        self._last_call_id: int | None = None
+
+    def _record_schema(self, ok: bool, error: str | None) -> None:
+        if not self.db_path or self._last_call_id is None:
+            return
+        try:
+            with connect(self.db_path) as con:
+                con.execute(
+                    "UPDATE llm_calls SET schema_ok=?, schema_error=? WHERE id=?",
+                    (1 if ok else 0, error[:500] if error else None, self._last_call_id),
+                )
+        except Exception:
+            pass
 
     def _headers(self) -> dict[str, str]:
         return {"Authorization": f"Bearer {self.cfg.api_key}", "Content-Type": "application/json"}
@@ -90,6 +191,7 @@ class LLMClient:
         ok = False
         error: str | None = None
         prompt_tokens = completion_tokens = None
+        self._last_call_id = None
 
         try:
             with httpx.Client(timeout=self.cfg.timeout_s) as client:
@@ -117,9 +219,10 @@ class LLMClient:
             if self.db_path:
                 try:
                     with connect(self.db_path) as con:
-                        con.execute(
-                            "INSERT INTO llm_calls(ts, model, purpose, prompt_tokens, completion_tokens, "
-                            "latency_ms, ok, error) VALUES(?,?,?,?,?,?,?,?)",
+                        cursor = con.execute(
+                            "INSERT INTO llm_calls(ts, model, purpose, prompt_tokens, "
+                            "completion_tokens, latency_ms, ok, error) "
+                            "VALUES(?,?,?,?,?,?,?,?)",
                             (
                                 utcnow(),
                                 self.cfg.model,
@@ -131,6 +234,7 @@ class LLMClient:
                                 error,
                             ),
                         )
+                        self._last_call_id = int(cursor.lastrowid)
                 except Exception:
                     pass
 
@@ -167,9 +271,18 @@ class LLMClient:
             raw = self.chat(messages, purpose=purpose, response_format=None)
 
         try:
-            return json.loads(_strip_fences(raw))
+            value = json.loads(_strip_fences(raw))
+            if schema:
+                validate_schema(value, schema)
         except json.JSONDecodeError as exc:
-            raise LLMError(f"JSON inválido: {raw[:400]}") from exc
+            message = f"JSON inválido: {raw[:400]}"
+            self._record_schema(False, message)
+            raise LLMError(message) from exc
+        except LLMSchemaError as exc:
+            self._record_schema(False, str(exc))
+            raise
+        self._record_schema(True, None)
+        return value
 
 
 def _strip_fences(text: str) -> str:
@@ -183,3 +296,44 @@ def _strip_fences(text: str) -> str:
     if inner.lower().startswith("json"):
         inner = inner[4:]
     return inner.strip()
+
+
+def schema_summary(db_path: str | Path) -> dict:
+    """Conteo explícito de llamadas con esquema válido, fallido o sin validar."""
+    init_db(db_path)
+    with connect(db_path) as con:
+        row = con.execute(
+            "SELECT COUNT(*) AS total, "
+            "SUM(CASE WHEN schema_ok=1 THEN 1 ELSE 0 END) AS ok, "
+            "SUM(CASE WHEN schema_ok=0 THEN 1 ELSE 0 END) AS failed, "
+            "SUM(CASE WHEN schema_ok IS NULL THEN 1 ELSE 0 END) AS unchecked "
+            "FROM llm_calls"
+        ).fetchone()
+        recent = con.execute(
+            "SELECT ts, model, purpose, schema_error FROM llm_calls "
+            "WHERE schema_ok=0 ORDER BY id DESC LIMIT 10"
+        ).fetchall()
+        by_model = con.execute(
+            "SELECT model, COUNT(*) AS n, "
+            "SUM(CASE WHEN schema_ok=0 THEN 1 ELSE 0 END) AS failed "
+            "FROM llm_calls WHERE schema_ok IS NOT NULL "
+            "GROUP BY model ORDER BY n DESC"
+        ).fetchall()
+    return {
+        "total_calls": int(row["total"] or 0),
+        "checked": int((row["ok"] or 0) + (row["failed"] or 0)),
+        "ok": int(row["ok"] or 0),
+        "failed": int(row["failed"] or 0),
+        "unchecked": int(row["unchecked"] or 0),
+        "recent_failures": [dict(item) for item in recent],
+        "by_model": [dict(item) for item in by_model],
+    }
+
+
+__all__ = [
+    "LLMClient",
+    "LLMError",
+    "LLMSchemaError",
+    "schema_summary",
+    "validate_schema",
+]

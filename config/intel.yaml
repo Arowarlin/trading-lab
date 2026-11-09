@@ -1,5 +1,10 @@
 # Fuentes de información continua (solo lectura).
-# No se usa ninguna API con clave en esta fase.
+# Finnhub usa FINNHUB_API_KEY desde keyring/.env; nunca se escribe aquí.
+scoring:
+  # ID exacto cargado en LM Studio; no cambia el modelo por defecto del lab.
+  model: "qwen/qwen3.8-27b"
+  limit: 20
+  batch_size: 8
 feeds:
   yahoo-spy:
     url: "https://feeds.finance.yahoo.com/rss/2.0/headline?s=SPY&region=US&lang=en-US"

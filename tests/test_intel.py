@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import httpx
+import pytest
+
 from tradinglab.db import init_db
 from tradinglab.intel.news import (
     fetch_rss,
@@ -59,6 +62,51 @@ def test_fetch_rss_usa_cliente():
             return Response()
 
     assert len(fetch_rss("https://example.com/rss", "test", client=Client())) == 2
+
+
+def test_fetch_rss_reintenta_solo_fallos_transitorios():
+    class Response:
+        text = SAMPLE
+
+        def __init__(self, status=200):
+            self.status_code = status
+
+        def raise_for_status(self):
+            if self.status_code >= 400:
+                raise httpx.HTTPStatusError(
+                    "fallo",
+                    request=httpx.Request("GET", "https://example.com/rss"),
+                    response=httpx.Response(
+                        self.status_code,
+                        request=httpx.Request("GET", "https://example.com/rss"),
+                    ),
+                )
+
+    class Flaky:
+        def __init__(self):
+            self.calls = 0
+
+        def get(self, url):
+            self.calls += 1
+            if self.calls == 1:
+                raise httpx.ConnectError(
+                    "sin red", request=httpx.Request("GET", url)
+                )
+            return Response()
+
+    client = Flaky()
+    assert len(fetch_rss("https://example.com/rss", "test", client=client, retries=1)) == 2
+    assert client.calls == 2
+
+    class NotFound(Flaky):
+        def get(self, url):
+            self.calls += 1
+            return Response(404)
+
+    client = NotFound()
+    with pytest.raises(httpx.HTTPStatusError):
+        fetch_rss("https://example.com/rss", "test", client=client, retries=2)
+    assert client.calls == 1
 
 
 def test_wrap_untrusted_no_obedece():

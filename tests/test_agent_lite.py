@@ -92,3 +92,28 @@ def test_lite_agent_maps_valid_rating(tmp_path, monkeypatch):
     )
     assert result["rating"] == "Overweight"
     assert result["horizon_days"] == 30
+
+
+def test_lite_agent_permite_modelo_alternativo_sin_cambiar_default(tmp_path, monkeypatch):
+    monkeypatch.setattr(lite, "fetch", lambda *a, **k: frame())
+    client = FakeClient(
+        {
+            "rating": "Hold",
+            "confidence": 0.5,
+            "thesis": "sin señal",
+            "risks": "ninguno",
+            "horizon_days": 20,
+        }
+    )
+    settings = get_settings()
+    default_model = settings.llm.model
+    result = lite.run_lite_agent(
+        "NVDA",
+        "2026-11-05",
+        settings,
+        client=client,
+        out_dir=tmp_path,
+        model="moe-30b-test",
+    )
+    assert result["model"] == "moe-30b-test"
+    assert settings.llm.model == default_model

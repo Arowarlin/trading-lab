@@ -102,12 +102,13 @@ def test_f13_dry_run_alpaca_evalua_filtros_y_no_envia(monkeypatch, tmp_path):
     monkeypatch.setattr(orch, "session_block", fake_session)
     monkeypatch.setattr(orch, "check_order", fake_guard)
 
-    # El bot deshabilitado no debe ejecutarse por defecto.
+    # Un bot deshabilitado no debe ejecutarse por defecto. F13 está activo en
+    # paper y se prueba aparte con include_disabled=True.
     assert (
         orch.run_all(
             settings,
             broker,
-            only="qqq-trend-f13",
+            only="meanrev-large",
             dry_run=True,
         )
         == []

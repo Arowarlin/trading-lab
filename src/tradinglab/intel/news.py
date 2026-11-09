@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import html
 import re
+import time
 from dataclasses import dataclass
 from datetime import timezone
 from email.utils import parsedate_to_datetime
@@ -96,19 +97,44 @@ def parse_rss(xml_text: str, source: str, *, limit: int = 30) -> list[NewsItem]:
     return items
 
 
+RETRY_STATUSES = frozenset({429, 500, 502, 503, 504})
+
+
+def _retryable(exc: Exception) -> bool:
+    if isinstance(exc, httpx.HTTPStatusError):
+        return exc.response.status_code in RETRY_STATUSES
+    return isinstance(exc, (httpx.TransportError, TimeoutError))
+
+
 def fetch_rss(
     url: str,
     source: str,
     *,
     limit: int = 30,
     client: httpx.Client | None = None,
+    retries: int = 2,
+    backoff_s: float = 0.5,
 ) -> list[NewsItem]:
+    """Descarga RSS con reintentos solo para fallos transitorios."""
     own = client is None
-    http = client or httpx.Client(timeout=15, follow_redirects=True, headers={"User-Agent": "TradingLab/0.1"})
+    http = client or httpx.Client(
+        timeout=15,
+        follow_redirects=True,
+        headers={"User-Agent": "TradingLab/0.1"},
+    )
+    attempts = max(1, int(retries) + 1)
     try:
-        response = http.get(url)
-        response.raise_for_status()
-        return parse_rss(response.text, source, limit=limit)
+        for attempt in range(attempts):
+            try:
+                response = http.get(url)
+                response.raise_for_status()
+                return parse_rss(response.text, source, limit=limit)
+            except Exception as exc:
+                if attempt >= attempts - 1 or not _retryable(exc):
+                    raise
+                if backoff_s > 0:
+                    time.sleep(float(backoff_s) * (2**attempt))
+        raise RuntimeError("fetch_rss sin intentos")  # pragma: no cover
     finally:
         if own:
             http.close()

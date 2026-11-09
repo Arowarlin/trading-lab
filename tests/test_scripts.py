@@ -55,6 +55,17 @@ def test_agents_daily_incluye_decisions_update():
     assert "--execute" not in script.lower()
 
 
+def test_intel_daily_con_scoring_y_finnhub_opcionales():
+    script = (ROOT / "scripts" / "intel_daily.ps1").read_text(encoding="utf-8")
+    assert "param(" in script
+    assert "[switch]$Finnhub" in script
+    assert "[switch]$Score" in script
+    assert "intel finnhub" in script
+    assert "intel score" in script
+    assert "orchestrate" not in script.lower()
+    assert "--execute" not in script.lower()
+
+
 def test_telegram_scripts_preparados_sin_registrar():
     bridge = (ROOT / "scripts" / "telegram_bridge.ps1").read_text(encoding="utf-8")
     assert "telegram bridge" in bridge

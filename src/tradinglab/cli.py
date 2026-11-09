@@ -97,6 +97,10 @@ lifecycle_app = typer.Typer(
     no_args_is_help=True,
     help="Incubadora: estados, criterios congelados y reporte forward.",
 )
+llm_app = typer.Typer(
+    no_args_is_help=True,
+    help="LLM local: validación de esquema y comparación de modelos lite.",
+)
 risk_budget_app = typer.Typer(
     no_args_is_help=True,
     help="Riesgo neto por activo, clúster USD y rebanadas por bot.",
@@ -117,6 +121,7 @@ app.add_typer(fund_app, name="fund")
 app.add_typer(operator_app, name="operator")
 app.add_typer(risk_budget_app, name="risk-budget")
 app.add_typer(lifecycle_app, name="lifecycle")
+app.add_typer(llm_app, name="llm")
 app.add_typer(lessons_app, name="lessons")
 app.add_typer(reports_app, name="reports")
 app.add_typer(markets_app, name="markets")
@@ -433,8 +438,8 @@ def doctor(network: bool = typer.Option(False, "--network", help="Probar descarg
                 table.add_row(
                     "Contexto LLM",
                     WARN,
-                    f"{ctx:,} tokens: los agentes necesitan ≥16k. Recarga el modelo "
-                    "con --context-length 32768.",
+                    f"{ctx:,} tokens: los agentes necesitan 16k o más. Recarga "
+                    "el modelo con --context-length 32768.",
                 )
             if models and settings.llm.model not in models:
                 table.add_row(
@@ -1153,6 +1158,121 @@ def status() -> None:
         console.print(t)
 
 
+@llm_app.command("status")
+def llm_status_cmd() -> None:
+    """Llamadas LLM con esquema válido, fallido o sin validar."""
+    from .llm import schema_summary
+
+    summary = schema_summary(DEFAULT_DB)
+    t = Table(title="Validación de esquema LLM")
+    t.add_column("Campo", style="bold")
+    t.add_column("Valor", justify="right")
+    t.add_row("Llamadas", str(summary["total_calls"]))
+    t.add_row("Validadas", str(summary["checked"]))
+    t.add_row("OK", str(summary["ok"]))
+    t.add_row("Fallidas", str(summary["failed"]))
+    t.add_row("Sin validar", str(summary["unchecked"]))
+    console.print(t)
+    if summary["by_model"]:
+        m = Table(title="Por modelo")
+        for col in ("Modelo", "N", "Fallidas"):
+            m.add_column(col, overflow="fold")
+        for row in summary["by_model"]:
+            m.add_row(str(row["model"]), str(row["n"]), str(row["failed"] or 0))
+        console.print(m)
+    if summary["recent_failures"]:
+        f = Table(title="Últimos fallos de esquema")
+        for col in ("Fecha", "Modelo", "Propósito", "Error"):
+            f.add_column(col, overflow="fold")
+        for row in summary["recent_failures"]:
+            f.add_row(
+                str(row["ts"])[:19],
+                str(row["model"] or "—"),
+                str(row["purpose"] or "—"),
+                str(row["schema_error"] or "")[:120],
+            )
+        console.print(f)
+    elif not summary["failed"]:
+        console.print("[green]Sin fallos de esquema registrados.[/green]")
+
+
+@llm_app.command("compare")
+def llm_compare_cmd(
+    ticker: str = typer.Argument(..., help="Símbolo, p. ej. SPY"),
+    models: str = typer.Option(
+        ..., "--models", help="Dos modelos separados por coma: actual,candidato"
+    ),
+) -> None:
+    """Compara dos modelos en modo lite; no cambia el default ni envía órdenes."""
+    from .model_compare import ModelCompareError, report, run_comparison
+
+    names = [item.strip() for item in models.split(",") if item.strip()]
+    try:
+        row = run_comparison(DEFAULT_DB, ticker, names, settings=get_settings())
+    except ModelCompareError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2) from exc
+    t = Table(title=f"Comparación lite · {ticker.upper()}")
+    for col in ("Modelo", "Rating", "Confianza", "Duración", "Error"):
+        t.add_column(col, overflow="fold")
+    for side in ("a", "b"):
+        t.add_row(
+            str(row[f"model_{side}"]),
+            str(row[f"rating_{side}"] or "sin datos"),
+            "—"
+            if row[f"confidence_{side}"] is None
+            else f"{float(row[f'confidence_{side}']):.0%}",
+            "—"
+            if row[f"elapsed_{side}"] is None
+            else f"{float(row[f'elapsed_{side}']):.1f}s",
+            str(row[f"error_{side}"] or "—"),
+        )
+    console.print(t)
+    console.print(
+        f"Acuerdo: {'sí' if row['agreement'] else 'no'} · "
+        f"hash {str(row['prompt_hash_a'])[:12]}… vs {str(row['prompt_hash_b'])[:12]}…"
+    )
+    summary = report(DEFAULT_DB)
+    if summary["insufficient"]:
+        console.print(f"[yellow]{summary['sample_warning']}.[/yellow]")
+    else:
+        console.print(
+            f"Acuerdo acumulado: {summary['agreement_rate']:.0%} "
+            f"({summary['n']} comparaciones)."
+        )
+
+
+@llm_app.command("report")
+def llm_report_cmd() -> None:
+    """Reporte acumulado de comparaciones entre modelos lite."""
+    from .model_compare import report
+
+    summary = report(DEFAULT_DB)
+    if not summary["n"]:
+        console.print("[yellow]Sin datos: no hay comparaciones de modelos.[/yellow]")
+        return
+    console.print(
+        f"Comparaciones: [bold]{summary['n']}[/bold] · acuerdo "
+        f"[bold]{summary['agreement_rate']:.0%}[/bold] · diferencia media de "
+        f"confianza {summary['mean_confidence_diff'] if summary['mean_confidence_diff'] is not None else 'sin datos'}"
+    )
+    t = Table(title="Por modelo")
+    for col in ("Modelo", "N", "Errores", "Confianza media"):
+        t.add_column(col, overflow="fold")
+    for row in summary["by_model"]:
+        t.add_row(
+            str(row["model"]),
+            str(row["n"]),
+            str(row["errors"]),
+            "—"
+            if row["mean_confidence"] is None
+            else f"{float(row['mean_confidence']):.0%}",
+        )
+    console.print(t)
+    if summary["insufficient"]:
+        console.print(f"[yellow]{summary['sample_warning']}.[/yellow]")
+
+
 @app.command("llm-test")
 def llm_test(
     prompt: str = typer.Option(
@@ -1177,7 +1297,7 @@ def llm_test(
             if ctx < 16_384:
                 console.print(
                     "[yellow]Aviso:[/yellow] los agentes de TradingAgents necesitan "
-                    "≥16k. Recarga con: lms load qwen3.8-27b --context-length 32768"
+                    "16k o más. Recarga con: lms load qwen3.8-27b --context-length 32768"
                 )
     except Exception as exc:
         console.print(f"[red]No se pudo conectar:[/red] {exc}")
@@ -2106,6 +2226,7 @@ def sec_facts_cmd(ticker: str = typer.Argument(..., help="Ticker, ej. NVDA")) ->
 def intel_fetch_cmd(
     source: str = typer.Option(None, "--source", help="Feed concreto de config/intel.yaml"),
     limit: int = typer.Option(30, "--limit"),
+    retries: int = typer.Option(2, "--retries", help="Reintentos por fallo transitorio"),
 ) -> None:
     """Descarga RSS, lo sanea y lo guarda con deduplicación. No ejecuta nada."""
     path = ROOT / "config" / "intel.yaml"
@@ -2118,24 +2239,47 @@ def intel_fetch_cmd(
         feeds = {source: feeds[source]}
 
     total = 0
+    attempted = 0
+    failures: list[str] = []
     for name, cfg in feeds.items():
         if not cfg.get("enabled", True):
             continue
+        attempted += 1
         try:
-            items = fetch_rss(cfg["url"], name, limit=limit)
+            items = fetch_rss(
+                cfg["url"], name, limit=limit, retries=max(0, retries)
+            )
             inserted = store_news(DEFAULT_DB, items)
             total += inserted
-            console.print(f"[green]{name}[/green] · {len(items)} vistos · {inserted} nuevos")
+            console.print(
+                f"[green]{name}[/green] · {len(items)} vistos · {inserted} nuevos"
+            )
         except Exception as exc:
+            failures.append(name)
             console.print(f"[red]{name}[/red] · {exc}")
     console.print(f"Total nuevos: {total} · texto externo saneado y trusted=false")
+    if failures:
+        console.print(f"[yellow]Fuentes con fallo:[/yellow] {', '.join(failures)}")
+    if attempted and len(failures) == attempted:
+        raise typer.Exit(1)
 
 
 @intel_app.command("status")
-def intel_status_cmd() -> None:
-    """Resumen de noticias almacenadas (sin puntuar todavía)."""
+def intel_status_cmd(
+    model: str = typer.Option(None, "--model", help="Modelo de scoring a consultar"),
+) -> None:
+    """Resumen de noticias almacenadas, scoring pendiente y proveedores."""
+    from .intel.news_scoring import news_score_summary, scoring_config
+
+    settings = get_settings()
+    active_model = model or scoring_config(settings)["model"]
     n = news_count(DEFAULT_DB)
-    console.print(f"Noticias almacenadas: [bold]{n}[/bold] · trusted=false")
+    summary = news_score_summary(DEFAULT_DB, model=active_model)
+    console.print(
+        f"Noticias almacenadas: [bold]{n}[/bold] · trusted=false · "
+        f"scoring [bold]{summary['scored']}[/bold] / pendientes "
+        f"[bold]{summary['pending']}[/bold] · modelo {active_model}"
+    )
     rows = recent_news(DEFAULT_DB, 8)
     if rows:
         t = Table(title="Últimas noticias saneadas")
@@ -2145,8 +2289,130 @@ def intel_status_cmd() -> None:
         for row in rows:
             t.add_row(str(row["source"]), str(row["published_at"] or "")[:19], str(row["title"]))
         console.print(t)
+    if summary["rows"]:
+        s = Table(title="Últimas puntuaciones")
+        s.add_column("Fuente")
+        s.add_column("Sentimiento", justify="right")
+        s.add_column("Relevancia", justify="right")
+        s.add_column("Titular", overflow="fold")
+        for row in summary["rows"][:8]:
+            s.add_row(
+                str(row["source"]),
+                f"{float(row['sentiment']):+.2f}",
+                f"{float(row['relevance']):.2f}",
+                str(row["title"]),
+            )
+        console.print(s)
     console.print(
-        "[dim]Calendario macro: FRED con `lab intel fred`; FOMC manual con `lab intel event`.[/dim]"
+        "[dim]Calendario macro: FRED con `lab intel fred`; FOMC manual con "
+        "`lab intel event`; proveedores con `lab intel providers`.[/dim]"
+    )
+
+
+@intel_app.command("score")
+def intel_score_cmd(
+    limit: int = typer.Option(20, "--limit", help="Máximo de noticias pendientes"),
+    batch_size: int = typer.Option(8, "--batch-size", help="Noticias por llamada"),
+    ticker: str = typer.Option(None, "--ticker", help="Activo objetivo; vacío = mercado"),
+    model: str = typer.Option(None, "--model", help="Modelo alternativo sin cambiar el default"),
+) -> None:
+    """Puntúa noticias pendientes con el LLM local. No ejecuta nada."""
+    from .intel.news_scoring import NewsScoringError, score_pending, scoring_config
+
+    settings = get_settings()
+    try:
+        result = score_pending(
+            DEFAULT_DB,
+            settings,
+            ticker=ticker,
+            limit=limit,
+            batch_size=batch_size,
+            model=model or scoring_config(settings)["model"],
+        )
+    except NewsScoringError as exc:
+        console.print(f"[red]Scoring falló:[/red] {exc}")
+        raise typer.Exit(1) from exc
+    if result["pending"] == 0:
+        console.print("[yellow]Sin datos: no hay noticias pendientes de scoring.[/yellow]")
+        return
+    console.print(
+        f"[green]Puntuadas {result['scored']}[/green] de {result['pending']} "
+        f"· lotes {result['batches']} · inválidas {result['invalid']} "
+        f"· ausentes {result['missing']} · modelo {result['model']}"
+    )
+    if result["missing"] or result["invalid"]:
+        console.print(
+            "[yellow]Respuesta parcial:[/yellow] no se inventaron puntuaciones "
+            "para las noticias ausentes."
+        )
+
+
+@intel_app.command("providers")
+def intel_providers_cmd(
+    check: bool = typer.Option(
+        False, "--check", help="Verifica Finnhub con una lectura de SPY"
+    ),
+) -> None:
+    """Estado de RSS, FRED, Finnhub y OpenBB; nunca imprime claves."""
+    from .intel.providers import provider_status
+
+    status = provider_status(check_finnhub=check)
+    t = Table(title="Proveedores de información")
+    for col in ("Proveedor", "Estado", "Detalle"):
+        t.add_column(col, overflow="fold")
+    rss = status["rss"]
+    t.add_row(
+        "RSS",
+        "ok" if rss["enabled"] else "sin feeds",
+        f"{rss['enabled']} activos de {rss['configured']} configurados",
+    )
+    fred = status["fred"]
+    t.add_row(
+        "FRED",
+        fred["status"],
+        "configurado; `lab intel fred`" if fred["configured"] else "falta FRED_API_KEY",
+    )
+    finnhub = status["finnhub"]
+    detail = finnhub["message"] or (
+        "configurado; usa --check" if finnhub["configured"] else "falta FINNHUB_API_KEY"
+    )
+    t.add_row("Finnhub", finnhub["status"], detail)
+    openbb = status["openbb"]
+    t.add_row(
+        "OpenBB",
+        openbb["status"],
+        "paquete instalado" if openbb["installed"] else "no instalado; no se usa",
+    )
+    console.print(t)
+    if check and finnhub["configured"] and not finnhub["verified"]:
+        raise typer.Exit(1)
+
+
+@intel_app.command("finnhub")
+def intel_finnhub_cmd(
+    limit: int = typer.Option(30, "--limit"),
+    category: str = typer.Option("general", "--category"),
+    retries: int = typer.Option(2, "--retries"),
+) -> None:
+    """Descarga noticias generales de Finnhub y las guarda saneadas."""
+    from .config import load_secrets
+    from .intel.finnhub import FinnhubError, fetch_news
+
+    load_secrets()
+    try:
+        items = fetch_news(
+            os.getenv("FINNHUB_API_KEY"),
+            category=category,
+            limit=limit,
+            retries=max(0, retries),
+        )
+    except FinnhubError as exc:
+        console.print(f"[red]Finnhub:[/red] {exc}")
+        raise typer.Exit(1) from exc
+    inserted = store_news(DEFAULT_DB, items)
+    console.print(
+        f"[green]Finnhub[/green] · {len(items)} vistas · {inserted} nuevas · "
+        "texto externo saneado y trusted=false"
     )
 
 

@@ -145,6 +145,7 @@ def run_lite_agent(
     client: LLMClient | None = None,
     start: str = "",
     out_dir: str | Path | None = None,
+    model: str | None = None,
 ) -> dict:
     """Una llamada al LLM con contexto técnico compacto. Devuelve la decisión."""
     day = analysis_date or date.today().isoformat()
@@ -166,7 +167,12 @@ def run_lite_agent(
         },
     ]
 
-    client = client or LLMClient(settings.llm, DEFAULT_DB)
+    llm_cfg = (
+        settings.llm.model_copy(update={"model": model})
+        if model
+        else settings.llm
+    )
+    client = client or LLMClient(llm_cfg, DEFAULT_DB)
     started = time.perf_counter()
     raw = client.chat_json(messages, purpose=f"agent-lite:{ticker}", schema=SCHEMA)
     elapsed = round(time.perf_counter() - started, 1)
@@ -182,7 +188,7 @@ def run_lite_agent(
         "decision": decision["thesis"],
         "risks": decision["risks"],
         "horizon_days": decision["horizon_days"],
-        "model": settings.llm.model,
+        "model": llm_cfg.model,
         "elapsed_s": elapsed,
         "context": context,
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
