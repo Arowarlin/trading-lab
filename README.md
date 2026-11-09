@@ -507,9 +507,10 @@ https://sim-api.tradestation.com/v3
 
 El adaptador ya está en **solo lectura**: refresh OAuth, cuentas, balances,
 posiciones y quotes. `lab tradestation setup` guarda Client ID, Client Secret,
-refresh token y Account ID en **keyring**; `status`, `accounts` y `positions`
-comprueban la conexión. Las funciones de órdenes solo responden `dry_run` y no
-envían nada.
+refresh token y Account ID en **keyring**; `lab tradestation auth-url` genera la
+URL OAuth y `lab tradestation exchange` intercambia el código por un refresh
+token sin imprimirlo. `status`, `accounts` y `positions` comprueban la conexión.
+Las funciones de órdenes solo responden `dry_run` y no envían nada.
 
 Bloqueado hasta que soporte TradeStation habilite la API Key. La cuenta de
 trading por sí sola no basta. No se asume forex en esta API; para FX/CFD se
@@ -2015,6 +2016,10 @@ SQLite. Si el último lunes esperado dentro de la ventana F13 no tiene ciclo,
 marca `f13_monday_missed` y envía la alerta; no hace falta esperar al chequeo
 de 72 h.
 
+`lab readiness` muestra en una sola tabla los días de F13 en paper, decisiones
+totales/con retorno 20d, cuántas faltan para la muestra mínima de 30, fallos de
+esquema LLM y macro de las próximas 48 h. No cambia umbrales ni opera.
+
 > **Activación controlada:** `lab f13 activate` exige F13 congelado, hash OK,
 > `mode=paper` y que el bot aún no esté activo. Edita **solo** la línea
 > `enabled` de `config/bots.yaml`, re-congela el hash con la nueva configuración
@@ -2226,7 +2231,7 @@ lab library show dsr
 ```
 
 Evidencia: `pytest tests/test_library.py -q` → **4 passed**; suite completa
-**528 passed**; `ruff` limpio; `lab doctor` OK. Sin dependencias nuevas ni
+**531 passed**; `ruff` limpio; `lab doctor` OK. Sin dependencias nuevas ni
 automatización de scraping.
 
 ---
@@ -2301,11 +2306,18 @@ lab research-intraday --symbol EURUSD --tick-spread data/cache/ticks/EURUSD_2025
 
 **Backtest.** `backtest.run` acepta `session=("09:30","16:00")`,
 `session_tz` y `flat_dates` para cerrar fuera de sesión o en días de
-rollover/vencimiento. `continuous.stitch_continuous` une contratos ajustando
-el salto por ratio o diferencia; los tests cubren ambos métodos.
+rollover/vencimiento. También está expuesto en CLI:
+
+```powershell
+lab backtest QQQ --session 09:30-16:00 --session-tz America/New_York
+lab futures stitch --old NQH26.parquet --new NQM26.parquet --roll 2026-03-20 --out NQ.continuous.parquet
+```
+
+`continuous.stitch_continuous` une contratos ajustando el salto por ratio o
+diferencia; los tests cubren ambos métodos.
 
 Evidencia: `pytest tests/test_ticks.py tests/test_continuous.py
-tests/test_engine.py -q` → **18 passed**; suite completa **528 passed**;
+tests/test_engine.py -q` → **18 passed**; suite completa **531 passed**;
 `ruff` limpio. Sin descarga de datos de pago ni órdenes.
 
 ---
