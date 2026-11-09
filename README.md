@@ -15,12 +15,12 @@ Entorno multi-bot de trading sobre **TradingAgents** y **Trading-R1**, con LLM l
 |---|---|---|
 | F0 | Infraestructura, venvs, repos, `uv`, `bun` | ✅ |
 | F1 | LM Studio sirviendo el modelo | ✅ descargado, cargado y `llm-test` OK |
-| F2 | Repos instalados y verificados | ✅ TradingAgents · ⚠ Trading-R1 requiere WSL |
+| F2 | Repos instalados y verificados | ✅ TradingAgents · ✅ Trading-R1 en WSL2 |
 | F3 | Núcleo del lab: config, SQLite, datos, riesgo | ✅ |
 | F4 | Backtester + estrategias deterministas | ✅ |
 | F5 | Alpaca paper + ejecución | ✅ validado (cuenta ACTIVE, equity 100k) |
 | F6 | TradingAgents como fuente de señal | ✅ `lite` validado (77 s) · `deep` opcional |
-| F7 | Trading-R1 (informes/Telegram) | ⏳ requiere WSL |
+| F7 | Trading-R1 (informes/Telegram) | 🟡 WSL2 + Trading-R1 operativos · ⏳ informe/Telegram |
 | F8 | Dashboard y observabilidad | ✅ `lab dashboard` (HTML) + `lab web` (consola v2: mercado, research, decisiones, repos) |
 | F9 | Núcleo multi-activo (forex, futuros, acciones) | ✅ |
 | F10 | MT5: datos, sizing, órdenes, hora de servidor | ✅ demo validada (abrir/cerrar) |
@@ -1585,37 +1585,42 @@ Evidencia: `pytest tests/test_learning.py -q` → **8 passed**; suite completa
 ## 7. Trading-R1 en Windows
 
 Trading-R1 usa `fcntl`, `os.O_NOFOLLOW` y `os.getuid()`: **no funciona en Windows**.
-Estado 2026-11-09: WSL **no está instalado** en este equipo; el repositorio
-`vendor/Trading-R1` está presente, pero no se puede ejecutar hasta instalar
-WSL2 + Ubuntu. No se ha descargado ni configurado ninguna clave Tauric.
+Estado 2026-11-09: WSL2 instalado (WSL 3.0.3, Ubuntu 24.04.5 LTS, usuario
+`pc`) y Trading-R1 0.1.1 en `~/.venv-r1`. LM Studio se alcanza con *mirrored
+networking* en `http://127.0.0.1:1234/v1` con `qwen3.8-27b`. No se ha
+configurado ninguna clave Tauric.
 
 Opciones, en orden recomendado:
 
-1. **WSL2** (recomendado):
+1. **WSL2** (instalado):
    ```powershell
-   wsl --install -d Ubuntu
+   wsl -d Ubuntu-24.04
    ```
-   Dentro de Ubuntu:
+   `C:\Users\PC\.wslconfig` activa `networkingMode=mirrored`, necesario para
+   llegar a LM Studio en `127.0.0.1:1234` desde WSL. El entorno queda en
+   `~/.bashrc` y `~/.profile` (`TR1_PROFILE=vllm`, `TR1_VLLM_BASE_URL`,
+   `TR1_VLLM_MODEL` y `~/.venv-r1/bin` en `PATH`).
+   ```bash
+   trading-r1 --profile vllm
+   ```
+   Reinstalación limpia dentro de Ubuntu:
    ```bash
    curl -LsSf https://astral.sh/uv/install.sh | sh
    uv venv --python 3.12 ~/.venv-r1
    uv pip install --python ~/.venv-r1/bin/python trading-r1
-   export TR1_VLLM_BASE_URL=http://$(ip route show default | awk '{print $3}'):1234/v1
-   export TR1_VLLM_MODEL=qwen3.8-27b
-   ~/.venv-r1/bin/trading-r1 --profile vllm
    ```
-   (En Windows 11 con *mirrored networking*, `localhost:1234` también funciona.)
+   Verificado: `/v1/models` y una inferencia real devolvieron HTTP 200.
 
 2. Contenedor Linux (requiere Docker Desktop, no instalado).
 
 3. Parchear `trading_r1/state/fileio.py` para Windows. No recomendado: hay más
    supuestos Unix en el proyecto.
 
-### Fallback nativo sin WSL
+### Fallback nativo
 
-Mientras WSL no esté listo, `lab premarket` genera el informe diario con Qwen
-local, datos de la caché, calendario macro y envío opcional a Telegram. No usa
-Trading-R1, no activa bots y no envía órdenes.
+`lab premarket` sigue disponible como alternativa sin Trading-R1: genera el
+informe diario con Qwen local, datos de la caché, calendario macro y envío
+opcional a Telegram. No activa bots y no envía órdenes.
 
 ```powershell
 lab premarket --tickers SPY,QQQ,NVDA --out logs\premarket\premarket.md
@@ -2343,8 +2348,8 @@ tests/test_engine.py -q` → **18 passed**; suite completa **531 passed**;
    (`news_blackout_min`, `weekend_holding`, `friday_cutoff_hour`,
    `rollover_blackout_min`) con tests de FOMC/NFP/CPI y cambios de hora.
 5. **F13** paper continuo 4-8 semanas → comparar contra SPY y decidir.
-6. **F7** Trading-R1 en WSL para el informe pre-market + Telegram → ⏳ WSL no
-   instalado; no se puede ejecutar todavía.
+6. **F7** Trading-R1 en WSL2 para el informe pre-market + Telegram → WSL2 y
+   Trading-R1 listos; falta validar el informe y el envío real por Telegram.
 7. ~~**F15** datos de ticks Dukascopy para modelar spread real en forex~~ → ✅
    descarga, decodificación e integración del spread horario en research;
    pendiente repetir el barrido real con el nuevo modelo de costes.
