@@ -533,12 +533,29 @@ def backtest(
     start: str = typer.Option(None, "--start", help="YYYY-MM-DD"),
     end: str = typer.Option(None, "--end", help="YYYY-MM-DD"),
     cash: float = typer.Option(100_000.0, "--cash", help="Capital inicial"),
+    session: str = typer.Option(
+        None, "--session", help="HH:MM-HH:MM para cerrar fuera de sesión"
+    ),
+    session_tz: str = typer.Option(
+        "UTC", "--session-tz", help="Zona de la sesión (p. ej. America/New_York)"
+    ),
+    flat_dates: str = typer.Option(
+        "", "--flat-dates", help="Fechas planas separadas por comas (rollover)"
+    ),
 ) -> None:
-    """Ejecuta un backtest con costes sobre datos diarios."""
+    """Ejecuta un backtest con costes; sesión/rollover opcionales."""
     settings = get_settings()
     if strategy not in STRATEGIES:
         console.print(f"[red]Estrategia desconocida:[/red] {strategy}. Opciones: {', '.join(STRATEGIES)}")
         raise typer.Exit(2)
+    session_bounds = None
+    if session:
+        parts = session.split("-", 1)
+        if len(parts) != 2 or not all(parts):
+            console.print("[red]--session debe ser HH:MM-HH:MM.[/red]")
+            raise typer.Exit(2)
+        session_bounds = (parts[0].strip(), parts[1].strip())
+    flat = [item.strip() for item in flat_dates.split(",") if item.strip()]
 
     df = data_mod.fetch(ticker.upper(), start or _default_start(), end or _today(), settings.data.cache_dir)
     result = STRATEGIES[strategy](df)
@@ -548,6 +565,9 @@ def backtest(
         starting_cash=cash,
         commission_bps=settings.execution.commission_bps,
         slippage_bps=settings.execution.slippage_bps,
+        session=session_bounds,
+        session_tz=session_tz,
+        flat_dates=flat,
     )
     m = bt.metrics
 
@@ -764,6 +784,56 @@ def premarket_cmd(
             console.print(f"[red]Telegram:[/red] {exc}")
             raise typer.Exit(1) from exc
         console.print("[green]Informe enviado a Telegram.[/green]")
+
+
+@app.command("readiness")
+def readiness_cmd() -> None:
+    """Muestra si F13/decisiones ya tienen muestra suficiente. Solo lectura."""
+    from .readiness import readiness
+
+    data = readiness(DEFAULT_DB, settings=get_settings())
+    table = Table(title=f"Readiness · {data['date']}")
+    table.add_column("Bloque", style="bold")
+    table.add_column("Estado", overflow="fold")
+    f13 = data.get("f13") or {}
+    table.add_row(
+        "F13",
+        (
+            f"{f13.get('bot') or 'sin datos'} · inicio {f13.get('start_date') or '—'} "
+            f"· {data.get('days_in_paper') or 0} días en paper"
+        ),
+    )
+    decisions = data["decisions"]
+    table.add_row(
+        "Decisiones",
+        f"{decisions['total']} totales · {decisions['with_20d']} con retorno 20d "
+        f"· faltan {decisions['needed']} para 30",
+    )
+    schema = data["llm_schema"]
+    table.add_row(
+        "Esquema LLM",
+        f"{schema['failed']} fallos de {schema['checked']} validadas",
+    )
+    if data["calendar"]:
+        table.add_row(
+            "Macro 48h",
+            "; ".join(
+                f"{row['ts_utc'][:16]} {row['event']} ({row['importance']})"
+                for row in data["calendar"][:4]
+            ),
+        )
+    else:
+        table.add_row("Macro 48h", "Sin datos")
+    console.print(table)
+    if decisions["total"] == 0:
+        console.print("[yellow]Sin datos de decisiones todavía.[/yellow]")
+    elif decisions["needed"]:
+        console.print(
+            f"[yellow]Muestra insuficiente: faltan {decisions['needed']} retornos "
+            "a 20 días.[/yellow]"
+        )
+    else:
+        console.print("[green]Muestra mínima de 30 retornos alcanzada.[/green]")
 
 
 @app.command("agent-compare")
@@ -4347,6 +4417,74 @@ def _trade_station_broker():
     return get_tradestation_broker(get_settings(), DEFAULT_DB, dry_run=True)
 
 
+@tradestation_app.command("auth-url")
+def tradestation_auth_url_cmd(
+    redirect_uri: str = typer.Option(
+        "http://localhost:3000/callback", "--redirect-uri"
+    ),
+    state: str = typer.Option("tradinglab", "--state"),
+) -> None:
+    """Muestra la URL de autorización OAuth de TradeStation."""
+    import os
+
+    from .config import load_secrets
+    from .execution.tradestation import authorize_url
+
+    load_secrets()
+    try:
+        url = authorize_url(
+            os.getenv("TRADESTATION_CLIENT_ID", ""),
+            redirect_uri=redirect_uri,
+            state=state,
+        )
+    except Exception as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2) from exc
+    console.print(url)
+
+
+@tradestation_app.command("exchange")
+def tradestation_exchange_cmd(
+    redirect_uri: str = typer.Option(
+        "http://localhost:3000/callback", "--redirect-uri"
+    ),
+) -> None:
+    """Intercambia el código OAuth y guarda el refresh token en keyring."""
+    import os
+
+    import keyring
+
+    from .config import KEYRING_SERVICE, load_secrets
+    from .execution.tradestation import exchange_code
+
+    load_secrets()
+    client_id = os.getenv("TRADESTATION_CLIENT_ID", "")
+    client_secret = os.getenv("TRADESTATION_CLIENT_SECRET", "")
+    if not client_id or not client_secret:
+        console.print("[red]Faltan Client ID/Secret; ejecuta setup o auth-url.[/red]")
+        raise typer.Exit(2)
+    code = typer.prompt("Authorization code", hide_input=True).strip()
+    try:
+        result = exchange_code(
+            client_id,
+            client_secret,
+            code,
+            redirect_uri=redirect_uri,
+        )
+    except Exception as exc:
+        console.print(f"[red]TradeStation OAuth:[/red] {exc}")
+        raise typer.Exit(1) from exc
+    keyring.set_password(
+        KEYRING_SERVICE,
+        "TRADESTATION_REFRESH_TOKEN",
+        result["refresh_token"],
+    )
+    console.print(
+        "[green]Refresh token guardado en keyring.[/green] "
+        "El access token no se persiste; expira en 20 minutos."
+    )
+
+
 @tradestation_app.command("status")
 def tradestation_status_cmd() -> None:
     """Comprueba OAuth y cuenta SIM; solo lectura."""
@@ -6077,6 +6215,37 @@ def futures_contracts(
             "sí" if c.get("activeContract") else "no",
         )
     console.print(t)
+
+
+@futures_app.command("stitch")
+def futures_stitch_cmd(
+    old: Path = typer.Option(..., "--old", help="Parquet del contrato antiguo"),
+    new: Path = typer.Option(..., "--new", help="Parquet del contrato nuevo"),
+    roll: str = typer.Option(..., "--roll", help="Fecha de roll YYYY-MM-DD"),
+    out: Path = typer.Option(..., "--out", help="Parquet continuo de salida"),
+    method: str = typer.Option("ratio", "--method", help="ratio | difference"),
+) -> None:
+    """Une dos contratos ajustando el salto de rollover (solo lectura)."""
+    from .continuous import ContinuousError, stitch_continuous
+
+    try:
+        old_frame = pd.read_parquet(old)
+        new_frame = pd.read_parquet(new)
+        continuous = stitch_continuous(
+            [(old.stem, old_frame), (new.stem, new_frame)],
+            [roll],
+            method=method,
+        )
+    except (OSError, ValueError, ContinuousError) as exc:
+        console.print(f"[red]Contratos continuos:[/red] {exc}")
+        raise typer.Exit(1) from exc
+    out.parent.mkdir(parents=True, exist_ok=True)
+    continuous.to_parquet(out)
+    console.print(
+        f"[green]Continuo guardado:[/green] {out} · {len(continuous)} barras · "
+        f"{continuous.index[0].date()} → {continuous.index[-1].date()} · "
+        f"método={method}"
+    )
 
 
 @futures_app.command("order")

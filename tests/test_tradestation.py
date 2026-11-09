@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from urllib.parse import parse_qs, urlparse
+
 import pytest
 
 from tradinglab.execution.tradestation import (
@@ -8,6 +10,8 @@ from tradinglab.execution.tradestation import (
     TradeStationBroker,
     TradeStationError,
     TradeStationIdentityError,
+    authorize_url,
+    exchange_code,
 )
 
 
@@ -159,6 +163,47 @@ def test_sin_refresh_token_es_error_claro():
     )
     with pytest.raises(TradeStationAuthError, match="faltan TRADESTATION"):
         broker.health()
+
+
+def test_authorize_url_y_exchange_code():
+    url = authorize_url("client-id", state="abc")
+    parsed = urlparse(url)
+    query = parse_qs(parsed.query)
+    assert parsed.netloc == "signin.tradestation.com"
+    assert query["client_id"] == ["client-id"]
+    assert query["state"] == ["abc"]
+    assert "offline_access" in query["scope"][0]
+
+    class OAuthClient:
+        def post(self, url, data=None, headers=None):
+            assert data["grant_type"] == "authorization_code"
+            assert data["code"] == "code-123"
+            return FakeResponse(
+                200,
+                {
+                    "access_token": "access",
+                    "refresh_token": "refresh",
+                    "expires_in": 1200,
+                    "scope": "openid offline_access",
+                },
+            )
+
+    result = exchange_code(
+        "client-id", "secret", "code-123", http=OAuthClient()
+    )
+    assert result["access_token"] == "access"
+    assert result["refresh_token"] == "refresh"
+    with pytest.raises(TradeStationAuthError, match="rechazó"):
+        exchange_code(
+            "client-id",
+            "secret",
+            "bad",
+            http=type(
+                "Denied",
+                (),
+                {"post": lambda *a, **k: FakeResponse(401)},
+            )(),
+        )
 
 
 def test_http_401_sin_segundo_token_no_filtra_secretos():

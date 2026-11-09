@@ -10,6 +10,7 @@ import os
 import time
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlencode
 
 import httpx
 
@@ -17,7 +18,9 @@ from ..config import load_secrets
 from ..db import connect, utcnow
 
 AUTH_TOKEN_URL = "https://signin.tradestation.com/oauth/token"
+AUTH_AUTHORIZE_URL = "https://signin.tradestation.com/authorize"
 SIM_MARKER = "sim-api.tradestation.com"
+DEFAULT_SCOPE = "openid offline_access ReadAccount Trade MarketData"
 
 
 class TradeStationError(RuntimeError):
@@ -53,6 +56,83 @@ def _first_number(payload: dict, *keys: str) -> float | None:
         except (TypeError, ValueError):
             continue
     return None
+
+
+def authorize_url(
+    client_id: str,
+    *,
+    redirect_uri: str = "http://localhost:3000/callback",
+    state: str = "tradinglab",
+    audience: str = "https://api.tradestation.com",
+    scope: str = DEFAULT_SCOPE,
+) -> str:
+    """URL de Auth Code Flow; no contiene secretos."""
+    if not client_id:
+        raise TradeStationAuthError("falta TRADESTATION_CLIENT_ID")
+    query = urlencode(
+        {
+            "response_type": "code",
+            "client_id": client_id,
+            "redirect_uri": redirect_uri,
+            "audience": audience,
+            "scope": scope,
+            "state": state,
+        }
+    )
+    return f"{AUTH_AUTHORIZE_URL}?{query}"
+
+
+def exchange_code(
+    client_id: str,
+    client_secret: str,
+    code: str,
+    *,
+    redirect_uri: str = "http://localhost:3000/callback",
+    http: httpx.Client | None = None,
+    auth_url: str = AUTH_TOKEN_URL,
+) -> dict:
+    """Intercambia el authorization code por access/refresh token."""
+    if not client_id or not client_secret:
+        raise TradeStationAuthError("faltan TRADESTATION_CLIENT_ID / CLIENT_SECRET")
+    if not code:
+        raise TradeStationAuthError("falta el authorization code")
+    own = http is None
+    client = http or httpx.Client(timeout=20)
+    try:
+        response = client.post(
+            auth_url,
+            data={
+                "grant_type": "authorization_code",
+                "client_id": client_id,
+                "client_secret": client_secret,
+                "code": code,
+                "redirect_uri": redirect_uri,
+            },
+            headers={"content-type": "application/x-www-form-urlencoded"},
+        )
+    except httpx.HTTPError as exc:
+        raise TradeStationAuthError(
+            f"TradeStation no disponible: {type(exc).__name__}"
+        ) from exc
+    finally:
+        if own:
+            client.close()
+    if response.status_code >= 400:
+        raise TradeStationAuthError(
+            f"TradeStation rechazó el código (HTTP {response.status_code})"
+        )
+    try:
+        payload = response.json()
+    except ValueError as exc:
+        raise TradeStationAuthError("respuesta OAuth no JSON") from exc
+    if not payload.get("access_token") or not payload.get("refresh_token"):
+        raise TradeStationAuthError("OAuth sin access_token o refresh_token")
+    return {
+        "access_token": payload["access_token"],
+        "refresh_token": payload["refresh_token"],
+        "expires_in": int(payload.get("expires_in", 1200)),
+        "scope": payload.get("scope"),
+    }
 
 
 class TradeStationBroker:
@@ -327,10 +407,14 @@ class TradeStationBroker:
 
 
 __all__ = [
+    "AUTH_AUTHORIZE_URL",
     "AUTH_TOKEN_URL",
+    "DEFAULT_SCOPE",
     "SIM_MARKER",
     "TradeStationAuthError",
     "TradeStationBroker",
     "TradeStationError",
     "TradeStationIdentityError",
+    "authorize_url",
+    "exchange_code",
 ]
