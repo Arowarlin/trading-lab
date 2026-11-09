@@ -195,6 +195,7 @@ def _variant_returns(
     params: dict,
     atr_series: pd.Series,
     *,
+    symbol: str,
     spread_bps: float,
     commission_bps: float,
     slippage_bps: float,
@@ -206,6 +207,7 @@ def _variant_returns(
     turnover = gross.copy()
     trades: list[dict] = []
     force_time = _parse_time(params.get("force_exit"), DEFAULT_FORCE_EXIT)
+    window_start = _parse_time(params.get("range_start"), DEFAULT_RANGE_START)
     for day in daily_dates:
         day_bars = bars[ny_dates == day]
         order = _order_for_day(day_bars, params, atr_series)
@@ -222,6 +224,11 @@ def _variant_returns(
             max_trades_per_day=int(params.get("max_trades_per_day", 1)),
             force_exit_time=force_time,
             session_offset_hours=_ny_offset(day),
+            symbol=symbol,
+            session_window=(window_start, force_time),
+            session_tz="America/New_York",
+            session_weekdays=(0, 1, 2, 3, 4),
+            asset_class="cfd",
         )
         if not result["trades"]:
             continue
@@ -353,6 +360,7 @@ def run_caja_ny(
             bars,
             params,
             atr_series,
+            symbol=symbol,
             spread_bps=spread_bps,
             commission_bps=0.0,
             slippage_bps=2.0,

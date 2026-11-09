@@ -55,6 +55,8 @@ from datetime import time
 import pandas as pd
 import pytest
 
+from tradinglab.prop.rules import PropRules
+
 
 def _bars(*rows: tuple[str, float, float, float, float]) -> pd.DataFrame:
     return pd.DataFrame(
@@ -102,6 +104,12 @@ def _run(bars: pd.DataFrame, orders: list[dict], **kwargs):
         "max_trades_per_day": 1,
         "force_exit_time": None,
         "session_offset_hours": 0.0,
+        "session_window": (time(0, 0), time(0, 0)),
+        "session_tz": "UTC",
+        "session_weekdays": (0, 1, 2, 3, 4),
+        "session_rules": None,
+        "asset_class": "cfd",
+        "symbol": None,
     }
     defaults.update(kwargs)
     return run_event_backtest(bars, orders, **defaults)
@@ -156,6 +164,73 @@ def test_misma_barra_stop_y_target_prioriza_stop():
     trade = result["trades"][0]
     assert trade["exit_reason"] == "stop"
     assert trade["exit_price"] == pytest.approx(99.0)
+
+
+# -------------------------------------------------------------- huecos de precio
+
+
+def test_stop_compra_con_hueco_abajo_fill_peor():
+    bars = _bars(
+        ("2026-11-09 09:15", 100.0, 101.0, 99.99, 100.5),
+        ("2026-11-09 09:30", 90.0, 92.0, 89.0, 91.0),
+    )
+    order = _order("buy", 100.0, 95.0, 110.0, expires="2026-11-09 10:00")
+    trade = _run(bars, [order])["trades"][0]
+    assert trade["exit_reason"] == "stop"
+    assert trade["exit_price"] == pytest.approx(90.0)
+
+
+def test_stop_venta_con_hueco_arriba_fill_peor():
+    bars = _bars(
+        ("2026-11-09 09:15", 100.0, 100.01, 99.0, 99.5),
+        ("2026-11-09 09:30", 110.0, 111.0, 108.0, 109.0),
+    )
+    order = _order("sell", 100.0, 105.0, 90.0, expires="2026-11-09 10:00")
+    trade = _run(bars, [order])["trades"][0]
+    assert trade["exit_reason"] == "stop"
+    assert trade["exit_price"] == pytest.approx(110.0)
+
+
+def test_objetivo_compra_no_regala_el_hueco():
+    bars = _bars(
+        ("2026-11-09 09:15", 100.0, 101.0, 99.9, 100.5),
+        ("2026-11-09 09:30", 120.0, 125.0, 119.0, 121.0),
+    )
+    order = _order("buy", 100.0, 95.0, 110.0, expires="2026-11-09 10:00")
+    trade = _run(bars, [order])["trades"][0]
+    assert trade["exit_reason"] == "target"
+    assert trade["exit_price"] == pytest.approx(110.0)
+
+
+def test_objetivo_venta_no_regala_el_hueco():
+    bars = _bars(
+        ("2026-11-09 09:15", 100.0, 100.1, 99.0, 99.5),
+        ("2026-11-09 09:30", 80.0, 81.0, 75.0, 79.0),
+    )
+    order = _order("sell", 100.0, 105.0, 90.0, expires="2026-11-09 10:00")
+    trade = _run(bars, [order])["trades"][0]
+    assert trade["exit_reason"] == "target"
+    assert trade["exit_price"] == pytest.approx(90.0)
+
+
+def test_entrada_limitada_compra_no_usa_hueco_favorable():
+    bars = _bars(
+        ("2026-11-09 09:15", 90.0, 95.0, 89.0, 94.0),
+        ("2026-11-09 09:30", 120.0, 125.0, 119.0, 121.0),
+    )
+    order = _order("buy", 100.0, 80.0, 120.0, expires="2026-11-09 10:00")
+    trade = _run(bars, [order])["trades"][0]
+    assert trade["entry_price"] == pytest.approx(100.0)
+
+
+def test_entrada_limitada_venta_no_usa_hueco_favorable():
+    bars = _bars(
+        ("2026-11-09 09:15", 110.0, 111.0, 105.0, 106.0),
+        ("2026-11-09 09:30", 80.0, 81.0, 75.0, 79.0),
+    )
+    order = _order("sell", 100.0, 120.0, 80.0, expires="2026-11-09 10:00")
+    trade = _run(bars, [order])["trades"][0]
+    assert trade["entry_price"] == pytest.approx(100.0)
 
 
 # ------------------------------------------------------------------- costes 4
@@ -319,6 +394,110 @@ def test_limitada_no_ejecutada_expira_y_no_pasa_al_dia_siguiente():
     result = _run(bars, [order])
     assert result["trades"] == []
     assert result["expired"] == 1
+
+
+def test_sesion_bloquea_barra_fuera_de_horario():
+    bars = _bars(("2026-11-09 08:00", 100.0, 101.0, 99.0, 100.5))
+    order = _order(
+        "buy",
+        100.0,
+        95.0,
+        110.0,
+        created="2026-11-09 07:00",
+        expires="2026-11-09 10:00",
+    )
+    result = _run(
+        bars,
+        [order],
+        session_window=(time(9, 0), time(17, 0)),
+        session_tz="UTC",
+        asset_class="cfd",
+    )
+    assert result["trades"] == []
+    assert result["session_skipped"] == 1
+
+
+def test_sesion_bloquea_rollover():
+    bars = _bars(("2026-11-09 21:00", 100.0, 101.0, 99.0, 100.5))
+    order = _order(
+        "buy",
+        100.0,
+        95.0,
+        110.0,
+        created="2026-11-09 20:00",
+        expires="2026-11-09 22:00",
+    )
+    rules = PropRules(
+        rollover_utc="21:00",
+        rollover_blackout_min=15,
+        weekend_holding=True,
+    )
+    result = _run(
+        bars,
+        [order],
+        session_window=(time(0, 0), time(0, 0)),
+        session_tz="UTC",
+        asset_class="cfd",
+        session_rules=rules,
+    )
+    assert result["trades"] == []
+    assert result["session_skipped"] == 1
+
+
+def test_sesion_bloquea_viernes_tras_corte():
+    bars = _bars(("2026-11-13 20:00", 100.0, 101.0, 99.0, 100.5))
+    order = _order(
+        "buy",
+        100.0,
+        95.0,
+        110.0,
+        created="2026-11-13 19:00",
+        expires="2026-11-13 21:00",
+    )
+    rules = PropRules(
+        weekend_holding=False,
+        friday_cutoff_hour=20,
+        reset_tz="Europe/Prague",
+    )
+    result = _run(
+        bars,
+        [order],
+        session_window=(time(0, 0), time(0, 0)),
+        session_tz="UTC",
+        asset_class="cfd",
+        session_rules=rules,
+    )
+    assert result["trades"] == []
+    assert result["session_skipped"] == 1
+
+
+def test_sesion_sin_datos_reporta_error():
+    bars = _bars(("2026-11-09 09:15", 100.0, 101.0, 99.0, 100.5))
+    order = _order("buy", 100.0, 95.0, 110.0)
+    result = _run(
+        bars,
+        [order],
+        session_window=None,
+        symbol="DESCONOCIDO",
+    )
+    assert result["trades"] == []
+    assert "sin datos de sesión" in result["session_error"]
+
+
+def test_sesion_infiere_24_5_del_simbolo():
+    bars = _bars(
+        ("2026-11-09 09:15", 100.0, 101.0, 99.0, 100.5),
+        ("2026-11-09 09:30", 120.0, 125.0, 119.0, 121.0),
+    )
+    order = _order("buy", 100.0, 95.0, 110.0, expires="2026-11-09 10:00")
+    result = _run(
+        bars,
+        [order],
+        session_window=None,
+        symbol="EURUSD",
+    )
+    assert len(result["trades"]) == 1
+    assert result["session_error"] is None
 
 
 def test_reconciliacion_eventos_no_supera_serie_con_entrada_mercado():

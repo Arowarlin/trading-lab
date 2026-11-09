@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import itertools
 import json
+import re
 import uuid
 from datetime import time
 from pathlib import Path
@@ -21,9 +22,10 @@ from .indicators import atr, ema
 from .intraday_costs import asset_costs
 from .learning import count_tests, get_lesson
 from .profiles import get_profile
-from .prop.rules import from_yaml
+from .prop.rules import PropRules, from_yaml
 from .prop.simulator import monte_carlo
 from .research import deflated_sharpe
+from .session import session_block
 from .strategies.base import StrategyResult
 from .trials import record_trial
 from .validation import cscv_pbo, returns_matrix
@@ -385,6 +387,29 @@ def backtest_intraday(
     }
 
 
+def _instrument_session(
+    symbol: str,
+) -> tuple[tuple[time, time], str, tuple[int, ...]] | None:
+    """Sesión del instrumento; None si no hay datos parseables."""
+    try:
+        from .instruments import get_instrument
+
+        instrument = get_instrument(symbol)
+    except Exception:
+        return None
+    text = str(instrument.session or "").strip()
+    session_tz = str(instrument.session_tz or "UTC")
+    # "24/5 (pausa diaria ...)" no es una sesión continua: no inventar.
+    if text.startswith("24/5") and "pausa" not in text.lower():
+        return (time(0, 0), time(0, 0)), session_tz, (0, 1, 2, 3, 4)
+    match = re.search(r"(\d{1,2}):(\d{2})-(\d{1,2}):(\d{2})", text)
+    if not match:
+        return None
+    start = time(int(match.group(1)), int(match.group(2)))
+    end = time(int(match.group(3)), int(match.group(4)))
+    return (start, end), session_tz, (0, 1, 2, 3, 4)
+
+
 def run_event_backtest(
     bars: pd.DataFrame,
     orders: list[dict],
@@ -397,6 +422,12 @@ def run_event_backtest(
     max_trades_per_day: int = 1,
     force_exit_time: time | None = None,
     session_offset_hours: float = 0.0,
+    symbol: str | None = None,
+    session_window: tuple[time, time] | None = None,
+    session_tz: str | None = None,
+    session_weekdays: tuple[int, ...] | None = None,
+    session_rules: PropRules | None = None,
+    asset_class: str = "cfd",
 ) -> dict:
     """Ejecuta órdenes limitadas con el modo de eventos (opt-in).
 
@@ -405,13 +436,22 @@ def run_event_backtest(
 
     Reglas: una compra limitada exige ``low < level`` estricto (y ``high >
     level`` para una venta); stop y objetivo en la misma barra resuelven a
-    stop; la entrada y el objetivo no pagan spread, mientras stop y salida
-    forzada pagan spread y slippage completos; la comisión se paga por lado;
+    stop; la entrada limitada se llena como mucho al nivel (nunca usa un hueco
+    favorable); un stop con hueco se llena al peor precio entre el stop y el
+    open; el objetivo se llena al objetivo, nunca en el hueco; la entrada y el
+    objetivo no pagan spread, mientras stop y salida forzada pagan spread y
+    slippage completos; la comisión se paga por lado;
     ``fill_pessimism_points`` exige superar el nivel por X puntos; se limita
-    ``max_trades_per_day``; y ``force_exit_time`` se convierte a UTC con el
+    ``max_trades_per_day``; ``force_exit_time`` se convierte a UTC con el
     offset semanal de sesión. Una orden con ``type="market"`` entra al open
     de la primera barra activa y paga spread + slippage completos; las
     órdenes sin ``type`` siguen siendo limitadas.
+
+    Guarda de sesión: si se pasan ``session_window``/``session_tz`` se
+    respetan; si faltan, se intenta inferir de ``instruments`` con ``symbol``.
+    Sin datos de sesión devuelve ``session_error`` y no ejecuta fills. Aplica
+    además el corte de viernes y el blackout de rollover de
+    ``session_rules`` (por defecto FTMO de ``config/prop.yaml``).
     """
     raw_orders = list(orders or [])
     if point <= 0:
@@ -421,7 +461,13 @@ def run_event_backtest(
     if max_trades_per_day < 0:
         raise ValueError("max_trades_per_day no puede ser negativo")
     if bars is None or len(bars) == 0:
-        return {"trades": [], "expired": len(raw_orders), "ignored": 0}
+        return {
+            "trades": [],
+            "expired": len(raw_orders),
+            "ignored": 0,
+            "session_error": None,
+            "session_skipped": 0,
+        }
 
     frame = bars.copy()
     if not isinstance(frame.index, pd.DatetimeIndex):
@@ -434,6 +480,49 @@ def run_event_backtest(
     for column in ("open", "high", "low", "close"):
         if column not in frame.columns:
             raise ValueError(f"falta columna {column} en bars")
+
+    def session_failure(message: str) -> dict:
+        return {
+            "trades": [],
+            "expired": len(raw_orders),
+            "ignored": 0,
+            "session_error": message,
+            "session_skipped": int(len(frame)),
+        }
+
+    resolved_window = session_window
+    resolved_tz = session_tz
+    resolved_weekdays = (
+        tuple(int(day) for day in session_weekdays)
+        if session_weekdays is not None
+        else None
+    )
+    if resolved_window is None and symbol:
+        inferred = _instrument_session(symbol)
+        if inferred is not None:
+            resolved_window, inferred_tz, inferred_weekdays = inferred
+            if resolved_tz is None:
+                resolved_tz = inferred_tz
+            if resolved_weekdays is None:
+                resolved_weekdays = inferred_weekdays
+    if resolved_window is None:
+        target = symbol or "el símbolo"
+        return session_failure(
+            f"sin datos de sesión para {target}: pasa session_window/session_tz"
+        )
+    if resolved_tz is None:
+        resolved_tz = "UTC"
+    if resolved_weekdays is None:
+        resolved_weekdays = (0, 1, 2, 3, 4)
+    try:
+        frame.index[0].tz_convert(resolved_tz)
+    except Exception as exc:
+        return session_failure(f"zona de sesión inválida {resolved_tz!r}: {exc}")
+    if session_rules is None:
+        try:
+            session_rules = from_yaml("ftmo", "challenge", 100_000.0)
+        except Exception as exc:
+            return session_failure(f"sin reglas de sesión: {exc}")
 
     commission = float(commission_bps)
     spread = float(spread_bps)
@@ -484,6 +573,7 @@ def run_event_backtest(
     trades: list[dict] = []
     expired = 0
     ignored = 0
+    session_skipped = 0
     pending = list(prepared)
     open_positions: list[dict] = []
     trades_by_day: dict = {}
@@ -503,18 +593,47 @@ def run_event_backtest(
             deadline = deadline.tz_localize("UTC")
         return deadline - pd.Timedelta(hours=float(session_offset_hours))
 
+    def bar_allowed(ts: pd.Timestamp) -> bool:
+        local = ts.tz_convert(resolved_tz)
+        if local.weekday() not in resolved_weekdays:
+            return False
+        start, end = resolved_window
+        if start != end:
+            current = local.time()
+            if start < end:
+                inside = start <= current <= end
+            else:
+                inside = current >= start or current <= end
+            if not inside:
+                return False
+        block = session_block(
+            session_rules,
+            now=local.to_pydatetime(),
+            asset_class=asset_class,
+        )
+        return not block.blocked
+
     def exit_for(position: dict, bar: pd.Series, ts: pd.Timestamp):
         target = position.get("target")
-        if position["side"] == "buy":
+        side = position["side"]
+        if side == "buy":
             stop_hit = float(bar["low"]) <= position["stop"]
             target_hit = target is not None and float(bar["high"]) >= target
         else:
             stop_hit = float(bar["high"]) >= position["stop"]
             target_hit = target is not None and float(bar["low"]) <= target
         if stop_hit:
-            return "stop", position["stop"], costs(add_spread=True)
+            if side == "buy":
+                price = min(position["stop"], float(bar["open"]))
+            else:
+                price = max(position["stop"], float(bar["open"]))
+            return "stop", price, costs(add_spread=True)
         if target_hit:
-            return "target", target, costs(add_spread=False)
+            if side == "buy":
+                price = min(target, float(bar["high"]))
+            else:
+                price = max(target, float(bar["low"]))
+            return "target", price, costs(add_spread=False)
         deadline = force_deadline(ts)
         if deadline is not None and ts >= deadline:
             return "force_exit", float(bar["close"]), costs(add_spread=True)
@@ -550,6 +669,10 @@ def run_event_backtest(
                 remaining.append(order)
         pending = remaining
 
+        if not bar_allowed(ts):
+            session_skipped += 1
+            continue
+
         # Posiciones abiertas: stop, objetivo o salida forzosa.
         for position in list(open_positions):
             exit_info = exit_for(position, bar, ts)
@@ -570,11 +693,12 @@ def run_event_backtest(
             if not limit_touched(order, bar):
                 remaining.append(order)
                 continue
-            entry_price = (
-                float(bar["open"])
-                if order["entry_type"] == "market"
-                else order["level"]
-            )
+            if order["entry_type"] == "market":
+                entry_price = float(bar["open"])
+            elif order["side"] == "buy":
+                entry_price = max(order["level"], float(bar["low"]))
+            else:
+                entry_price = min(order["level"], float(bar["high"]))
             position = {
                 "side": order["side"],
                 "entry_time": ts,
@@ -601,7 +725,13 @@ def run_event_backtest(
         pending = remaining
 
     expired += len(pending)
-    return {"trades": trades, "expired": expired, "ignored": ignored}
+    return {
+        "trades": trades,
+        "expired": expired,
+        "ignored": ignored,
+        "session_error": None,
+        "session_skipped": session_skipped,
+    }
 
 
 def _session_mask(index: pd.DatetimeIndex, start_hour: int, end_hour: int) -> pd.Series:
