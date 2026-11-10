@@ -65,6 +65,16 @@ def _local(now: datetime | None, tz: str) -> datetime:
 # --------------------------------------------------------------- trailing DD
 
 
+def zone_for_utilization(utilization: float) -> tuple[DefenseLevel, float]:
+    """Nivel y factor de tamaño para el uso del límite de drawdown."""
+    if utilization >= 1.0:
+        return ("breach", 0.0)
+    for name, threshold, factor in reversed(_ZONES):
+        if utilization >= threshold:
+            return (name, factor)
+    return ("ok", 1.0)
+
+
 @dataclass(frozen=True)
 class DrawdownReport:
     equity: float
@@ -119,14 +129,7 @@ class TrailingDrawdown:
         drawdown = max(0.0, (hwm - value) / hwm)
         utilization = drawdown / self.max_drawdown_pct
 
-        level: DefenseLevel = "breach"
-        size_factor = 0.0
-        if utilization < 1.0:
-            for name, threshold, factor in reversed(_ZONES):
-                if utilization >= threshold:
-                    level = name
-                    size_factor = factor
-                    break
+        level, size_factor = zone_for_utilization(utilization)
 
         warnings: list[str] = []
         if level in {"caution", "alert", "critical"}:
@@ -411,4 +414,5 @@ __all__ = [
     "EquityDefense",
     "FlattenClock",
     "TrailingDrawdown",
+    "zone_for_utilization",
 ]
