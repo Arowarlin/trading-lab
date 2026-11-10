@@ -101,6 +101,10 @@ ticks_app = typer.Typer(
     no_args_is_help=True,
     help="Ticks Dukascopy: descarga, parquet y métricas de spread.",
 )
+slippage_app = typer.Typer(
+    no_args_is_help=True,
+    help="Sonda de slippage real en demo: medición aislada, sin bots.",
+)
 tradestation_app = typer.Typer(
     no_args_is_help=True,
     help="TradeStation SIM: OAuth, cuentas y posiciones en solo lectura.",
@@ -131,6 +135,7 @@ app.add_typer(risk_budget_app, name="risk-budget")
 app.add_typer(lifecycle_app, name="lifecycle")
 app.add_typer(llm_app, name="llm")
 app.add_typer(ticks_app, name="ticks")
+app.add_typer(slippage_app, name="slippage")
 app.add_typer(tradestation_app, name="tradestation")
 app.add_typer(lessons_app, name="lessons")
 app.add_typer(reports_app, name="reports")
@@ -4919,6 +4924,123 @@ def ticks_broker_spread_cmd(
     console.print("[dim]Solo datos; no se ha enviado ninguna orden.[/dim]")
     if report.get("symbols", {}).get(result["symbol"], {}).get("status") == "sin datos":
         console.print("[yellow]Sin datos: no hay ticks del bróker; no se rellena con Dukascopy.[/yellow]")
+
+
+@slippage_app.command("probe")
+def slippage_probe_cmd(
+    symbol: str = typer.Argument(..., help="Símbolo, p. ej. EURUSD"),
+    orders: int = typer.Option(2, "--orders", min=1, help="Round-trips a enviar"),
+    volume: float = typer.Option(None, "--volume", help="Debe ser el volumen mínimo"),
+    spacing: float = typer.Option(2.0, "--spacing", help="Segundos entre round-trips"),
+    max_orders: int = typer.Option(3, "--max-orders", min=1, help="Tope por ejecución"),
+    max_orders_day: int = typer.Option(6, "--max-orders-day", min=1, help="Tope diario"),
+) -> None:
+    """Mide slippage real enviando round-trips de volumen mínimo en demo."""
+    from .slippage_probe import run_probe
+
+    settings = get_settings()
+    broker = _mt5(settings, dry_run=False)
+    try:
+        result = run_probe(
+            broker,
+            symbol,
+            orders=orders,
+            volume=volume,
+            spacing_s=spacing,
+            max_orders=max_orders,
+            max_orders_day=max_orders_day,
+        )
+    except Exception as exc:
+        console.print(Panel(str(exc), title="Sonda de slippage abortada", style="bold red"))
+        raise typer.Exit(1) from exc
+    finally:
+        broker.shutdown()
+
+    table = Table(title=f"Slippage probe · {result['symbol']}")
+    table.add_column("Campo", style="bold")
+    table.add_column("Valor", justify="right")
+    table.add_row("Round-trips pedidos", str(result["requested_round_trips"]))
+    table.add_row("Órdenes enviadas", str(result["sent_orders"]))
+    table.add_row("Round-trips completados", str(result["filled_round_trips"]))
+    table.add_row("Requotes", str(result["requotes"]))
+    table.add_row("Errores", str(result["errors"]))
+    table.add_row("Volumen", f"{result['volume']:g}")
+    console.print(table)
+    console.print(f"[dim]Registrado en {result['db_path']} · solo demo, posiciones cerradas.[/dim]")
+
+
+@slippage_app.command("report")
+def slippage_report_cmd(
+    symbol: str = typer.Option(None, "--symbol", help="Filtrar por símbolo"),
+    order_type: str = typer.Option(None, "--order-type", help="market|limit"),
+) -> None:
+    """Mediana y p75 de slippage por símbolo, lado y hora UTC."""
+    from .slippage_probe import report
+
+    if order_type is not None and order_type.lower() not in {"market", "limit"}:
+        raise typer.BadParameter("--order-type debe ser market o limit")
+    payload = report(symbol=symbol, order_type=order_type)
+    if payload["rows"] == 0:
+        console.print(Panel("Sin datos de slippage.", style="yellow"))
+        return
+    console.print(
+        f"[dim]{payload['rows']} órdenes registradas · "
+        f"{payload['filled_rows']} con fill · {payload['requotes']} requotes[/dim]"
+    )
+    for title, rows, columns in (
+        (
+            "Por símbolo",
+            payload["by_symbol"],
+            ("Símbolo", "N", "Mediana bps", "P75 bps", "Requotes"),
+        ),
+        (
+            "Por lado",
+            payload["by_side"],
+            ("Símbolo", "Lado", "N", "Mediana bps", "P75 bps", "Requotes"),
+        ),
+        (
+            "Por hora UTC",
+            payload["by_hour"],
+            ("Símbolo", "Hora UTC", "N", "Mediana bps", "P75 bps", "Requotes"),
+        ),
+        (
+            "Por tipo de orden",
+            payload["by_order_type"],
+            ("Símbolo", "Tipo", "N", "Mediana bps", "P75 bps", "Requotes"),
+        ),
+    ):
+        table = Table(title=title)
+        for column in columns:
+            table.add_column(column, justify="left" if column == "Símbolo" else "right")
+        for row in rows:
+            values = []
+            for column in columns:
+                if column == "Símbolo":
+                    values.append(str(row.get("symbol") or ""))
+                elif column == "Lado":
+                    values.append(str(row.get("side") or ""))
+                elif column == "Hora UTC":
+                    values.append(f"{int(row.get('hour_utc') or 0):02d}")
+                elif column == "Tipo":
+                    values.append(str(row.get("order_type") or ""))
+                elif column == "N":
+                    values.append(str(row.get("n") or 0))
+                elif column == "Mediana bps":
+                    values.append(
+                        "sin datos"
+                        if row.get("median_bps") is None
+                        else f"{float(row['median_bps']):.3f}"
+                    )
+                elif column == "P75 bps":
+                    values.append(
+                        "sin datos"
+                        if row.get("p75_bps") is None
+                        else f"{float(row['p75_bps']):.3f}"
+                    )
+                else:
+                    values.append(str(row.get("requotes") or 0))
+            table.add_row(*values)
+        console.print(table)
 
 
 @mt5_app.command("aliases")

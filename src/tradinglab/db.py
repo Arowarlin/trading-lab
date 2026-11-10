@@ -460,6 +460,24 @@ CREATE TABLE IF NOT EXISTS broker_spreads (
 );
 CREATE INDEX IF NOT EXISTS idx_broker_spreads_symbol
     ON broker_spreads(symbol, source);
+CREATE TABLE IF NOT EXISTS broker_slippage (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    side TEXT NOT NULL,
+    hour_utc INTEGER NOT NULL,
+    requested REAL NOT NULL,
+    filled REAL,
+    slippage_bps REAL,
+    volume REAL NOT NULL,
+    order_type TEXT NOT NULL,
+    leg TEXT NOT NULL DEFAULT 'entry',
+    requote INTEGER NOT NULL DEFAULT 0,
+    retcode INTEGER,
+    error TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_broker_slippage_symbol
+    ON broker_slippage(symbol, leg, ts);
 CREATE TABLE IF NOT EXISTS asset_aliases (
     canonical TEXT PRIMARY KEY,
     broker_symbol TEXT NOT NULL,
