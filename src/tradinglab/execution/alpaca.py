@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import logging
 import os
-from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
 
 from ..db import connect, utcnow
+
+logger = logging.getLogger(__name__)
 
 
 class AlpacaError(RuntimeError):
@@ -153,13 +155,48 @@ class AlpacaBroker:
         return self.snapshot(prices)["equity"]
 
     def equity_series(self) -> pd.Series:
-        try:
-            history = self.client.get_portfolio_history(period="6M", timeframe="1D")
-        except Exception:
-            return pd.Series(dtype=float)
+        from alpaca.trading.requests import GetPortfolioHistoryRequest
 
-        if not history.timestamp or not history.equity:
-            return pd.Series(dtype=float)
+        for period in ("1M", "3M"):
+            try:
+                request = GetPortfolioHistoryRequest(
+                    period=period, timeframe="1D"
+                )
+                history = self.client.get_portfolio_history(
+                    history_filter=request
+                )
+            except Exception as exc:
+                logger.warning(
+                    "Alpaca portfolio history %s falló: %s", period, exc
+                )
+                continue
 
-        idx = pd.to_datetime([datetime.fromtimestamp(t) for t in history.timestamp])
-        return pd.Series([float(e) for e in history.equity], index=idx).dropna()
+            if isinstance(history, dict):
+                stamps = history.get("timestamp") or []
+                equity = history.get("equity") or []
+            else:
+                stamps = getattr(history, "timestamp", None) or []
+                equity = getattr(history, "equity", None) or []
+            if not stamps or not equity:
+                continue
+            try:
+                values = [float(value) for value in equity]
+            except (TypeError, ValueError) as exc:
+                logger.warning(
+                    "Alpaca portfolio history %s con equity inválido: %s",
+                    period,
+                    exc,
+                )
+                continue
+            index = pd.to_datetime(list(stamps), unit="s", utc=True)
+            series = pd.Series(values, index=index).dropna()
+            if len(series):
+                return series
+
+        equity_now = float(self.snapshot()["equity"])
+        logger.warning(
+            "Alpaca sin historial de portfolio en 1M/3M; "
+            "se usa el equity actual %.2f como snapshot",
+            equity_now,
+        )
+        return pd.Series([equity_now], index=[pd.Timestamp.now(tz="UTC")])
