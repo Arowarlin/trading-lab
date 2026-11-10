@@ -921,6 +921,45 @@ etapa.
   limpio; `lab doctor` OK; `lab f13 config-check` sin cambios. Sin activar
   bots, sin órdenes y sin relajar umbrales.
 
+### Etapa 3b — Puente forward experimental de forex (2026-11-10)
+
+- [x] **Runner separado del orquestador**
+  - `src/tradinglab/forward_intraday.py` + CLI `lab intraday forward|status`.
+  - `config/intraday_forward.yaml` congela solo dos candidatos:
+    EURUSD `london_pullback` (50/100/0.5/16) y USDJPY `tokyo_breakout`
+    (8/0.25/4). No toca `intraday_bots.yaml` ni `bots.yaml`.
+  - No es una validación: ambos tienen Sharpe negativo y no pasaron la
+    puerta de incubación. Es una excepción forward documentada.
+- [x] **Guardas fail-closed**
+  - Solo `mode=demo`, `identity_ok=True`, cuenta `ftmo_demo`, login y
+    servidor esperados; cualquier clave ausente o distinta de `True` aborta.
+  - Volumen mínimo del símbolo, nunca más; stop ATR en el bróker; una
+    entrada por bot y día UTC; cierre por señal, `max_hold` o corte.
+  - Solo se cierran posiciones con el `magic` del bot; una posición ajena
+    bloquea aperturas y nunca se toca.
+  - Kill-switch, guard de cuenta, presupuesto, sesión, calendario y noticias
+    se consultan antes de abrir; los cierres siempre están permitidos.
+- [x] **Dry-run real**
+  - `lab intraday forward` conectó a MT5 demo y evaluó ambos candidatos sin
+    enviar órdenes. A las 16:05 UTC ambos estaban planos porque Londres y
+    Tokio ya habían cerrado.
+  - El runner necesita 5.000 velas M15 para que MT5 infiera el offset
+    semanal; con 600 el terminal no puede confirmar la apertura del domingo.
+- [x] **Signal-only programado**
+  - `scripts/intraday_forward_signal.ps1` ejecuta `lab intraday forward`
+    (dry-run) una vez por barra M15 dentro de las ventanas UTC de Tokio y
+    Londres; no usa `--execute` ni envía órdenes.
+  - Tarea `TradingLab-IntradayForward` registrada cada 5 minutos; el script
+    filtra la ventana y la fase de la barra. Guarda log UTF-8 en
+    `logs/intraday_forward/`.
+- Evidencia: `pytest tests/test_forward_intraday.py -q` → **29 passed**;
+  `pytest tests/test_scripts.py -q` → **14 passed**; suite completa
+  **670 passed**; `ruff` limpio; F13 intacto
+  (`54b420360f17c75d…`). Sin activar bots, sin órdenes reales y sin tocar
+  `bots.yaml`, `lab.yaml`, `prop.yaml` ni `f13.yaml`.
+- Pendiente: validación explícita del operador para poner `enabled:true` y
+  ejecutar la primera orden demo a volumen mínimo.
+
 ### Etapa 4 — Presupuesto de riesgo neto por activo
 
 - [x] **`config/risk_budget.yaml`**

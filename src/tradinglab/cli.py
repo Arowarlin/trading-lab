@@ -105,6 +105,10 @@ slippage_app = typer.Typer(
     no_args_is_help=True,
     help="Sonda de slippage real en demo: medición aislada, sin bots.",
 )
+intraday_app = typer.Typer(
+    no_args_is_help=True,
+    help="Forward intradía: dos candidatos fijos, dry-run por defecto.",
+)
 tradestation_app = typer.Typer(
     no_args_is_help=True,
     help="TradeStation SIM: OAuth, cuentas y posiciones en solo lectura.",
@@ -136,6 +140,7 @@ app.add_typer(lifecycle_app, name="lifecycle")
 app.add_typer(llm_app, name="llm")
 app.add_typer(ticks_app, name="ticks")
 app.add_typer(slippage_app, name="slippage")
+app.add_typer(intraday_app, name="intraday")
 app.add_typer(tradestation_app, name="tradestation")
 app.add_typer(lessons_app, name="lessons")
 app.add_typer(reports_app, name="reports")
@@ -5012,6 +5017,155 @@ def slippage_probe_cmd(
     table.add_row("Volumen", f"{result['volume']:g}")
     console.print(table)
     console.print(f"[dim]Registrado en {result['db_path']} · solo demo, posiciones cerradas.[/dim]")
+
+
+@intraday_app.command("status")
+def intraday_forward_status() -> None:
+    """Muestra los dos candidatos congelados y su estado de armado."""
+    from .forward_intraday import load_forward_bots
+
+    try:
+        bots = load_forward_bots()
+    except Exception as exc:
+        console.print(Panel(str(exc), title="Forward no disponible", style="bold red"))
+        raise typer.Exit(1) from exc
+
+    console.print("[bold]Forward intradía · configuración congelada[/bold]")
+    for bot in bots:
+        console.print(
+            f"\n[bold]{bot.id}[/bold] · {bot.canonical_symbol} · {bot.strategy}"
+        )
+        console.print(f"  Parámetros: {json.dumps(bot.params, sort_keys=True)}")
+        console.print(
+            f"  Entrada UTC: {bot.entry_start:%H:%M}-{bot.entry_end:%H:%M} · "
+            f"Corte UTC: {bot.force_exit:%H:%M} · Stop: {bot.stop_atr:g} ATR"
+        )
+        console.print(
+            f"  Trades/día: {bot.max_trades_per_day} · Magic: {bot.magic} · "
+            f"Armado: {'sí' if bot.enabled else 'no (solo dry-run)'}"
+        )
+        if bot.notes:
+            console.print(f"  [dim]{bot.notes}[/dim]")
+    console.print(
+        "\n[dim]La ejecución exige enabled:true y `lab intraday forward "
+        "--execute --confirm FORWARD-DEMO`.[/dim]"
+    )
+
+
+@intraday_app.command("forward")
+def intraday_forward_cmd(
+    bot: str = typer.Option(
+        None, "--bot", help="ID del forward; por defecto los dos candidatos"
+    ),
+    execute: bool = typer.Option(
+        False,
+        "--execute",
+        help="Enviar órdenes demo; sin esta bandera solo hace dry-run",
+    ),
+    confirm: str = typer.Option(
+        None,
+        "--confirm",
+        help="Token FORWARD-DEMO obligatorio con --execute",
+    ),
+    bars: int = typer.Option(
+        5_000, "--bars", min=210, help="Velas M15 a cargar por símbolo"
+    ),
+) -> None:
+    """Evalúa los dos forwards fijos y solo con --execute envía en demo."""
+    from .forward_intraday import load_forward_bots, run_forward_all
+
+    settings = get_settings()
+    try:
+        bots = load_forward_bots()
+    except Exception as exc:
+        console.print(Panel(str(exc), title="Forward no disponible", style="bold red"))
+        raise typer.Exit(1) from exc
+
+    if bot:
+        bots = [item for item in bots if item.id == bot]
+        if not bots:
+            console.print(f"[red]Forward desconocido:[/red] {bot}")
+            raise typer.Exit(2)
+
+    if execute:
+        if confirm != "FORWARD-DEMO":
+            console.print(
+                Panel(
+                    "La ejecución real exige repetir con "
+                    "`--confirm FORWARD-DEMO`.",
+                    title="Confirmación requerida",
+                    style="bold red",
+                )
+            )
+            raise typer.Exit(2)
+        disabled = [item.id for item in bots if not item.enabled]
+        if disabled:
+            console.print(
+                Panel(
+                    "Estos forwards están enabled:false y no se envían:\n"
+                    + "\n".join(f"- {item}" for item in disabled),
+                    title="Forward no armado",
+                    style="bold red",
+                )
+            )
+            raise typer.Exit(2)
+
+    broker = _mt5(settings, dry_run=not execute)
+    try:
+        decisions = run_forward_all(
+            bots,
+            broker,
+            settings,
+            dry_run=not execute,
+            bars=bars,
+        )
+    except Exception as exc:
+        console.print(
+            Panel(str(exc)[-2000:], title="Forward detenido", style="bold red")
+        )
+        raise typer.Exit(1) from exc
+    finally:
+        broker.shutdown()
+
+    table = Table(
+        title=f"Forward intradía · {'EXECUTE demo' if execute else 'DRY-RUN'}"
+    )
+    for column in (
+        "Bot",
+        "Símbolo",
+        "Señal",
+        "Acción",
+        "Precio",
+        "ATR",
+        "Stop",
+        "Vol",
+        "Ticket",
+        "Motivo",
+    ):
+        table.add_column(column, overflow="fold")
+    for item in decisions:
+        table.add_row(
+            item.bot,
+            item.symbol,
+            f"{item.signal:+.0f}",
+            item.action,
+            f"{item.price:.5f}" if item.price is not None else "-",
+            f"{item.atr:.5f}" if item.atr is not None else "-",
+            f"{item.stop:.5f}" if item.stop is not None else "-",
+            f"{item.volume:g}" if item.volume is not None else "-",
+            str(item.position_ticket or "-"),
+            item.reason,
+        )
+    console.print(table)
+    if execute:
+        console.print(
+            "[green]Ejecución demo completada.[/green] Revisa posiciones y "
+            "`lab mt5 positions`."
+        )
+    else:
+        console.print(
+            "[yellow]Sin --execute: dry-run; no se envía ninguna orden.[/yellow]"
+        )
 
 
 @slippage_app.command("report")

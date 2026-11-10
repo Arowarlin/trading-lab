@@ -212,3 +212,27 @@ def test_f13_scripts_preparados_sin_registrar():
     assert "22:20" in register
     assert "f13_daily.ps1" in register
 
+
+def test_intraday_forward_scripts_signal_only():
+    daily = (ROOT / "scripts" / "intraday_forward_signal.ps1").read_text(
+        encoding="utf-8"
+    )
+    assert "intraday forward --bars 5000" in daily
+    assert "--execute" not in daily
+    assert "intraday_forward_failed" in daily
+    assert "TradingLab-IntradayForward" in daily
+    assert "[Console]::OutputEncoding" in daily
+    assert "PYTHONIOENCODING" in daily
+    assert "Add-Content -Path $log" in daily
+    assert "Register-ScheduledTask" not in daily
+    assert "*>>" not in daily
+
+    register = (
+        ROOT / "scripts" / "register_intraday_forward_task.ps1"
+    ).read_text(encoding="utf-8")
+    assert "Register-ScheduledTask" in register
+    assert "TradingLab-IntradayForward" in register
+    assert "intraday_forward_signal.ps1" in register
+    assert "RepetitionInterval" in register
+    assert "--execute" not in register
+

@@ -1,0 +1,47 @@
+# Forward experimental de forex (Etapa 3).
+#
+# Solo dos candidatos, parámetros congelados y cuenta demo. No es una
+# validación: los dos tienen Sharpe negativo en backtest y no pasaron la
+# puerta de incubación. Se usan como excepción forward documentada.
+#
+# enabled:false = solo dry-run. La ejecución real exige enabled:true y el
+# comando explícito `lab intraday forward --execute --confirm FORWARD-DEMO`.
+version: 1
+account: ftmo_demo
+bots:
+  - id: eurusd-london-pullback-forward
+    canonical_symbol: EURUSD
+    strategy: london_pullback
+    timeframe: M15
+    account: ftmo_demo
+    params:
+      fast: 50
+      slow: 100
+      pullback_atr: 0.5
+      max_hold: 16
+    entry_start: "07:00"
+    entry_end: "16:00"
+    force_exit: "16:00"
+    stop_atr: 2.0
+    max_trades_per_day: 1
+    magic: 20261151
+    enabled: false
+    notes: "Forward experimental; backtest Sharpe -4.42, MaxDD -30.4%."
+
+  - id: usdjpy-tokyo-breakout-forward
+    canonical_symbol: USDJPY
+    strategy: tokyo_breakout
+    timeframe: M15
+    account: ftmo_demo
+    params:
+      range_bars: 8
+      buffer_atr: 0.25
+      max_hold: 4
+    entry_start: "00:00"
+    entry_end: "03:00"
+    force_exit: "04:00"
+    stop_atr: 2.0
+    max_trades_per_day: 1
+    magic: 20261152
+    enabled: false
+    notes: "Forward experimental; backtest Sharpe -4.63, MaxDD -8.1%."
