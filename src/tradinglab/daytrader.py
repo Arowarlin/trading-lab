@@ -412,13 +412,22 @@ def plan_orders(
     results: list[dict] = []
     for order in orders:
         external = verdicts.get(order.fingerprint, "BLOCK")
+        plan_entry = None
+        raw_plan = order.raw.get("plan")
+        if isinstance(raw_plan, dict):
+            try:
+                candidate = float(raw_plan.get("entry"))
+                if math.isfinite(candidate) and candidate > 0:
+                    plan_entry = candidate
+            except (TypeError, ValueError):
+                plan_entry = None
         item = {
             "symbol": order.symbol,
             "side": order.side,
             "qty": order.qty,
             "stop": order.stop,
             "target": order.target,
-            "price": order.limit_price or prices.get(order.symbol),
+            "price": order.limit_price or plan_entry or prices.get(order.symbol),
             "external_verdict": external,
             "guard_verdict": "NO EVALUADO",
             "action": "rechazada",
@@ -438,7 +447,7 @@ def plan_orders(
             results.append(item)
             continue
 
-        price = order.limit_price or prices.get(order.symbol) or 0.0
+        price = order.limit_price or plan_entry or prices.get(order.symbol) or 0.0
         params = {
             "account": settings.daytrader.account,
             "ticker": order.symbol,
