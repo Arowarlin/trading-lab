@@ -143,6 +143,12 @@ lógica de umbrales, el EA trae un input de pruebas:
 normal, por ejemplo por depósitos, retiros o reinicios). Mientras tanto:
 `defense_mode: report` en Python y `Mode=ALERT` en el EA.
 
+Nota operativa: el chart de EURUSD H1 del perfil quedó con `expertmode=0`
+(solo ALERT). Antes de pasar a `CLOSE`, cambia ese valor a `1` en el bloque
+`<expert>` del chart, o vuelve a adjuntar el EA desde el Navegador, y confirma
+que el algo trading del terminal está activo. Con `expertmode=0` el EA calcula
+y avisa, pero no puede cerrar.
+
 ## Comandos
 
 ```powershell

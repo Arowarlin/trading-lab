@@ -999,6 +999,12 @@ etapa.
   sin cambios respecto al estado previo: el hash ya estaba `changed`
   (`6250d4c0…`) por el bloque `daytrader`; este bloque no toca archivos F13.
   Sin activar bots, sin órdenes y sin push.
+- Estado operativo 2026-11-10 23:42 UTC: EA compilado con **0 errores, 0
+  warnings**, JSON copiado a `MQL5/Files`, EA cargado en **EURUSD H1** del
+  perfil y corriendo en **ALERT** (log `INIT` + `START` + `CONFIG`), cuenta
+  FTMO-Demo con 0 posiciones y 0 órdenes. Ventana de 5 sesiones en curso;
+  `defense_mode` sigue en `report`. El chart quedó con `expertmode=0`: antes
+  de `CLOSE` hay que ponerlo a 1 y confirmar algo trading.
 
 ### Etapa 4 — Presupuesto de riesgo neto por activo
 
