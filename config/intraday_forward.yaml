@@ -9,6 +9,11 @@
 # máximo 1 trade/día por bot y cierre obligatorio por sesión.
 version: 1
 account: ftmo_demo
+# Defensa de equity (HWM + zonas + circuit breaker diario):
+#   off     -> no evalúa
+#   report  -> evalúa y lo publica en guards, sin bloquear (dry-run)
+#   enforce -> bloquea aperturas en zona caution o con el breaker disparado
+defense: report
 bots:
   - id: eurusd-london-pullback-forward
     canonical_symbol: EURUSD

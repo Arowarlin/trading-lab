@@ -40,6 +40,7 @@ from .intel.calendar import calendar_block_for_settings
 from .intraday import STRATEGIES as INTRADAY_STRATEGIES
 from .killswitch import ensure as ensure_killswitch
 from .profiles import BotProfile, get_profile
+from .prop.defense import DailyCircuitBreaker, TrailingDrawdown
 from .prop.guard import AccountSnapshot, PropGuard, evaluate_account
 from .risk_budget import assess_open, news_blackout
 from .session import flatten_required, session_block
@@ -81,6 +82,8 @@ class ForwardBot:
     magic: int
     enabled: bool
     notes: str = ""
+    # off | report | enforce. `report` calcula y publica en guards sin bloquear.
+    defense_mode: str = "report"
 
     @property
     def signal_bot(self) -> str:
@@ -131,6 +134,9 @@ def load_forward_bots(path: str | Path | None = None) -> list[ForwardBot]:
     account = str(raw.get("account") or "").strip()
     if account != "ftmo_demo":
         raise ForwardError("el forward solo permite account=ftmo_demo")
+    defense_mode = str(raw.get("defense") or "report").strip().lower()
+    if defense_mode not in {"off", "report", "enforce"}:
+        raise ForwardError("defense debe ser off, report o enforce")
     items = raw.get("bots") or []
     if not isinstance(items, list) or not items:
         raise ForwardError("el forward no tiene bots configurados")
@@ -193,6 +199,7 @@ def load_forward_bots(path: str | Path | None = None) -> list[ForwardBot]:
                 magic=magic,
                 enabled=enabled,
                 notes=str(item.get("notes") or ""),
+                defense_mode=defense_mode,
             )
         )
         if not out[-1].canonical_symbol:
@@ -670,6 +677,80 @@ def _close_with_retries(
     return {"ok": True, "already_closed": True, "ticket": ticket}
 
 
+def _defense_guard(
+    bot: ForwardBot,
+    state,
+    equity: float,
+    now: datetime,
+    rules,
+) -> dict:
+    """Evalúa HWM y circuit breaker; en modo `report` no bloquea."""
+    if bot.defense_mode == "off":
+        return {
+            "allowed": True,
+            "label": "off",
+            "reason": "",
+            "level": "off",
+            "size_factor": 1.0,
+            "drawdown_pct": 0.0,
+            "utilization": 0.0,
+            "breaker_tripped": False,
+        }
+
+    max_dd = rules.effective_max_loss_usd / rules.account_size
+    max_daily = rules.effective_daily_limit_usd / rules.account_size
+    peak = float(state.peak_equity or equity)
+    try:
+        drawdown = TrailingDrawdown(max_dd, start_equity=peak)
+        dd_report = drawdown.observe(equity)
+        breaker = DailyCircuitBreaker(
+            max_daily_loss_pct=max_daily,
+            day_start_equity=state.day_start_equity or equity,
+            tz=rules.reset_tz,
+        )
+        breaker_report = breaker.observe(equity, now)
+    except Exception as exc:
+        return {
+            "allowed": False,
+            "label": f"error: {exc}",
+            "reason": f"defensa no disponible: {exc}",
+            "level": "error",
+            "size_factor": 0.0,
+            "drawdown_pct": 0.0,
+            "utilization": 0.0,
+            "breaker_tripped": False,
+        }
+
+    if not dd_report.allowed:
+        reason = dd_report.reason
+    elif breaker_report.tripped:
+        reason = f"circuit breaker: {breaker_report.reason}"
+    elif dd_report.size_factor < 1.0:
+        reason = (
+            f"zona {dd_report.level}: factor {dd_report.size_factor:g}x "
+            "no operable con volumen mínimo"
+        )
+    else:
+        reason = "ok"
+
+    allowed = reason == "ok"
+    label = f"{dd_report.level} {dd_report.size_factor:g}x"
+    if not allowed:
+        label += " (bloquea)"
+    if bot.defense_mode == "report":
+        label = f"report:{label}"
+    return {
+        "allowed": allowed,
+        "label": label,
+        "reason": reason,
+        "level": dd_report.level,
+        "size_factor": dd_report.size_factor,
+        "drawdown_pct": dd_report.drawdown_pct,
+        "utilization": dd_report.utilization,
+        "breaker_tripped": breaker_report.tripped,
+    }
+
+
 def _blocked(
     bot: ForwardBot,
     symbol: str,
@@ -875,7 +956,10 @@ def run_forward_bot(
         "killswitch": "pendiente",
         "account_guard": "pendiente",
         "risk_budget": "pendiente",
+        "defense": "pendiente",
     }
+    defense = _defense_guard(bot, state, equity, moment, rules)
+    guards["defense"] = defense["label"]
 
     if position is not None:
         return _manage_position(
@@ -1101,6 +1185,25 @@ def run_forward_bot(
             symbol,
             signal,
             f"máximo de trades/día alcanzado ({bot_trades}/{max_trades})",
+            price=price,
+            atr_value=atr_value,
+            guards=guards,
+        )
+
+    if bot.defense_mode == "enforce" and not defense["allowed"]:
+        _record_signal(
+            db_path,
+            bot,
+            symbol,
+            signal,
+            price,
+            f"blocked defense: {defense['reason']}",
+        )
+        return _blocked(
+            bot,
+            symbol,
+            signal,
+            f"defensa: {defense['reason']}",
             price=price,
             atr_value=atr_value,
             guards=guards,

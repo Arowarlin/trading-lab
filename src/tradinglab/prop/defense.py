@@ -178,6 +178,9 @@ class DailyCircuitBreaker:
     explícito. Registrar una operación no bloquea el cierre de las que ya
     están abiertas: eso lo decide quien llama.
 
+    La pérdida diaria combina lo realizado (``record_trade``) con el drawdown
+    de equity desde la apertura del día, así también detecta pérdidas abiertas.
+
     Si no se siembra ``day_start_equity``, el primer ``observe`` del día fija
     la base; para medir la pérdida real del día hay que sembrarla con el
     equity de apertura.
@@ -227,7 +230,11 @@ class DailyCircuitBreaker:
         self._ensure_day_start(equity)
         base = float(self._day_start)  # type: ignore[arg-type]
         daily_pnl = self._realized
-        daily_loss = max(0.0, -daily_pnl) / base
+        realized_loss = max(0.0, -daily_pnl) / base
+        equity_loss = (
+            max(0.0, base - float(equity)) / base if equity is not None else 0.0
+        )
+        daily_loss = max(realized_loss, equity_loss)
 
         if self._latch is None:
             if daily_loss >= self.max_daily_loss_pct:

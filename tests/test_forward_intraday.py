@@ -128,6 +128,13 @@ def _seed_order(db, bot: fwd.ForwardBot, when: datetime) -> None:
         )
 
 
+def _equity_series(rows: list[tuple[str, float]]) -> pd.Series:
+    return pd.Series(
+        [value for _, value in rows],
+        index=pd.to_datetime([stamp for stamp, _ in rows], utc=True),
+    )
+
+
 def _bot(**overrides) -> fwd.ForwardBot:
     data = {
         "id": "eurusd-london-pullback-forward",
@@ -404,7 +411,20 @@ def test_config_dos_candidatos_fijos() -> None:
     }
     assert all(bot.account == "ftmo_demo" for bot in bots)
     assert all(bot.enabled for bot in bots)
+    assert all(bot.defense_mode == "report" for bot in bots)
     assert len({bot.magic for bot in bots}) == 2
+
+
+def test_config_defense_invalido(tmp_path) -> None:
+    bad = tmp_path / "bad.yaml"
+    bad.write_text(
+        fwd.CONFIG_PATH.read_text(encoding="utf-8").replace(
+            "defense: report", "defense: loose"
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(fwd.ForwardError, match="defense"):
+        fwd.load_forward_bots(bad)
 
 
 @pytest.mark.parametrize(
@@ -621,6 +641,83 @@ def test_max_trades_dia_bloquea(tmp_path, guards) -> None:
     )
     assert decision.action == "bloqueado"
     assert "máximo de trades/día" in decision.reason
+    assert broker.submit_calls == []
+
+
+def test_defense_report_no_bloquea(tmp_path, guards) -> None:
+    db = tmp_path / "lab.db"
+    _seed_alias(db)
+    broker = FakeBroker(health={**HEALTH, "equity": 93_600.0})
+    broker.equity_series = lambda days=180: _equity_series(
+        [
+            ("2026-11-09 00:00", 100_000.0),
+            ("2026-11-10 00:00", 93_600.0),
+            ("2026-11-10 15:00", 93_600.0),
+        ]
+    )
+    decision = fwd.run_forward_bot(
+        _bot(defense_mode="report"),
+        broker,
+        _settings(),
+        dry_run=True,
+        db_path=db,
+        now=NOW,
+        strategy_fn=_strategy(1),
+    )
+    assert decision.action == "open_long"
+    assert decision.guards["defense"].startswith("report:")
+    assert "caution" in decision.guards["defense"]
+    assert broker.submit_calls == []
+
+
+def test_defense_enforce_bloquea_en_caution(tmp_path, guards) -> None:
+    db = tmp_path / "lab.db"
+    _seed_alias(db)
+    broker = FakeBroker(health={**HEALTH, "equity": 93_600.0})
+    broker.equity_series = lambda days=180: _equity_series(
+        [
+            ("2026-11-09 00:00", 100_000.0),
+            ("2026-11-10 00:00", 93_600.0),
+            ("2026-11-10 15:00", 93_600.0),
+        ]
+    )
+    decision = fwd.run_forward_bot(
+        _bot(defense_mode="enforce"),
+        broker,
+        _settings(),
+        dry_run=True,
+        db_path=db,
+        now=NOW,
+        strategy_fn=_strategy(1),
+    )
+    assert decision.action == "bloqueado"
+    assert "defensa" in decision.reason
+    assert "caution" in decision.reason
+    assert broker.submit_calls == []
+
+
+def test_defense_enforce_bloquea_por_breaker(tmp_path, guards) -> None:
+    db = tmp_path / "lab.db"
+    _seed_alias(db)
+    broker = FakeBroker(health={**HEALTH, "equity": 95_000.0})
+    broker.equity_series = lambda days=180: _equity_series(
+        [
+            ("2026-11-09 00:00", 100_000.0),
+            ("2026-11-10 00:00", 100_000.0),
+            ("2026-11-10 15:00", 95_000.0),
+        ]
+    )
+    decision = fwd.run_forward_bot(
+        _bot(defense_mode="enforce"),
+        broker,
+        _settings(),
+        dry_run=True,
+        db_path=db,
+        now=NOW,
+        strategy_fn=_strategy(1),
+    )
+    assert decision.action == "bloqueado"
+    assert "circuit breaker" in decision.reason
     assert broker.submit_calls == []
 
 

@@ -114,6 +114,15 @@ def test_perdida_diaria_latchea_aunque_el_equity_se_recupere():
     assert later.reason.startswith("pérdida diaria")
 
 
+def test_perdida_diaria_por_equity_dispara_sin_trades():
+    breaker = DailyCircuitBreaker(max_daily_loss_pct=0.03, day_start_equity=100_000)
+    report = breaker.observe(96_000.0, now=NOW)
+    assert report.tripped
+    assert report.daily_loss_pct == pytest.approx(0.04)
+    assert report.consecutive_losses == 0
+    assert "pérdida diaria" in report.reason
+
+
 def test_el_breaker_se_rearma_al_dia_siguiente():
     breaker = DailyCircuitBreaker(max_consecutive_losses=1, day_start_equity=100_000)
     assert breaker.record_trade(-50.0, now=NOW).tripped
@@ -166,7 +175,7 @@ def test_reloj_ignora_fin_de_semana():
 
 
 def test_facade_permite_y_reduce_por_zona():
-    defense = EquityDefense(start_equity=100_000)
+    defense = EquityDefense(start_equity=100_000, max_daily_loss_pct=0.10)
     ok = defense.evaluate(100_000, NOW)
     assert ok.allowed and ok.size_factor == 1.0
 

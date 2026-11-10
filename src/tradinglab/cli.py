@@ -5146,6 +5146,7 @@ def intraday_forward_cmd(
         "Stop",
         "Vol",
         "Ticket",
+        "Defensa",
         "Motivo",
     ):
         table.add_column(column, overflow="fold")
@@ -5160,6 +5161,7 @@ def intraday_forward_cmd(
             f"{item.stop:.5f}" if item.stop is not None else "-",
             f"{item.volume:g}" if item.volume is not None else "-",
             str(item.position_ticket or "-"),
+            str(item.guards.get("defense") or "-"),
             item.reason,
         )
     console.print(table)
