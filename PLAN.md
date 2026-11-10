@@ -960,6 +960,46 @@ etapa.
 - Pendiente: validación explícita del operador para poner `enabled:true` y
   ejecutar la primera orden demo a volumen mínimo.
 
+### Etapa 3c — Guardián de equity en MetaTrader 5 (2026-11-10)
+
+- [x] **Exportador (`src/tradinglab/guardian.py`)**
+  - `build_config(account_id)` lee `config/accounts.yaml`, los límites
+    efectivos de `prop/rules.py` y los `magic` de
+    `config/intraday_forward.yaml`.
+  - No inventa límites: aborta si falta la cuenta, el `firm/phase`, los
+    límites de una cuenta propia o la lista de magics.
+  - `export_config` escribe de forma atómica
+    `MQL5/Files/tradinglab_guardian.json` si `lab.yaml -> mt5.data_path`
+    existe; si no, `data/guardian.json` con aviso.
+  - Incluye `reset_utc_offset_minutes` resuelto desde `reset_tz` (MQL5 no
+    trae tzdata) y `limits_source` para trazabilidad.
+- [x] **CLI `lab guardian export|status`**
+  - Exporta y muestra cuenta, límites, reset, offset, magics y bots.
+  - `status` enseña ruta, destino (terminal o respaldo), antigüedad y datos;
+    sin JSON: **Sin datos**.
+- [x] **EA `mql5/TradingLabGuardian.mq5`**
+  - Lee el JSON en `OnInit` y cada 60 s; falla cerrado si falta un campo.
+  - `OnTimer` cada 1 s; base del día en el primer tick tras las 00:00 locales
+    y pico trailing persistidos en variables globales.
+  - `ALERT`: Print + ntfy. `CLOSE`: cierra solo los magics listados, escribe
+    `tradinglab_guardian_block.flag` y publica
+    `TradingLabGuardianBlocked`; insiste cada 2 s. Nunca toca otro magic.
+  - Log en `MQL5/Files/tradinglab_guardian.log`.
+  - `TestEquityFile` permite probar umbrales con equity sintética en el
+    Strategy Tester.
+- [x] **Tests y documentación**
+  - `tests/test_guardian.py`: 19 passed, 1 skipped (`@pytest.mark.mt5`).
+  - `docs/guardian.md`: instalación, JSON, Strategy Tester con equity
+    sintética y regla de activación.
+  - Regla: `defense_mode: enforce` en el forward solo tras **5 días de sesión
+    en ALERT sin falsos positivos**.
+- Evidencia: `ruff` limpio; `pytest tests/test_guardian.py -q` → **19 passed,
+  1 skipped**; suite completa **734 passed, 1 skipped**; `lab doctor` OK con
+  los WARN conocidos (ProjectX sin credenciales y plantilla de fondeo). F13
+  sin cambios respecto al estado previo: el hash ya estaba `changed`
+  (`6250d4c0…`) por el bloque `daytrader`; este bloque no toca archivos F13.
+  Sin activar bots, sin órdenes y sin push.
+
 ### Etapa 4 — Presupuesto de riesgo neto por activo
 
 - [x] **`config/risk_budget.yaml`**

@@ -124,6 +124,8 @@ cd E:\trading-lab
 .\.venv\Scripts\lab.exe killswitch status
 .\.venv\Scripts\lab.exe killswitch test
 .\.venv\Scripts\lab.exe killswitch reset
+.\.venv\Scripts\lab.exe guardian export --account ftmo_demo
+.\.venv\Scripts\lab.exe guardian status
 .\.venv\Scripts\lab.exe alerts status
 .\.venv\Scripts\lab.exe alerts check
 .\.venv\Scripts\lab.exe alerts test
@@ -651,6 +653,28 @@ abajo al step del bróker.
 
 Flujo: velas H1 del terminal → señal long/short → ATR → sizing → **guard de
 fondeo** → orden con SL/TP. Si el guard bloquea, no se envía.
+
+### Guardián de equity MQL5
+
+Defensa dentro del terminal para que siga actuando si Python se cae. Es solo
+demo: no abre operaciones y solo cierra posiciones cuyo `magic` esté en la
+lista exportada.
+
+```powershell
+.\.venv\Scripts\lab.exe guardian export --account ftmo_demo
+.\.venv\Scripts\lab.exe guardian status
+```
+
+El exportador lee los límites efectivos de `config/prop.yaml` (FTMO 100k:
+4,5% diario y 9% máximo) y los magics de `config/intraday_forward.yaml`.
+Escribe `MQL5/Files/tradinglab_guardian.json` si `config/lab.yaml` define
+`mt5.data_path`; si no, deja `data/guardian.json` y avisa. El EA
+`mql5/TradingLabGuardian.mq5` trabaja en `ALERT` (Print + ntfy) o `CLOSE`
+(cierra los magics gestionados y bloquea aperturas hasta el reset diario).
+
+Regla: `defense_mode: enforce` en el forward solo tras **5 días de sesión en
+ALERT sin falsos positivos**. Instalación, JSON y prueba con equity sintética
+en el Strategy Tester: [`docs/guardian.md`](docs/guardian.md).
 
 ### Advertencias
 

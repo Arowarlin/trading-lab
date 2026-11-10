@@ -73,6 +73,10 @@ futures_app = typer.Typer(no_args_is_help=True, help="Futuros: ProjectX/TopstepX
 killswitch_app = typer.Typer(
     no_args_is_help=True, help="Kill-switch persistente: estado, pruebas y reset manual."
 )
+guardian_app = typer.Typer(
+    no_args_is_help=True,
+    help="Guardián MQL5: exporta límites y magics para el EA de equity.",
+)
 alerts_app = typer.Typer(
     no_args_is_help=True, help="Alertas ntfy/Telegram, latido y chequeo de servicios."
 )
@@ -134,6 +138,7 @@ app.add_typer(mt5_app, name="mt5")
 app.add_typer(prop_app, name="prop")
 app.add_typer(futures_app, name="futures")
 app.add_typer(killswitch_app, name="killswitch")
+app.add_typer(guardian_app, name="guardian")
 app.add_typer(alerts_app, name="alerts")
 app.add_typer(f13_app, name="f13")
 app.add_typer(bots_app, name="bots")
@@ -1966,6 +1971,96 @@ def killswitch_reset_cmd(
             raise typer.Exit(1)
     new_state = reset_killswitch(DEFAULT_DB, confirm=True)
     console.print(f"[green]Kill-switch reseteado[/green] · reset_at={new_state.reset_at}")
+
+
+@guardian_app.command("export")
+def guardian_export_cmd(
+    account: str = typer.Option(
+        "ftmo_demo", "--account", help="Cuenta de accounts.yaml"
+    ),
+) -> None:
+    """Escribe el JSON que lee el EA en MQL5/Files."""
+    from .guardian import GuardianError, export_config
+
+    try:
+        result = export_config(account)
+    except GuardianError as exc:
+        console.print(
+            Panel(str(exc), title="Guardián no exportado", style="bold red")
+        )
+        raise typer.Exit(1) from exc
+
+    cfg = result["config"]
+    if result["warning"]:
+        console.print(f"[yellow]{result['warning']}[/yellow]")
+
+    t = Table(title="Guardián · configuración exportada")
+    t.add_column("Campo", style="bold")
+    t.add_column("Valor", justify="right")
+    t.add_row("Cuenta", str(cfg["account"]))
+    t.add_row("Tamaño", f"{float(cfg['account_size']):,.2f}")
+    t.add_row("Pérdida diaria", f"{float(cfg['daily_loss_pct']):.2%}")
+    t.add_row("Drawdown máximo", f"{float(cfg['max_drawdown_pct']):.2%}")
+    t.add_row("Reset", f"{cfg['reset_time']} {cfg['reset_tz']}")
+    t.add_row("Offset UTC", f"{int(cfg['reset_utc_offset_minutes'])} min")
+    t.add_row("Magics", ", ".join(str(item) for item in cfg["magics"]))
+    t.add_row("Bots", ", ".join(str(item) for item in cfg["bots"]))
+    t.add_row("Fuente", str(cfg["limits_source"]))
+    console.print(t)
+    console.print(f"[green]JSON:[/green] {result['path']}")
+    if result["fallback"]:
+        console.print(
+            "[yellow]Destino de respaldo: copia el JSON a MQL5/Files del terminal "
+            "o configura mt5.data_path en config/lab.yaml.[/yellow]"
+        )
+
+
+@guardian_app.command("status")
+def guardian_status_cmd(
+    account: str = typer.Option(None, "--account", help="Filtra por cuenta"),
+) -> None:
+    """Último JSON exportado, su destino y su antigüedad."""
+    from .guardian import GuardianError, read_exported
+
+    try:
+        state = read_exported()
+    except GuardianError as exc:
+        console.print(
+            Panel(str(exc), title="Guardián no disponible", style="bold red")
+        )
+        raise typer.Exit(1) from exc
+
+    if not state["exists"]:
+        console.print(
+            "[yellow]Sin datos: ejecuta `lab guardian export`.[/yellow]"
+        )
+        return
+
+    cfg = state["config"] or {}
+    if account and str(cfg.get("account")) != account:
+        console.print(
+            f"[yellow]El JSON es de {cfg.get('account')}, no de {account}.[/yellow]"
+        )
+
+    t = Table(title="Guardián · estado")
+    t.add_column("Campo", style="bold")
+    t.add_column("Valor", justify="right")
+    t.add_row("Ruta", str(state["path"]))
+    t.add_row("Destino", "respaldo data/" if state["fallback"] else "MQL5/Files")
+    t.add_row("Cuenta", str(cfg.get("account") or "-"))
+    t.add_row("Generado", str(cfg.get("generated_at") or "-"))
+    age = state.get("age_s")
+    t.add_row("Antigüedad", f"{float(age) / 3600:.1f} h" if age is not None else "Sin datos")
+    daily = cfg.get("daily_loss_pct")
+    max_dd = cfg.get("max_drawdown_pct")
+    t.add_row("Pérdida diaria", f"{float(daily):.2%}" if daily is not None else "Sin datos")
+    t.add_row("Drawdown máximo", f"{float(max_dd):.2%}" if max_dd is not None else "Sin datos")
+    t.add_row("Reset", f"{cfg.get('reset_time', '-')} {cfg.get('reset_tz', '-')}")
+    magics = cfg.get("magics") or []
+    t.add_row("Magics", ", ".join(str(item) for item in magics) or "Sin datos")
+    console.print(t)
+    if state["warning"]:
+        console.print(f"[yellow]{state['warning']}[/yellow]")
 
 
 @alerts_app.command("status")
