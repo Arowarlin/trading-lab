@@ -14,6 +14,7 @@ from typing import Any, Callable
 
 import numpy as np
 
+from .alerts import send as send_alert
 from .config import DEFAULT_DB
 from .db import connect, init_db
 
@@ -22,6 +23,8 @@ DEFAULT_MAX_ROUND_TRIPS = 3
 DEFAULT_MAX_ROUND_TRIPS_DAY = 6
 DEFAULT_POLL_ATTEMPTS = 10
 DEFAULT_POLL_S = 0.2
+DEFAULT_CLOSE_ATTEMPTS = 3
+DEFAULT_CLOSE_RETRY_S = 0.5
 REQUOTE_CODE = 10004
 
 
@@ -90,32 +93,213 @@ def _entries_today(db_path: str | Path, day: str) -> int:
     return int(row["n"])
 
 
-def _find_position(
+def _require_health_true(health: dict, key: str, message: str) -> None:
+    if health.get(key) is not True:
+        raise SlippageProbeError(message)
+
+
+def _position_ids(position: dict) -> set[int]:
+    ids: set[int] = set()
+    for key in ("ticket", "order_id", "deal_id", "position_id", "identifier"):
+        value = position.get(key)
+        if value is None:
+            continue
+        try:
+            ids.add(int(value))
+        except (TypeError, ValueError):
+            continue
+    return ids
+
+
+def _find_position_by_ids(
     broker,
     symbol: str,
+    *,
+    order_id: int,
+    deal_id: int | None,
     side: str,
     volume: float,
-    *,
     sleep: Callable[[float], None],
-) -> dict | None:
+) -> dict:
+    expected = {int(order_id)}
+    if deal_id is not None:
+        expected.add(int(deal_id))
     for attempt in range(DEFAULT_POLL_ATTEMPTS):
         positions = broker.positions(symbol=symbol)
         matches = [
             position
             for position in positions
-            if str(position.get("side") or "").lower() == side
-            and math.isclose(
+            if _position_ids(position) & expected
+        ]
+        if len(matches) > 1:
+            raise SlippageProbeError(
+                f"{symbol}: posición ambigua para order_id={order_id} "
+                f"deal_id={deal_id}; no se cierra nada"
+            )
+        if len(matches) == 1:
+            position = matches[0]
+            if str(position.get("side") or "").lower() != side:
+                raise SlippageProbeError(
+                    f"{symbol}: la posición {position.get('ticket')} no coincide "
+                    "con el lado de la entrada; no se cierra nada"
+                )
+            if not math.isclose(
                 float(position.get("volume") or 0.0),
                 volume,
                 rel_tol=1e-9,
                 abs_tol=1e-9,
-            )
-        ]
-        if matches:
-            return max(matches, key=lambda item: int(item.get("ticket") or 0))
+            ):
+                raise SlippageProbeError(
+                    f"{symbol}: la posición {position.get('ticket')} no coincide "
+                    "con el volumen de la entrada; no se cierra nada"
+                )
+            return position
         if attempt < DEFAULT_POLL_ATTEMPTS - 1:
             sleep(DEFAULT_POLL_S)
-    return None
+    raise SlippageProbeError(
+        f"{symbol}: no se pudo identificar la posición por order_id={order_id} "
+        f"deal_id={deal_id}; no se cierra nada"
+    )
+
+
+def _position_is_open(broker, symbol: str, ticket: int) -> bool:
+    try:
+        positions = broker.positions(symbol=symbol)
+    except Exception:
+        return True
+    return any(int(ticket) in _position_ids(position) for position in positions)
+
+
+def _close_with_retries(
+    broker,
+    ticket: int,
+    volume: float,
+    *,
+    sleep: Callable[[float], None],
+) -> tuple[dict | None, Exception | None, int]:
+    last_error: Exception | None = None
+    for attempt in range(1, DEFAULT_CLOSE_ATTEMPTS + 1):
+        try:
+            return broker.close_position(ticket, volume=volume), None, attempt
+        except Exception as exc:
+            last_error = exc
+            if attempt < DEFAULT_CLOSE_ATTEMPTS:
+                sleep(DEFAULT_CLOSE_RETRY_S)
+    return None, last_error, DEFAULT_CLOSE_ATTEMPTS
+
+
+def _prepare_probe(
+    broker,
+    symbol: str,
+    *,
+    orders: int,
+    volume: float | None,
+    spacing_s: float,
+    max_orders: int,
+    max_orders_day: int,
+    db_path: str | Path,
+    clock: Callable[[], datetime],
+) -> dict:
+    symbol = str(symbol or "").strip().upper()
+    if not symbol:
+        raise SlippageProbeError("símbolo vacío")
+    if orders < 1:
+        raise SlippageProbeError("orders debe ser >= 1")
+    if max_orders < 1 or max_orders_day < 1:
+        raise SlippageProbeError("los topes deben ser >= 1")
+    if orders > max_orders:
+        raise SlippageProbeError(
+            f"orders {orders} > tope por ejecución {max_orders}"
+        )
+    if spacing_s < 0:
+        raise SlippageProbeError("spacing no puede ser negativo")
+
+    health = broker.health()
+    if health.get("mode") != "demo":
+        raise SlippageProbeError(
+            f"cuenta no demo: mode={health.get('mode')!r}; no se envía nada"
+        )
+    _require_health_true(
+        health, "identity_ok", "identity_ok != True; no se envía nada"
+    )
+    _require_health_true(
+        health, "connected", "connected != True; no se envía nada"
+    )
+    _require_health_true(
+        health, "trade_allowed", "trade_allowed != True; no se envía nada"
+    )
+
+    spec = broker.symbol_spec(symbol)
+    volume_min = float(spec.get("volume_min") or 0.0)
+    if volume_min <= 0:
+        raise SlippageProbeError(f"{symbol}: volume_min inválido")
+    if volume is not None:
+        if not math.isclose(float(volume), volume_min, rel_tol=1e-9, abs_tol=1e-12):
+            raise SlippageProbeError(
+                f"{symbol}: esta sonda solo permite el volumen mínimo "
+                f"({volume_min:g}); recibido {float(volume):g}"
+            )
+    selected_volume = volume_min
+
+    init_db(db_path)
+    now = clock() or datetime.now(timezone.utc)
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=timezone.utc)
+    day = now.astimezone(timezone.utc).date().isoformat()
+    already = _entries_today(db_path, day)
+    if already + orders > max_orders_day:
+        raise SlippageProbeError(
+            f"tope diario: ya hay {already} entradas hoy y se piden {orders}; "
+            f"máximo {max_orders_day}"
+        )
+    return {
+        "symbol": symbol,
+        "orders": orders,
+        "volume": selected_volume,
+        "spec": spec,
+        "health": health,
+        "spacing_s": spacing_s,
+        "max_orders": max_orders,
+        "max_orders_day": max_orders_day,
+        "day": day,
+        "entries_today": already,
+        "db_path": str(db_path),
+    }
+
+
+def preview_probe(
+    broker,
+    symbol: str,
+    *,
+    orders: int = 2,
+    volume: float | None = None,
+    spacing_s: float = DEFAULT_SPACING_S,
+    max_orders: int = DEFAULT_MAX_ROUND_TRIPS,
+    max_orders_day: int = DEFAULT_MAX_ROUND_TRIPS_DAY,
+    db_path: str | Path = DEFAULT_DB,
+    clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
+) -> dict:
+    """Valida guardas y muestra qué enviaría, sin enviar nada."""
+    prepared = _prepare_probe(
+        broker,
+        symbol,
+        orders=orders,
+        volume=volume,
+        spacing_s=spacing_s,
+        max_orders=max_orders,
+        max_orders_day=max_orders_day,
+        db_path=db_path,
+        clock=clock,
+    )
+    prepared.update(
+        {
+            "dry_run": True,
+            "mode": prepared["health"].get("mode"),
+            "identity_ok": prepared["health"].get("identity_ok"),
+            "would_send_orders": 2 * orders,
+        }
+    )
+    return prepared
 
 
 def run_probe(
@@ -136,54 +320,19 @@ def run_probe(
     ``orders`` y los topes cuentan round-trips; cada round-trip son dos órdenes
     de mercado (entrada y cierre). Cualquier guarda falla antes de enviar.
     """
-    symbol = str(symbol or "").strip().upper()
-    if not symbol:
-        raise SlippageProbeError("símbolo vacío")
-    if orders < 1:
-        raise SlippageProbeError("orders debe ser >= 1")
-    if max_orders < 1 or max_orders_day < 1:
-        raise SlippageProbeError("los topes deben ser >= 1")
-    if orders > max_orders:
-        raise SlippageProbeError(
-            f"orders {orders} > tope por ejecución {max_orders}"
-        )
-    if spacing_s < 0:
-        raise SlippageProbeError("spacing no puede ser negativo")
-
-    health = broker.health()
-    if health.get("mode") != "demo":
-        raise SlippageProbeError(
-            f"cuenta no demo: mode={health.get('mode')!r}; no se envía nada"
-        )
-    if health.get("identity_ok") is not True:
-        raise SlippageProbeError("identity_ok != True; no se envía nada")
-    if not health.get("connected", True):
-        raise SlippageProbeError("terminal MT5 no conectado; no se envía nada")
-    if not health.get("trade_allowed", True):
-        raise SlippageProbeError(
-            "Algo Trading desactivado en el terminal; no se envía nada"
-        )
-
-    spec = broker.symbol_spec(symbol)
-    volume_min = float(spec.get("volume_min") or 0.0)
-    if volume_min <= 0:
-        raise SlippageProbeError(f"{symbol}: volume_min inválido")
-    if volume is not None:
-        if not math.isclose(float(volume), volume_min, rel_tol=1e-9, abs_tol=1e-12):
-            raise SlippageProbeError(
-                f"{symbol}: esta sonda solo permite el volumen mínimo "
-                f"({volume_min:g}); recibido {float(volume):g}"
-            )
-    selected_volume = volume_min
-
-    init_db(db_path)
-    day = (clock() or datetime.now(timezone.utc)).astimezone(timezone.utc).date().isoformat()
-    already = _entries_today(db_path, day)
-    if already + orders > max_orders_day:
-        raise SlippageProbeError(
-            f"tope diario: ya hay {already} entradas hoy y se piden {orders}; "
-            f"máximo {max_orders_day}"
-        )
+    prepared = _prepare_probe(
+        broker,
+        symbol,
+        orders=orders,
+        volume=volume,
+        spacing_s=spacing_s,
+        max_orders=max_orders,
+        max_orders_day=max_orders_day,
+        db_path=db_path,
+        clock=clock,
+    )
+    symbol = prepared["symbol"]
+    selected_volume = prepared["volume"]
 
     sent = 0
     filled = 0
@@ -257,14 +406,22 @@ def run_probe(
             },
         )
 
-        position = _find_position(
-            broker, symbol, side, selected_volume, sleep=sleep
-        )
-        if position is None:
+        order_id = order.get("order_id")
+        if order_id is None:
             raise SlippageProbeError(
-                f"{symbol}: posición no encontrada tras la entrada; "
-                "revisa el terminal antes de continuar"
+                f"{symbol}: submit_market no devolvió order_id; no se puede "
+                "identificar la posición y no se cierra nada"
             )
+        deal_id = order.get("deal_id")
+        position = _find_position_by_ids(
+            broker,
+            symbol,
+            order_id=int(order_id),
+            deal_id=None if deal_id is None else int(deal_id),
+            side=side,
+            volume=selected_volume,
+            sleep=sleep,
+        )
         close_side = "sell" if side == "buy" else "buy"
         close_tick = broker.tick(symbol)
         close_requested = float(
@@ -272,15 +429,26 @@ def run_probe(
         )
         close_stamp = clock().astimezone(timezone.utc)
         sent += 1
-        try:
-            closed = broker.close_position(
-                int(position["ticket"]), volume=selected_volume
+        closed, close_error, attempts = _close_with_retries(
+            broker,
+            int(position["ticket"]),
+            selected_volume,
+            sleep=sleep,
+        )
+        if closed is None:
+            retcode = (
+                _retcode_from_error(close_error)
+                if close_error is not None
+                else None
             )
-        except Exception as exc:
-            retcode = _retcode_from_error(exc)
-            requote = _is_requote(exc, retcode)
+            requote = (
+                _is_requote(close_error, retcode)
+                if close_error is not None
+                else False
+            )
             requotes += 1 if requote else 0
             errors += 0 if requote else 1
+            error_text = str(close_error)[:300]
             _record(
                 db_path,
                 {
@@ -296,12 +464,29 @@ def run_probe(
                     "leg": "close",
                     "requote": requote,
                     "retcode": retcode,
-                    "error": str(exc)[:300],
+                    "error": f"close failed after {attempts} attempts: {error_text}",
                 },
             )
+            if _position_is_open(broker, symbol, int(position["ticket"])):
+                message = (
+                    f"Posición huérfana en {symbol} ticket={position['ticket']} "
+                    f"tras {attempts} intentos de cierre: {error_text}"
+                )
+                try:
+                    send_alert(
+                        "slippage_probe_orphan",
+                        message,
+                        severity="error",
+                        db_path=db_path,
+                    )
+                except Exception:
+                    pass
+                raise SlippageProbeError(message) from close_error
             raise SlippageProbeError(
-                f"{symbol}: no se pudo cerrar la posición {position['ticket']}: {exc}"
-            ) from exc
+                f"{symbol}: el cierre falló tras {attempts} intentos y la "
+                f"posición {position['ticket']} ya no está abierta; "
+                f"no hay fill de cierre: {error_text}"
+            ) from close_error
 
         close_filled = float(closed["price"])
         _record(
@@ -406,11 +591,20 @@ def report(
     }
 
 
+def confirmation_matches(symbol: str, typed: str) -> bool:
+    """Confirma que el texto escrito coincide con el símbolo, sin ambigüedad."""
+    return str(typed or "").strip().upper() == str(symbol or "").strip().upper()
+
+
 __all__ = [
+    "DEFAULT_CLOSE_ATTEMPTS",
+    "DEFAULT_CLOSE_RETRY_S",
     "DEFAULT_MAX_ROUND_TRIPS",
     "DEFAULT_MAX_ROUND_TRIPS_DAY",
     "DEFAULT_SPACING_S",
     "SlippageProbeError",
+    "confirmation_matches",
+    "preview_probe",
     "report",
     "run_probe",
     "slippage_bps",

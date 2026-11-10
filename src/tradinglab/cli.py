@@ -4934,13 +4934,56 @@ def slippage_probe_cmd(
     spacing: float = typer.Option(2.0, "--spacing", help="Segundos entre round-trips"),
     max_orders: int = typer.Option(3, "--max-orders", min=1, help="Tope por ejecución"),
     max_orders_day: int = typer.Option(6, "--max-orders-day", min=1, help="Tope diario"),
+    execute: bool = typer.Option(
+        False,
+        "--execute",
+        help="Enviar órdenes reales en demo; sin esta bandera solo hace dry-run",
+    ),
 ) -> None:
     """Mide slippage real enviando round-trips de volumen mínimo en demo."""
-    from .slippage_probe import run_probe
+    from .slippage_probe import confirmation_matches, preview_probe, run_probe
 
     settings = get_settings()
-    broker = _mt5(settings, dry_run=False)
+    broker = _mt5(settings, dry_run=not execute)
     try:
+        preview = preview_probe(
+            broker,
+            symbol,
+            orders=orders,
+            volume=volume,
+            spacing_s=spacing,
+            max_orders=max_orders,
+            max_orders_day=max_orders_day,
+        )
+        table = Table(
+            title=(
+                f"Slippage probe · {preview['symbol']} · "
+                f"{'EXECUTE' if execute else 'DRY-RUN'}"
+            )
+        )
+        table.add_column("Campo", style="bold")
+        table.add_column("Valor", justify="right")
+        table.add_row("Modo cuenta", str(preview.get("mode")))
+        table.add_row("identity_ok", str(preview.get("identity_ok")))
+        table.add_row("Round-trips", str(preview["orders"]))
+        table.add_row("Órdenes previstas", str(preview["would_send_orders"]))
+        table.add_row("Volumen", f"{preview['volume']:g}")
+        table.add_row("Spacing", f"{preview['spacing_s']:g} s")
+        table.add_row("Tope ejecución", str(preview["max_orders"]))
+        table.add_row("Tope diario", str(preview["max_orders_day"]))
+        table.add_row("Entradas hoy", str(preview["entries_today"]))
+        console.print(table)
+        if not execute:
+            console.print(
+                "[yellow]Sin --execute: dry-run; no se envía ninguna orden.[/yellow]"
+            )
+            return
+        typed = typer.prompt(
+            f"Escribe {preview['symbol']} para confirmar el envío real en demo"
+        )
+        if not confirmation_matches(preview["symbol"], typed):
+            console.print("[red]Confirmación incorrecta; no se envía nada.[/red]")
+            raise typer.Exit(2)
         result = run_probe(
             broker,
             symbol,
@@ -4950,6 +4993,8 @@ def slippage_probe_cmd(
             max_orders=max_orders,
             max_orders_day=max_orders_day,
         )
+    except typer.Exit:
+        raise
     except Exception as exc:
         console.print(Panel(str(exc), title="Sonda de slippage abortada", style="bold red"))
         raise typer.Exit(1) from exc
