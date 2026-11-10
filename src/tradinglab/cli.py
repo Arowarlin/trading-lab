@@ -54,6 +54,7 @@ from .killswitch import reset as reset_killswitch
 from .llm import LLMClient
 from .orchestrator import load_bots, run_all, write_dry_run_log
 from .prop import AccountState, PropGuard, PropRules, from_yaml, ftmo, monte_carlo
+from .prop.defense import FlattenClock, TrailingDrawdown
 from .reconciliation import last_reconciliation
 from .reconciliation import reconcile as reconcile_broker
 from .reporting import build_dashboard
@@ -5686,6 +5687,48 @@ def prop_status(
         )
 
     _print_guard(rules, guard.evaluate(state))
+
+
+@prop_app.command("defense")
+def prop_defense(
+    equity: float | None = typer.Option(None, "--equity", help="Equity actual"),
+    hwm: float | None = typer.Option(None, "--hwm", help="Máximo histórico de equity"),
+    firm: str = typer.Option(None, "--firm"),
+    phase: str = typer.Option(None, "--phase"),
+    account_size: float = typer.Option(None, "--account-size"),
+    flat_by: str = typer.Option("15:55", "--flat-by", help="Hora local de cierre"),
+    tz: str = typer.Option("America/New_York", "--tz", help="Zona del cierre"),
+) -> None:
+    """Zonas de drawdown trailing, factor de tamaño y hora de cierre."""
+    rules = _prop_rules(firm, phase, account_size)
+    eq = float(equity if equity is not None else rules.account_size)
+    peak = float(hwm if hwm is not None else max(eq, rules.account_size))
+    limit_pct = rules.effective_max_loss_usd / rules.account_size
+
+    dd = TrailingDrawdown(limit_pct, start_equity=peak)
+    report = dd.observe(eq)
+    now = datetime.now(timezone.utc)
+    clock = FlattenClock(flat_by, tz=tz)
+    floor = dd.floor() or 0.0
+
+    t = Table(title=f"Defensa de equity · {rules.firm} · {rules.phase}")
+    t.add_column("Campo", style="bold")
+    t.add_column("Valor", justify="right")
+    t.add_row("Equity", f"{eq:,.2f}")
+    t.add_row("HWM", f"{report.hwm:,.2f}")
+    t.add_row("Suelo", f"{floor:,.2f}")
+    t.add_row("Drawdown", f"{report.drawdown_pct:.2%}")
+    t.add_row("Límite", f"{limit_pct:.2%} ({rules.effective_max_loss_usd:,.2f})")
+    t.add_row("Uso del límite", f"{report.utilization:.0%}")
+    t.add_row("Zona", report.level)
+    t.add_row("Factor de tamaño", f"{report.size_factor:g}x")
+    t.add_row("Nuevas entradas", "permitidas" if report.allowed else "bloqueadas")
+    t.add_row("Cierre", f"{flat_by} {tz}")
+    t.add_row("Reloj", "toca aplanar" if clock.due(now) else "dentro de hora")
+    console.print(t)
+    for warning in report.warnings:
+        console.print(f"[yellow]{warning}[/yellow]")
+    console.print(f"Motivo: {report.reason}")
 
 
 @prop_app.command("size")
