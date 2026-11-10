@@ -1,0 +1,20 @@
+{
+  "mode": "daily",
+  "as_of": "2026-11-10 close",
+  "scanned": 3,
+  "hits": [
+    {
+      "symbol": "AAPL",
+      "setup": "breakout_20d",
+      "price": 350.69
+    },
+    {
+      "symbol": "MSFT",
+      "setups": [
+        "reclaim_ma20",
+        "oversold"
+      ],
+      "price": 545.18
+    }
+  ]
+}

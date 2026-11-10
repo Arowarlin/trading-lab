@@ -1,0 +1,16 @@
+{
+  "results": [
+    {
+      "index": 0,
+      "symbol": "AAPL",
+      "side": "buy",
+      "verdict": "BLOCK",
+      "fingerprint": "3ad825674d2d78c2",
+      "reasons": [
+        "max loss per trade"
+      ]
+    }
+  ],
+  "pass": 0,
+  "block": 1
+}

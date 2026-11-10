@@ -1,0 +1,14 @@
+{
+  "results": [
+    {
+      "index": 0,
+      "symbol": "AAPL",
+      "side": "buy",
+      "verdict": "PASS",
+      "fingerprint": "3ad825674d2d78c2",
+      "reasons": []
+    }
+  ],
+  "pass": 1,
+  "block": 0
+}

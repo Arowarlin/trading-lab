@@ -1,0 +1,14 @@
+{
+  "orders": [
+    {
+      "symbol": "AAPL",
+      "side": "buy",
+      "qty": "8",
+      "type": "market",
+      "time_in_force": "day",
+      "order_class": "bracket",
+      "stop_loss_stop_price": "340.00",
+      "take_profit_limit_price": "370.00"
+    }
+  ]
+}

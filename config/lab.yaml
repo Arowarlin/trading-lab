@@ -26,6 +26,11 @@ execution:
   commission_bps: 1.0
   slippage_bps: 5.0
 
+daytrader:
+  dir: "C:/Users/PC/Proyectos/trading/trader"
+  account: alpaca_paper
+  enabled: false
+
 data:
   provider: yahoo             # yahoo | alpaca
   cache_dir: data/cache

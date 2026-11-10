@@ -109,6 +109,10 @@ intraday_app = typer.Typer(
     no_args_is_help=True,
     help="Forward intradía: dos candidatos fijos, dry-run por defecto.",
 )
+daytrader_app = typer.Typer(
+    no_args_is_help=True,
+    help="Day trading de acciones desde JSON externo, con guards del lab.",
+)
 tradestation_app = typer.Typer(
     no_args_is_help=True,
     help="TradeStation SIM: OAuth, cuentas y posiciones en solo lectura.",
@@ -141,6 +145,7 @@ app.add_typer(llm_app, name="llm")
 app.add_typer(ticks_app, name="ticks")
 app.add_typer(slippage_app, name="slippage")
 app.add_typer(intraday_app, name="intraday")
+app.add_typer(daytrader_app, name="daytrader")
 app.add_typer(tradestation_app, name="tradestation")
 app.add_typer(lessons_app, name="lessons")
 app.add_typer(reports_app, name="reports")
@@ -5165,6 +5170,96 @@ def intraday_forward_cmd(
     else:
         console.print(
             "[yellow]Sin --execute: dry-run; no se envía ninguna orden.[/yellow]"
+        )
+
+
+@daytrader_app.command("import")
+def daytrader_import_cmd(
+    execute: bool = typer.Option(
+        False,
+        "--execute",
+        help="Ejecutar solo si enabled=true y la cuenta es paper; sin esto, dry-run",
+    ),
+) -> None:
+    """Importa señales y previsualiza/ejecuta las órdenes del pipeline externo."""
+    from .daytrader import import_signals, plan_orders
+
+    settings = get_settings()
+    target = settings.daytrader.dir
+    init_db(DEFAULT_DB)
+    try:
+        with connect(DEFAULT_DB) as con:
+            imported = import_signals(settings, con, target)
+        plan = plan_orders(settings, target, execute=execute)
+    except Exception as exc:
+        console.print(Panel(str(exc)[-2000:], title="Daytrader detenido", style="bold red"))
+        raise typer.Exit(1) from exc
+
+    console.print(
+        f"Señales: [bold]{imported['inserted']}[/bold] nuevas · "
+        f"{imported['skipped']} ya existían · carpeta: {target}"
+    )
+    if not plan["orders_file"]:
+        console.print(
+            f"[yellow]No hay orders.json en {target}; solo se importaron señales.[/yellow]"
+        )
+        if not plan["risk_file"]:
+            console.print(
+                "[dim]state/risk.json tampoco existe; si hubiera órdenes, "
+                "se tratarían como BLOCK.[/dim]"
+            )
+        return
+
+    if not plan["risk_file"]:
+        console.print(
+            "[yellow]state/risk.json no existe: todas las órdenes se tratan "
+            "como BLOCK.[/yellow]"
+        )
+    if execute and not plan["enabled"]:
+        console.print(
+            "[yellow]daytrader.enabled=false: --execute no ejecuta; "
+            "se muestra dry-run.[/yellow]"
+        )
+    if not plan["orders"]:
+        console.print("[dim]orders.json existe pero no contiene órdenes.[/dim]")
+        return
+
+    table = Table(
+        title=(
+            f"Daytrader · {'EXECUTE' if execute else 'DRY-RUN'} · "
+            f"{plan['account']}"
+        )
+    )
+    for column in (
+        "Símbolo",
+        "Lado",
+        "Qty",
+        "Stop",
+        "Target",
+        "Veredicto externo",
+        "Guards lab",
+        "Acción",
+    ):
+        table.add_column(column, overflow="fold")
+    for item in plan["orders"]:
+        table.add_row(
+            item["symbol"],
+            item["side"],
+            f"{item['qty']:g}" if item.get("qty") is not None else "-",
+            f"{item['stop']:.2f}" if item.get("stop") is not None else "-",
+            f"{item['target']:.2f}" if item.get("target") is not None else "-",
+            str(item.get("external_verdict") or "-"),
+            str(item.get("guard_verdict") or "-"),
+            str(item.get("action") or "-"),
+        )
+    console.print(table)
+    for item in plan["orders"]:
+        if item.get("action") == "rechazada" and item.get("reason"):
+            console.print(f"  [red]{item['symbol']}[/red]: {item['reason']}")
+    if execute and not plan["can_execute"]:
+        console.print(
+            "[dim]Ejecución bloqueada: se requiere --execute + enabled=true + "
+            "cuenta paper.[/dim]"
         )
 
 

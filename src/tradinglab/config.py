@@ -142,6 +142,12 @@ class ExecutionSettings(BaseModel):
     slippage_bps: float = 5.0
 
 
+class DaytraderSettings(BaseModel):
+    dir: str = "C:/Users/PC/Proyectos/trading/trader"
+    account: str = "alpaca_paper"
+    enabled: bool = False
+
+
 class DataSettings(BaseModel):
     provider: Literal["yahoo", "alpaca"] = "yahoo"
     cache_dir: Path = Path("data/cache")
@@ -220,6 +226,7 @@ class Settings(BaseModel):
     llm: LLMSettings = Field(default_factory=LLMSettings)
     risk: RiskSettings = Field(default_factory=RiskSettings)
     execution: ExecutionSettings = Field(default_factory=ExecutionSettings)
+    daytrader: DaytraderSettings = Field(default_factory=DaytraderSettings)
     data: DataSettings = Field(default_factory=DataSettings)
     mt5: MT5Settings = Field(default_factory=MT5Settings)
     projectx: ProjectXSettings = Field(default_factory=ProjectXSettings)
