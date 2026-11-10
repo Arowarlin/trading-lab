@@ -213,26 +213,37 @@ def test_f13_scripts_preparados_sin_registrar():
     assert "f13_daily.ps1" in register
 
 
-def test_intraday_forward_scripts_signal_only():
-    daily = (ROOT / "scripts" / "intraday_forward_signal.ps1").read_text(
+def test_intraday_forward_scripts_signal_y_execute():
+    signal = (ROOT / "scripts" / "intraday_forward_signal.ps1").read_text(
         encoding="utf-8"
     )
-    assert "intraday forward --bars 5000" in daily
-    assert "--execute" not in daily
-    assert "intraday_forward_failed" in daily
-    assert "TradingLab-IntradayForward" in daily
-    assert "[Console]::OutputEncoding" in daily
-    assert "PYTHONIOENCODING" in daily
-    assert "Add-Content -Path $log" in daily
-    assert "Register-ScheduledTask" not in daily
-    assert "*>>" not in daily
+    assert "intraday forward --bars 5000" in signal
+    assert "--execute" not in signal
+    assert "intraday_forward_failed" in signal
+    assert "TradingLab-IntradayForward" in signal
+    assert "[Console]::OutputEncoding" in signal
+    assert "PYTHONIOENCODING" in signal
+    assert "Add-Content -Path $log" in signal
+    assert "Register-ScheduledTask" not in signal
+    assert "*>>" not in signal
+
+    execute = (ROOT / "scripts" / "intraday_forward_execute.ps1").read_text(
+        encoding="utf-8"
+    )
+    assert "intraday forward --bars 5000 --execute --confirm FORWARD-DEMO" in execute
+    assert "intraday_forward_failed" in execute
+    assert "TradingLab-IntradayForward" in execute
+    assert "[Console]::OutputEncoding" in execute
+    assert "PYTHONIOENCODING" in execute
+    assert "Add-Content -Path $log" in execute
+    assert "Register-ScheduledTask" not in execute
+    assert "*>>" not in execute
 
     register = (
         ROOT / "scripts" / "register_intraday_forward_task.ps1"
     ).read_text(encoding="utf-8")
     assert "Register-ScheduledTask" in register
     assert "TradingLab-IntradayForward" in register
-    assert "intraday_forward_signal.ps1" in register
+    assert "intraday_forward_execute.ps1" in register
     assert "RepetitionInterval" in register
-    assert "--execute" not in register
 

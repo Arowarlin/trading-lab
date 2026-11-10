@@ -4,8 +4,9 @@
 # validación: los dos tienen Sharpe negativo en backtest y no pasaron la
 # puerta de incubación. Se usan como excepción forward documentada.
 #
-# enabled:false = solo dry-run. La ejecución real exige enabled:true y el
-# comando explícito `lab intraday forward --execute --confirm FORWARD-DEMO`.
+# enabled:true = forward demo automático en la próxima ventana de sesión.
+# La tarea programada usa `--execute --confirm FORWARD-DEMO`; volumen mínimo,
+# máximo 1 trade/día por bot y cierre obligatorio por sesión.
 version: 1
 account: ftmo_demo
 bots:
@@ -25,7 +26,7 @@ bots:
     stop_atr: 2.0
     max_trades_per_day: 1
     magic: 20261151
-    enabled: false
+    enabled: true
     notes: "Forward experimental; backtest Sharpe -4.42, MaxDD -30.4%."
 
   - id: usdjpy-tokyo-breakout-forward
@@ -43,5 +44,5 @@ bots:
     stop_atr: 2.0
     max_trades_per_day: 1
     magic: 20261152
-    enabled: false
+    enabled: true
     notes: "Forward experimental; backtest Sharpe -4.63, MaxDD -8.1%."

@@ -1,11 +1,12 @@
-# Registra la tarea signal-only del forward intradía.
+# Registra la tarea de ejecución demo del forward intradía.
 #
-# La tarea despierta cada 5 minutos y el script solo invoca el dry-run una vez
-# por barra M15 dentro de las ventanas UTC. No activa bots ni envía órdenes.
+# La tarea despierta cada 5 minutos y el script solo invoca la ejecución demo
+# una vez por barra M15 dentro de las ventanas UTC. Solo demo, volumen mínimo,
+# máximo 1 trade/día y cierres obligatorios por sesión.
 $ErrorActionPreference = "Stop"
 
 $root = "E:\trading-lab"
-$script = Join-Path $root "scripts\intraday_forward_signal.ps1"
+$script = Join-Path $root "scripts\intraday_forward_execute.ps1"
 $taskName = "TradingLab-IntradayForward"
 
 if (-not (Test-Path $script)) {
@@ -41,7 +42,7 @@ Register-ScheduledTask `
     -Action $action `
     -Trigger $trigger `
     -Settings $settings `
-    -Description "TradingLab forward intradía signal-only: dry-run una vez por barra M15; sin órdenes." `
+    -Description "TradingLab forward intradía demo: ejecución automática una vez por barra M15; volumen mínimo y guardas." `
     -Force
 
 Write-Output "Tarea registrada: $taskName"

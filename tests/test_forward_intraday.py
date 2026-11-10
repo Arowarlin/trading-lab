@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime, time, timezone
 
 import pandas as pd
@@ -402,7 +403,7 @@ def test_config_dos_candidatos_fijos() -> None:
         "max_hold": 4,
     }
     assert all(bot.account == "ftmo_demo" for bot in bots)
-    assert all(not bot.enabled for bot in bots)
+    assert all(bot.enabled for bot in bots)
     assert len({bot.magic for bot in bots}) == 2
 
 
@@ -852,6 +853,10 @@ def test_cli_execute_exige_confirmacion_y_armado(monkeypatch) -> None:
     assert no_confirm.exit_code == 2
     assert calls == []
 
+    disabled = [
+        replace(bot, enabled=False) for bot in fwd.load_forward_bots()
+    ]
+    monkeypatch.setattr(fwd, "load_forward_bots", lambda: disabled)
     not_armed = CliRunner().invoke(
         cli_mod.app,
         ["intraday", "forward", "--execute", "--confirm", "FORWARD-DEMO"],
@@ -867,4 +872,4 @@ def test_cli_status_muestra_los_dos(monkeypatch) -> None:
     assert result.exit_code == 0
     assert "eurusd-london-pullback-forward" in result.output
     assert "usdjpy-tokyo-breakout-forward" in result.output
-    assert "solo dry-run" in result.output
+    assert "Armado: sí" in result.output
