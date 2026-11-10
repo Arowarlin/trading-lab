@@ -61,6 +61,7 @@ class DaytraderSignal:
     price: float
     as_of: str
     mode: str
+    hit_index: int = 0
     raw: dict = field(default_factory=dict, repr=False, compare=False)
 
 
@@ -162,7 +163,7 @@ def load_watchlist(
         raise DaytraderError("watchlist.json: hits debe ser una lista")
 
     out: list[DaytraderSignal] = []
-    for hit in hits:
+    for hit_index, hit in enumerate(hits):
         if not isinstance(hit, dict):
             raise DaytraderError("watchlist.json: hit inválido")
         symbol = str(hit.get("symbol") or "").strip().upper()
@@ -177,6 +178,7 @@ def load_watchlist(
                     price=price,
                     as_of=as_of,
                     mode=mode,
+                    hit_index=hit_index,
                     raw=dict(hit),
                 )
             )
@@ -323,7 +325,8 @@ def import_signals(
     target = _resolve_dir(directory, settings)
     signals = load_watchlist(target)
     inserted = 0
-    skipped = 0
+    duplicate_hits: set[int] = set()
+    inserted_hits: set[int] = set()
     for signal in signals:
         reason = f"source=daytrader; setup={signal.setup}; as_of={signal.as_of}"
         # Compatibilidad con la primera versión, que añadía "; mode=...".
@@ -338,7 +341,7 @@ def import_signals(
             (signal.symbol, "daytrader", *variants),
         ).fetchone()
         if exists:
-            skipped += 1
+            duplicate_hits.add(signal.hit_index)
             continue
         con.execute(
             "INSERT INTO signals(ts, ticker, bot, side, strength, price, reason) "
@@ -354,10 +357,14 @@ def import_signals(
             ),
         )
         inserted += 1
+        inserted_hits.add(signal.hit_index)
+    skipped = len(duplicate_hits - inserted_hits)
     return {
         "dir": str(target),
         "inserted": inserted,
         "skipped": skipped,
+        "inserted_hits": len(inserted_hits),
+        "total_hits": len({signal.hit_index for signal in signals}),
         "signals": signals,
     }
 

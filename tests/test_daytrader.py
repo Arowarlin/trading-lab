@@ -95,7 +95,9 @@ def test_watchlist_importa_senales_y_no_duplica(tmp_path: Path) -> None:
     with connect(db) as con:
         second = daytrader.import_signals(settings, con, tmp_path)
     assert second["inserted"] == 0
-    assert second["skipped"] == 3
+    assert second["skipped"] == 2
+    assert second["total_hits"] == 2
+    assert second["inserted_hits"] == 0
 
     with connect(db) as con:
         rows = con.execute(
@@ -105,6 +107,25 @@ def test_watchlist_importa_senales_y_no_duplica(tmp_path: Path) -> None:
     assert {row["ticker"] for row in rows} == {"AAPL", "MSFT"}
     assert all(row["bot"] == "daytrader" for row in rows)
     assert any("setup=breakout_20d" in row["reason"] for row in rows)
+
+
+def test_duplicados_cuentan_hits_no_senales(tmp_path: Path) -> None:
+    _prepare(tmp_path)
+    db = tmp_path / "lab.db"
+    init_db(db)
+    settings = _settings(tmp_path)
+    with connect(db) as con:
+        daytrader.import_signals(settings, con, tmp_path)
+    with connect(db) as con:
+        con.execute(
+            "DELETE FROM signals WHERE ticker = 'MSFT' AND reason = ?",
+            ("source=daytrader; setup=oversold; as_of=2026-11-10 close",),
+        )
+    with connect(db) as con:
+        result = daytrader.import_signals(settings, con, tmp_path)
+    assert result["inserted"] == 1
+    assert result["skipped"] == 1
+    assert result["total_hits"] == 2
 
 
 def test_orden_pass_pasa_a_previsualizacion(
