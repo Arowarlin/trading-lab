@@ -201,6 +201,10 @@ def test_f13_scripts_preparados_sin_registrar():
     assert "no iniciado" in daily
     assert "PreflightOnly" in daily
     assert "Register-ScheduledTask" not in daily
+    assert "[Console]::OutputEncoding" in daily
+    assert "PYTHONIOENCODING" in daily
+    assert "Out-File -FilePath $log -Encoding utf8" in daily
+    assert "*>>" not in daily
 
     register = (ROOT / "scripts" / "register_f13_task.ps1").read_text(encoding="utf-8")
     assert "Register-ScheduledTask" in register

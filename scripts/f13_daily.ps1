@@ -8,6 +8,9 @@ param(
 
 $ErrorActionPreference = "Continue"
 $env:PYTHONUTF8 = "1"
+$env:PYTHONIOENCODING = "utf-8"
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+$OutputEncoding = [Console]::OutputEncoding
 
 $root = "E:\trading-lab"
 $lab = Join-Path $root ".venv\Scripts\lab.exe"
@@ -20,10 +23,16 @@ function Write-Log([string]$Message) {
     Add-Content -Path $log -Value ("{0} {1}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), $Message) -Encoding utf8
 }
 
+function Invoke-Lab([string[]]$Arguments) {
+    $output = & $lab @Arguments 2>&1
+    $code = $LASTEXITCODE
+    $output | Out-File -FilePath $log -Encoding utf8 -Append
+    return $code
+}
+
 function Run-Step([string]$Label, [string[]]$Arguments) {
     Write-Log "INICIO $Label"
-    & $lab @Arguments *>> $log
-    $code = $LASTEXITCODE
+    $code = Invoke-Lab $Arguments
     Write-Log "FIN $Label exit=$code"
     return $code
 }
@@ -53,10 +62,14 @@ $codes += Run-Step "f13 report" @("f13", "report")
 $failed = @($codes | Where-Object { $_ -ne 0 })
 if ($failed.Count -gt 0) {
     Write-Log "F13 daily FAILED codes=$($codes -join ',')"
-    & $lab alerts send f13_daily_failed -m "F13 daily fallo codigos $($codes -join ',')" --severity error *>> $log
+    $null = Invoke-Lab @(
+        "alerts", "send", "f13_daily_failed",
+        "-m", "F13 daily fallo codigos $($codes -join ',')",
+        "--severity", "error"
+    )
     exit 1
 }
 
 Write-Log "F13 daily OK"
-& $lab alerts heartbeat *>> $log
+$null = Invoke-Lab @("alerts", "heartbeat")
 exit 0
