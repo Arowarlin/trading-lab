@@ -34,6 +34,11 @@ GRIDS: dict[str, dict[str, list]] = {
         "exit_z": [0.0],
         "max_hold": [5, 10],
     },
+    "sector_momentum": {
+        "lookback": [20, 60, 120],
+        "vol_window": [10, 20],
+        "vol_mult": [1.0, 1.25],
+    },
 }
 
 DEFAULT_SYMBOLS = ["SPY", "QQQ", "GLD", "TLT", "IWM", "EURUSD=X"]

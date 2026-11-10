@@ -3,7 +3,11 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from tradinglab.strategies import trend_ls_signal, trend_signal
+from tradinglab.strategies import (
+    sector_momentum_signal,
+    trend_ls_signal,
+    trend_signal,
+)
 
 
 def frame(closes: np.ndarray) -> pd.DataFrame:
@@ -43,3 +47,29 @@ def test_trend_ls_needs_enough_history():
     df = frame(100 + np.arange(50) * 0.5)
     sig = trend_ls_signal(df)
     assert (sig.target == 0).all()
+
+
+def test_sector_momentum_long_en_tendencia_suave():
+    df = frame(100 + np.arange(400) * 0.5)
+    sig = sector_momentum_signal(df)
+    assert sig.target.iloc[-1] == 1.0
+    assert sig.target.min() >= 0.0
+    assert sig.target.max() <= 1.0
+    assert sig.params == {
+        "lookback": 60,
+        "vol_window": 20,
+        "vol_mult": 1.25,
+    }
+
+
+def test_sector_momentum_sin_historial_suficiente():
+    df = frame(100 + np.arange(50) * 0.5)
+    sig = sector_momentum_signal(df)
+    assert (sig.target == 0).all()
+
+
+def test_sector_momentum_no_short():
+    df = frame(400 - np.arange(400) * 0.5)
+    sig = sector_momentum_signal(df)
+    assert sig.target.iloc[-1] == 0.0
+    assert sig.target.min() >= 0.0
