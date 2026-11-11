@@ -33,6 +33,20 @@ assets:
     source_date: "2025-09-25"
     effective_from: "2025-09-29"
     source_url: "https://ftmo.com/en/blog/trading-updates/trading-update-25-sep-2025/"
+  GBPUSD:
+    # La tabla de FTMO es por grupo "Forex" (2,50 USD/lote/lado), no por par:
+    # GBPUSD entra en el mismo grupo que EURUSD y USDJPY.
+    verified: true
+    commission_type: per_lot_usd
+    commission_per_lot_usd: 2.50
+    commission_side: per_side
+    contract_size: 100000
+    base_currency: GBP
+    quote_currency: USD
+    source: "FTMO Trading Update | 25 Sep 2025 (Forex)"
+    source_date: "2025-09-25"
+    effective_from: "2025-09-29"
+    source_url: "https://ftmo.com/en/blog/trading-updates/trading-update-25-sep-2025/"
   XAUUSD:
     verified: true
     commission_type: percent_of_volume
