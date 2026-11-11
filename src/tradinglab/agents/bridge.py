@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from datetime import date
 
@@ -8,6 +9,10 @@ from ..config import ROOT
 
 TA_PYTHON = ROOT / ".venv-ta" / "Scripts" / "python.exe"
 TA_SCRIPT = ROOT / "scripts" / "run_tradingagents.py"
+
+# Salida máxima del lado deep. En local 2048 basta; con un proveedor de nube
+# (DeepSeek admite hasta 384K) un informe de analista completo no cabe en 2k.
+DEFAULT_MAX_TOKENS = int(os.getenv("LAB_DEEP_MAX_TOKENS", "8192"))
 
 RATING_TO_TARGET: dict[str, float | None] = {
     "Buy": 1.0,
@@ -34,14 +39,16 @@ def run_tradingagents(
     save: bool = True,
     timeout: int = 1800,
     max_tool_rounds: int = 8,
-    max_tokens: int = 2048,
+    max_tokens: int = DEFAULT_MAX_TOKENS,
 ) -> dict:
     """Lanza un run de TradingAgents en su propio venv y devuelve la decisión.
 
     `timeout` es el presupuesto de tiempo del run (por defecto 30 min): el
     script se corta solo con un error claro y el padre mata el proceso si
-    aun así se pasa. Con el modelo de 27B en esta máquina el deep no cabe en
-    ese presupuesto, así que falla rápido y el lado lite sigue su curso.
+    aun así se pasa. El modelo local de 27B no cabe en ese presupuesto, así
+    que el lado deep puede apuntarse a un proveedor de nube con
+    `LAB_DEEP_LLM_PROVIDER` / `LAB_DEEP_LLM_MODEL` / `LAB_DEEP_LLM_BASE_URL`
+    y dejar el lite en LM Studio.
     """
     if not TA_PYTHON.exists():
         raise AgentError(f"No existe el intérprete de TradingAgents: {TA_PYTHON}")

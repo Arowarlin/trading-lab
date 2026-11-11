@@ -48,6 +48,32 @@ def _loaded_context(base_url: str, model: str) -> int | None:
     return None
 
 
+def _install_opencode_headers(base_url: str, session_id: str) -> bool:
+    """El gateway de OpenCode Go exige `x-opencode-session`; sin ella da 400.
+
+    Se inyecta como cabecera por defecto del cliente de LangChain, sin tocar
+    el código de TradingAgents. Devuelve True si se instaló.
+    """
+    if "opencode.ai" not in base_url:
+        return False
+    from langchain_openai import ChatOpenAI
+
+    if getattr(ChatOpenAI, "_tradinglab_session_header", False):
+        return True
+    original = ChatOpenAI.__init__
+
+    def patched(self, *args, **kwargs):
+        headers = dict(kwargs.get("default_headers") or {})
+        headers.setdefault("x-opencode-session", session_id)
+        headers.setdefault("User-Agent", "trading-lab/1.0")
+        kwargs["default_headers"] = headers
+        original(self, *args, **kwargs)
+
+    ChatOpenAI.__init__ = patched
+    ChatOpenAI._tradinglab_session_header = True
+    return True
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--ticker", required=True)
@@ -57,7 +83,11 @@ def main() -> int:
     parser.add_argument("--risk-rounds", type=int, default=1)
     parser.add_argument("--language", default="Spanish")
     parser.add_argument("--max-tool-rounds", type=int, default=8)
-    parser.add_argument("--max-tokens", type=int, default=2048)
+    parser.add_argument(
+        "--max-tokens",
+        type=int,
+        default=int(os.getenv("LAB_DEEP_MAX_TOKENS", "8192")),
+    )
     parser.add_argument("--out", required=True)
     parser.add_argument("--save", action="store_true")
     parser.add_argument(
@@ -104,25 +134,61 @@ def main() -> int:
 
         load_dotenv(ROOT / ".env")
 
+        # El cliente `openai_compatible` de TradingAgents lee su clave de
+        # OPENAI_COMPATIBLE_API_KEY. El deep usa una credencial distinta de la
+        # del servidor local, así que se inyecta aquí sin tocar el .env global.
+        deep_key = os.getenv("LAB_DEEP_LLM_API_KEY")
+        if deep_key:
+            os.environ["OPENAI_COMPATIBLE_API_KEY"] = deep_key
+
         from tradingagents.agents.rating import extract_rating
         from tradingagents.default_config import DEFAULT_CONFIG
         from tradingagents.graph.trading_graph import TradingAgentsGraph
 
-        model = os.getenv("LAB_LLM_MODEL", "qwen3.8-27b")
-        backend = os.getenv("LAB_LLM_BASE_URL", "http://127.0.0.1:1234/v1")
-        loaded_ctx = _loaded_context(backend, model)
-        if loaded_ctx is not None and loaded_ctx < MIN_CONTEXT:
+        # El lado deep puede usar otro proveedor que el lab (p. ej. DeepSeek en
+        # la nube) sin tocar el cliente local: LAB_DEEP_* tiene prioridad y, si
+        # no existe, se cae al LLM del laboratorio (LM Studio).
+        model = (
+            os.getenv("LAB_DEEP_LLM_MODEL")
+            or os.getenv("LAB_LLM_MODEL", "qwen3.8-27b")
+        )
+        backend = (
+            os.getenv("LAB_DEEP_LLM_BASE_URL")
+            or os.getenv("LAB_LLM_BASE_URL", "http://127.0.0.1:1234/v1")
+        )
+        provider = os.getenv("LAB_DEEP_LLM_PROVIDER", "").strip() or "openai_compatible"
+
+        # OpenCode Go rechaza con 400 las peticiones sin `x-opencode-session`.
+        _install_opencode_headers(
+            backend, f"lab-deep-{args.ticker.lower()}-{args.date}"
+        )
+
+        # El chequeo de contexto solo aplica a LM Studio (endpoint /api/v0/models).
+        # En un proveedor de nube no hay que comprobar nada.
+        is_local = "127.0.0.1" in backend or "localhost" in backend
+        if is_local:
+            loaded_ctx = _loaded_context(backend, model)
+            if loaded_ctx is not None and loaded_ctx < MIN_CONTEXT:
+                raise RuntimeError(
+                    f"El modelo '{model}' está cargado con {loaded_ctx:,} tokens de contexto; "
+                    f"TradingAgents necesita al menos {MIN_CONTEXT:,}. "
+                    f"Recarga con: lms unload --all && lms load {model} "
+                    "--context-length 32768 --parallel 1 --yes"
+                )
+        elif provider == "openai_compatible" and not deep_key:
+            # Sin esto la clave local (lm-studio) viajaría al gateway y el
+            # fallo saldría como un 401 sin explicación.
             raise RuntimeError(
-                f"El modelo '{model}' está cargado con {loaded_ctx:,} tokens de contexto; "
-                f"TradingAgents necesita al menos {MIN_CONTEXT:,}. "
-                f"Recarga con: lms unload --all && lms load {model} "
-                "--context-length 32768 --parallel 1 --yes"
+                "Falta la credencial del lado deep: define LAB_DEEP_LLM_API_KEY en "
+                f"{ROOT / '.env'}. Sin ella el gateway responde 401. Se crea en "
+                "OpenCode Console > Settings > Service accounts > Add API Key "
+                "(Permissions: Restricted, Models: Request); empieza por oc_sk_."
             )
 
         cfg = DEFAULT_CONFIG.copy()
         cfg.update(
             {
-                "llm_provider": "openai_compatible",
+                "llm_provider": provider,
                 "backend_url": backend,
                 "deep_think_llm": model,
                 "quick_think_llm": model,
