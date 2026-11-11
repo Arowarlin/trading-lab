@@ -2048,6 +2048,7 @@ se revisa. F13 nunca pasa a dinero real.
 lab f13 status          # activo + criterios
 lab f13 freeze          # congela hash/criterios; NO activa el bot
 lab f13 activate        # activa en paper y re-congela el hash; pide confirmación
+lab f13 refreeze        # re-congela si solo cambió algo ajeno al bot (--reason)
 lab f13 report          # reporte diario en reports/f13/ (solo lectura)
 lab f13 signal-check    # señal viva vs recalculada
 lab f13 config-check    # hash congelado vs actual
@@ -2056,6 +2057,14 @@ lab f13 check           # paradas duras + alerta
 
 La activación del bot requiere aprobación humana explícita; `freeze` no activa
 el bot. `activate` es el paso controlado y ya se ejecutó.
+
+`lab f13 refreeze --reason "<motivo>" --yes` sirve para cambios **ajenos al
+bot** (por ejemplo, un bloque nuevo en `config/lab.yaml`). Solo acepta si
+`bots.yaml`, `prop.yaml`, `f13.yaml` y el bloque del bot F13 siguen idénticos al
+freeze; si cambió cualquiera de ellos, se niega. Guarda el hash anterior, el
+nuevo, el motivo y la fecha en `f13_config`, el historial en `f13_refreezes` y
+audita `f13_refreeze`; `lab f13 report` muestra ese historial.
+
 
 `lab f13 report` genera `reports/f13/YYYY-MM-DD.json`, su versión Markdown y
 `latest.json`/`latest.md`. Resume **ciclos ejecutados** (un ciclo por fecha con

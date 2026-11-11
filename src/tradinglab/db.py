@@ -146,6 +146,18 @@ CREATE TABLE IF NOT EXISTS f13_config (
     frozen_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS f13_refreezes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts TEXT NOT NULL,
+    bot TEXT NOT NULL,
+    previous_hash TEXT NOT NULL,
+    new_hash TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    changed_files TEXT,
+    file_hashes TEXT,
+    actor TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS f13_metrics (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     ts TEXT NOT NULL,
@@ -681,6 +693,19 @@ def init_db(path: str | Path) -> None:
         _migrate_llm_calls(con)
         _migrate_orders(con)
         _migrate_audit_chain(con)
+        _migrate_f13(con)
+
+
+def _migrate_f13(con: sqlite3.Connection) -> None:
+    """Huellas por archivo e historial de re-congelados. Solo aditivo."""
+    columns = [
+        row["name"] for row in con.execute("PRAGMA table_info(f13_config)").fetchall()
+    ]
+    if not columns:
+        return
+    for column in ("file_hashes", "previous_hash", "refreeze_reason", "refrozen_at"):
+        if column not in columns:
+            con.execute(f"ALTER TABLE f13_config ADD COLUMN {column} TEXT")
 
 
 def _migrate_equity(con: sqlite3.Connection) -> None:

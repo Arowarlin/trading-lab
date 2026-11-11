@@ -2601,6 +2601,59 @@ def f13_activate_cmd(
     )
 
 
+@f13_app.command("refreeze")
+def f13_refreeze_cmd(
+    reason: str = typer.Option(..., "--reason", help="Motivo del re-congelado"),
+    yes: bool = typer.Option(False, "--yes", help="No pedir confirmación"),
+    bot: str = typer.Option(None, "--bot", help="Bot F13 (por defecto, el congelado)"),
+) -> None:
+    """Re-congela el hash solo si el bot y los archivos protegidos no cambiaron."""
+    from .f13 import refreeze as f13_refreeze
+
+    init_db(DEFAULT_DB)
+    row = f13_status(DEFAULT_DB)
+    if not row:
+        console.print("[yellow]F13 no iniciado. Ejecuta `lab f13 freeze` primero.[/yellow]")
+        raise typer.Exit(2)
+    if not str(reason or "").strip():
+        console.print("[red]Falta --reason: el re-congelado exige un motivo.[/red]")
+        raise typer.Exit(2)
+    check = f13_config_check(DEFAULT_DB)
+    if check["ok"]:
+        console.print(
+            "[green]El hash ya coincide con el congelado: no hay nada que "
+            "re-congelar.[/green]"
+        )
+        raise typer.Exit(1)
+    if not yes:
+        console.print(
+            "Se va a re-congelar F13.\n"
+            f"  anterior: {check['frozen'][:16]}…\n"
+            f"  nuevo:    {check['current'][:16]}…\n"
+            f"  motivo:   {reason}"
+        )
+        console.print(
+            "[dim]Solo se acepta si bots.yaml, prop.yaml, f13.yaml y el bloque "
+            "del bot siguen iguales.[/dim]"
+        )
+        if not typer.confirm("¿Re-congelar?"):
+            raise typer.Exit(1)
+    try:
+        result = f13_refreeze(DEFAULT_DB, reason=reason, bot=bot)
+    except ValueError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2) from exc
+    console.print(
+        f"[green]F13 re-congelado[/green] · "
+        f"{result['previous_hash'][:16]}… → {result['new_hash'][:16]}…"
+    )
+    console.print(
+        f"[dim]Motivo: {result['reason']} · archivos cambiados: "
+        f"{', '.join(result['changed_files']) or 'ninguno'} · "
+        f"baseline: {result['source']}[/dim]"
+    )
+
+
 @f13_app.command("report")
 def f13_report_cmd() -> None:
     """Genera el reporte diario F13 en reports/f13/ (solo lectura)."""
@@ -2646,6 +2699,8 @@ def f13_report_cmd() -> None:
         f"{slip['p95_bps'] if slip['p95_bps'] is not None else '—'} bps",
     )
     t.add_row("Error tamaño máx.", f"{size['max_error_shares']:g}")
+    refreezes = report.get("refreezes") or []
+    t.add_row("Re-congelados", str(len(refreezes)))
     try:
         from .audit import chain_state
 
@@ -2664,6 +2719,13 @@ def f13_report_cmd() -> None:
     except Exception as exc:  # pragma: no cover - la auditoría no bloquea el reporte
         t.add_row("Cadena auditoría", f"Sin datos ({exc})")
     console.print(t)
+    for item in refreezes[:5]:
+        console.print(
+            f"[dim]Re-congelado {str(item.get('ts') or '')[:19]} · "
+            f"{str(item.get('previous_hash') or '')[:8]}… → "
+            f"{str(item.get('new_hash') or '')[:8]}… · "
+            f"{item.get('reason') or '—'}[/dim]"
+        )
     console.print(
         f"[dim]JSON: {report['files']['json']} · MD: {report['files']['markdown']}[/dim]"
     )

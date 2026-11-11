@@ -6,6 +6,7 @@ import pandas as pd
 import pytest
 import yaml
 
+from tradinglab.cli import app
 from tradinglab.config import Settings
 from tradinglab.db import connect, init_db
 from tradinglab.f13 import (
@@ -17,6 +18,8 @@ from tradinglab.f13 import (
     freeze,
     load_criteria,
     record_snapshot,
+    refreeze,
+    refreeze_history,
     signal_check,
     status,
 )
@@ -299,6 +302,177 @@ def _repo(tmp_path):
         encoding="utf-8",
     )
     return root
+
+
+def test_refreeze_rechaza_si_cambio_bots_yaml(tmp_path) -> None:
+    root = _repo(tmp_path)
+    db = tmp_path / "lab.db"
+    freeze(
+        db,
+        bot="qqq-trend-f13",
+        symbol="QQQ",
+        start_date="2026-11-09",
+        root=root,
+    )
+    path = root / "config" / "bots.yaml"
+    path.write_text(path.read_text(encoding="utf-8") + "# ajeno\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="protegidos"):
+        refreeze(db, reason="prueba", root=root)
+    assert config_check(db, root)["ok"] is False
+    assert refreeze_history(db) == []
+
+
+def test_refreeze_rechaza_si_cambio_el_bot(tmp_path) -> None:
+    root = _repo(tmp_path)
+    db = tmp_path / "lab.db"
+    freeze(
+        db,
+        bot="qqq-trend-f13",
+        symbol="QQQ",
+        start_date="2026-11-09",
+        root=root,
+    )
+    path = root / "config" / "bots.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace(
+            "params: {fast: 50, slow: 200, regime: 200}",
+            "params: {fast: 20, slow: 200, regime: 200}",
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="protegidos"):
+        refreeze(db, reason="prueba", root=root)
+
+
+def test_refreeze_acepta_solo_lab_yaml_cambiado(tmp_path) -> None:
+    root = _repo(tmp_path)
+    db = tmp_path / "lab.db"
+    freeze(
+        db,
+        bot="qqq-trend-f13",
+        symbol="QQQ",
+        start_date="2026-11-09",
+        root=root,
+    )
+    before = status(db)["config_hash"]
+    (root / "config" / "lab.yaml").write_text(
+        "mode: paper\ndaytrader:\n  enabled: true\n", encoding="utf-8"
+    )
+    result = refreeze(db, reason="bloque ajeno al bot", root=root)
+    assert result["previous_hash"] == before
+    assert result["new_hash"] != before
+    assert result["changed_files"] == ["lab.yaml"]
+    assert config_check(db, root)["ok"] is True
+    row = status(db)
+    assert row["previous_hash"] == before
+    assert row["config_hash"] == result["new_hash"]
+    assert row["refreeze_reason"] == "bloque ajeno al bot"
+    assert row["refrozen_at"]
+    history = refreeze_history(db)
+    assert len(history) == 1
+    assert history[0]["reason"] == "bloque ajeno al bot"
+    assert history[0]["previous_hash"] == before
+    assert history[0]["new_hash"] == result["new_hash"]
+    with connect(db) as con:
+        audit = con.execute(
+            "SELECT action, actor FROM console_actions WHERE action = 'f13_refreeze'"
+        ).fetchall()
+    assert audit and audit[0]["actor"] == "cli"
+
+
+def test_refreeze_exige_motivo(tmp_path) -> None:
+    root = _repo(tmp_path)
+    db = tmp_path / "lab.db"
+    freeze(
+        db,
+        bot="qqq-trend-f13",
+        symbol="QQQ",
+        start_date="2026-11-09",
+        root=root,
+    )
+    with pytest.raises(ValueError, match="motivo"):
+        refreeze(db, reason="  ", root=root)
+
+
+def test_refreeze_sin_congelar_falla(tmp_path) -> None:
+    root = _repo(tmp_path)
+    db = tmp_path / "lab.db"
+    with pytest.raises(ValueError, match="no está congelado"):
+        refreeze(db, reason="prueba", root=root)
+
+
+def test_refreeze_no_repite_si_el_hash_no_cambio(tmp_path) -> None:
+    root = _repo(tmp_path)
+    db = tmp_path / "lab.db"
+    freeze(
+        db,
+        bot="qqq-trend-f13",
+        symbol="QQQ",
+        start_date="2026-11-09",
+        root=root,
+    )
+    with pytest.raises(ValueError, match="nada que re-congelar"):
+        refreeze(db, reason="prueba", root=root)
+
+
+def test_el_reporte_muestra_los_recongelados(tmp_path) -> None:
+    root = _repo(tmp_path)
+    db = tmp_path / "lab.db"
+    freeze(
+        db,
+        bot="qqq-trend-f13",
+        symbol="QQQ",
+        start_date="2026-11-09",
+        root=root,
+    )
+    (root / "config" / "lab.yaml").write_text("mode: paper\n", encoding="utf-8")
+    refreeze(db, reason="motivo visible", root=root)
+    report = daily_report(db, root=root, out_dir=tmp_path / "reports")
+    assert report["refreezes"][0]["reason"] == "motivo visible"
+    markdown = (tmp_path / "reports" / f"{report['report_date']}.md").read_text(
+        encoding="utf-8"
+    )
+    assert "## Re-congelados" in markdown
+    assert "motivo visible" in markdown
+
+
+def test_cli_refreeze_muestra_y_confirma(tmp_path, monkeypatch) -> None:
+    from typer.testing import CliRunner
+
+    import tradinglab.cli as cli_mod
+
+    root = _repo(tmp_path)
+    db = tmp_path / "lab.db"
+    freeze(
+        db,
+        bot="qqq-trend-f13",
+        symbol="QQQ",
+        start_date="2026-11-09",
+        root=root,
+    )
+    (root / "config" / "lab.yaml").write_text("mode: paper\n", encoding="utf-8")
+    monkeypatch.setattr(cli_mod, "DEFAULT_DB", db)
+    calls: list[dict] = []
+
+    def fake_refreeze(db_path, *, reason, root=None, bot=None, baseline=None):
+        calls.append({"reason": reason, "bot": bot})
+        return {
+            "previous_hash": "a" * 64,
+            "new_hash": "b" * 64,
+            "reason": reason,
+            "changed_files": ["lab.yaml"],
+            "source": "f13_config",
+        }
+
+    monkeypatch.setattr("tradinglab.f13.refreeze", fake_refreeze)
+    runner = CliRunner()
+    denied = runner.invoke(app, ["f13", "refreeze", "--reason", "x"])
+    assert denied.exit_code == 1
+    assert not calls
+    accepted = runner.invoke(app, ["f13", "refreeze", "--reason", "x", "--yes"])
+    assert accepted.exit_code == 0
+    assert calls == [{"reason": "x", "bot": None}]
+    assert "re-congelado" in accepted.output.lower()
 
 
 def test_activate_solo_cambia_su_bot_y_recongela(tmp_path) -> None:

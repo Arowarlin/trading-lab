@@ -1445,6 +1445,42 @@ etapa.
   `TradingLab-Drill` en estado Ready (proxima: domingo 03:00); hash F13
   `7fe0f5a6.` (sigue `changed` por el bloque `daytrader`).
 
+### Etapa 3l - Re-congelado de F13 por cambios ajenos al bot (2026-11-11)
+
+- [x] **Diagnostico del hash `changed`**
+  - Congelado `54b420360f17c75d1768000b8a8587afbddc8e748713cb4bb05b8d853e469d12`;
+    actual `7fe0f5a637bf29cb524b778d566d7aa58658bd5cc8fd0cfcccdf17556ac8c767`.
+  - El hash congelado se reproduce exactamente en el commit `0a6f867`
+    ("chore(f13): activa qqq-trend-f13 en paper"), con `bots.yaml` en CRLF y
+    los otros tres en LF. Contra ese commit: `bots.yaml`, `prop.yaml` y
+    `f13.yaml` son identicos; `lab.yaml` solo difiere por el bloque
+    `daytrader` (carril AAPL). No hay ninguna otra diferencia.
+- [x] **`lab f13 refreeze --reason <texto> --yes`**
+  - Baseline por archivo: columna nueva `f13_config.file_hashes` (la guarda
+    `freeze`) y, si falta, reconstruccion desde el historial git buscando el
+    commit cuyo hash combinado coincide con el congelado (probando CRLF/LF).
+  - Rechaza si cambio `bots.yaml`, `prop.yaml`, `f13.yaml` o el bloque del bot
+    F13; acepta si solo cambio `lab.yaml`.
+  - Guarda en `f13_config` el hash anterior, el nuevo, el motivo y la fecha;
+    el historial completo en `f13_refreezes`; y audita `f13_refreeze` en
+    `console_actions`.
+  - `lab f13 report` muestra el historial de re-congelados (tabla y seccion
+    en el markdown).
+- [x] **Migracion aditiva**: `f13_config` gana `file_hashes`, `previous_hash`,
+    `refreeze_reason` y `refrozen_at`; tabla nueva `f13_refreezes`. Nada se
+    borra ni se reescribe.
+- [x] **Ejecucion real**: `54b42036…` -> `7fe0f5a6…`, motivo "cambio ajeno al
+    bot: bloque daytrader (carril AAPL)", archivos cambiados `lab.yaml`,
+    baseline `git:0a6f867`. `lab f13 config-check` queda **OK**.
+- [x] **Tests sinteticos** (`tests/test_f13.py`): rechazo si cambia
+    `bots.yaml` o el bloque del bot; aceptacion si solo cambia `lab.yaml`
+    (con historial y auditoria); motivo obligatorio; sin freeze previo falla;
+    no repite si el hash no cambio; el reporte muestra el historial; el CLI
+    pide confirmacion.
+- Evidencia: `ruff` limpio; `pytest tests/test_f13.py -q` -> 24 passed; suite
+  completa **827 passed, 1 skipped**; `lab doctor` OK con los WARN conocidos;
+  `lab f13 status|check|report` OK. Sin push.
+
 ### Etapa 4 — Presupuesto de riesgo neto por activo
 
 - [x] **`config/risk_budget.yaml`**
@@ -1724,4 +1760,5 @@ etapa.
 | 2026-11-11 | Condicionadores | propuesta con 1.498 dias afectados: Sharpe 0,83->0,76, retorno 69,97%->49,67%, MaxDD -8,57%->-8,09%; no compensa, queda como propuesta (`default: {}`) |
 | 2026-11-11 | Reversion overnight | Sharpe -0,15, MaxDD -18,18%, retorno -8,28%, P(pasar) 16,95%, P(breach) 37,55%; falla, se documenta y se para (pesos normalizados a bruto <= 1) |
 | 2026-11-11 | Familias de sesion | `research-intraday` EURUSD 0/52 y USDJPY 0/52 con `session_hold` y `fix_flow` (stop ATR real); informe en `reports/research/intraday_session/`; suite 805 passed, 1 skipped; ruff limpio |
+| 2026-11-11 | F13 re-congelado | `lab f13 refreeze --reason "cambio ajeno al bot: bloque daytrader (carril AAPL)" --yes` -> 54b42036 -> 7fe0f5a6; solo `lab.yaml`; baseline `git:0a6f867`; `config-check` OK; historial en `f13_refreezes` y auditoria `f13_refreeze`; sin push |
 |  |  |  |

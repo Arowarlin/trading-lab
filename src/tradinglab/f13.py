@@ -58,6 +58,87 @@ def config_hash(root: Path = ROOT) -> str:
     return digest.hexdigest()
 
 
+def _normalised(blob: bytes) -> bytes:
+    """Compara contenido ignorando CRLF/LF: el repo y Windows no coinciden."""
+    return blob.replace(b"\r\n", b"\n")
+
+
+def file_digests(root: Path = ROOT) -> dict[str, str]:
+    """sha256 por archivo (normalizado a LF) para comparar el freeze."""
+    return {
+        path.name: hashlib.sha256(
+            _normalised(path.read_bytes() if path.exists() else b"")
+        ).hexdigest()
+        for path in config_files(root)
+    }
+
+
+def _bot_block(bots_bytes: bytes, bot: str) -> dict | None:
+    try:
+        data = yaml.safe_load(bots_bytes.decode("utf-8")) or {}
+    except Exception:
+        return None
+    for item in data.get("bots") or []:
+        if str(item.get("id")) == str(bot):
+            return item
+    return None
+
+
+def _baseline_from_git(
+    root: Path, frozen_hash: str
+) -> tuple[str, dict[str, str], dict[str, bytes]] | None:
+    """Busca el commit cuyo hash combinado coincide con el congelado.
+
+    Devuelve (commit, huellas por archivo, contenido por archivo) o None. El
+    hash se calculó sobre los bytes del árbol de trabajo, así que se prueban
+    las combinaciones CRLF/LF por archivo hasta reproducirlo.
+    """
+    import itertools
+    import subprocess
+
+    names = [path.name for path in config_files(root)]
+
+    def git(*args: str) -> bytes:
+        return subprocess.run(
+            ["git", "-C", str(root), *args],
+            check=True,
+            capture_output=True,
+        ).stdout
+
+    try:
+        log = git("log", "--format=%H", "--", *[f"config/{name}" for name in names])
+    except Exception:
+        return None
+    for sha in log.decode("utf-8", errors="replace").split():
+        blobs: list[bytes] = []
+        for name in names:
+            try:
+                blobs.append(git("show", f"{sha}:config/{name}"))
+            except Exception:
+                blobs.append(b"")
+        for flags in itertools.product([False, True], repeat=len(names)):
+            digest = hashlib.sha256()
+            for name, blob, crlf in zip(names, blobs, flags):
+                data = (
+                    blob.replace(b"\r\n", b"\n").replace(b"\n", b"\r\n")
+                    if crlf
+                    else blob
+                )
+                digest.update(name.encode("utf-8"))
+                digest.update(data)
+            if digest.hexdigest() == frozen_hash:
+                digests = {
+                    name: hashlib.sha256(_normalised(blob)).hexdigest()
+                    for name, blob in zip(names, blobs)
+                }
+                return (
+                    sha,
+                    digests,
+                    {name: blob for name, blob in zip(names, blobs)},
+                )
+    return None
+
+
 def load_criteria(root: Path = ROOT) -> dict:
     path = root / "config" / "f13.yaml"
     if not path.exists():
@@ -80,14 +161,179 @@ def freeze(
     init_db(db_path)
     criteria = load_criteria(root)
     digest = config_hash(root)
+    digests = json.dumps(file_digests(root), sort_keys=True, ensure_ascii=False)
     with connect(db_path) as con:
         con.execute(
             "INSERT OR REPLACE INTO f13_config"
-            "(id, bot, symbol, start_date, config_hash, criteria, frozen_at) "
-            "VALUES(1, ?, ?, ?, ?, ?, ?)",
-            (bot, symbol, start_date, digest, json.dumps(criteria, ensure_ascii=False), utcnow()),
+            "(id, bot, symbol, start_date, config_hash, criteria, frozen_at, "
+            "file_hashes) VALUES(1, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                bot,
+                symbol,
+                start_date,
+                digest,
+                json.dumps(criteria, ensure_ascii=False),
+                utcnow(),
+                digests,
+            ),
         )
     return status(db_path) or {}
+
+
+PROTECTED_FILES = ("bots.yaml", "prop.yaml", "f13.yaml")
+
+
+def refreeze(
+    db_path: str | Path,
+    *,
+    reason: str,
+    root: Path = ROOT,
+    bot: str | None = None,
+    baseline: dict[str, str] | None = None,
+) -> dict:
+    """Re-congela el hash **solo** si lo protegido no cambió.
+
+    - Protegidos: `bots.yaml`, `prop.yaml`, `f13.yaml` y el bloque del bot
+      F13 dentro de `bots.yaml`. Deben ser idénticos al freeze.
+    - `lab.yaml` sí puede cambiar (p. ej. un bloque ajeno al bot).
+    - Guarda el hash anterior, el nuevo, el motivo y la fecha en
+      `f13_config`, el historial en `f13_refreezes` y audita
+      `f13_refreeze` en `console_actions`.
+    """
+    init_db(db_path)
+    frozen = status(db_path)
+    if not frozen:
+        raise ValueError("F13 no está congelado; usa `lab f13 freeze`.")
+    reason = str(reason or "").strip()
+    if not reason:
+        raise ValueError("El re-congelado exige un motivo (--reason).")
+    bot_id = str(bot or frozen.get("bot") or "")
+
+    baseline_digests: dict[str, str] | None = None
+    baseline_blobs: dict[str, bytes] | None = None
+    source = ""
+    if baseline is not None:
+        baseline_digests = {str(key): str(value) for key, value in dict(baseline).items()}
+        source = "explicito"
+    if baseline_digests is None:
+        raw = str(frozen.get("file_hashes") or "").strip()
+        if raw:
+            try:
+                data = json.loads(raw)
+            except (TypeError, ValueError):
+                data = None
+            if isinstance(data, dict):
+                baseline_digests = {
+                    str(key): str(value) for key, value in data.items()
+                }
+                source = "f13_config"
+    if baseline_digests is None:
+        found = _baseline_from_git(root, str(frozen.get("config_hash") or ""))
+        if found is not None:
+            commit, baseline_digests, baseline_blobs = found
+            source = f"git:{commit[:7]}"
+    if baseline_digests is None:
+        raise ValueError(
+            "Sin huellas por archivo del freeze y sin historial git que las "
+            "reconstruya: no se re-congela a ciegas."
+        )
+
+    current = file_digests(root)
+    changed = [
+        path.name
+        for path in config_files(root)
+        if current.get(path.name) != baseline_digests.get(path.name)
+    ]
+    protected_changed = [name for name in PROTECTED_FILES if name in changed]
+    if protected_changed:
+        raise ValueError(
+            "Cambiaron archivos protegidos por F13: "
+            f"{', '.join(protected_changed)}. No se re-congela."
+        )
+    if baseline_blobs is not None:
+        before = _bot_block(baseline_blobs.get("bots.yaml", b""), bot_id)
+        after = _bot_block(
+            (root / "config" / "bots.yaml").read_bytes()
+            if (root / "config" / "bots.yaml").exists()
+            else b"",
+            bot_id,
+        )
+        if before != after:
+            raise ValueError(
+                f"El bot {bot_id} cambió en bots.yaml; no se re-congela."
+            )
+
+    previous = str(frozen.get("config_hash") or "")
+    new_hash = config_hash(root)
+    if new_hash == previous:
+        raise ValueError(
+            "El hash no cambió respecto al congelado; no hay nada que re-congelar."
+        )
+    now = utcnow()
+    payload = json.dumps(current, sort_keys=True, ensure_ascii=False)
+    with connect(db_path) as con:
+        con.execute(
+            "UPDATE f13_config SET config_hash=?, frozen_at=?, file_hashes=?, "
+            "previous_hash=?, refreeze_reason=?, refrozen_at=? WHERE id=1",
+            (new_hash, now, payload, previous, reason, now),
+        )
+        con.execute(
+            "INSERT INTO f13_refreezes"
+            "(ts, bot, previous_hash, new_hash, reason, changed_files, "
+            "file_hashes, actor) VALUES(?,?,?,?,?,?,?,?)",
+            (
+                now,
+                bot_id,
+                previous,
+                new_hash,
+                reason,
+                json.dumps(changed, ensure_ascii=False),
+                payload,
+                "cli",
+            ),
+        )
+    try:
+        from .runtime import record_console_action
+
+        record_console_action(
+            db_path,
+            action="f13_refreeze",
+            params={
+                "bot": bot_id,
+                "previous_hash": previous,
+                "new_hash": new_hash,
+                "reason": reason,
+            },
+            result="re-congelado",
+            ok=True,
+            actor="cli",
+            detail=json.dumps(
+                {"source": source, "changed_files": changed},
+                ensure_ascii=False,
+            )[:900],
+        )
+    except Exception:
+        pass
+    return {
+        "bot": bot_id,
+        "previous_hash": previous,
+        "new_hash": new_hash,
+        "reason": reason,
+        "changed_files": changed,
+        "source": source,
+        "frozen_at": now,
+    }
+
+
+def refreeze_history(db_path: str | Path, limit: int = 20) -> list[dict]:
+    """Historial de re-congelados, el más reciente primero."""
+    init_db(db_path)
+    with connect(db_path) as con:
+        rows = con.execute(
+            "SELECT * FROM f13_refreezes ORDER BY id DESC LIMIT ?",
+            (max(1, int(limit)),),
+        ).fetchall()
+    return [dict(row) for row in rows]
 
 
 def _set_bot_enabled(root: Path, bot: str, enabled: bool) -> None:
@@ -511,6 +757,30 @@ def _render_daily_report(payload: dict) -> str:
             f"{'OK' if size.get('ok') else 'FALLO'} |"
         ),
         "",
+    ]
+    refreezes = payload.get("refreezes") or []
+    lines += [
+        "## Re-congelados",
+        "",
+        f"- Total: {len(refreezes)}",
+        "",
+    ]
+    if refreezes:
+        lines += [
+            "| Fecha | Anterior | Nuevo | Motivo |",
+            "|---|---|---|---|",
+        ]
+        for item in refreezes:
+            lines.append(
+                f"| {str(item.get('ts') or '')[:19]} | "
+                f"`{str(item.get('previous_hash') or '')[:12]}…` | "
+                f"`{str(item.get('new_hash') or '')[:12]}…` | "
+                f"{item.get('reason') or '—'} |"
+            )
+    else:
+        lines.append("Sin re-congelados.")
+    lines += [
+        "",
         "## Alertas",
         "",
     ]
@@ -579,6 +849,7 @@ def daily_report(
     start = date.fromisoformat(str(frozen.get("start_date")))
     criteria = _frozen_criteria(frozen, root)
     check = config_check(db_path, root)
+    refreezes = refreeze_history(db_path)
     cycle_map = _dryrun_cycles(root, start, report_day)
     expected_days = _business_days(start, report_day - timedelta(days=1))
     executed_days = [day for day in expected_days if day in cycle_map]
@@ -707,6 +978,7 @@ def daily_report(
             "ok": bool(check["ok"]),
         },
         "criteria": criteria,
+        "refreezes": refreezes,
         "cycles": {
             "expected": len(expected_days),
             "executed": len(executed_days),
