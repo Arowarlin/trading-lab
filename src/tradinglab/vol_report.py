@@ -22,7 +22,7 @@ from .prop.simulator import monte_carlo
 from .strategies import STRATEGIES
 from .vol_target import profile_vol_config
 
-DEFAULT_BOTS = ("qqq-trend-f13", "trend-spy", "meanrev")
+DEFAULT_BOTS = ("qqq-trend-f13", "trend-spy", "meanrev-large")
 MC_PATHS = 2_000
 MC_HORIZON = 120
 MC_BLOCK = 5
@@ -34,6 +34,10 @@ def _specs(bot_ids: tuple[str, ...] | list[str]) -> list[BotSpec]:
     out: list[BotSpec] = []
     for bot_id in bot_ids:
         spec = catalog.get(bot_id)
+        if spec is None:
+            # permite el nombre de la estrategia (p. ej. "meanrev") como atajo
+            candidates = [item for item in catalog.values() if item.strategy == bot_id]
+            spec = candidates[0] if len(candidates) == 1 else None
         if spec is None:
             continue
         out.append(spec)
