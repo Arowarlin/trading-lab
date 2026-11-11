@@ -315,6 +315,32 @@ CREATE TABLE IF NOT EXISTS data_freshness (
     ts TEXT NOT NULL
 );
 
+
+CREATE TABLE IF NOT EXISTS tca (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    fill_id INTEGER,
+    bot TEXT,
+    account TEXT,
+    symbol TEXT NOT NULL,
+    side TEXT,
+    signal_px REAL,
+    order_px REAL,
+    fill_px REAL,
+    slippage_bps REAL,
+    latency_ms REAL,
+    expected_cost_bps REAL,
+    realized_cost_bps REAL,
+    ts_utc TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS tca_state (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    bot TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    status TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS console_actions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     ts TEXT NOT NULL,

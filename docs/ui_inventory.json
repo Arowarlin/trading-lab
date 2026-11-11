@@ -373,6 +373,8 @@
     "status-prague",
     "status-research",
     "system-list",
+    "tca-meta",
+    "tca-table",
     "ticker",
     "ticker-track",
     "toast",
@@ -430,6 +432,7 @@
     "/api/research/detail?artifact=${encodeURIComponent",
     "/api/risk",
     "/api/session",
-    "/api/slo"
+    "/api/slo",
+    "/api/tca"
   ]
 }

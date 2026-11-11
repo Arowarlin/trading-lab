@@ -129,6 +129,25 @@ class PaperBroker:
                 "INSERT INTO fills(order_id, ts, qty, price, commission) VALUES(?,?,?,?,?)",
                 (order_id, utcnow(), abs(qty), fill_px, fee),
             )
+            try:
+                from ..tca import record_fill as tca_record
+
+                realized_bps = (abs(fill_px - price) / price) * 10_000.0
+                tca_record(
+                    self.db_path,
+                    fill_id=order_id,
+                    bot=bot,
+                    symbol=ticker,
+                    side=side,
+                    signal_px=price,
+                    order_px=price,
+                    fill_px=fill_px,
+                    slippage_bps=self.slippage_bps,
+                    expected_cost_bps=self.slippage_bps + self.commission_bps,
+                    realized_cost_bps=realized_bps + self.commission_bps,
+                )
+            except Exception:
+                pass
 
             new_qty = held_qty + qty
             if new_qty <= 1e-9:

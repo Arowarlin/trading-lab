@@ -2101,6 +2101,20 @@ class LabData:
 
         return self.cache.get("model_ranking", 300.0, collect)
 
+    def tca(self) -> dict:
+        """Ejecución (TCA): slippage EWMA frente al supuesto, por bot."""
+        from .tca import build_tca
+
+        def collect() -> dict:
+            if not self.db_path.exists():
+                return {"rows": [], "status": "sin datos", "error": "sin base de datos"}
+            try:
+                return build_tca(self.db_path)
+            except Exception as exc:
+                return {"rows": [], "status": "sin datos", "error": str(exc)[:240]}
+
+        return self.cache.get("tca", 120.0, collect)
+
     def slo(self) -> dict:
         """SLO operativo: frescura por símbolo, reloj, drift y último latido."""
         from .alerts import last_heartbeat
@@ -2599,6 +2613,8 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 self._json(self.server.data.model_ranking())
             elif path == "/api/slo":
                 self._json(self.server.data.slo())
+            elif path == "/api/tca":
+                self._json(self.server.data.tca())
             elif path == "/api/reports":
                 self._json({"files": list_exports()})
             elif path == "/api/reports/preview":

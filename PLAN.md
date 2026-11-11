@@ -1193,6 +1193,76 @@ etapa.
   OK; F13 sin cambios (`6250d4c0…`). Commit local pendiente de push; sin activar
   bots y sin órdenes.
 
+### Etapa 3d — Frescura de datos y desviación de reloj (2026-11-11)
+
+- [x] **Tabla de frescura** (`data_freshness`)
+  - `src/tradinglab/freshness.py` con `record()` y `check(symbol, timeframe, now)`.
+  - La escriben **todos** los fetch: `data/yahoo.py` (yahoo), `intraday.save_bars`
+    (mt5) y `data/ticks.py` (ticks).
+  - `check()` compara la edad de la **descarga** con la frecuencia esperada por
+    timeframe: `ok`, `aviso` o `falla`. **Sin dato es `falla`.**
+  - Los umbrales salen de `config/lab.yaml -> freshness` si esa clave existe; si
+    no, de los valores por defecto del módulo (documentados). **No se toca
+    `lab.yaml`**: ese archivo está en el hash congelado de F13.
+- [x] **Gate de aperturas**
+  - `orchestrator.run_bot` y el forward intradía bloquean la **apertura** si los
+    datos están en `falla` o si el reloj se desvía más de 10 s.
+  - **Cierres y reducciones nunca se bloquean** (el camino de salida va antes).
+  - El bloqueo por frescura queda auditado en `console_actions` (con la cadena de
+    hash) y genera alerta `freshness_block`; el de reloj, `clock_block`.
+- [x] **`clock.py`**
+  - Compara la hora local con el **servidor MT5** (tick fresco) y con un **NTP
+    público por UDP** (solo stdlib). Más de 2 s es `aviso`; más de 10 s, `falla`.
+  - `lab doctor` muestra las filas **Reloj** y **Frescura**.
+- [x] **SLO en la consola**
+  - `GET /api/slo` (solo lectura): frescura por símbolo, desviación de reloj,
+    drift de posición de la última reconciliación y último latido.
+  - Tres LEDs fijos en el HUD: **DATOS**, **RELOJ**, **POSICIÓN**.
+- [x] **Tests**: frescura ok/aviso/falla, sin datos, umbrales desde YAML, reloj
+  desviado, apertura bloqueada y cierre permitido.
+
+### Etapa 3e — Objetivo de volatilidad (2026-11-11)
+
+- [x] **`vol_target.scale`**
+  - EWMA de 30 días sobre la volatilidad diaria; factor = `min(apalancamiento
+    máximo, objetivo / volatilidad)`.
+  - Rebalance semanal: el factor se fija el lunes y se mantiene entre medias.
+  - **Sin lookahead**: la volatilidad del día `t` usa solo datos hasta `t-1`.
+- [x] **Perfiles** (`config/profiles.yaml`, no congelado en F13)
+  - `target_vol`: equity 0,08 · intraday_fx 0,06 · intraday_futures 0,10.
+  - `vol_target.enabled: false` en todos los perfiles: **nada se activa**.
+- [x] **Motor e informes**
+  - `backtest.run` acepta `vol_target` y multiplica el objetivo de exposición;
+    los guards de presupuesto y de cuenta se siguen aplicando después.
+  - `portfolio.account_vol_factor` aplica el segundo factor de cartera
+    (opcional, `target_vol` por cuenta en `config/accounts.yaml`).
+  - `lab research --vol-target on` escribe
+    `reports/research/vol_target/comparison.md` con Sharpe, MaxDD, retorno,
+    turnover, coste extra y P(pasar)/P(breach) de FTMO 100k en ambos casos.
+- [x] **Tests**: el factor baja con la volatilidad, tope de apalancamiento,
+  truncado vs completo, rebalance semanal, exposición menor en el backtest y
+  umbrales por perfil.
+
+### Etapa 3f — TCA: coste de ejecución real (2026-11-11)
+
+- [x] **Tabla `tca`**
+  - `fill_id, bot, account, symbol, side, signal_px, order_px, fill_px,
+    slippage_bps, latency_ms, expected_cost_bps, realized_cost_bps, ts_utc`.
+  - Se rellena al registrar cada fill en **paper**, **MT5** y **Alpaca**.
+- [x] **`tca.py`**
+  - EWMA de **20 fills** del slippage y del coste realizado, por bot y símbolo.
+  - Estados con los umbrales de `drift.py`: `ok`, `vigilar`, `deriva`; con menos
+    de 5 fills, **sin datos**.
+  - La alerta `tca_drift` se envía **solo al pasar a `deriva`** (estado previo en
+    `tca_state`).
+- [x] **Integraciones**
+  - `drift.py` añade la EWMA y el estado de TCA a cada fila de deriva.
+  - `GET /api/tca` y panel **"Ejecución (TCA)"** en la pestaña Bots (slippage
+    EWMA vs supuesto, fill rate, latencia mediana, coste realizado y estado).
+  - `lab tca status [--bot]`.
+- [x] **Tests**: EWMA, umbrales de estado, sin datos, EWMA del slippage y
+  alerta una sola vez.
+
 ### Etapa 4 — Presupuesto de riesgo neto por activo
 
 - [x] **`config/risk_budget.yaml`**

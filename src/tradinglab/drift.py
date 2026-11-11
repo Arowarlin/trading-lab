@@ -254,6 +254,12 @@ def build_drift(
             }
         )
     rows.sort(key=lambda row: row["bot"])
+    try:
+        from .tca import attach_to_drift
+
+        rows = attach_to_drift(rows, db_path)
+    except Exception:
+        pass
     counts = {"ok": 0, "vigilar": 0, "deriva": 0, "sin datos": 0}
     for row in rows:
         counts[row["status"]] = counts.get(row["status"], 0) + 1

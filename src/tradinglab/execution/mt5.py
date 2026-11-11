@@ -695,6 +695,25 @@ class MT5Broker:
                 last_error = f"order_send=None ({mt5.last_error()})"
                 continue
             if result.retcode == mt5.TRADE_RETCODE_DONE:
+                try:
+                    from ..tca import record_fill as tca_record
+                    from ..tca import slippage_bps as tca_slip
+
+                    fill_px = float(result.price or price)
+                    tca_record(
+                        self.db_path,
+                        bot=bot,
+                        symbol=spec["symbol"],
+                        side=side,
+                        signal_px=price,
+                        order_px=price,
+                        fill_px=fill_px,
+                        slippage_bps=tca_slip(price, fill_px, side),
+                        expected_cost_bps=float(getattr(self, "slippage_bps", 0.0) or 0.0),
+                        realized_cost_bps=abs(fill_px - price) / price * 10_000.0,
+                    )
+                except Exception:
+                    pass
                 return self._record(
                     result=result,
                     spec=spec,

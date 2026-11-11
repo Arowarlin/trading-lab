@@ -126,6 +126,22 @@ class AlpacaBroker:
             "submitted_at": str(order.submitted_at),
         }
 
+        try:
+            from ..tca import record_fill as tca_record
+
+            tca_record(
+                self.db_path,
+                bot=bot,
+                symbol=ticker.upper(),
+                side="buy" if qty > 0 else "sell",
+                signal_px=price,
+                order_px=price,
+                expected_cost_bps=float(getattr(self, "slippage_bps", 0.0) or 0.0),
+            )
+        except Exception:
+            pass
+
+        return result
         if self.db_path:
             try:
                 with connect(self.db_path) as con:

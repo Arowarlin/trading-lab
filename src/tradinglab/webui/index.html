@@ -1652,7 +1652,13 @@
         </div>
       </div>
       <div class="bot-grid" id="bots-grid"></div>
-    </section>
+    
+      <div class="panel" style="margin-bottom:14px">
+        <div class="panel-head"><h2>Ejecución (TCA)</h2><span class="muted tiny" id="tca-meta"></span></div>
+        <div id="tca-table"></div>
+        <div class="note">Slippage EWMA de 20 fills frente al supuesto del backtest. Con menos de 5 fills no se concluye nada.</div>
+      </div>
+</section>
 
     <!-- ============================================================ AGENTES -->
     <section class="view" id="view-agents">
@@ -2385,7 +2391,7 @@ async function loadAll(manual = false) {
   button.disabled = true;
   button.classList.add("loading");
   $("#refresh-label").textContent = "Actualizando…";
-  const [overviewResult, riskResult, accountsResult, fundResult, operatorResult, driftResult, instrumentsResult, marketsResult, rankingResult, sloResult] = await Promise.allSettled([
+  const [overviewResult, riskResult, accountsResult, fundResult, operatorResult, driftResult, instrumentsResult, marketsResult, rankingResult, sloResult, tcaResult] = await Promise.allSettled([
     getJSON("/api/overview"),
     getJSON("/api/risk"),
     getJSON("/api/accounts"),
@@ -2396,6 +2402,7 @@ async function loadAll(manual = false) {
     getJSON("/api/markets"),
     getJSON("/api/models/ranking"),
     getJSON("/api/slo"),
+    getJSON("/api/tca"),
   ]);
   if (overviewResult.status === "fulfilled") {
     const newBuild = overviewResult.value?.meta?.build;
@@ -2433,6 +2440,10 @@ async function loadAll(manual = false) {
   if (sloResult.status === "fulfilled") {
     S.slo = sloResult.value;
     renderSlo(sloResult.value);
+  }
+  if (tcaResult.status === "fulfilled") {
+    S.tca = tcaResult.value;
+    renderTca(tcaResult.value);
   }
   if (riskResult.status === "fulfilled") {
     S.risk = riskResult.value;
@@ -4948,6 +4959,45 @@ function renderAgentComparison() {
     ${grid([{ label: "Lite → deep" }, ...columns.map((column) => ({ label: column, num: true }))], matrixRows, { empty: "Sin datos." })}
     <div class="panel-head" style="margin-top:14px"><h2>Por fuente</h2><span class="muted tiny">forward 20d</span></div>
     ${grid([{ label: "Fuente" }, { label: "N", num: true }, { label: "N 20d", num: true }, { label: "20d", num: true }, { label: "Hit 20d", num: true }, { label: "Muestra" }], sourceRows, { empty: "Sin datos." })}`;
+}
+
+function renderTca(data) {
+  const host = $("#tca-table");
+  if (!host) return;
+  const meta = $("#tca-meta");
+  const rows = (data && data.rows) || [];
+  if (!rows.length) {
+    if (meta) meta.textContent = (data && data.error) || "sin datos";
+    host.innerHTML = `<div class="empty">Sin datos: no hay fills registrados para el TCA.</div>`;
+    return;
+  }
+  if (meta) meta.textContent = `${rows.length} bot/símbolo · peor estado: ${data.status || "ok"}`;
+  const body = rows.map((row) => [
+    `<b>${esc(row.bot)}</b>`,
+    esc(row.symbol),
+    num(row.fills, 0),
+    row.slippage_ewma_bps == null ? "Sin datos" : num(row.slippage_ewma_bps, 1) + " bps",
+    row.expected_cost_bps == null ? "Sin datos" : num(row.expected_cost_bps, 1) + " bps",
+    row.fill_rate == null ? "Sin datos" : pct(row.fill_rate, 0),
+    row.median_latency_ms == null ? "Sin datos" : num(row.median_latency_ms, 0) + " ms",
+    row.cost_ewma_bps == null ? "Sin datos" : num(row.cost_ewma_bps, 1) + " bps",
+    `<span class="tag ${row.status === "ok" ? "green" : row.status === "vigilar" ? "yellow" : row.status === "deriva" ? "red" : ""}">${esc(row.status)}</span>`,
+  ]);
+  host.innerHTML = grid(
+    [
+      { label: "Bot" },
+      { label: "Símbolo" },
+      { label: "Fills", num: true },
+      { label: "Slippage EWMA" },
+      { label: "Supuesto" },
+      { label: "Fill rate" },
+      { label: "Latencia" },
+      { label: "Coste EWMA" },
+      { label: "Estado" },
+    ],
+    body,
+    { empty: "Sin datos." }
+  );
 }
 
 function renderSlo(data) {

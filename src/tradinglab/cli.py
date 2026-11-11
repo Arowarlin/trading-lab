@@ -7869,6 +7869,63 @@ def library_show_cmd(
     console.print(table)
 
 
+@app.command("tca")
+def tca_cmd(
+    bot: str = typer.Option(None, "--bot", help="Filtra por bot"),
+    min_fills: int = typer.Option(5, "--min-fills", help="Mínimo de fills para concluir"),
+) -> None:
+    """Estado de TCA: slippage y coste real frente al supuesto."""
+    from .tca import build_tca
+
+    state = build_tca(DEFAULT_DB, min_fills=min_fills, alert=False)
+    rows = [
+        row
+        for row in state["rows"]
+        if not bot or str(row["bot"]) == bot
+    ]
+    if not rows:
+        console.print("[yellow]Sin datos: no hay fills registrados.[/yellow]")
+        return
+    t = Table(title="TCA · ejecución real")
+    for col in (
+        "Bot",
+        "Símbolo",
+        "Fills",
+        "Slippage EWMA",
+        "Slippage p50",
+        "Coste EWMA",
+        "Latencia",
+        "Fill rate",
+        "Estado",
+    ):
+        t.add_column(col, overflow="fold")
+    for row in rows:
+        t.add_row(
+            str(row["bot"]),
+            str(row["symbol"]),
+            str(row["fills"]),
+            f"{row['slippage_ewma_bps']:.1f} bps"
+            if row["slippage_ewma_bps"] is not None
+            else "Sin datos",
+            f"{row['slippage_p50_bps']:.1f} bps"
+            if row["slippage_p50_bps"] is not None
+            else "Sin datos",
+            f"{row['cost_ewma_bps']:.1f} bps"
+            if row["cost_ewma_bps"] is not None
+            else "Sin datos",
+            f"{row['median_latency_ms']:.0f} ms"
+            if row["median_latency_ms"] is not None
+            else "Sin datos",
+            f"{row['fill_rate']:.0%}" if row["fill_rate"] is not None else "Sin datos",
+            row["status"],
+        )
+    console.print(t)
+    console.print(
+        f"[dim]Supuesto medio: "
+        f"{rows[0]['expected_cost_bps']:.1f} bps · estado global: {state['status']}[/dim]"
+    )
+
+
 def main() -> None:
     app()
 
