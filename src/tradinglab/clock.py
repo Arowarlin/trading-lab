@@ -59,7 +59,12 @@ def ntp_offset_s(
 
 
 def mt5_offset_s(symbol: str = "EURUSD") -> float | None:
-    """Desviación del reloj local frente al servidor MT5 (en horas)."""
+    """Offset UTC del servidor MT5 (en segundos), no una desviación.
+
+    El servidor va en GMT+X: eso **no** es desincronización. Solo sirve como
+    referencia si además se conoce el offset esperado (configurado o ya
+    detectado); si no, la fuente MT5 no aporta señal de reloj.
+    """
     try:
         import MetaTrader5 as mt5
 
@@ -83,6 +88,28 @@ def mt5_offset_s(symbol: str = "EURUSD") -> float | None:
     return float(offset_h) * 3600.0
 
 
+def mt5_skew_s(symbol: str = "EURUSD") -> float | None:
+    """Residuo entre el offset detectado y el esperado, en segundos.
+
+    Sin offset esperado no hay referencia: `None` (la fuente no cuenta).
+    """
+    detected = mt5_offset_s(symbol)
+    if detected is None:
+        return None
+    expected = None
+    try:
+        from .config import get_settings
+
+        value = get_settings().mt5.server_utc_offset_hours
+        if value is not None:
+            expected = float(value) * 3600.0
+    except Exception:
+        expected = None
+    if expected is None:
+        return None
+    return abs(detected - expected)
+
+
 def check_clock(*, now: datetime | None = None, symbol: str = "EURUSD") -> dict:
     """Estado del reloj: `ok`, `aviso`, `falla` o `sin_datos`."""
     sources: dict[str, float | None] = {}
@@ -91,7 +118,7 @@ def check_clock(*, now: datetime | None = None, symbol: str = "EURUSD") -> dict:
     except Exception:
         sources["ntp"] = None
     try:
-        sources["mt5"] = mt5_offset_s(symbol)
+        sources["mt5"] = mt5_skew_s(symbol)
     except Exception:
         sources["mt5"] = None
 
@@ -138,5 +165,6 @@ __all__ = [
     "STATUS_SIN_DATOS",
     "check_clock",
     "mt5_offset_s",
+    "mt5_skew_s",
     "ntp_offset_s",
 ]

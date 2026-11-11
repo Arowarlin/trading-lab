@@ -247,3 +247,13 @@ def test_apertura_bloqueada_por_reloj(monkeypatch, tmp_path):
     assert actions[0].status == "bloqueado"
     assert "reloj" in actions[0].detail
     assert broker.submitted == 0
+
+
+def test_el_offset_del_servidor_no_es_desviacion(monkeypatch):
+    monkeypatch.setattr(clock_mod, "ntp_offset_s", lambda *a, **k: None)
+    monkeypatch.setattr(clock_mod, "mt5_offset_s", lambda *a, **k: 7200.0)
+    monkeypatch.setattr(clock_mod, "mt5_skew_s", lambda *a, **k: None)
+    estado = clock_mod.check_clock(now=NOW)
+    # sin NTP ni referencia de offset no hay desviación que reportar
+    assert estado["status"] == clock_mod.STATUS_SIN_DATOS
+    assert estado["skew_s"] is None
