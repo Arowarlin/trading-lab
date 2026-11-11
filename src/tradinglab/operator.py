@@ -9,9 +9,12 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import os
 import re
 import secrets
 import threading
+import urllib.error
+import urllib.request
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable
@@ -41,6 +44,8 @@ from .session import session_block
 PIN_KEY = "CONSOLE_PIN"
 PIN_RE = re.compile(r"^\d{6,12}$")
 PIN_MIN_DIGITS = 6
+DEFAULT_WEB_PORT = 8420
+WEB_PORT_ENV = "LAB_WEB_PORT"
 SUPPORTED_PLATFORMS = {"internal", "paper", "alpaca", "mt5"}
 TRADEABLE_STATUSES = {"active", "demo", "paper", "simulated"}
 ACTIONS = {
@@ -97,6 +102,40 @@ def set_pin(pin: str, setter: Callable[[str], None] | None = None) -> None:
         (setter or _default_pin_set)(pin)
     except Exception as exc:
         raise RuntimeError("No se pudo guardar el PIN en el keyring.") from exc
+
+
+def web_port(port: int | None = None) -> int:
+    """Puerto del panel: el indicado, o `LAB_WEB_PORT`, o 8420."""
+    if port is not None:
+        return int(port)
+    raw = (os.environ.get(WEB_PORT_ENV) or "").strip()
+    try:
+        return int(raw) if raw else DEFAULT_WEB_PORT
+    except ValueError:
+        return DEFAULT_WEB_PORT
+
+
+def server_session(port: int | None = None, timeout: float = 2.0) -> dict | None:
+    """Pregunta al panel web por su sesión de operador en vivo.
+
+    El armado vive en la memoria del proceso web y, por diseño, se pierde al
+    reiniciarlo: no está en la base de datos. La única fuente de verdad es el
+    servidor, así que se consulta por HTTP en loopback. Devuelve la sesión, o
+    None si el panel no responde (que se trata siempre como desarmado).
+    """
+    target = f"http://127.0.0.1:{web_port(port)}/api/operator"
+    request = urllib.request.Request(target, headers={"Accept": "application/json"})
+    # Sin proxies: en Windows una variable http_proxy rompería el loopback.
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    try:
+        with opener.open(request, timeout=timeout) as response:
+            if response.status != 200:
+                return None
+            payload = json.loads(response.read().decode("utf-8"))
+    except (urllib.error.URLError, OSError, ValueError):
+        return None
+    session = payload.get("session") if isinstance(payload, dict) else None
+    return session if isinstance(session, dict) else None
 
 
 def _digest(action: str, payload: dict) -> str:
@@ -1292,6 +1331,7 @@ class OperatorService:
 
 __all__ = [
     "ACTIONS",
+    "DEFAULT_WEB_PORT",
     "OperatorError",
     "OperatorService",
     "OperatorSession",
@@ -1299,5 +1339,7 @@ __all__ = [
     "PIN_MIN_DIGITS",
     "pin_configured",
     "pin_needs_rotation",
+    "server_session",
     "set_pin",
+    "web_port",
 ]

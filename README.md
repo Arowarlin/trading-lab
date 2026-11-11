@@ -1202,13 +1202,17 @@ en `console_actions`.
 
 ```powershell
 lab operator pin       # guarda/rota el PIN en keyring (entrada oculta)
-lab operator status    # PIN, mode y enabled efectivo por bot
+lab operator status    # PIN, mode, armado en vivo y enabled por bot
 ```
 
-Evidencia: `pytest tests/test_operator.py -q` → **17 passed**; cubre sin armar
+El armado vive solo en la memoria del panel: `lab operator status` y `lab drill`
+lo consultan con `GET /api/operator` (puerto de `LAB_WEB_PORT`, 8420 por
+defecto). Si el panel no responde, el CLI falla cerrado y lo dice.
+
+Evidencia: `pytest tests/test_operator.py -q` → **20 passed**; cubre sin armar
 (403), PIN corto/bloqueo persistente, live/plantilla rechazadas, orden fuera de
-límite, cierre con kill-switch activo, token caducado/reutilizado, F13 intacto y
-auditoría sin secretos.
+límite, cierre con kill-switch activo, token caducado/reutilizado, F13 intacto,
+auditoría sin secretos y la lectura del armado desde otro proceso.
 
 ---
 

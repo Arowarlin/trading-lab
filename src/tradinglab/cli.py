@@ -4383,7 +4383,13 @@ def operator_pin_cmd() -> None:
 @operator_app.command("status")
 def operator_status_cmd() -> None:
     """Muestra si hay PIN y el estado runtime de los bots."""
-    from .operator import OperatorSession, pin_configured, pin_needs_rotation
+    from .operator import (
+        OperatorSession,
+        pin_configured,
+        pin_needs_rotation,
+        server_session,
+        web_port,
+    )
     from .runtime import get_bot_state
 
     settings = get_settings()
@@ -4415,7 +4421,14 @@ def operator_status_cmd() -> None:
         "Bloqueo PIN",
         str(session_state.get("locked_until") or "no"),
     )
-    t.add_row("Armado", "solo en el servidor web (se pierde al reiniciar)")
+    live = server_session()
+    if live is None:
+        armed_text = f"no visible: el panel web no responde en el puerto {web_port()}"
+    elif live.get("armed"):
+        armed_text = f"sí · {live.get('seconds_left')}s restantes"
+    else:
+        armed_text = "no (panel web en marcha, desarmado)"
+    t.add_row("Armado", armed_text)
     t.add_row(
         "Ventana",
         f"{settings.operator.arm_minutes} min · "
@@ -8404,6 +8417,7 @@ def drill_cmd(
 ) -> None:
     """Simulacro de emergencia (R8). Solo paper/demo y con operador armado."""
     from .drill import DrillError, run_drill, simulate_drill
+    from .operator import server_session, web_port
 
     settings = get_settings()
     if str(settings.mode).lower() == "live":
@@ -8429,15 +8443,18 @@ def drill_cmd(
         )
         return
     try:
-        armed = False
-        try:
-            from .operator import OperatorService
-
-            armed = OperatorService(settings, DEFAULT_DB).status().get("armed", False)
-        except Exception:
-            armed = False
-        if not armed:
-            console.print("[red]El simulacro exige el operador armado.[/red]")
+        session = server_session()
+        if session is None:
+            console.print(
+                "[red]El simulacro exige el operador armado y el panel web en "
+                f"marcha: no responde en http://127.0.0.1:{web_port()}.[/red]"
+            )
+            raise typer.Exit(2)
+        if not session.get("armed"):
+            console.print(
+                "[red]El simulacro exige el operador armado. "
+                "Ármalo desde la consola con el PIN.[/red]"
+            )
             raise typer.Exit(2)
         if not confirm:
             console.print("[red]El simulacro exige --confirm.[/red]")

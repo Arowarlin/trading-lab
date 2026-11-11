@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import http.client
 import json
+import socket
 import threading
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -17,11 +18,15 @@ from tradinglab.journal import ClosedTrade
 from tradinglab.killswitch import activate as activate_killswitch
 from tradinglab.killswitch import load_state
 from tradinglab.operator import (
+    DEFAULT_WEB_PORT,
+    WEB_PORT_ENV,
     OperatorError,
     OperatorService,
     OperatorSession,
     pin_needs_rotation,
+    server_session,
     set_pin,
+    web_port,
 )
 from tradinglab.riskpause import pause_status
 from tradinglab.runtime import console_actions, get_bot_state
@@ -574,3 +579,53 @@ def test_web_operador_sin_armar_y_dos_pasos(tmp_path: Path, monkeypatch) -> None
         server.shutdown()
         server.server_close()
         thread.join(timeout=2)
+
+
+def test_server_session_lee_el_armado_del_panel(tmp_path: Path, monkeypatch) -> None:
+    """El CLI ve el armado que vive en el proceso web (regresión de `lab drill`)."""
+    monkeypatch.setattr("tradinglab.orchestrator.DEFAULT_DB", tmp_path / "lab.db")
+    service, _, db = _service(tmp_path)
+    data = web.LabData(
+        Settings(),
+        root=tmp_path,
+        db_path=db,
+        external=False,
+        operator_service=service,
+    )
+    server = web.DashboardServer(("127.0.0.1", 0), data)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    port = server.server_address[1]
+    try:
+        session = server_session(port=port, timeout=3.0)
+        assert session is not None
+        assert session["armed"] is False
+
+        service.session.arm("1234")
+        session = server_session(port=port, timeout=3.0)
+        assert session is not None
+        assert session["armed"] is True
+        assert session["seconds_left"] > 0
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
+def test_server_session_sin_panel_es_desarmado() -> None:
+    """Sin panel no hay armado visible: el simulacro falla cerrado."""
+    probe = socket.socket()
+    probe.bind(("127.0.0.1", 0))
+    port = probe.getsockname()[1]
+    probe.close()
+    assert server_session(port=port, timeout=0.5) is None
+
+
+def test_web_port_precedencia(monkeypatch) -> None:
+    monkeypatch.delenv(WEB_PORT_ENV, raising=False)
+    assert web_port() == DEFAULT_WEB_PORT
+    monkeypatch.setenv(WEB_PORT_ENV, "9100")
+    assert web_port() == 9100
+    assert web_port(1234) == 1234
+    monkeypatch.setenv(WEB_PORT_ENV, "no-es-un-puerto")
+    assert web_port() == DEFAULT_WEB_PORT

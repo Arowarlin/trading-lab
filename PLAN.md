@@ -460,6 +460,17 @@ confirmación en dos pasos, guards equivalentes a la CLI y auditoría.
     de live, copy trading, EAs o ejecución de código.
 - [x] **11.5 Tests y documentación** — 2026-11-07
   - `pytest tests/test_operator.py -q` → 11 passed; suite completa y README 6f.
+- [x] **11.6 El CLI lee el armado del panel** — 2026-11-11
+  - `lab drill` construía un `OperatorService` nuevo en su propio proceso, así
+    que su sesión en memoria nacía vacía y `armed` siempre era `False`: el
+    simulacro era inejecutable aunque el panel estuviera armado.
+  - `operator.server_session()` consulta `GET /api/operator` en loopback
+    (sin proxies, timeout 2 s) y `web_port()` respeta `LAB_WEB_PORT`. El
+    armado sigue viviendo solo en la memoria del panel y se pierde al
+    reiniciar; sin panel el CLI falla cerrado con un mensaje explícito.
+  - `lab operator status` muestra el armado real y sus segundos restantes en
+    lugar de una frase fija.
+  - `pytest tests/test_operator.py -q` → 20 passed (3 nuevos).
 
 ## Fase 12 — Shell de consola y dashboard (etapa 1)
 
