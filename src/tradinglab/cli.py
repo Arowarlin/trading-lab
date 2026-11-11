@@ -1543,6 +1543,46 @@ def llm_compare_cmd(
         )
 
 
+@llm_app.command("ranking")
+def llm_ranking_cmd() -> None:
+    """Ranking de modelos por acierto a 20 días."""
+    from .agent_compare import model_ranking
+
+    rows = model_ranking(DEFAULT_DB)
+    t = Table(title="Ranking de modelos")
+    for col in (
+        "Modelo",
+        "N",
+        "Hit 20d",
+        "Retorno 20d",
+        "Latencia (s)",
+        "schema_ok",
+        "Acuerdo lite/deep",
+        "Muestra",
+    ):
+        t.add_column(col, overflow="fold")
+    for row in rows:
+        t.add_row(
+            str(row["model"]),
+            str(row["n"]),
+            _fmt_pct(row["hit_rate_20d"]) if row["hit_rate_20d"] is not None else "-",
+            _fmt_pct(row["mean_return_20d"])
+            if row["mean_return_20d"] is not None
+            else "-",
+            f"{row['median_latency_s']:.1f}"
+            if row["median_latency_s"] is not None
+            else "-",
+            _fmt_pct(row["schema_ok_rate"]) if row["schema_ok_rate"] is not None else "-",
+            _fmt_pct(row["agreement_rate"]) if row["agreement_rate"] is not None else "-",
+            "insuficiente" if row["insufficient"] else "ok",
+        )
+    console.print(t)
+    if not rows:
+        console.print(
+            "[yellow]Sin datos: no hay decisiones de modelos registradas.[/yellow]"
+        )
+
+
 @llm_app.command("report")
 def llm_report_cmd() -> None:
     """Reporte acumulado de comparaciones entre modelos lite."""

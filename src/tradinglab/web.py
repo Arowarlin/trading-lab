@@ -2087,6 +2087,20 @@ class LabData:
 
         return self.cache.get("decisions_compare", 300.0, collect)
 
+    def model_ranking(self) -> dict:
+        """Ranking de modelos por acierto a 20 días; cachea 5 minutos."""
+        from .agent_compare import model_ranking
+
+        def collect() -> dict:
+            if not self.db_path.exists():
+                return {"items": [], "error": "sin base de datos"}
+            try:
+                return {"items": model_ranking(self.db_path)}
+            except Exception as exc:
+                return {"items": [], "error": str(exc)[:240]}
+
+        return self.cache.get("model_ranking", 300.0, collect)
+
     # ------------------------------------------------------------------- repos
 
     def repo_audit(self) -> dict:
@@ -2509,6 +2523,8 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 self._json(self.server.data.learning())
             elif path == "/api/models":
                 self._json(registry_payload(self.server.data.db_path))
+            elif path == "/api/models/ranking":
+                self._json(self.server.data.model_ranking())
             elif path == "/api/reports":
                 self._json({"files": list_exports()})
             elif path == "/api/reports/preview":

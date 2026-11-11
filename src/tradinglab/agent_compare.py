@@ -6,11 +6,13 @@ marcan y se excluyen de toda estadística forward.
 from __future__ import annotations
 
 import re
+import statistics
 from datetime import date
 from pathlib import Path
+from typing import Any
 
 from .agents.bridge import RATING_TO_TARGET
-from .config import Settings
+from .config import DEFAULT_DB, Settings
 from .db import connect, init_db, utcnow
 from .decisions import (
     deep_prompt_hash,
@@ -21,6 +23,14 @@ from .decisions import (
 
 DEFAULT_ANALYSTS = ("market", "news", "fundamentals", "social")
 MIN_SAMPLE = 30
+
+# Dirección (no peso objetivo) de cada rating: sirve para el acierto a 20 días.
+RATING_DIRECTION: dict[str, float] = {
+    "buy": 1.0,
+    "overweight": 1.0,
+    "sell": -1.0,
+    "underweight": -1.0,
+}
 
 
 class CompareError(ValueError):
@@ -236,11 +246,140 @@ def comparisons(db_path: str | Path, *, limit: int = 50) -> list[dict]:
     return [dict(row) for row in rows]
 
 
+# ------------------------------------------------------------------ ranking
+
+
+def _clean_model(value: Any) -> str:
+    return str(value or "").strip()
+
+
+def model_ranking(
+    db_path: str | Path = DEFAULT_DB,
+    *,
+    min_sample: int = MIN_SAMPLE,
+) -> list[dict]:
+    """Ranking de modelos por acierto a 20 días.
+
+    Junta `lite_model_comparisons`, `agent_comparisons` y `decision_outcomes`
+    para contar las decisiones de cada modelo, y `llm_calls` para la tasa de
+    `schema_ok`. El acierto se mide con el retorno de 20 días **con el signo
+    de la dirección que dio el modelo**; el retorno medio usa ese mismo
+    retorno con signo.
+
+    Con menos de `min_sample` decisiones por modelo la fila se marca
+    `insufficient`. Sin datos devuelve una lista vacía.
+    """
+    init_db(db_path)
+    with connect(db_path) as con:
+        outcomes = con.execute("SELECT * FROM decision_outcomes").fetchall()
+        pairs = con.execute("SELECT * FROM agent_comparisons").fetchall()
+        lite_pairs = con.execute("SELECT * FROM lite_model_comparisons").fetchall()
+        calls = con.execute(
+            "SELECT model, schema_ok, latency_ms FROM llm_calls"
+        ).fetchall()
+
+    decisions: dict[str, set[tuple[str, str]]] = {}
+    returns: dict[str, list[float]] = {}
+    latencies: dict[str, list[float]] = {}
+    agreements: dict[str, list[int]] = {}
+    schema: dict[str, list[int]] = {}
+
+    def _touch(model: str, ticker: str, day: str) -> None:
+        name = _clean_model(model)
+        if not name:
+            return
+        decisions.setdefault(name, set()).add((str(ticker), str(day)))
+
+    def _latency(model: str, value: Any) -> None:
+        name = _clean_model(model)
+        if name and value is not None:
+            latencies.setdefault(name, []).append(float(value))
+
+    def _agreement(models: list[str], value: Any) -> None:
+        if value is None:
+            return
+        for model in models:
+            name = _clean_model(model)
+            if name:
+                agreements.setdefault(name, []).append(int(value))
+
+    for row in outcomes:
+        model = _clean_model(row["model"])
+        if not model:
+            continue
+        _touch(model, row["ticker"], row["decision_date"])
+        _latency(model, row["duration_s"])
+        if row["return_20d"] is not None:
+            direction = RATING_DIRECTION.get(str(row["rating"] or "").strip().lower())
+            if direction is not None:
+                returns.setdefault(model, []).append(float(row["return_20d"]) * direction)
+
+    for row in pairs:
+        lite_model = _clean_model(row["lite_model"])
+        deep_model = _clean_model(row["deep_model"])
+        _touch(lite_model, row["ticker"], row["decision_date"])
+        _touch(deep_model, row["ticker"], row["decision_date"])
+        _latency(lite_model, row["lite_duration_s"])
+        _latency(deep_model, row["deep_duration_s"])
+        _agreement([lite_model, deep_model], row["agreement"])
+
+    for row in lite_pairs:
+        model_a = _clean_model(row["model_a"])
+        model_b = _clean_model(row["model_b"])
+        _touch(model_a, row["ticker"], row["decision_date"])
+        _touch(model_b, row["ticker"], row["decision_date"])
+        _latency(model_a, row["elapsed_a"])
+        _latency(model_b, row["elapsed_b"])
+        _agreement([model_a, model_b], row["agreement"])
+
+    for row in calls:
+        model = _clean_model(row["model"])
+        if model and row["schema_ok"] is not None:
+            schema.setdefault(model, []).append(int(row["schema_ok"]))
+        if model and row["latency_ms"] is not None:
+            latencies.setdefault(model, []).append(float(row["latency_ms"]) / 1000.0)
+
+    out: list[dict] = []
+    for model, keys in decisions.items():
+        rets = returns.get(model, [])
+        lats = latencies.get(model, [])
+        agrees = agreements.get(model, [])
+        sch = schema.get(model, [])
+        n = len(keys)
+        out.append(
+            {
+                "model": model,
+                "n": n,
+                "n_with_outcome": len(rets),
+                "hit_rate_20d": (
+                    sum(1 for value in rets if value > 0.0) / len(rets) if rets else None
+                ),
+                "mean_return_20d": (sum(rets) / len(rets)) if rets else None,
+                "median_latency_s": (statistics.median(lats) if lats else None),
+                "schema_ok_rate": (sum(sch) / len(sch)) if sch else None,
+                "agreement_rate": (sum(agrees) / len(agrees)) if agrees else None,
+                "insufficient": n < min_sample,
+                "sample_warning": (
+                    f"muestra insuficiente: n={n} < {min_sample}" if n < min_sample else ""
+                ),
+            }
+        )
+    out.sort(
+        key=lambda row: (
+            row["hit_rate_20d"] is None,
+            -(row["hit_rate_20d"] or 0.0),
+            row["model"],
+        )
+    )
+    return out
+
+
 __all__ = [
     "CompareError",
     "DEFAULT_ANALYSTS",
     "MIN_SAMPLE",
     "comparisons",
+    "model_ranking",
     "report",
     "run_comparison",
 ]

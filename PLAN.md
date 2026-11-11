@@ -1080,6 +1080,32 @@ etapa.
   `lab doctor` OK; F13 sin cambios respecto al estado previo (`6250d4c0…`).
   Sin push, sin activar bots y sin órdenes.
 
+### Etapa 3f — Ranking de modelos (2026-11-11)
+
+- [x] **`model_ranking()` en `agent_compare.py`**
+  - Junta `lite_model_comparisons`, `agent_comparisons` y `decision_outcomes`
+    para contar las decisiones por modelo (claves únicas ticker + fecha) y
+    `llm_calls` para la tasa de `schema_ok`.
+  - Por modelo: N de decisiones, acierto a 20 días (retorno con el signo de la
+    dirección que dio), retorno medio a 20 días, latencia mediana en segundos,
+    tasa de `schema_ok`, acuerdo lite/deep y `insufficient` si N < 30.
+  - Sin datos devuelve lista vacía; los ratings sin dirección (Hold, REVIEW)
+    no cuentan como acierto ni como retorno.
+- [x] **Endpoint y CLI**
+  - `GET /api/models/ranking` (solo lectura) en `web.py`.
+  - `lab llm ranking`.
+- [x] **Panel en la consola** (pestaña Agentes): "Ranking de modelos", ordenado
+  por acierto, chip de muestra insuficiente y "Sin datos" cuando no hay.
+  HTML/CSS/JS propios, sin CDN ni dependencias nuevas.
+- [x] **Inventario UI** actualizado con los ids nuevos y la llamada a la API,
+  sin retirar ninguna entrada previa.
+- [x] **Tests**: ranking con datos sintéticos, caso vacío, orden por acierto,
+  ratings sin dirección, muestra insuficiente y consola (panel + inventario).
+- Evidencia: `ruff` limpio; suite completa **755 passed, 1 skipped**; en la base
+  real `lab llm ranking` muestra 3 modelos con N = 3, 3 y 5, todos marcados
+  **insuficientes** y sin retornos 20d todavía. Sin push, sin activar bots y
+  sin órdenes.
+
 ### Etapa 4 — Presupuesto de riesgo neto por activo
 
 - [x] **`config/risk_budget.yaml`**

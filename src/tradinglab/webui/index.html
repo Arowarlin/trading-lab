@@ -1682,6 +1682,12 @@
         <div class="note">Solo cuenta el forward (las pasadas retrospectivas se excluyen). Con menos de 30 comparaciones: muestra insuficiente; no se inventan conclusiones.</div>
       </div>
 
+      <div class="panel" style="margin-bottom:14px">
+        <div class="panel-head"><h2>Ranking de modelos</h2><span class="muted tiny" id="model-ranking-meta"></span></div>
+        <div id="model-ranking"></div>
+        <div class="note">Ordenado por acierto a 20 días. Con menos de 30 decisiones por modelo se marca <strong>muestra insuficiente</strong>; sin datos no se inventa nada.</div>
+      </div>
+
       <div class="panel">
         <div class="panel-head"><h2>Runs deep (TradingAgents)</h2><span class="muted tiny">logs/deep_*.log</span></div>
         <div id="deep-logs"></div>
@@ -2376,7 +2382,7 @@ async function loadAll(manual = false) {
   button.disabled = true;
   button.classList.add("loading");
   $("#refresh-label").textContent = "Actualizando…";
-  const [overviewResult, riskResult, accountsResult, fundResult, operatorResult, driftResult, instrumentsResult, marketsResult] = await Promise.allSettled([
+  const [overviewResult, riskResult, accountsResult, fundResult, operatorResult, driftResult, instrumentsResult, marketsResult, rankingResult] = await Promise.allSettled([
     getJSON("/api/overview"),
     getJSON("/api/risk"),
     getJSON("/api/accounts"),
@@ -2385,6 +2391,7 @@ async function loadAll(manual = false) {
     getJSON("/api/drift"),
     getJSON("/api/instruments"),
     getJSON("/api/markets"),
+    getJSON("/api/models/ranking"),
   ]);
   if (overviewResult.status === "fulfilled") {
     const newBuild = overviewResult.value?.meta?.build;
@@ -2414,6 +2421,10 @@ async function loadAll(manual = false) {
       renderAsset();
       renderIncubation();
     }
+  }
+  if (rankingResult.status === "fulfilled") {
+    S.modelRanking = rankingResult.value;
+    renderModelRanking();
   }
   if (riskResult.status === "fulfilled") {
     S.risk = riskResult.value;
@@ -4929,6 +4940,44 @@ function renderAgentComparison() {
     ${grid([{ label: "Lite → deep" }, ...columns.map((column) => ({ label: column, num: true }))], matrixRows, { empty: "Sin datos." })}
     <div class="panel-head" style="margin-top:14px"><h2>Por fuente</h2><span class="muted tiny">forward 20d</span></div>
     ${grid([{ label: "Fuente" }, { label: "N", num: true }, { label: "N 20d", num: true }, { label: "20d", num: true }, { label: "Hit 20d", num: true }, { label: "Muestra" }], sourceRows, { empty: "Sin datos." })}`;
+}
+
+function renderModelRanking() {
+  const data = S.modelRanking;
+  const host = $("#model-ranking");
+  if (!host) return;
+  const meta = $("#model-ranking-meta");
+  const rows = (data && data.items) || [];
+  if (!rows.length) {
+    if (meta) meta.textContent = (data && data.error) || "sin datos";
+    host.innerHTML = `<div class="empty">Sin datos: no hay decisiones de modelos registradas.</div>`;
+    return;
+  }
+  if (meta) meta.textContent = `${rows.length} modelo${rows.length === 1 ? "" : "s"}`;
+  const body = rows.map((row) => [
+    `<b>${esc(row.model)}</b>`,
+    num(row.n, 0),
+    row.hit_rate_20d == null ? "Sin datos" : pct(row.hit_rate_20d, 1),
+    row.mean_return_20d == null ? "Sin datos" : pct(row.mean_return_20d, 2),
+    row.median_latency_s == null ? "Sin datos" : num(row.median_latency_s, 1) + " s",
+    row.schema_ok_rate == null ? "Sin datos" : pct(row.schema_ok_rate, 0),
+    row.agreement_rate == null ? "Sin datos" : pct(row.agreement_rate, 0),
+    row.insufficient ? `<span class="tag yellow">insuficiente</span>` : `<span class="tag green">ok</span>`,
+  ]);
+  host.innerHTML = grid(
+    [
+      { label: "Modelo" },
+      { label: "N", num: true },
+      { label: "Hit 20d", num: true },
+      { label: "Retorno 20d", num: true },
+      { label: "Latencia", num: true },
+      { label: "schema_ok", num: true },
+      { label: "Acuerdo", num: true },
+      { label: "Muestra" },
+    ],
+    body,
+    { empty: "Sin datos." }
+  );
 }
 
 function showAgent(index) {

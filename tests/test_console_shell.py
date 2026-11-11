@@ -162,6 +162,27 @@ def test_inventario_ui_base_sigue_completo() -> None:
     assert api_calls == set(inventory["api_calls"])
 
 
+def test_ranking_de_modelos_en_pestana_agentes() -> None:
+    text = INDEX.read_text(encoding="utf-8")
+    for marker in (
+        'id="model-ranking"',
+        'id="model-ranking-meta"',
+        "Ranking de modelos",
+        "function renderModelRanking()",
+        'getJSON("/api/models/ranking")',
+        "muestra insuficiente",
+    ):
+        assert marker in text, marker
+    inventory = _inventory()
+    assert "model-ranking" in inventory["ids"]
+    assert "model-ranking-meta" in inventory["ids"]
+    assert "/api/models/ranking" in inventory["api_calls"]
+    # ninguna entrada previa se retira
+    assert "view-agents" in inventory["ids"]
+    assert "agent-compare" in inventory["ids"]
+    assert "/api/overview" in inventory["api_calls"]
+
+
 def test_componentes_v3_presentes() -> None:
     text = INDEX.read_text(encoding="utf-8")
     for marker in (
