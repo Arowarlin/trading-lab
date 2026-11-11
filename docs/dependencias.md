@@ -72,6 +72,43 @@ uv pip install --python .venv-vbt "git+https://github.com/Makeph/prop-ev"
   entorno del laboratorio.
 - `.venv-vbt` está en `.gitignore` (`.venv-*/`).
 
+## TradingAgents (venv `.venv-ta`, herramienta externa)
+
+Fecha de verificación: 2026-11-11.
+
+| Paquete | Versión | Licencia | Origen |
+|---|---|---|---|
+| tradingagents | **0.7.1** | Apache-2.0 | editable desde `vendor/TradingAgents` (commit `9fa1196`, "announce Trading-R1 official release") |
+
+- **No se actualiza**: 0.7.1 ≥ 0.2.0, así que la condición de actualización no se
+  cumple. El modelo por defecto y `config/market_agents.yaml` **no se tocan** y el
+  endpoint sigue siendo LM Studio (`http://127.0.0.1:1234/v1`).
+- `.venv-ta` **no tiene pip** (venv creado con `uv`), así que
+  `python -m pip show tradingagents` falla. La versión se comprueba con:
+
+  ```powershell
+  .\.venv-ta\Scripts\python.exe -c "import tradingagents; print(tradingagents.__version__)"
+  ```
+
+- El deep exige que el modelo de LM Studio esté cargado con **≥16.384 tokens de
+  contexto**; con 8.192 el run falla rápido con un mensaje explícito. Con 32.768
+  el run deep de `lab agent-compare` **superó la hora** en esta máquina: no es
+  viable aquí y queda documentado, no corregido a la fuerza.
+
+## Operación de LM Studio (nota)
+
+En esta máquina la VRAM no da para dos copias del modelo de 17,74 GB. Con dos
+instancias resident (por ejemplo, una cargada a mano y otra por JIT) la latencia
+del lite se triplica (≈90 s → ≈250 s) porque una copia cae a CPU. Regla práctica:
+**una sola instancia**. Comprobaciones:
+
+```powershell
+lms server start                 # si el servidor no está en marcha
+lms ps                           # debe listar UNA instancia
+lms unload --all                 # antes de cambiar el contexto
+lms load qwen3.8-27b --context-length 32768 --parallel 1 --yes
+```
+
 ## Notas
 
 - `uv.lock` fija todo el árbol transitivo; CI usa `uv sync --frozen`.

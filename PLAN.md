@@ -1106,6 +1106,36 @@ etapa.
   **insuficientes** y sin retornos 20d todavía. Sin push, sin activar bots y
   sin órdenes.
 
+### Etapa 3g — Verificación de TradingAgents y del modo lite (2026-11-11)
+
+- [x] **Versión**
+  - `tradingagents` **0.7.1** (Apache-2.0), instalado en editable desde
+    `vendor/TradingAgents` (commit `9fa1196`). `.venv-ta` no tiene pip, así que
+    la versión se comprueba con `import tradingagents; __version__`; queda
+    documentado en `docs/dependencias.md`.
+  - **0.7.1 ≥ 0.2.0**: no se actualiza. El modelo por defecto y
+    `config/market_agents.yaml` no se tocan y el endpoint sigue siendo LM
+    Studio. La API de configuración multi-proveedor no cambió, así que
+    `scripts/run_tradingagents.py` **no se toca**.
+- [x] **Modo lite con LM Studio**
+  - `lab agent SPY|QQQ|NVDA --mode lite`: 3 de 3 correctos (98,1 s / 143,0 s /
+    77,6 s de reloj).
+  - `lab llm status`: 45 llamadas, **26 validadas, 26 OK, 0 fallidas** (antes
+    15 OK y 0 fallidas) → `schema_ok` **no empeora**.
+  - Latencia mediana de `qwen3.8-27b`: **109,2 s** frente a 116,8 s antes
+    (**−6,5 %**, muy por debajo del +20 % permitido). Los otros dos modelos no
+    cambian (78,1 s y 179,0 s).
+- [x] **Hallazgo operativo documentado** (no es un problema de versión)
+  - El deep exige ≥16.384 tokens de contexto: con 8.192 falla rápido con
+    mensaje explícito y con 32.768 el run **superó la hora** en esta máquina.
+  - Con **dos instancias** del modelo resident la latencia del lite se triplica
+    (≈90 s → ≈250 s) porque una copia cae a CPU: la VRAM no da para dos copias
+    de 17,74 GB. Con una sola instancia la latencia vuelve a su nivel. Queda
+    documentado en `docs/dependencias.md` con los comandos `lms`.
+- Evidencia: `ruff` limpio; suite completa **755 passed, 1 skipped**; `lab doctor`
+  OK con los WARN conocidos; F13 sin cambios respecto al estado previo
+  (`6250d4c0…`). Sin push, sin activar bots y sin órdenes.
+
 ### Etapa 4 — Presupuesto de riesgo neto por activo
 
 - [x] **`config/risk_budget.yaml`**
