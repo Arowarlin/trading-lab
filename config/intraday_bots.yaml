@@ -189,7 +189,10 @@ bots:
     universe: [US100.cash]
     timeframe: H4
     enabled: false
-    exposure: 0.25
+    # Exposición decidida con `lab prop exposure-sweep` (2026-11-11):
+    # k=0,75 da EV +233 EUR/intento con breach 36,0 % y peor 5 % MaxDD -26,6 %;
+    # k=1 da algo más de EV (+338) pero 45,4 % de breach y -34,1 % de cola.
+    exposure: 0.75
     params: {fast: 20, slow: 100, regime: 200, stop_atr: 2.0, atr_window: 14}
     grid: {fast: [20, 50], slow: [100, 200], stop_atr: [2.0, 3.0]}
     description: "Tendencia diaria sobre US100.cash (senal D1, ejecucion H4, stop ATR)."

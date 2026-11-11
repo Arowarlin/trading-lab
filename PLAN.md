@@ -1584,6 +1584,12 @@ etapa.
   - **Recomendación: k=1 por EV**, con óptimo plano (k=0,5-1,0) y el aviso de
     que subir k dispara el breach y el peor MaxDD. Es un estudio: no se cambia
     la exposición de ningún bot ni se activa nada.
+  - **Decisi?n (2026-11-11): k=0,75** para un eventual intento. Acepta 105 EUR
+    menos de EV que k=1 (+233 frente a +338) a cambio de 9,4 pp menos de breach
+    (36,0 % frente a 45,4 %) y 7,5 pp menos de cola (-26,6 % frente a -34,1 %
+    de MaxDD al 5 % peor). El EV de k=1 est? dentro del ruido del modelo del
+    mes 1 y una reventada cuesta otra cuota entera. El bot `us100-trend-d1`
+    queda con `exposure: 0.75` y **sigue `enabled: false`**: no se activa nada.
   - EV oráculo (un objetivo completo): +3.378 a +4.570; se muestra como
     contraste de convención, no como criterio.
 - [x] **Tests sintéticos** (`tests/test_exposure_sweep.py`, 10 passed):
