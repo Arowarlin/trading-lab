@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from ..audit import append_hashed
 from ..db import connect, utcnow
 
 logger = logging.getLogger(__name__)
@@ -128,23 +129,23 @@ class AlpacaBroker:
         if self.db_path:
             try:
                 with connect(self.db_path) as con:
-                    con.execute(
-                        "INSERT INTO orders(ts, ticker, side, qty, order_type, status, broker_id, bot, reason, run_id, "
-                        "risk_usd, stop_price) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
-                        (
-                            utcnow(),
-                            result["ticker"],
-                            result["side"],
-                            result["qty"],
-                            "market",
-                            result["status"],
-                            result["order_id"],
-                            bot,
-                            reason,
-                            run_id,
-                            None if risk_usd is None else float(risk_usd),
-                            None if stop_price is None else float(stop_price),
-                        ),
+                    append_hashed(
+                        con,
+                        "orders",
+                        {
+                            "ts": utcnow(),
+                            "ticker": result["ticker"],
+                            "side": result["side"],
+                            "qty": result["qty"],
+                            "order_type": "market",
+                            "status": result["status"],
+                            "broker_id": result["order_id"],
+                            "bot": bot,
+                            "reason": reason,
+                            "run_id": run_id,
+                            "risk_usd": None if risk_usd is None else float(risk_usd),
+                            "stop_price": None if stop_price is None else float(stop_price),
+                        },
                     )
             except Exception:
                 pass

@@ -77,6 +77,10 @@ guardian_app = typer.Typer(
     no_args_is_help=True,
     help="Guardián MQL5: exporta límites y magics para el EA de equity.",
 )
+audit_app = typer.Typer(
+    no_args_is_help=True,
+    help="Auditoría: cadena de hash de orders y console_actions.",
+)
 alerts_app = typer.Typer(
     no_args_is_help=True, help="Alertas ntfy/Telegram, latido y chequeo de servicios."
 )
@@ -139,6 +143,7 @@ app.add_typer(prop_app, name="prop")
 app.add_typer(futures_app, name="futures")
 app.add_typer(killswitch_app, name="killswitch")
 app.add_typer(guardian_app, name="guardian")
+app.add_typer(audit_app, name="audit")
 app.add_typer(alerts_app, name="alerts")
 app.add_typer(f13_app, name="f13")
 app.add_typer(bots_app, name="bots")
@@ -2058,6 +2063,60 @@ def killswitch_reset_cmd(
     console.print(f"[green]Kill-switch reseteado[/green] · reset_at={new_state.reset_at}")
 
 
+@audit_app.command("verify")
+def audit_verify_cmd(
+    table: str = typer.Option(None, "--table", help="orders | console_actions"),
+    alert: bool = typer.Option(
+        True, "--alert/--no-alert", help="Enviar alerta si la cadena está rota"
+    ),
+) -> None:
+    """Verifica la cadena de hash y avisa si está rota."""
+    from .audit import CHAINED_TABLES, verify_chain
+
+    tables = [table] if table else list(CHAINED_TABLES)
+    unknown = [name for name in tables if name not in CHAINED_TABLES]
+    if unknown:
+        console.print(f"[red]Tabla desconocida:[/red] {', '.join(unknown)}")
+        raise typer.Exit(2)
+
+    t = Table(title="Auditoría · cadena de hash")
+    t.add_column("Tabla", style="bold")
+    t.add_column("Estado", justify="right")
+    t.add_column("Filas", justify="right")
+    t.add_column("Encadenadas", justify="right")
+    t.add_column("Antes de cadena", justify="right")
+    t.add_column("Primera rotura", justify="right")
+
+    broken: list[tuple[str, dict]] = []
+    for name in tables:
+        result = verify_chain(name)
+        t.add_row(
+            name,
+            "[green]OK[/green]" if result["ok"] else "[red]ROTA[/red]",
+            str(result["n"]),
+            str(result["hashed"]),
+            str(result["legacy"]),
+            str(result["first_break_id"]) if result["first_break_id"] is not None else "-",
+        )
+        if not result["ok"]:
+            broken.append((name, result))
+    console.print(t)
+
+    for name, result in broken:
+        message = (
+            f"Cadena de auditoría rota en {name} "
+            f"(primera rotura id={result['first_break_id']})"
+        )
+        if alert:
+            try:
+                send_alert("audit_chain_broken", message, severity="error")
+            except Exception as exc:  # pragma: no cover - depends on the channel
+                console.print(f"[dim]No se pudo enviar la alerta: {exc}[/dim]")
+        console.print(f"[red]{message}[/red]")
+    if broken:
+        raise typer.Exit(1)
+
+
 @guardian_app.command("export")
 def guardian_export_cmd(
     account: str = typer.Option(
@@ -2472,6 +2531,23 @@ def f13_report_cmd() -> None:
         f"{slip['p95_bps'] if slip['p95_bps'] is not None else '—'} bps",
     )
     t.add_row("Error tamaño máx.", f"{size['max_error_shares']:g}")
+    try:
+        from .audit import chain_state
+
+        chain = chain_state(DEFAULT_DB)
+        for name, result in chain["tables"].items():
+            estado = "OK" if result["ok"] else "ROTA"
+            extra = (
+                f" (rotura id={result['first_break_id']})"
+                if result["first_break_id"] is not None
+                else ""
+            )
+            t.add_row(
+                f"Cadena {name}",
+                f"{estado} · {result['hashed']}/{result['n']} encadenadas{extra}",
+            )
+    except Exception as exc:  # pragma: no cover - la auditoría no bloquea el reporte
+        t.add_row("Cadena auditoría", f"Sin datos ({exc})")
     console.print(t)
     console.print(
         f"[dim]JSON: {report['files']['json']} · MD: {report['files']['markdown']}[/dim]"

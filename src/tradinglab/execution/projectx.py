@@ -7,6 +7,7 @@ from typing import Any
 
 import httpx
 
+from ..audit import append_hashed
 from ..db import connect, utcnow
 
 
@@ -386,20 +387,24 @@ class ProjectXBroker:
             return
         try:
             with connect(self.db_path) as con:
-                con.execute(
-                    "INSERT INTO orders(ts, ticker, side, qty, order_type, status, broker_id, bot, reason) "
-                    "VALUES(?,?,?,?,?,?,?,?,?)",
-                    (
-                        utcnow(),
-                        str(order.get("contract_id")),
-                        str(order.get("side")),
-                        float(order.get("size") or 0),
-                        str(order.get("order_type")),
-                        str(order.get("status")),
-                        str(order.get("order_id")) if order.get("order_id") is not None else None,
-                        bot,
-                        reason,
-                    ),
+                append_hashed(
+                    con,
+                    "orders",
+                    {
+                        "ts": utcnow(),
+                        "ticker": str(order.get("contract_id")),
+                        "side": str(order.get("side")),
+                        "qty": float(order.get("size") or 0),
+                        "order_type": str(order.get("order_type")),
+                        "status": str(order.get("status")),
+                        "broker_id": (
+                            str(order.get("order_id"))
+                            if order.get("order_id") is not None
+                            else None
+                        ),
+                        "bot": bot,
+                        "reason": reason,
+                    },
                 )
         except (sqlite3.Error, OSError):
             pass

@@ -48,7 +48,9 @@ CREATE TABLE IF NOT EXISTS orders (
     reason TEXT,
     run_id INTEGER,
     risk_usd REAL,
-    stop_price REAL
+    stop_price REAL,
+    prev_hash TEXT,
+    row_hash TEXT
 );
 
 CREATE TABLE IF NOT EXISTS fills (
@@ -311,7 +313,9 @@ CREATE TABLE IF NOT EXISTS console_actions (
     result TEXT NOT NULL,
     ok INTEGER NOT NULL,
     actor TEXT,
-    detail TEXT
+    detail TEXT,
+    prev_hash TEXT,
+    row_hash TEXT
 );
 
 CREATE TABLE IF NOT EXISTS bot_runtime_state (
@@ -632,6 +636,7 @@ def init_db(path: str | Path) -> None:
         _migrate_decision_outcomes(con)
         _migrate_llm_calls(con)
         _migrate_orders(con)
+        _migrate_audit_chain(con)
 
 
 def _migrate_equity(con: sqlite3.Connection) -> None:
@@ -665,6 +670,24 @@ def _migrate_orders(con: sqlite3.Connection) -> None:
         con.execute("ALTER TABLE orders ADD COLUMN risk_usd REAL")
     if columns and "stop_price" not in columns:
         con.execute("ALTER TABLE orders ADD COLUMN stop_price REAL")
+
+
+def _migrate_audit_chain(con: sqlite3.Connection) -> None:
+    """Añade las columnas de la cadena de hash. Solo aditivo e idempotente.
+
+    Las filas anteriores se quedan con `prev_hash` y `row_hash` a NULL: son
+    "antes de la cadena" y no rompen la verificación.
+    """
+    for table in ("console_actions", "orders"):
+        columns = [
+            row["name"] for row in con.execute(f"PRAGMA table_info({table})").fetchall()
+        ]
+        if not columns:
+            continue
+        if "prev_hash" not in columns:
+            con.execute(f"ALTER TABLE {table} ADD COLUMN prev_hash TEXT")
+        if "row_hash" not in columns:
+            con.execute(f"ALTER TABLE {table} ADD COLUMN row_hash TEXT")
 
 
 def _migrate_bot_evaluations(con: sqlite3.Connection) -> None:

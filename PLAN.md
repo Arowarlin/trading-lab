@@ -1049,6 +1049,37 @@ etapa.
   previo (`6250d4c0…`, ya `changed` por el bloque `daytrader`). Sin push, sin
   activar bots y sin órdenes.
 
+### Etapa 3e — Cadena de hash de auditoría (2026-11-11)
+
+- [x] **Migración aditiva**
+  - `orders` y `console_actions` ganan `prev_hash` y `row_hash` (TEXT, NULL en
+    las filas antiguas). `init_db` los añade si faltan; la migración es
+    **idempotente** y no borra ni reescribe filas.
+- [x] **`src/tradinglab/audit.py`**
+  - `row_hash = sha256(prev_hash + json_canonico_de_la_fila_sin_los_dos_hashes)`.
+    El JSON canónico usa **todas** las columnas de la tabla (las no escritas
+    valen `None`), para que el hash no dependa del módulo que insertó.
+  - `append_hashed(con, table, row)` inserta y sella la fila; `prev_hash` es el
+    `row_hash` de la fila anterior por `id`.
+  - `verify_chain(table)` devuelve `ok`, `first_break_id` y `n`. Las filas con
+    hash NULL son "antes de la cadena" y **no** fallan.
+- [x] **Escritores con cadena**
+  - `runtime.py` (acciones de consola, incluida la del operador) y las cuatro
+    escrituras de órdenes: `execution/paper.py`, `execution/alpaca.py`,
+    `execution/mt5.py` y `execution/projectx.py`.
+- [x] **CLI y alerta**
+  - `lab audit verify [--table]` muestra el estado y avisa con
+    `audit_chain_broken` si la cadena está rota (se puede silenciar con
+    `--no-alert`). Sale con código 1 si hay rotura.
+  - `lab f13 report` incluye el estado de la cadena de cada tabla.
+- [x] **Tests**: cadena válida, fila alterada detectada, fila borrada detectada,
+  filas antiguas sin hash que no rompen, migración idempotente, rechazo de
+  tabla sin auditar y CLI.
+- Evidencia: `ruff` limpio; suite completa **749 passed, 1 skipped**; en la
+  base real `lab audit verify` → **OK** con 2+2 filas "antes de la cadena";
+  `lab doctor` OK; F13 sin cambios respecto al estado previo (`6250d4c0…`).
+  Sin push, sin activar bots y sin órdenes.
+
 ### Etapa 4 — Presupuesto de riesgo neto por activo
 
 - [x] **`config/risk_budget.yaml`**

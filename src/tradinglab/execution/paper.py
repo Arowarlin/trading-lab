@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from ..audit import append_hashed
 from ..db import connect, utcnow
 
 
@@ -106,24 +107,23 @@ class PaperBroker:
             if qty < 0 and abs(qty) > held_qty + 1e-9:
                 raise RuntimeError(f"no puedes vender {abs(qty)} de {ticker}; tienes {held_qty:g}")
 
-            cur = con.execute(
-                "INSERT INTO orders(ts, ticker, side, qty, order_type, status, bot, reason, run_id, "
-                "risk_usd, stop_price) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
-                (
-                    utcnow(),
-                    ticker,
-                    side,
-                    abs(qty),
-                    "market",
-                    "filled",
-                    bot,
-                    reason,
-                    run_id,
-                    None if risk_usd is None else float(risk_usd),
-                    None if stop_price is None else float(stop_price),
-                ),
+            order_id = append_hashed(
+                con,
+                "orders",
+                {
+                    "ts": utcnow(),
+                    "ticker": ticker,
+                    "side": side,
+                    "qty": abs(qty),
+                    "order_type": "market",
+                    "status": "filled",
+                    "bot": bot,
+                    "reason": reason,
+                    "run_id": run_id,
+                    "risk_usd": None if risk_usd is None else float(risk_usd),
+                    "stop_price": None if stop_price is None else float(stop_price),
+                },
             )
-            order_id = int(cur.lastrowid)
 
             con.execute(
                 "INSERT INTO fills(order_id, ts, qty, price, commission) VALUES(?,?,?,?,?)",

@@ -6,6 +6,7 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
+from .audit import append_hashed
 from .db import connect, init_db, utcnow
 
 SCHEMA = """
@@ -142,18 +143,18 @@ def record_console_action(
         if key.lower() not in {"pin", "token", "password", "secret"}
     }
     with connect(db_path) as con:
-        con.execute(
-            "INSERT INTO console_actions(ts, action, params, result, ok, actor, detail) "
-            "VALUES(?,?,?,?,?,?,?)",
-            (
-                utcnow(),
-                action,
-                json.dumps(safe, ensure_ascii=False, default=str)[:4000],
-                result[:2000],
-                int(ok),
-                actor,
-                detail[:1000],
-            ),
+        append_hashed(
+            con,
+            "console_actions",
+            {
+                "ts": utcnow(),
+                "action": action,
+                "params": json.dumps(safe, ensure_ascii=False, default=str)[:4000],
+                "result": result[:2000],
+                "ok": int(ok),
+                "actor": actor,
+                "detail": detail[:1000],
+            },
         )
 
 

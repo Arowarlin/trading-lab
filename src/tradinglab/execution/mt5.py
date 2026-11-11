@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from ..audit import append_hashed
 from ..db import connect, utcnow
 from ..instruments import Instrument, InstrumentError, get_instrument
 from .mt5_offsets import (
@@ -747,24 +748,23 @@ class MT5Broker:
         if self.db_path:
             try:
                 with connect(self.db_path) as con:
-                    con.execute(
-                        "INSERT INTO orders(ts, ticker, side, qty, order_type, status, broker_id, "
-                        "bot, reason, run_id, risk_usd, stop_price) "
-                        "VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
-                        (
-                            utcnow(),
-                            spec["symbol"],
-                            side,
-                            float(result.volume or vol),
-                            "market",
-                            "filled",
-                            str(result.order),
-                            bot,
-                            reason,
-                            run_id,
-                            None if risk_usd is None else float(risk_usd),
-                            None if stop_price is None else float(stop_price),
-                        ),
+                    append_hashed(
+                        con,
+                        "orders",
+                        {
+                            "ts": utcnow(),
+                            "ticker": spec["symbol"],
+                            "side": side,
+                            "qty": float(result.volume or vol),
+                            "order_type": "market",
+                            "status": "filled",
+                            "broker_id": str(result.order),
+                            "bot": bot,
+                            "reason": reason,
+                            "run_id": run_id,
+                            "risk_usd": None if risk_usd is None else float(risk_usd),
+                            "stop_price": None if stop_price is None else float(stop_price),
+                        },
                     )
             except Exception:
                 pass
