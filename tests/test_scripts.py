@@ -7,12 +7,22 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def test_lmstudio_start_sin_descarga_ni_secretos():
     script = (ROOT / "scripts" / "lmstudio_start.ps1").read_text(encoding="utf-8")
-    assert "lms load qwen3.8-27b" in script
-    assert "--context-length 16384" in script
+    assert "qwen/qwen3-30b-a3b" in script
+    assert "32768" in script
     assert "--parallel 1" in script
     assert "download" not in script.lower()
     assert "api_key" not in script.lower()
     assert "TradingLab-LMStudio" not in script  # la tarea se registra fuera del script
+
+
+def test_orchestrate_spy_solo_paper_y_ventana_et():
+    script = (ROOT / "scripts" / "orchestrate_spy_daily.ps1").read_text(encoding="utf-8")
+    assert "orchestrate --bot trend-spy" in script
+    assert "--dry-run" not in script
+    assert "Eastern Standard Time" in script
+    assert "9 * 60 + 30" in script
+    assert "9 * 60 + 59" in script
+    assert "TradingLab-OrchestrateSPY" in script  # mutex, no registro
 
 
 def test_calendar_csv_estructura():
