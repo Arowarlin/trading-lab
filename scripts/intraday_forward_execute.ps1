@@ -33,6 +33,30 @@ $inTokyo = $minuteOfDay -ge 0 -and $minuteOfDay -le (4 * 60 + 30)
 $inLondon = $minuteOfDay -ge (7 * 60) -and $minuteOfDay -le (16 * 60 + 30)
 $inWindow = $isWeekday -and ($inTokyo -or $inLondon)
 
+# Registro diario del guardián: una línea por día UTC con las sesiones en
+# ALERT, los disparos y si la puerta de CLOSE está cumplida. Es la evidencia
+# de la ventana de 5 sesiones. No bloquea el forward: si el guardián no
+# responde, se anota y se sigue.
+$guardianState = Join-Path $logDir "guardian_state.txt"
+$todayKey = $utc.ToString("yyyy-MM-dd")
+$lastGuardian = ""
+if (Test-Path $guardianState) {
+    $lastGuardian = (Get-Content $guardianState -Raw -Encoding utf8).Trim()
+}
+if ($lastGuardian -ne $todayKey) {
+    try {
+        $raw = & $lab guardian status --json 2>&1
+        $status = ($raw -join "`n") | ConvertFrom-Json
+        $sessions = $status.sessions
+        $gate = if ($sessions.gate_ok) { "cumple" } else { "pendiente" }
+        Write-Log ("GUARDIAN sesiones={0}/{1} disparos={2} puerta={3} ({4})" -f `
+            $sessions.sessions, $sessions.required, $sessions.triggers, $gate, $sessions.reason)
+        Set-Content -Path $guardianState -Value $todayKey -Encoding utf8 -NoNewline
+    } catch {
+        Write-Log ("GUARDIAN no se pudo consultar: {0}" -f $_.Exception.Message)
+    }
+}
+
 # Una sola pasada por barra M15: la tarea despierta cada 5 min y solo actúa
 # en los primeros 5 minutos tras el cierre de la vela.
 $barPhase = $utc.Minute % 15

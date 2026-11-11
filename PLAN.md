@@ -1164,6 +1164,35 @@ etapa.
   OK; F13 sin cambios (`6250d4c0…`). Commit local pendiente de push en este
   bloque; sin activar bots y sin órdenes.
 
+### Etapa 3i — Registro diario del guardián, deep explícito y lista de pre-apertura (2026-11-11)
+
+- [x] **El guardián deja rastro diario sin tareas nuevas**
+  - `scripts/intraday_forward_execute.ps1` escribe **una línea por día UTC** en
+    su log con el estado del guardián (sesiones, disparos y puerta) antes de
+    evaluar los bots; el estado se guarda en `logs/intraday_forward/
+    guardian_state.txt` para no repetirlo.
+  - Ejemplo real: `GUARDIAN sesiones=1/5 disparos=0 puerta=pendiente (solo 1 de
+    5 sesiones; faltan 4)`.
+- [x] **El deep falla de forma visible**
+  - `lab agent-compare` añade una línea explícita cuando el deep no se
+    completa (motivo y presupuesto de 1.800 s) en vez de un "—" silencioso.
+  - Tests: el presupuesto llega al script, el padre mata 60 s después y el CLI
+    avisa.
+- [x] **Carril de acciones: lista de pre-apertura**
+  - El ORB solo se refresca **dentro de sesión**; tras el cierre se genera la
+    lista **diaria** (breakout 20d, bull flag, reclaim MA20, oversold y
+    oversold bounce) con los cierres completos: es la entrada de la mañana.
+  - Copia de seguridad del watchlist ORB del 2026-11-10 13:42 ET antes de
+    sobrescribirlo.
+  - El scan **no elige**: la elección del ticker sigue siendo del operador. La
+    entrada de AAPL que quedó esperando (`trader/entry.json`, status
+    `waiting`) expiró con el corte de las 15:30 ET.
+  - El carril de acciones necesita además `daytrader.enabled: true` en
+    `config/lab.yaml` (hoy `false`) para que el bróker paper ejecute.
+- Evidencia: `ruff` limpio; suite completa **762 passed, 1 skipped**; `lab doctor`
+  OK; F13 sin cambios (`6250d4c0…`). Commit local pendiente de push; sin activar
+  bots y sin órdenes.
+
 ### Etapa 4 — Presupuesto de riesgo neto por activo
 
 - [x] **`config/risk_budget.yaml`**

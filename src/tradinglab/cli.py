@@ -1023,6 +1023,12 @@ def agent_compare_cmd(
             str(row["deep_error"] or "—"),
         )
         console.print(table)
+        if row.get("deep_error") and not row.get("deep_rating"):
+            console.print(
+                "[yellow]El deep no se completó:[/yellow] "
+                + str(row["deep_error"])[:300]
+                + " [dim](presupuesto 1800 s; el lado lite queda registrado)[/dim]"
+            )
         if row["retrospective"]:
             console.print(
                 "[yellow]Pasada retrospectiva: no cuenta para el reporte forward.[/yellow]"
