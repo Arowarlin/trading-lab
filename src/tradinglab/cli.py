@@ -551,6 +551,18 @@ def fetch(
 def backtest(
     ticker: str = typer.Argument(..., help="Símbolo, p. ej. NVDA"),
     strategy: str = typer.Option("trend", "--strategy", "-s", help=", ".join(STRATEGIES)),
+    family: str = typer.Option(
+        None,
+        "--family",
+        help="Familia intradía (M15) del motor intradía, p. ej. london_pullback",
+    ),
+    timeframe: str = typer.Option("M15", "--timeframe", help="Timeframe con --family"),
+    params: str = typer.Option(
+        None, "--params", help='Parámetros JSON, p. ej. {"fast":50,"slow":200}'
+    ),
+    exposure: float = typer.Option(
+        1.0, "--exposure", help="Exposición objetivo del bot (0-1)"
+    ),
     start: str = typer.Option(None, "--start", help="YYYY-MM-DD"),
     end: str = typer.Option(None, "--end", help="YYYY-MM-DD"),
     cash: float = typer.Option(100_000.0, "--cash", help="Capital inicial"),
@@ -562,6 +574,9 @@ def backtest(
     ),
     flat_dates: str = typer.Option(
         "", "--flat-dates", help="Fechas planas separadas por comas (rollover)"
+    ),
+    export_signals: str = typer.Option(
+        None, "--export-signals", help="Escribe parquet con la traza de ejecución"
     ),
 ) -> None:
     """Ejecuta un backtest con costes; sesión/rollover opcionales."""
@@ -578,11 +593,45 @@ def backtest(
         session_bounds = (parts[0].strip(), parts[1].strip())
     flat = [item.strip() for item in flat_dates.split(",") if item.strip()]
 
-    df = data_mod.fetch(ticker.upper(), start or _default_start(), end or _today(), settings.data.cache_dir)
-    result = STRATEGIES[strategy](df)
+    kwargs: dict = {}
+    if params:
+        try:
+            loaded = json.loads(params)
+        except ValueError as exc:
+            console.print(f"[red]--params no es JSON válido:[/red] {exc}")
+            raise typer.Exit(2) from exc
+        if not isinstance(loaded, dict):
+            console.print("[red]--params debe ser un objeto JSON.[/red]")
+            raise typer.Exit(2)
+        kwargs = loaded
+
+    intraday = bool(family)
+    if intraday:
+        from .intraday import STRATEGIES as INTRADAY_STRATEGIES
+        from .intraday import load_bars
+
+        if family not in INTRADAY_STRATEGIES:
+            console.print(
+                f"[red]Familia intradía desconocida:[/red] {family}. "
+                f"Opciones: {', '.join(sorted(INTRADAY_STRATEGIES))}"
+            )
+            raise typer.Exit(2)
+        try:
+            df = load_bars(settings.data.cache_dir, ticker.upper(), timeframe)
+        except FileNotFoundError as exc:
+            console.print(f"[red]Falta la caché MT5:[/red] {exc}")
+            raise typer.Exit(2) from exc
+        result = INTRADAY_STRATEGIES[family](df, **kwargs)
+        label = f"{family} {timeframe}"
+    else:
+        df = data_mod.fetch(ticker.upper(), start or _default_start(), end or _today(), settings.data.cache_dir)
+        result = STRATEGIES[strategy](df, **kwargs)
+        label = f"{strategy} {result.params}"
+
+    target = (result.target.astype(float) * float(exposure)).clip(-1.0, 1.0)
     bt = run_backtest(
         df,
-        result.target,
+        target,
         starting_cash=cash,
         commission_bps=settings.execution.commission_bps,
         slippage_bps=settings.execution.slippage_bps,
@@ -592,7 +641,37 @@ def backtest(
     )
     m = bt.metrics
 
-    table = Table(title=f"Backtest · {ticker.upper()} · {strategy} · {result.params}")
+    if export_signals:
+        from .export_signals import export_signals as write_signals
+
+        export = write_signals(
+            df,
+            target,
+            bt,
+            export_signals,
+            symbol=ticker.upper(),
+            strategy=label,
+            commission_bps=settings.execution.commission_bps,
+            slippage_bps=settings.execution.slippage_bps,
+            spread_bps=0.0,
+            exposure=exposure,
+            session=session_bounds,
+            session_tz=session_tz,
+            flat_dates=flat,
+            meta={
+                "bot": ticker.upper(),
+                "family": family,
+                "params": kwargs,
+                "init_cash": float(cash),
+                "timeframe": timeframe if intraday else "1d",
+            },
+        )
+        console.print(
+            f"[green]Señales exportadas:[/green] {export.path} "
+            f"({export.rows} barras, {export.executions} ejecuciones)"
+        )
+
+    table = Table(title=f"Backtest · {ticker.upper()} · {label}")
     table.add_column("Métrica", style="bold")
     table.add_column("Valor", justify="right")
     rows = [
@@ -609,9 +688,15 @@ def backtest(
         ("Win rate", _fmt_pct(m["win_rate"])),
         ("Exposición media", _fmt_pct(m["exposure"])),
     ]
-    for label, value in rows:
-        table.add_row(label, value)
+    for label_row, value in rows:
+        table.add_row(label_row, value)
     console.print(table)
+
+    if intraday:
+        console.print(
+            "[yellow]Intradía: las métricas anualizadas (CAGR, Sharpe, Calmar) usan "
+            "252 días y no son comparables con diario.[/yellow]"
+        )
 
     if not bt.trades.empty:
         console.print(f"[dim]{len(bt.trades)} ejecuciones (compras/ventas) registradas[/dim]")

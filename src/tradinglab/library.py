@@ -25,7 +25,7 @@ REQUIRED_FIELDS = (
     "status",
     "reason",
 )
-STATUSES = {"adoptada", "evaluada", "descartada"}
+STATUSES = {"adoptada", "evaluada", "descartada", "verificacion"}
 
 
 class LibraryError(ValueError):

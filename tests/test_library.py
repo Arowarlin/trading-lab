@@ -41,7 +41,7 @@ def test_biblioteca_carga_y_estructura() -> None:
         "ssrn",
     } == set(ids)
     for entry in entries:
-        assert entry["status"] in {"adoptada", "evaluada", "descartada"}
+        assert entry["status"] in {"adoptada", "evaluada", "descartada", "verificacion"}
         for field in ("name", "category", "problem", "license", "version", "reason"):
             assert entry[field], (entry["id"], field)
 

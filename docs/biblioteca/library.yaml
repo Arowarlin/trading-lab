@@ -190,13 +190,13 @@ entries:
     official_url: "https://github.com/polakowo/vectorbt"
     license: "Apache-2.0"
     version: "1.2.0"
-    dependencies: "Paquete pesado; no instalado"
+    dependencies: "Herramienta externa en .venv-vbt; no es dependencia del proyecto"
     data_costs: "Sin coste; datos propios"
-    advantages: "Rápido para barridos grandes."
-    risks: "Superficie de dependencias; no sustituye el motor validado actual."
-    tests: "No instalado"
-    status: descartada
-    reason: "No se adopta: el backtester propio ya cubre la necesidad."
+    advantages: "Rápido para barridos grandes; útil como oráculo independiente."
+    risks: "Superficie de dependencias; su modelo de órdenes no cuenta las operaciones igual que el motor propio."
+    tests: "scripts/oracle_vectorbt.py sobre qqq-trend-f13 y las dos familias intradía del forward"
+    status: verificacion
+    reason: "Verificado como oráculo el 2026-11-11: equity final idéntica en QQQ y diferencia máxima por operación del 0,011% en las familias intradía. No se adopta como motor: sigue siendo herramienta de verificación en venv aparte."
 
   - id: backtrader
     name: Backtrader

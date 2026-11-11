@@ -1006,6 +1006,49 @@ etapa.
   `defense_mode` sigue en `report`. El chart quedó con `expertmode=0`: antes
   de `CLOSE` hay que ponerlo a 1 y confirmar algo trading.
 
+### Etapa 3d — Oráculos externos del backtest y del simulador (2026-11-11)
+
+- [x] **Venv de herramientas externas (`.venv-vbt`)**
+  - `uv venv .venv-vbt` (CPython 3.12.16) con **vectorbt 1.2.0** (Apache-2.0),
+    **prop-ev 0.1.0** (MIT, git `eea3870`) y pyarrow 26.0.1.
+  - **No son dependencias**: fuera de `pyproject.toml` y de `uv.lock`, y el
+    laboratorio nunca las importa. Versiones y licencias en
+    `docs/dependencias.md`.
+- [x] **Exportador de señales (`lab backtest --export-signals`)**
+  - `src/tradinglab/export_signals.py` escribe parquet con fecha, símbolo,
+    objetivo de exposición, precio de ejecución, comisión, spread y slippage,
+    más qty, side y equity; sidecar `.meta.json` con las métricas del motor.
+  - `backtest.py` **no se modifica**: el exportador lee su resultado y replica
+    solo el filtro de sesión.
+  - `lab backtest` admite además `--family` (intradía M15), `--params` y
+    `--exposure`.
+- [x] **Oráculo vectorbt (`scripts/oracle_vectorbt.py`)**
+  - Recomputa la curva con vectorbt desde las mismas primitivas y compara
+    operaciones, PnL total, diferencia por operación (>0,1 %) y curvas.
+  - Resultados: **qqq-trend-f13** equity final idéntica (154.886,93) y 584
+    operaciones alineadas; **london_pullback EURUSD** 1.542 operaciones
+    alineadas, diferencia máxima **0,010 %**; **tokyo_breakout USDJPY** 180
+    operaciones, diferencia máxima **0,011 %**. Ninguna operación supera el
+    umbral de 0,1 %.
+  - Informe en `reports/research/oracles/vectorbt_<bot>.md`.
+- [x] **Oráculo prop-ev (`scripts/oracle_prop_ev.py`)**
+  - Exporta los retornos diarios de `qqq-trend-f13` y los pasa a prop-ev con
+    las reglas efectivas de `config/prop.yaml` (FTMO 100k).
+  - 120 días / 1 fase: laboratorio **65,65 %** de P(pasar) y 8,25 % de breach;
+    prop-ev **58,41 %**. 30 días / 2 fases: 5,30 % frente a 0,03 %.
+  - Informe en `reports/research/oracles/prop_ev.md` con la lectura de por qué
+    los dos motores no son equivalentes (bootstrap por bloques frente a
+    gaussiana i.i.d. por operación, fases, horizonte y fee sin datos).
+- [x] **Sin tocar `backtest.py` ni `prop/simulator.py`**: no hubo diferencias
+  materiales; la diferencia de conteo de operaciones está documentada (el motor
+  solo realiza PnL cuando la ejecución reduce la posición).
+- [x] **Ficha de biblioteca**: `vectorbt` pasa a `status: verificacion` con
+  motivo. Tests sintéticos del exportador en `tests/test_export_signals.py`.
+- Evidencia: `ruff` limpio; suite completa **740 passed, 1 skipped**;
+  `lab doctor` OK con los WARN conocidos; F13 sin cambios respecto al estado
+  previo (`6250d4c0…`, ya `changed` por el bloque `daytrader`). Sin push, sin
+  activar bots y sin órdenes.
+
 ### Etapa 4 — Presupuesto de riesgo neto por activo
 
 - [x] **`config/risk_budget.yaml`**

@@ -43,6 +43,35 @@ Extra `mt5`: `MetaTrader5==5.0.6231`, `tzdata==2026.6`.
 | pyqlib | 0.9.7 | MIT | Fase 7; venv aparte, no romper `.venv` |
 | ProsusAI/finbert | — | **CC-BY-NC-SA 4.0** | **No usar**: restricción no comercial; usar Qwen inicialmente |
 
+## Herramientas externas de verificación (venv aparte, NO dependencias)
+
+Fecha: 2026-11-11. Venv: `.venv-vbt` (uv 0.13.7, CPython 3.12.16). **No están
+en `pyproject.toml` ni en `uv.lock`**: el laboratorio nunca las importa y `uv
+sync --frozen` no las instala. Solo sirven para contrastar motores propios con
+implementaciones independientes.
+
+| Paquete | Versión | Licencia | Uso |
+|---|---|---|---|
+| vectorbt | 1.2.0 | Apache-2.0 (polakowo/vectorbt) | oráculo del motor de backtest |
+| prop-ev | 0.1.0 (git `eea3870`) | MIT (Makeph/prop-ev) | oráculo del simulador de fondeo |
+| pyarrow | 26.0.1 | Apache-2.0 | lectura de parquet en el venv de oráculos |
+| numpy / pandas | 2.5.4 / 3.1.1 | BSD-3-Clause | resueltos por uv |
+| numba / scipy / matplotlib | 0.68.1 / 1.18.1 / 3.11.2 | MIT / BSD-3 / PSF-like | dependencias de vectorbt |
+
+Reproducir:
+
+```powershell
+uv venv .venv-vbt
+uv pip install --python .venv-vbt vectorbt pyarrow
+uv pip install --python .venv-vbt "git+https://github.com/Makeph/prop-ev"
+```
+
+- `scripts/oracle_vectorbt.py` se ejecuta con `.venv-vbt\Scripts\python.exe`.
+- `scripts/oracle_prop_ev.py` se ejecuta con el venv principal y llama a prop-ev
+  en un subproceso con `.venv-vbt`, para que el paquete externo no entre en el
+  entorno del laboratorio.
+- `.venv-vbt` está en `.gitignore` (`.venv-*/`).
+
 ## Notas
 
 - `uv.lock` fija todo el árbol transitivo; CI usa `uv sync --frozen`.
