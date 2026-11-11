@@ -206,9 +206,30 @@ class LLMClient:
             choices = data.get("choices") or []
             if not choices:
                 raise LLMError(f"Respuesta sin choices: {str(data)[:500]}")
-            content = choices[0].get("message", {}).get("content")
+            choice = choices[0]
+            message = choice.get("message") or {}
+            content = message.get("content")
             if not content:
-                raise LLMError("Respuesta vacía del modelo")
+                # Los modelos de razonamiento (qwen3, deepseek...) se gastan el
+                # presupuesto de max_tokens en `reasoning_content` y devuelven
+                # el content vacío. Sin este detalle el fallo parece del servidor.
+                finish = choice.get("finish_reason")
+                reasoning = message.get("reasoning_content") or message.get("reasoning") or ""
+                reasoning_tokens = (usage.get("completion_tokens_details") or {}).get(
+                    "reasoning_tokens"
+                )
+                budget = self.cfg.max_tokens if max_tokens is None else max_tokens
+                if finish == "length":
+                    raise LLMError(
+                        f"El modelo agotó max_tokens={budget} razonando y no llegó a "
+                        f"responder (tokens de razonamiento: {reasoning_tokens}). "
+                        "Sube max_tokens."
+                    )
+                raise LLMError(
+                    "Respuesta vacía del modelo"
+                    + (f" (finish_reason={finish})" if finish else "")
+                    + (f"; razonó: {reasoning[:200]!r}" if reasoning else "")
+                )
             ok = True
             return content
         except Exception as exc:

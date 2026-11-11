@@ -22,9 +22,11 @@ if (-not (Test-Path $lms)) {
 }
 
 # Si el modelo ya está cargado, no recargar.
+$model = "qwen/qwen3-30b-a3b"
+$ctx = 32768
 $ps = (& $lms ps 2>&1 | Out-String)
-if ($ps -match "qwen3\.8-27b") {
-    Write-Log "qwen3.8-27b ya está cargado; no se recarga"
+if ($ps -match [regex]::Escape($model) -and $ps -match "$ctx") {
+    Write-Log "$model ya está cargado con contexto $ctx; no se recarga"
     exit 0
 }
 
@@ -48,11 +50,11 @@ if (-not $healthy) {
     exit 1
 }
 
-Write-Log "Cargando qwen3.8-27b con contexto 16384"
-& $lms load qwen3.8-27b --context-length 16384 --parallel 1 --identifier qwen3.8-27b --ttl 86400 --yes *>> $log
+Write-Log "Cargando $model con contexto $ctx"
+& $lms load $model --context-length $ctx --parallel 1 --identifier $model --ttl 86400 --yes *>> $log
 
 $ps = (& $lms ps 2>&1 | Out-String)
-if ($ps -match "qwen3\.8-27b") {
+if ($ps -match [regex]::Escape($model)) {
     Write-Log "Modelo cargado correctamente"
     exit 0
 }

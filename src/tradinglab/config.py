@@ -259,6 +259,10 @@ class Settings(BaseModel):
             settings.llm.base_url = v
         if v := os.getenv("LAB_LLM_MODEL"):
             settings.llm.model = v
+        if v := os.getenv("LAB_LLM_API_KEY"):
+            settings.llm.api_key = v
+        if v := os.getenv("LAB_LLM_MAX_TOKENS"):
+            settings.llm.max_tokens = int(v)
 
         # MetaTrader 5 y cuentas de fondeo
         if v := os.getenv("MT5_PATH"):

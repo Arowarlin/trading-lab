@@ -6,10 +6,14 @@ currency: USD
 
 llm:
   base_url: http://127.0.0.1:1234/v1   # LM Studio
-  model: qwen3.8-27b
+  # MoE (3B activos por token): ~16x mas rapido en CPU que el 27B denso.
+  # Medido en llm_calls: 82 s de media frente a 1340 s con qwen3.8-27b.
+  model: qwen/qwen3-30b-a3b
   api_key: lm-studio
   temperature: 0.2
-  max_tokens: 2048
+  # qwen3 razona antes de responder y esos tokens cuentan en max_tokens.
+  # 2048 se queda corto en las tareas JSON: el content vuelve vacío.
+  max_tokens: 4096
   timeout_s: 600
 
 risk:
