@@ -166,6 +166,27 @@ app.add_typer(intel_app, name="intel")
 app.add_typer(sec_app, name="sec")
 app.add_typer(telegram_app, name="telegram")
 app.add_typer(library_app, name="library")
+
+
+def _harden_stdio() -> None:
+    """Evita que un solo glifo (→, ·) tumbe un comando entero.
+
+    En consolas Windows con cp1252/cp850 rich escribe con la codificación del
+    stream y lanza UnicodeEncodeError al llegar a un carácter que no existe en
+    ella (p. ej. la flecha de "lite → deep"). Se degrada el carácter en vez de
+    abortar la salida.
+    """
+    legacy = {"cp1252", "cp850", "cp437", "cp858"}
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            enc = (getattr(stream, "encoding", "") or "").lower().replace("-", "")
+            if enc in legacy:
+                stream.reconfigure(errors="replace")  # type: ignore[union-attr]
+        except Exception:
+            pass
+
+
+_harden_stdio()
 console = Console()
 
 OK = "[green]OK[/green]"
