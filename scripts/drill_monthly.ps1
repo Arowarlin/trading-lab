@@ -1,8 +1,12 @@
 # Simulacro mensual de emergencia (R8).
 #
-# Solo paper/demo. Requiere el operador ARMADO y el flag --confirm.
+# Por defecto es una SIMULACION: informa de lo que habria que hacer y deja
+# rastro, sin cancelar ordenes, sin cerrar posiciones y sin enviar avisos.
+# Es lo que ejecuta la tarea programada `TradingLab-Drill` (domingo 03:00).
+#
+# El simulacro real (-Confirm) solo paper/demo y exige el operador ARMADO.
 # NO registra la tarea: eso lo hace register_drill_task.ps1 y necesita
-# autorización explícita del usuario.
+# autorizacion explicita del usuario.
 param(
     [switch]$Confirm
 )
@@ -22,14 +26,12 @@ function Write-Log([string]$Message) {
     Add-Content -Path $log -Value ("{0} {1}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), $Message) -Encoding utf8
 }
 
-if (-not $Confirm) {
-    Write-Log "simulacro cancelado: falta -Confirm"
-    Write-Output "Falta -Confirm: no se ejecuta nada."
-    exit 1
+Write-Log "INICIO simulacro mensual (modo: $(if ($Confirm) { 'real' } else { 'simulacion' }))"
+if ($Confirm) {
+    $output = & $lab drill --confirm 2>&1
+} else {
+    $output = & $lab drill --dry-run 2>&1
 }
-
-Write-Log "INICIO simulacro R8"
-$output = & $lab drill --confirm 2>&1
 $code = $LASTEXITCODE
 $output | ForEach-Object {
     Add-Content -Path $log -Value ([string]$_) -Encoding utf8

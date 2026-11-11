@@ -5637,6 +5637,69 @@ def daytrader_import_cmd(
         )
 
 
+@daytrader_app.command("lane")
+def daytrader_lane_cmd() -> None:
+    """Carril de acciones: ticker fijo, estado del pipeline y si puede ejecutar."""
+    from .equities_lane import status
+
+    payload = status()
+    table = Table(title="Carril de acciones (paper)")
+    table.add_column("Campo", overflow="fold")
+    table.add_column("Valor", overflow="fold")
+    table.add_row("Ticker", str(payload.get("ticker") or "-"))
+    table.add_row("Setup", str(payload.get("setup") or "-"))
+    table.add_row("Intervalo", str(payload.get("interval") or "-"))
+    table.add_row("Cuenta", str(payload.get("account") or "-"))
+    table.add_row("Solo este ticker", "sí" if payload.get("only_ticker") else "no")
+    table.add_row("Carpeta del pipeline", str(payload.get("dir") or "-"))
+    table.add_row(
+        "daytrader.enabled", "sí" if payload.get("daytrader_enabled") else "no"
+    )
+    table.add_row("Cuenta paper", "sí" if payload.get("paper") else "no")
+    table.add_row(
+        "Puede ejecutar",
+        "sí" if payload.get("can_execute") else "no (dry-run)",
+    )
+    entry = payload.get("entry") or {}
+    table.add_row(
+        "Entrada pendiente",
+        (
+            f"{entry.get('symbol')} · {entry.get('setup')} · {entry.get('status')}"
+            f" · nivel {entry.get('level')}"
+            if entry.get("symbol")
+            else "-"
+        ),
+    )
+    table.add_row(
+        "Watchlist (hits del ticker)",
+        f"{payload.get('watchlist_hits', 0)}"
+        + (
+            f" · {payload.get('watchlist_as_of')}"
+            if payload.get("watchlist_as_of")
+            else ""
+        ),
+    )
+    table.add_row(
+        "Peso de referencia",
+        (
+            f"{payload.get('target_weight')} %"
+            if payload.get("target_weight") is not None
+            else "-"
+        ),
+    )
+    table.add_row("Órdenes del carril", str(payload.get("orders_in_lane", 0)))
+    console.print(table)
+    if payload.get("error"):
+        console.print(f"[red]{payload['error']}[/red]")
+    if payload.get("notes"):
+        console.print(f"[dim]{payload['notes']}[/dim]")
+    if not payload.get("can_execute"):
+        console.print(
+            "[dim]Sin órdenes: el carril no ejecuta hasta que "
+            "`daytrader.enabled` sea true y la cuenta sea paper.[/dim]"
+        )
+
+
 @slippage_app.command("report")
 def slippage_report_cmd(
     symbol: str = typer.Option(None, "--symbol", help="Filtrar por símbolo"),
@@ -7940,14 +8003,38 @@ def tca_cmd(
 @app.command("drill")
 def drill_cmd(
     confirm: bool = typer.Option(False, "--confirm", help="Confirmación explícita del simulacro"),
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help="Simulación sin tocar nada: informa y deja rastro, no cancela ni cierra",
+    ),
 ) -> None:
     """Simulacro de emergencia (R8). Solo paper/demo y con operador armado."""
-    from .drill import DrillError, run_drill
+    from .drill import DrillError, run_drill, simulate_drill
 
     settings = get_settings()
     if str(settings.mode).lower() == "live":
         console.print("[red]El simulacro no se ejecuta en live.[/red]")
         raise typer.Exit(2)
+    if dry_run:
+        try:
+            resultado = simulate_drill(DEFAULT_DB, settings)
+        except DrillError as exc:
+            console.print(f"[red]{exc}[/red]")
+            raise typer.Exit(2) from exc
+        console.print(
+            f"[cyan]Simulación del simulacro[/cyan] en {resultado['elapsed_s']}s · "
+            f"{resultado['pending_orders']} órdenes abiertas · "
+            f"{resultado['positions']} posiciones · kill-switch "
+            f"{'activo' if resultado['killswitch_active'] else 'inactivo'} · "
+            f"ntfy {'sí' if resultado['ntfy_configured'] else 'no'} · "
+            f"telegram {'sí' if resultado['telegram_configured'] else 'no'}"
+        )
+        console.print(
+            "[dim]No se canceló nada, no se cerró nada y no se enviaron avisos. "
+            "El simulacro real sigue exigiendo operador armado y --confirm.[/dim]"
+        )
+        return
     try:
         armed = False
         try:

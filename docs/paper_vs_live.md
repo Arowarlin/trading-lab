@@ -20,5 +20,13 @@ humana y sigue siendo paper/demo.
 
 - Nunca `mode=live` sin autorización humana explícita.
 - El simulacro (`lab drill`) **rechaza** `mode=live` y exige operador armado.
+- El simulacro real (`lab drill --confirm`) solo lo lanza el operador: el
+  estado "armado" vive en memoria y una tarea programada nunca lo ve.
+- La tarea mensual `TradingLab-Drill` (domingo 03:00) ejecuta la
+  **simulación** (`lab drill --dry-run`): informa de lo que habría que hacer,
+  comprueba los canales y deja rastro, pero no cancela órdenes, no cierra
+  posiciones, no activa el kill-switch y no envía avisos.
+- El carril de acciones solo acepta el ticker de `config/equities_lane.yaml`
+  (hoy `AAPL`); una orden de otro símbolo se rechaza antes de los guards.
 - Las alertas críticas (kill-switch, cadena de auditoría rota) no se suprimen
   nunca por presupuesto de alertas.

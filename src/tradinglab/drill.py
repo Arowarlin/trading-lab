@@ -14,11 +14,117 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .db import init_db
+from .db import connect, init_db
 
 
 class DrillError(RuntimeError):
     pass
+
+
+OPEN_STATUSES = ("pending", "submitted", "accepted", "new", "partially_filled")
+
+
+def simulate_drill(
+    db_path: str | Path,
+    settings,
+    *,
+    magics: tuple[int, ...] = (),
+) -> dict:
+    """Simulación **sin tocar nada**: qué haría el simulacro y con qué canales.
+
+    Es la versión segura para la tarea programada mensual: no cancela órdenes,
+    no cierra posiciones, no activa el kill-switch y no envía avisos. Solo
+    informa y deja rastro en `console_actions` con actor `drill`.
+    """
+    if str(getattr(settings, "mode", "paper")).lower() == "live":
+        raise DrillError("el simulacro no se ejecuta en live")
+
+    init_db(db_path)
+    started = time.time()
+    steps: list[dict] = []
+
+    def step(name: str, ok: bool, detail: str = "") -> None:
+        steps.append(
+            {
+                "step": name,
+                "ok": bool(ok),
+                "detail": detail[:200],
+                "elapsed_s": round(time.time() - started, 2),
+            }
+        )
+
+    pending = 0
+    positions = 0
+    try:
+        with connect(db_path) as con:
+            marks = ", ".join("?" for _ in OPEN_STATUSES)
+            pending = int(
+                con.execute(
+                    f"SELECT COUNT(*) FROM orders WHERE status IN ({marks})",
+                    OPEN_STATUSES,
+                ).fetchone()[0]
+            )
+            positions = int(
+                con.execute("SELECT COUNT(*) FROM positions WHERE qty != 0").fetchone()[0]
+            )
+        step("inventario", True, f"{pending} órdenes abiertas, {positions} posiciones")
+    except Exception as exc:
+        step("inventario", False, str(exc))
+
+    killswitch = False
+    try:
+        with connect(db_path) as con:
+            row = con.execute(
+                "SELECT active FROM killswitch ORDER BY id DESC LIMIT 1"
+            ).fetchone()
+        killswitch = bool(row["active"]) if row is not None else False
+        step("kill-switch", True, "activo" if killswitch else "inactivo")
+    except Exception as exc:
+        step("kill-switch", False, str(exc))
+
+    ntfy = False
+    telegram = False
+    try:
+        from .alerts import AlertConfig
+
+        cfg = AlertConfig.from_env()
+        ntfy = bool(cfg.ntfy_topic)
+        telegram = bool(cfg.telegram_token and cfg.telegram_chat)
+        step(
+            "canales",
+            True,
+            f"ntfy {'sí' if ntfy else 'no'} · telegram {'sí' if telegram else 'no'}",
+        )
+    except Exception as exc:
+        step("canales", False, str(exc))
+
+    result = {
+        "ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "mode": str(getattr(settings, "mode", "paper")),
+        "pending_orders": pending,
+        "positions": positions,
+        "killswitch_active": killswitch,
+        "ntfy_configured": ntfy,
+        "telegram_configured": telegram,
+        "magics": list(magics),
+        "elapsed_s": round(time.time() - started, 2),
+        "steps": steps,
+    }
+    try:
+        from .runtime import record_console_action
+
+        record_console_action(
+            db_path,
+            action="drill_simulacion",
+            params={"pending": pending, "positions": positions},
+            result=f"simulación en {result['elapsed_s']}s",
+            ok=True,
+            actor="drill",
+            detail=json.dumps(result, ensure_ascii=False)[:900],
+        )
+    except Exception:
+        pass
+    return result
 
 
 def run_drill(
@@ -77,12 +183,15 @@ def run_drill(
 
     telegram = ""
     try:
-        from .telegram import send as send_telegram
+        # `send_configured` envía al chat autorizado; antes se importaba un
+        # `send` que no existe y el aviso de Telegram nunca salía.
+        from .telegram import send_configured as send_telegram
 
-        telegram = str(send_telegram(f"Simulacro R8: {cancelled} órdenes, {closed} posiciones"))
+        send_telegram(f"Simulacro R8: {cancelled} órdenes, {closed} posiciones")
+        telegram = "enviado"
     except Exception as exc:
         telegram = f"sin telegram: {str(exc)[:120]}"
-    step("aviso telegram", True, telegram)
+    step("aviso telegram", telegram == "enviado", telegram)
 
     killswitch = False
     try:
@@ -135,4 +244,4 @@ def run_drill(
 
 import json  # noqa: E402  (usado en el detalle del simulacro)
 
-__all__ = ["DrillError", "run_drill"]
+__all__ = ["DrillError", "run_drill", "simulate_drill"]
