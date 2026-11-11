@@ -29,6 +29,11 @@ from tradinglab.execution import get_mt5_broker  # noqa: E402
 from tradinglab.indicators import atr  # noqa: E402
 
 
+def _is_short(side: str) -> bool:
+    """MT5 devuelve 'buy'/'sell'; las pruebas usan 'long'/'short'."""
+    return str(side).lower() in {"sell", "short"}
+
+
 def next_stop(
     *,
     side: str,
@@ -44,7 +49,7 @@ def next_stop(
     min_distance: float = 0.0,
 ) -> float | None:
     """Nuevo SL o None. `best` es el extremo favorable (mínimo en corto)."""
-    short = str(side).lower() == "short"
+    short = _is_short(side)
     candidate: float | None = None
     if profit_r >= trail_r:
         candidate = best + atr_mult * atr_value if short else best - atr_mult * atr_value
@@ -126,7 +131,7 @@ def main() -> int:
                     continue
                 tick = broker.tick(position["symbol"])
                 spec = broker.symbol_spec(position["symbol"])
-                short = data["side"] == "short"
+                short = _is_short(data["side"])
                 price = tick["ask"] if short else tick["bid"]
                 best[ticket] = (
                     min(best[ticket], price) if short else max(best[ticket], price)
