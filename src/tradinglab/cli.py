@@ -6468,6 +6468,11 @@ def optimize_cmd(
 
 @app.command("research")
 def research_cmd(
+    conditioned: str = typer.Option(
+        "off",
+        "--conditioned",
+        help="on|off: escribe la comparación con condicionadores",
+    ),
     vol_target: str = typer.Option(
         "off",
         "--vol-target",
@@ -6673,6 +6678,12 @@ def research_cmd(
         )
     console.print(f"Reporte: {files['latest_md']}")
     console.print(f"JSON:    {files['latest_json']}")
+
+    if str(conditioned).lower() == "on":
+        from .conditioner_report import compare as conditioner_compare
+
+        for path in conditioner_compare():
+            console.print(f"[green]Informe de condicionadores:[/green] {path}")
 
     if str(vol_target).lower() == "on":
         from .vol_report import compare as vol_compare

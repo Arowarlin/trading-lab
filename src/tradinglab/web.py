@@ -2115,6 +2115,25 @@ class LabData:
 
         return self.cache.get("tca", 120.0, collect)
 
+    def conditioners_today(self) -> dict:
+        """Flags de condicionadores de la última sesión (solo lectura)."""
+        from .conditioners import today_flags
+
+        def collect() -> dict:
+            if not self.db_path.exists():
+                return {"items": [], "error": "sin base de datos"}
+            try:
+                symbols = [str(spec.universe[0]).upper() for spec in load_bots() if spec.universe]
+                items = [
+                    today_flags(symbol, db_path=self.db_path)
+                    for symbol in sorted(set(symbols))[:8]
+                ]
+                return {"items": items, "generated_at": _now()}
+            except Exception as exc:
+                return {"items": [], "error": str(exc)[:240]}
+
+        return self.cache.get("conditioners_today", 300.0, collect)
+
     def slo(self) -> dict:
         """SLO operativo: frescura por símbolo, reloj, drift y último latido."""
         from .alerts import last_heartbeat
@@ -2613,6 +2632,8 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 self._json(self.server.data.model_ranking())
             elif path == "/api/slo":
                 self._json(self.server.data.slo())
+            elif path == "/api/conditioners/today":
+                self._json(self.server.data.conditioners_today())
             elif path == "/api/tca":
                 self._json(self.server.data.tca())
             elif path == "/api/reports":

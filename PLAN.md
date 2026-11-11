@@ -1263,6 +1263,33 @@ etapa.
 - [x] **Tests**: EWMA, umbrales de estado, sin datos, EWMA del slippage y
   alerta una sola vez.
 
+### Etapa 3g — Condicionadores de mercado (2026-11-11)
+
+- [x] **`conditioners.py`** con flags diarios por fecha y símbolo, todos
+  **causales** (para el día `t` solo se usan datos hasta `t-1`):
+  - `pre_fomc`: 24 h antes de una reunión de la FOMC (desde `macro_events`).
+    **Sin dato no hay flag** y se avisa.
+  - `tom_window`: -5..+3 hábiles alrededor del Employment Report.
+  - `month_end_selloff`: los 5 hábiles previos al fin de mes.
+  - `monday_overnight`: lunes.
+  - `boundary_extreme`: precio o retorno de 20 días a más de 2 desviaciones
+    típicas de su propia historia (252 barras).
+  - `regime_ok`: el régimen de `regimes.py`.
+- [x] **Multiplicador de exposición** (`strategies/base.py`)
+  - `exposure_multiplier(flags, table)` con tabla opcional por bot
+    (`conditioners:` en `config/bots.yaml`). Por defecto todo 1,0: **no se toca
+    `bots.yaml`** porque está en el hash congelado de F13.
+- [x] **Research e informes**
+  - `lab research --conditioned on` escribe
+    `reports/research/conditioners/<bot>.md` con Sharpe, Sharpe stitched, MaxDD,
+    bloques positivos y días afectados. Cada variante condicionada suma **1** al
+    contador de pruebas del DSR (no uno por flag).
+- [x] **API y consola**
+  - `GET /api/conditioners/today` y panel **"Condicionadores activos"** en la
+    pestaña Mercado (flags de la última sesión).
+- [x] **Tests**: multiplicador, causalidad (truncado vs completo), flags sin
+  calendario y días hábiles.
+
 ### Etapa 4 — Presupuesto de riesgo neto por activo
 
 - [x] **`config/risk_budget.yaml`**

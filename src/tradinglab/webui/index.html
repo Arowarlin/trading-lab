@@ -1339,7 +1339,13 @@
           <div id="market-breadth"></div>
         </div>
       </div>
-    </section>
+    
+      <div class="panel" style="margin-bottom:14px">
+        <div class="panel-head"><h2>Condicionadores activos</h2><span class="muted tiny" id="conditioners-meta"></span></div>
+        <div id="conditioners-today"></div>
+        <div class="note">Flags causales de la última sesión. Sin dato de calendario no hay flag de FOMC ni de empleo.</div>
+      </div>
+</section>
 
     <!-- ================================================================ ACTIVO -->
     <section class="view" id="view-asset">
@@ -2391,7 +2397,7 @@ async function loadAll(manual = false) {
   button.disabled = true;
   button.classList.add("loading");
   $("#refresh-label").textContent = "Actualizando…";
-  const [overviewResult, riskResult, accountsResult, fundResult, operatorResult, driftResult, instrumentsResult, marketsResult, rankingResult, sloResult, tcaResult] = await Promise.allSettled([
+  const [overviewResult, riskResult, accountsResult, fundResult, operatorResult, driftResult, instrumentsResult, marketsResult, rankingResult, sloResult, tcaResult, conditionersResult] = await Promise.allSettled([
     getJSON("/api/overview"),
     getJSON("/api/risk"),
     getJSON("/api/accounts"),
@@ -2402,6 +2408,7 @@ async function loadAll(manual = false) {
     getJSON("/api/markets"),
     getJSON("/api/models/ranking"),
     getJSON("/api/slo"),
+    getJSON("/api/conditioners/today"),
     getJSON("/api/tca"),
   ]);
   if (overviewResult.status === "fulfilled") {
@@ -2440,6 +2447,10 @@ async function loadAll(manual = false) {
   if (sloResult.status === "fulfilled") {
     S.slo = sloResult.value;
     renderSlo(sloResult.value);
+  }
+  if (conditionersResult.status === "fulfilled") {
+    S.conditioners = conditionersResult.value;
+    renderConditioners(conditionersResult.value);
   }
   if (tcaResult.status === "fulfilled") {
     S.tca = tcaResult.value;
@@ -4995,6 +5006,32 @@ function renderTca(data) {
       { label: "Coste EWMA" },
       { label: "Estado" },
     ],
+    body,
+    { empty: "Sin datos." }
+  );
+}
+
+function renderConditioners(data) {
+  const host = $("#conditioners-today");
+  if (!host) return;
+  const meta = $("#conditioners-meta");
+  const items = (data && data.items) || [];
+  if (!items.length) {
+    if (meta) meta.textContent = (data && data.error) || "sin datos";
+    host.innerHTML = `<div class="empty">Sin datos: no hay sesiones con condicionadores calculados.</div>`;
+    return;
+  }
+  if (meta) meta.textContent = `${items.length} símbolo(s)`;
+  const body = items.map((item) => [
+    `<b>${esc(item.symbol)}</b>`,
+    item.date || "-",
+    Object.keys(item.flags || {})
+      .filter((name) => item.flags[name])
+      .map((name) => `<span class="tag yellow">${esc(name)}</span>`)
+      .join(" ") || `<span class="muted">sin flags</span>`,
+  ]);
+  host.innerHTML = grid(
+    [{ label: "Símbolo" }, { label: "Sesión" }, { label: "Flags" }],
     body,
     { empty: "Sin datos." }
   );
