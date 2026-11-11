@@ -11,7 +11,7 @@ import itertools
 import json
 import re
 import uuid
-from datetime import time
+from datetime import datetime, time, timezone
 from pathlib import Path
 
 import numpy as np
@@ -229,6 +229,21 @@ def save_bars(df: pd.DataFrame, cache_dir: str | Path, symbol: str, timeframe: s
         frame.index = frame.index.tz_localize("UTC")
     frame.index.name = "ts"
     frame.to_parquet(path)
+    try:
+        from .freshness import record
+
+        last = frame.index[-1] if len(frame) else None
+        if hasattr(last, "to_pydatetime"):
+            last = last.to_pydatetime()
+        record(
+            symbol,
+            timeframe,
+            last_bar_utc=last,
+            fetched_at_utc=datetime.now(timezone.utc),
+            source="mt5",
+        )
+    except Exception:
+        pass
     return path
 
 

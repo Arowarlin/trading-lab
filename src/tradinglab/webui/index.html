@@ -1152,6 +1152,9 @@
         <span class="hud-chip" id="hud-killswitch"><span class="led" id="hud-killswitch-led"></span>Kill-switch <b>—</b></span>
         <span class="hud-chip" id="hud-f13"><span class="hud-ico">◉</span>F13 <b>—</b></span>
         <span class="hud-chip" id="hud-data"><span class="hud-ico">▤</span>Datos <b>—</b></span>
+        <span class="hud-chip" id="hud-slo-datos"><span class="led" id="hud-slo-datos-led"></span>DATOS <b>—</b></span>
+        <span class="hud-chip" id="hud-slo-reloj"><span class="led" id="hud-slo-reloj-led"></span>RELOJ <b>—</b></span>
+        <span class="hud-chip" id="hud-slo-posicion"><span class="led" id="hud-slo-posicion-led"></span>POSICIÓN <b>—</b></span>
         <span class="hud-chip hud-operator" id="hud-operator"><span class="hud-ico">⌘</span>Operador <b>desarmado</b></span>
       </div>
     </div>
@@ -2382,7 +2385,7 @@ async function loadAll(manual = false) {
   button.disabled = true;
   button.classList.add("loading");
   $("#refresh-label").textContent = "Actualizando…";
-  const [overviewResult, riskResult, accountsResult, fundResult, operatorResult, driftResult, instrumentsResult, marketsResult, rankingResult] = await Promise.allSettled([
+  const [overviewResult, riskResult, accountsResult, fundResult, operatorResult, driftResult, instrumentsResult, marketsResult, rankingResult, sloResult] = await Promise.allSettled([
     getJSON("/api/overview"),
     getJSON("/api/risk"),
     getJSON("/api/accounts"),
@@ -2392,6 +2395,7 @@ async function loadAll(manual = false) {
     getJSON("/api/instruments"),
     getJSON("/api/markets"),
     getJSON("/api/models/ranking"),
+    getJSON("/api/slo"),
   ]);
   if (overviewResult.status === "fulfilled") {
     const newBuild = overviewResult.value?.meta?.build;
@@ -2425,6 +2429,10 @@ async function loadAll(manual = false) {
   if (rankingResult.status === "fulfilled") {
     S.modelRanking = rankingResult.value;
     renderModelRanking();
+  }
+  if (sloResult.status === "fulfilled") {
+    S.slo = sloResult.value;
+    renderSlo(sloResult.value);
   }
   if (riskResult.status === "fulfilled") {
     S.risk = riskResult.value;
@@ -4940,6 +4948,48 @@ function renderAgentComparison() {
     ${grid([{ label: "Lite → deep" }, ...columns.map((column) => ({ label: column, num: true }))], matrixRows, { empty: "Sin datos." })}
     <div class="panel-head" style="margin-top:14px"><h2>Por fuente</h2><span class="muted tiny">forward 20d</span></div>
     ${grid([{ label: "Fuente" }, { label: "N", num: true }, { label: "N 20d", num: true }, { label: "20d", num: true }, { label: "Hit 20d", num: true }, { label: "Muestra" }], sourceRows, { empty: "Sin datos." })}`;
+}
+
+function renderSlo(data) {
+  const setChip = (id, status, label) => {
+    const el = $("#" + id);
+    if (!el) return;
+    el.classList.remove("ok", "warn", "bad");
+    el.classList.add(status === "ok" ? "ok" : status === "aviso" ? "warn" : "bad");
+    const bold = el.querySelector("b");
+    if (bold) bold.textContent = label;
+  };
+  if (!data) {
+    setChip("hud-slo-datos", "bad", "Sin datos");
+    setChip("hud-slo-reloj", "bad", "Sin datos");
+    setChip("hud-slo-posicion", "bad", "Sin datos");
+    return;
+  }
+  const fresh = data.freshness || [];
+  let worst = fresh.length ? "ok" : "bad";
+  let label = fresh.length ? "ok" : "Sin datos";
+  fresh.forEach((item) => {
+    if (item.status === "falla") {
+      worst = "falla";
+      label = item.symbol;
+    } else if (item.status === "aviso" && worst !== "falla") {
+      worst = "aviso";
+      label = item.symbol;
+    }
+  });
+  setChip("hud-slo-datos", worst, label);
+  const clockState = data.clock || {};
+  setChip(
+    "hud-slo-reloj",
+    clockState.status === "ok" ? "ok" : clockState.status === "aviso" ? "warn" : "bad",
+    clockState.status === "ok" ? "sincronizado" : clockState.status || "Sin datos"
+  );
+  const drift = data.position_drift || {};
+  setChip(
+    "hud-slo-posicion",
+    drift.status === "ok" ? "ok" : drift.status === "aviso" ? "warn" : "bad",
+    drift.status === "ok" ? "ok" : drift.status || "Sin datos"
+  );
 }
 
 function renderModelRanking() {

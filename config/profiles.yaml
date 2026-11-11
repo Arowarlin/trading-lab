@@ -2,6 +2,9 @@
 # Valores de plantilla: verifica cada límite con tu firma/contrato.
 profiles:
   swing_equity:
+    target_vol: 0.08
+    vol_target:
+      enabled: false
     description: "Swing de acciones/ETF; señal diaria tras el cierre de EE. UU."
     timeframe: "1d"
     schedule:
@@ -20,6 +23,9 @@ profiles:
       require_regimes: true
 
   intraday_fx:
+    target_vol: 0.06
+    vol_target:
+      enabled: false
     description: "Intradía forex/CFD; sesión europea/americana."
     timeframe: "M15"
     schedule:
@@ -38,6 +44,9 @@ profiles:
       require_regimes: true
 
   intraday_futures:
+    target_vol: 0.10
+    vol_target:
+      enabled: false
     description: "Intradía de futuros; RTH de Chicago. Solo diseño por ahora."
     timeframe: "M15"
     schedule:

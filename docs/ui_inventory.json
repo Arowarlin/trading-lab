@@ -207,6 +207,12 @@
     "hud-killswitch",
     "hud-killswitch-led",
     "hud-operator",
+    "hud-slo-datos",
+    "hud-slo-datos-led",
+    "hud-slo-posicion",
+    "hud-slo-posicion-led",
+    "hud-slo-reloj",
+    "hud-slo-reloj-led",
     "incubation-events",
     "incubation-meta",
     "incubation-stats",
@@ -423,6 +429,7 @@
     "/api/reports/preview?file=${encodeURIComponent",
     "/api/research/detail?artifact=${encodeURIComponent",
     "/api/risk",
-    "/api/session"
+    "/api/session",
+    "/api/slo"
   ]
 }

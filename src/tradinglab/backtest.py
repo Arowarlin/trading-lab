@@ -73,6 +73,7 @@ def run(
     session: tuple[str, str] | None = None,
     session_tz: str = "UTC",
     flat_dates: Iterable[str] | None = None,
+    vol_target: dict | None = None,
 ) -> BacktestResult:
     """Backtest long/short, sin apalancamiento, ejecución en la apertura siguiente.
 
@@ -91,6 +92,19 @@ def run(
         .clip(-abs(max_gross), abs(max_gross))
         .fillna(0.0)
     )
+    if vol_target:
+        # Objetivo de volatilidad: el factor se estima con datos hasta t-1 y
+        # el motor ya aplaza el objetivo una barra más al ejecutar.
+        from .vol_target import scale as vol_scale
+
+        factor = vol_scale(
+            df["close"].astype(float).pct_change().fillna(0.0),
+            target_vol_annual=float(vol_target["target_vol_annual"]),
+            halflife_days=int(vol_target.get("halflife_days", 30)),
+            max_leverage=float(vol_target.get("max_leverage", 2.0)),
+            rebalance=str(vol_target.get("rebalance", "W")),
+        )
+        tgt = tgt * factor.reindex(df.index).fillna(1.0)
     pos_target = tgt.shift(1).fillna(0.0)
     bounds = _session_bounds(session)
     flat = {str(value) for value in (flat_dates or [])}

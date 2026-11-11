@@ -2101,6 +2101,78 @@ class LabData:
 
         return self.cache.get("model_ranking", 300.0, collect)
 
+    def slo(self) -> dict:
+        """SLO operativo: frescura por símbolo, reloj, drift y último latido."""
+        from .alerts import last_heartbeat
+        from .clock import STATUS_AVISO as CLOCK_AVISO
+        from .clock import STATUS_FALLA as CLOCK_FALLA
+        from .clock import check_clock
+        from .db import connect
+        from .freshness import STATUS_AVISO as FRESH_AVISO
+        from .freshness import STATUS_FALLA as FRESH_FALLA
+        from .freshness import check as check_freshness
+
+        def collect() -> dict:
+            symbols: list[tuple[str, str]] = []
+            drift: dict = {"status": "sin_datos", "detail": "sin datos: no hay reconciliación"}
+            try:
+                with connect(self.db_path) as con:
+                    rows = con.execute(
+                        "SELECT symbol, timeframe, MAX(id) AS last FROM data_freshness "
+                        "GROUP BY symbol, timeframe ORDER BY symbol LIMIT 12"
+                    ).fetchall()
+                    symbols = [(str(row["symbol"]), str(row["timeframe"])) for row in rows]
+                    last = con.execute(
+                        "SELECT * FROM reconciliation ORDER BY id DESC LIMIT 1"
+                    ).fetchone()
+                if last is not None:
+                    diff_positions = int(last["diff_positions"] or 0)
+                    diff_equity = float(last["diff_equity"] or 0.0)
+                    if diff_positions or abs(diff_equity) > 1.0:
+                        drift = {
+                            "status": "aviso",
+                            "detail": (
+                                f"{diff_positions} posición(es) de diferencia, "
+                                f"equity {diff_equity:+,.2f}"
+                            ),
+                            "ts": str(last["ts"] or ""),
+                        }
+                    else:
+                        drift = {
+                            "status": "ok",
+                            "detail": "broker y base coinciden",
+                            "ts": str(last["ts"] or ""),
+                        }
+            except Exception as exc:
+                drift = {"status": "sin_datos", "detail": str(exc)[:200]}
+
+            freshness = [check_freshness(symbol, timeframe) for symbol, timeframe in symbols]
+            clock_state = check_clock()
+
+            status = "ok"
+            if any(item["status"] == FRESH_FALLA for item in freshness) or (
+                clock_state["status"] == CLOCK_FALLA
+            ):
+                status = "falla"
+            elif (
+                any(item["status"] == FRESH_AVISO for item in freshness)
+                or clock_state["status"] == CLOCK_AVISO
+                or drift.get("status") == "aviso"
+            ):
+                status = "aviso"
+
+            return {
+                "status": status,
+                "generated_at": _now(),
+                "freshness": freshness,
+                "clock": clock_state,
+                "position_drift": drift,
+                "heartbeat": last_heartbeat(self.db_path),
+                "symbols": len(freshness),
+            }
+
+        return self.cache.get("slo", 60.0, collect)
+
     # ------------------------------------------------------------------- repos
 
     def repo_audit(self) -> dict:
@@ -2525,6 +2597,8 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 self._json(registry_payload(self.server.data.db_path))
             elif path == "/api/models/ranking":
                 self._json(self.server.data.model_ranking())
+            elif path == "/api/slo":
+                self._json(self.server.data.slo())
             elif path == "/api/reports":
                 self._json({"files": list_exports()})
             elif path == "/api/reports/preview":

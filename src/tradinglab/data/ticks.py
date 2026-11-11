@@ -207,6 +207,23 @@ def save_ticks(
     target.mkdir(parents=True, exist_ok=True)
     path = target / f"{str(symbol).upper()}_{day:%Y%m%d}.parquet"
     frame.to_parquet(path, index=False)
+    try:
+        from ..freshness import record
+
+        last = None
+        for column in ("timestamp", "time", "ts"):
+            if column in frame.columns and len(frame):
+                last = frame[column].iloc[-1]
+                break
+        record(
+            symbol,
+            "tick",
+            last_bar_utc=last,
+            fetched_at_utc=datetime.now(timezone.utc),
+            source="ticks",
+        )
+    except Exception:
+        pass
     return path
 
 

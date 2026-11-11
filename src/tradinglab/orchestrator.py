@@ -11,9 +11,13 @@ import yaml
 from .accounts import AccountDefinition, effective_limits, load_accounts, rules_for_account
 from .alerts import send as send_alert
 from .asset_aliases import symbol_allowed
+from .clock import STATUS_FALLA as CLOCK_FALLA
+from .clock import check_clock
 from .config import DEFAULT_DB, ROOT, Settings
 from .data import fetch
 from .db import connect, utcnow
+from .freshness import STATUS_FALLA as FRESHNESS_FALLA
+from .freshness import check as check_freshness
 from .indicators import atr
 from .intel.calendar import calendar_block_for_settings, rules_from_settings
 from .killswitch import allows_order
@@ -23,7 +27,7 @@ from .profiles import BotProfile, load_profiles
 from .prop.guard import AccountLimits, AccountSnapshot, PropGuard, evaluate_account
 from .risk import check_order, size_position
 from .risk_budget import assess_open, news_blackout
-from .runtime import effective_enabled
+from .runtime import effective_enabled, record_console_action
 from .session import session_block
 from .strategies import STRATEGIES
 
@@ -315,6 +319,48 @@ def run_bot(
         if delta == 0:
             actions.append(action)
             continue
+
+        if delta > 0:
+            # Datos frescos y reloj sano: sin esto no se abre nada. Los
+            # cierres y reducciones (delta < 0) nunca pasan por aquí.
+            fresh = check_freshness(ticker, spec.timeframe or "1d")
+            if fresh["status"] == FRESHNESS_FALLA:
+                action.status = "bloqueado"
+                action.detail = f"datos: {fresh['reason']}"
+                actions.append(action)
+                record_console_action(
+                    DEFAULT_DB,
+                    action="freshness_block",
+                    params={"bot": spec.id, "ticker": ticker},
+                    result=fresh["reason"],
+                    ok=False,
+                    actor="orchestrator",
+                )
+                send_alert(
+                    "freshness_block",
+                    f"{spec.id}/{ticker}: {fresh['reason']}",
+                    severity="warning",
+                )
+                continue
+            clock_state = check_clock()
+            if clock_state["status"] == CLOCK_FALLA:
+                action.status = "bloqueado"
+                action.detail = f"reloj: {clock_state['reason']}"
+                actions.append(action)
+                record_console_action(
+                    DEFAULT_DB,
+                    action="clock_block",
+                    params={"bot": spec.id, "ticker": ticker},
+                    result=clock_state["reason"],
+                    ok=False,
+                    actor="orchestrator",
+                )
+                send_alert(
+                    "clock_block",
+                    f"{spec.id}/{ticker}: {clock_state['reason']}",
+                    severity="warning",
+                )
+                continue
 
         if delta > 0 and spec.profile == "intraday_fx":
             allowed, reason = symbol_allowed(DEFAULT_DB, ticker)

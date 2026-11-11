@@ -33,8 +33,12 @@ from .accounts import (
 )
 from .alerts import send as send_alert
 from .asset_aliases import symbol_allowed
+from .clock import STATUS_FALLA as CLOCK_FALLA
+from .clock import check_clock
 from .config import DEFAULT_DB, ROOT, Settings
 from .db import connect, init_db, utcnow
+from .freshness import STATUS_FALLA as FRESHNESS_FALLA
+from .freshness import check as check_freshness
 from .indicators import atr
 from .intel.calendar import calendar_block_for_settings
 from .intraday import STRATEGIES as INTRADAY_STRATEGIES
@@ -957,6 +961,8 @@ def run_forward_bot(
         "account_guard": "pendiente",
         "risk_budget": "pendiente",
         "defense": "pendiente",
+        "freshness": "pendiente",
+        "clock": "pendiente",
     }
     defense = _defense_guard(bot, state, equity, moment, rules)
     guards["defense"] = defense["label"]
@@ -992,6 +998,39 @@ def run_forward_bot(
             price=price,
             atr=atr_value,
             dry_run=dry_run,
+            guards=guards,
+        )
+
+    # Datos frescos y reloj sano: sin esto no se abre nada. El cierre de una
+    # posición ya está gestionado antes (rama `position is not None`).
+    fresh = check_freshness(symbol, bot.timeframe)
+    guards["freshness"] = f"{fresh['status']}: {fresh['reason']}"
+    if fresh["status"] == FRESHNESS_FALLA:
+        _record_signal(
+            db_path, bot, symbol, signal, price, f"blocked freshness: {fresh['reason']}"
+        )
+        return _blocked(
+            bot,
+            symbol,
+            signal,
+            f"datos: {fresh['reason']}",
+            price=price,
+            atr_value=atr_value,
+            guards=guards,
+        )
+    clock_state = check_clock()
+    guards["clock"] = f"{clock_state['status']}: {clock_state['reason']}"
+    if clock_state["status"] == CLOCK_FALLA:
+        _record_signal(
+            db_path, bot, symbol, signal, price, f"blocked clock: {clock_state['reason']}"
+        )
+        return _blocked(
+            bot,
+            symbol,
+            signal,
+            f"reloj: {clock_state['reason']}",
+            price=price,
+            atr_value=atr_value,
             guards=guards,
         )
 

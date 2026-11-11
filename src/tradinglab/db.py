@@ -305,6 +305,16 @@ CREATE TABLE IF NOT EXISTS sec_fetches (
     error TEXT
 );
 
+CREATE TABLE IF NOT EXISTS data_freshness (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    symbol TEXT NOT NULL,
+    timeframe TEXT NOT NULL,
+    last_bar_utc TEXT,
+    fetched_at_utc TEXT,
+    source TEXT NOT NULL,
+    ts TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS console_actions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     ts TEXT NOT NULL,

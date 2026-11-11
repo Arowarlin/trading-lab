@@ -377,3 +377,34 @@ __all__ = [
     "write",
     "write_simulation",
 ]
+
+
+def account_vol_factor(
+    returns_by_bot: dict[str, "pd.Series"],
+    target_vol_annual: float | None,
+    max_leverage: float = 2.0,
+) -> float:
+    """Segundo factor de cartera: la suma de los bots no supera el objetivo.
+
+    `returns_by_bot` son los retornos diarios ya ponderados por la
+    exposición de cada bot. Sin objetivo configurado devuelve 1,0.
+    """
+    from .vol_target import scale as vol_scale
+
+    if not target_vol_annual:
+        return 1.0
+    series = [
+        pd.Series(value, dtype=float)
+        for value in (returns_by_bot or {}).values()
+        if value is not None and len(value)
+    ]
+    if not series:
+        return 1.0
+    total = pd.concat(series, axis=1).fillna(0.0).sum(axis=1)
+    factor = vol_scale(
+        total,
+        target_vol_annual=float(target_vol_annual),
+        max_leverage=float(max_leverage),
+        rebalance="W",
+    )
+    return float(factor.iloc[-1]) if len(factor) else 1.0

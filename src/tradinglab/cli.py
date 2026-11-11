@@ -344,6 +344,51 @@ def doctor(network: bool = typer.Option(False, "--network", help="Probar descarg
         settings = None
         table.add_row("Config", FAIL, str(exc)[:160])
 
+    # Reloj: desviación local frente a NTP y al servidor MT5
+    try:
+        from .clock import check_clock
+
+        clock_state = check_clock()
+        detail = str(clock_state["reason"])
+        if clock_state.get("skew_s") is not None:
+            detail = f"{detail} · desviación {float(clock_state['skew_s']):.1f} s"
+        clock_ok = clock_state["status"] == "ok"
+        clock_warn = clock_state["status"] == "aviso"
+        table.add_row("Reloj", OK if clock_ok else WARN if clock_warn else FAIL, detail)
+    except Exception as exc:
+        table.add_row("Reloj", WARN, str(exc)[:160])
+
+    # Frescura de datos por símbolo
+    try:
+        from .db import connect
+        from .freshness import check as check_freshness
+
+        with connect(DEFAULT_DB) as con:
+            rows = con.execute(
+                "SELECT symbol, timeframe FROM data_freshness "
+                "GROUP BY symbol, timeframe ORDER BY symbol LIMIT 8"
+            ).fetchall()
+        states = [
+            check_freshness(str(row["symbol"]), str(row["timeframe"])) for row in rows
+        ]
+        if not states:
+            table.add_row("Frescura", WARN, "sin datos: no hay descargas registradas")
+        else:
+            peor = "ok"
+            for item in states:
+                if item["status"] == "falla":
+                    peor = "falla"
+                    break
+                if item["status"] == "aviso":
+                    peor = "aviso"
+            table.add_row(
+                "Frescura",
+                OK if peor == "ok" else WARN if peor == "aviso" else FAIL,
+                f"{len(states)} símbolos · peor estado: {peor}",
+            )
+    except Exception as exc:
+        table.add_row("Frescura", WARN, str(exc)[:160])
+
     # Secretos: solo nombres/orígenes, nunca valores
     try:
         from .config import secret_status
@@ -6423,6 +6468,11 @@ def optimize_cmd(
 
 @app.command("research")
 def research_cmd(
+    vol_target: str = typer.Option(
+        "off",
+        "--vol-target",
+        help="on|off: escribe la comparación con objetivo de volatilidad",
+    ),
     symbols: str = typer.Option(
         None, "--symbols", help="Lista separada por comas (ej. SPY,QQQ,EURUSD=X)"
     ),
@@ -6623,6 +6673,14 @@ def research_cmd(
         )
     console.print(f"Reporte: {files['latest_md']}")
     console.print(f"JSON:    {files['latest_json']}")
+
+    if str(vol_target).lower() == "on":
+        from .vol_report import compare as vol_compare
+
+        path = vol_compare()
+        console.print(
+            f"[green]Comparación con objetivo de volatilidad:[/green] {path}"
+        )
 
 
 @app.command("research-horizons")
