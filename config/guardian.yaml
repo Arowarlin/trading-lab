@@ -1,0 +1,13 @@
+# Terminal de MetaTrader 5 donde corre el EA del guardián.
+#
+# Este archivo NO está en el hash congelado de F13 (a diferencia de
+# `config/lab.yaml`), así que se puede corregir sin romper el freeze.
+#
+# Hay más de un MetaTrader 5 instalado y la API de Python se puede conectar a
+# cualquiera de ellos: el guardián tiene que leer y escribir en el terminal
+# donde está adjunto el EA (`expertmode=0` en el perfil de charts).
+#
+# 2026-11-11: el EA está en el terminal 81A933A9... (FTMO-Demo). La API
+# conectaba con 6C3C6A11..., que no tiene el EA: por eso el log se busca
+# también en los demás terminales.
+terminal_path: "C:/Users/PC/AppData/Roaming/MetaQuotes/Terminal/81A933A9AFC5DE3C23B15CAB19C63850"

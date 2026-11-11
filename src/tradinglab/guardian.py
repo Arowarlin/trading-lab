@@ -25,7 +25,9 @@ from .forward_intraday import load_forward_bots
 
 GUARDIAN_VERSION = 1
 GUARDIAN_FILENAME = "tradinglab_guardian.json"
+GUARDIAN_LOG_FILENAME = "tradinglab_guardian.log"
 GUARDIAN_GLOBAL_BLOCK = "TradingLabGuardianBlocked"
+GUARDIAN_CONFIG = CONFIG_DIR / "guardian.yaml"
 
 
 class GuardianError(RuntimeError):
@@ -59,8 +61,31 @@ def _raw_account(account_id: str, accounts_path: Path | None) -> dict:
     return entry
 
 
+def guardian_terminal_path(path: Path | None = None) -> Path | None:
+    """Terminal del EA según `config/guardian.yaml` (no está en el hash de F13).
+
+    Conviene porque hay más de un MetaTrader 5 instalado y la API puede
+    conectarse a otro: el guardián tiene que leer el log del terminal donde
+    está adjunto el EA.
+    """
+    target = Path(path) if path else GUARDIAN_CONFIG
+    if not target.exists():
+        return None
+    raw = _read_yaml(target)
+    value = str(raw.get("terminal_path") or "").strip()
+    return Path(value).expanduser() if value else None
+
+
 def terminal_data_path(lab_path: Path | None = None) -> Path | None:
-    """Ruta de datos del terminal desde ``lab.yaml -> mt5.data_path``."""
+    """Ruta de datos del terminal.
+
+    Orden: `config/guardian.yaml` (terminal del EA) y después
+    `lab.yaml -> mt5.data_path`.
+    """
+    if lab_path is None:
+        configured = guardian_terminal_path()
+        if configured is not None:
+            return configured
     path = Path(lab_path) if lab_path else CONFIG_DIR / "lab.yaml"
     raw = _read_yaml(path)
     mt5 = raw.get("mt5") or {}
@@ -262,7 +287,7 @@ def read_exported(
 
 
 def _terminal_data_path() -> Path | None:
-    """Ruta de datos del terminal: `lab.yaml` y, si falta, la API de MT5."""
+    """Ruta de datos del terminal: `config`, `lab.yaml` o la API de MT5."""
     try:
         configured = terminal_data_path()
     except GuardianError:
@@ -282,6 +307,19 @@ def _terminal_data_path() -> Path | None:
         return None
 
 
+def _other_terminal_logs() -> list[Path]:
+    """Logs del EA en los demás terminales de MetaTrader 5 instalados."""
+    root = Path.home() / "AppData" / "Roaming" / "MetaQuotes" / "Terminal"
+    out: list[Path] = []
+    if not root.exists():
+        return out
+    for folder in sorted(root.iterdir()):
+        log = folder / "MQL5" / "Files" / GUARDIAN_LOG_FILENAME
+        if log.exists():
+            out.append(log)
+    return out
+
+
 def guardian_sessions(*, required: int = 5, data_path: Path | None = None) -> dict:
     """Sesiones ALERT observadas en el log del EA y si la puerta está cumplida.
 
@@ -290,6 +328,7 @@ def guardian_sessions(*, required: int = 5, data_path: Path | None = None) -> di
     no registra ningún `TRIGGER`.
     """
     base = Path(data_path) if data_path is not None else _terminal_data_path()
+    explicit = data_path is not None
     if base is None:
         return {
             "ok": False,
@@ -301,7 +340,7 @@ def guardian_sessions(*, required: int = 5, data_path: Path | None = None) -> di
             "session_days": [],
             "modes": [],
         }
-    log = base / "MQL5" / "Files" / "tradinglab_guardian.log"
+    log = base / "MQL5" / "Files" / GUARDIAN_LOG_FILENAME
     state: dict = {
         "ok": True,
         "path": str(log),
@@ -314,6 +353,17 @@ def guardian_sessions(*, required: int = 5, data_path: Path | None = None) -> di
         "modes": [],
         "exists": log.exists(),
     }
+    if not log.exists() and not explicit:
+        # Hay más de un terminal de MT5: si el configurado no tiene log, se
+        # busca el del EA en los demás. Sin log no se inventan sesiones.
+        alternatives = [item for item in _other_terminal_logs() if item != log]
+        if alternatives:
+            alternatives.sort(key=lambda item: item.stat().st_mtime, reverse=True)
+            log = alternatives[0]
+            state["path"] = str(log)
+            state["terminal_path"] = str(log.parent.parent.parent)
+            state["exists"] = True
+            state["source"] = "log encontrado en otro terminal de MT5"
     if not log.exists():
         state["reason"] = "el EA todavía no ha escrito el log"
         return state

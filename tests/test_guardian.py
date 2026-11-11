@@ -17,6 +17,7 @@ from tradinglab.guardian import (
     build_config,
     export_config,
     guardian_sessions,
+    guardian_terminal_path,
     read_exported,
     resolve_target,
     terminal_data_path,
@@ -335,6 +336,44 @@ def test_sesiones_sin_log_no_inventan_datos(tmp_path: Path) -> None:
     assert state["sessions"] == 0
     assert state["gate_ok"] is False
     assert state["exists"] is False
+
+
+def test_el_log_se_busca_en_otro_terminal_de_mt5(tmp_path: Path, monkeypatch) -> None:
+    """Si el terminal configurado no tiene log, se usa el del EA en otro."""
+    otro = tmp_path / "otro"
+    log = _write_log(
+        otro,
+        [
+            f"2026.11.{day:02d} 00:00:12 INIT mode=ALERT account=ftmo_demo daily=0.0450"
+            for day in (10, 11, 12, 13, 16)
+        ],
+    )
+    monkeypatch.setattr(
+        "tradinglab.guardian._terminal_data_path", lambda: tmp_path / "terminal"
+    )
+    monkeypatch.setattr(
+        "tradinglab.guardian._other_terminal_logs", lambda: [log]
+    )
+    state = guardian_sessions(required=5)
+    assert state["exists"] is True
+    assert state["sessions"] == 5
+    assert state["gate_ok"] is True
+    assert "otro terminal" in state["source"]
+
+
+def test_el_terminal_del_guardian_viene_de_su_config(tmp_path: Path) -> None:
+    path = tmp_path / "guardian.yaml"
+    path.write_text(
+        yaml.safe_dump({"terminal_path": str(tmp_path / "terminal")}), encoding="utf-8"
+    )
+    assert guardian_terminal_path(path) == tmp_path / "terminal"
+    assert guardian_terminal_path(tmp_path / "no-existe.yaml") is None
+
+
+def test_la_configuracion_real_apunta_a_un_terminal():
+    path = guardian_terminal_path()
+    assert path is not None
+    assert path.exists()
 
 
 def test_cli_guardian_export(monkeypatch, tmp_path):
