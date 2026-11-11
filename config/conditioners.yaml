@@ -1,0 +1,25 @@
+# Multiplicadores de exposicion por condicionador (OPCIONAL).
+#
+# Se aplican al objetivo ANTES de los guards de apertura. Sin tabla, todos los
+# flags valen 1,0 y los bots se comportan igual que hasta ahora.
+#
+# `config/bots.yaml` esta congelado en el hash de F13, asi que la tabla vive
+# aqui para no tocarlo. Se busca primero en bots.yaml (clave `conditioners:`)
+# y despues aqui (seccion `bots:` y `default:`).
+#
+# DECISION 2026-11-11: la propuesta NO se activa. Medida sobre qqq-trend-f13
+# (1.498 dias afectados) cuesta Sharpe 0,83 -> 0,76 y retorno 69,97% -> 49,67%
+# por un MaxDD que solo mejora de -8,57% a -8,09%. Se deja documentada y sin
+# efecto hasta que se opine al respecto.
+default: {}
+
+bots: {}
+
+# Propuesta medida (NO se aplica): usarla solo con criterio explicito.
+proposal:
+  pre_fomc: 0.5
+  tom_window: 0.75
+  month_end_selloff: 0.75
+  monday_overnight: 0.75
+  boundary_extreme: 0.5
+  regime_ok: 1.0

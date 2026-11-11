@@ -13,6 +13,7 @@ from .alerts import send as send_alert
 from .asset_aliases import symbol_allowed
 from .clock import STATUS_FALLA as CLOCK_FALLA
 from .clock import check_clock
+from .conditioners import bot_multiplier_table, flags_series
 from .config import DEFAULT_DB, ROOT, Settings
 from .data import fetch
 from .db import connect, utcnow
@@ -30,6 +31,7 @@ from .risk_budget import assess_open, news_blackout
 from .runtime import effective_enabled, record_console_action
 from .session import session_block
 from .strategies import STRATEGIES
+from .strategies.base import exposure_multiplier
 
 BOTS_FILE = ROOT / "config" / "bots.yaml"
 ARCHIVE_FILE = ROOT / "config" / "bots_archive.yaml"
@@ -252,6 +254,16 @@ def run_bot(
             price = float(df["close"].iloc[-1])
             atr_value = float(atr(df).iloc[-1])
             target = float(result.target.iloc[-1])
+            # Condicionadores: multiplicador de exposición antes de los guards.
+            table = bot_multiplier_table(spec.id)
+            if table:
+                frame, _warnings = flags_series(
+                    ticker, df["close"].astype(float), db_path=DEFAULT_DB
+                )
+                if not frame.empty:
+                    last = frame.iloc[-1]
+                    flags = {name: bool(last.get(name, False)) for name in frame.columns}
+                    target *= exposure_multiplier(flags, table)
         except Exception as exc:
             actions.append(
                 BotAction(spec.id, ticker, 0.0, 0.0, 0.0, 0, 0, "error", str(exc)[:200])

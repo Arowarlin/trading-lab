@@ -69,3 +69,36 @@ def test_fomc_sin_tabla_devuelve_error(tmp_path):
     fechas, error = fomc_dates(str(tmp_path / "no-existe.db"))
     assert fechas == []
     assert error
+
+
+def test_tabla_por_bot_desde_conditioners_yaml(tmp_path, monkeypatch):
+    from tradinglab import conditioners
+
+    (tmp_path / "conditioners.yaml").write_text(
+        "bots:\n  bot-a:\n    pre_fomc: 0.5\n"
+        "default:\n  monday_overnight: 0.75\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(conditioners, "CONFIG_DIR", tmp_path)
+    assert conditioners.bot_multiplier_table("bot-a") == {"pre_fomc": 0.5}
+    assert conditioners.bot_multiplier_table("otro") == {"monday_overnight": 0.75}
+
+
+def test_la_propuesta_no_afecta_a_produccion(tmp_path, monkeypatch):
+    from tradinglab import conditioners
+
+    (tmp_path / "conditioners.yaml").write_text(
+        "default: {}\nbots: {}\nproposal:\n  pre_fomc: 0.5\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(conditioners, "CONFIG_DIR", tmp_path)
+    assert conditioners.bot_multiplier_table("bot-a") == {}
+    assert conditioners.proposal_table("bot-a") == {"pre_fomc": 0.5}
+
+
+def test_la_configuracion_real_no_tiene_multiplicadores():
+    """Con `default: {}` y `bots: {}` nada cambia en producción."""
+    from tradinglab.conditioners import bot_multiplier_table
+
+    for bot_id in ("qqq-trend-f13", "trend-spy", "meanrev-large"):
+        assert bot_multiplier_table(bot_id) == {}

@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 
 from .backtest import run as run_backtest
-from .conditioners import bot_multiplier_table, flags_series
+from .conditioners import bot_multiplier_table, flags_series, proposal_table
 from .config import ROOT, get_settings
 from .data import fetch
 from .orchestrator import load_bots
@@ -72,7 +72,7 @@ def compare(bot_ids: list[str] | None = None, out_dir: Path | None = None) -> li
     for bot in catalog:
         if bot.strategy not in STRATEGIES:
             continue
-        table = bot_multiplier_table(bot.id)
+        table = bot_multiplier_table(bot.id) or proposal_table(bot.id)
         try:
             base, symbol, _ = _run(bot, conditioned=False, table=table)
             cond, _symbol, days = _run(bot, conditioned=True, table=table)

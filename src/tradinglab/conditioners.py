@@ -22,6 +22,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import yaml
 
 from .config import CONFIG_DIR
 from .db import connect, init_db
@@ -236,6 +237,7 @@ def today_flags(symbol: str, *, db_path: str | Path | None = None) -> dict:
 
 __all__ = [
     "bot_multiplier_table",
+    "proposal_table",
     "FLAGS",
     "boundary_flags",
     "business_days_around",
@@ -247,31 +249,61 @@ __all__ = [
 ]
 
 
-def bot_multiplier_table(bot_id: str, path: Path | None = None) -> dict[str, float]:
-    """Multiplicadores por condicionador de un bot (`config/bots.yaml`).
+def _clean_table(table: object) -> dict[str, float]:
+    if not isinstance(table, dict):
+        return {}
+    out: dict[str, float] = {}
+    for flag, value in table.items():
+        try:
+            out[str(flag)] = float(value)
+        except (TypeError, ValueError):
+            continue
+    return out
 
-    La tabla es opcional: si el bot no la tiene, todos los flags valen 1,0.
+
+def bot_multiplier_table(bot_id: str, path: Path | None = None) -> dict[str, float]:
+    """Multiplicadores por condicionador de un bot.
+
+    Se busca primero en `config/bots.yaml` (clave `conditioners:`) y después en
+    `config/conditioners.yaml` (sección `bots:` y `default:`). Si no hay tabla,
+    todos los flags valen 1,0 y nada cambia.
     """
-    file_path = Path(path) if path else CONFIG_DIR / "bots.yaml"
-    if not file_path.exists():
+    bots_file = Path(path) if path else CONFIG_DIR / "bots.yaml"
+    if bots_file.exists():
+        try:
+            raw = yaml.safe_load(bots_file.read_text(encoding="utf-8")) or {}
+        except Exception:
+            raw = {}
+        for bot in raw.get("bots") or []:
+            if str(bot.get("id")) != str(bot_id):
+                continue
+            table = _clean_table(bot.get("conditioners"))
+            if table:
+                return table
+
+    cond_file = CONFIG_DIR / "conditioners.yaml"
+    if cond_file.exists():
+        try:
+            raw = yaml.safe_load(cond_file.read_text(encoding="utf-8")) or {}
+        except Exception:
+            raw = {}
+        bots = raw.get("bots") or {}
+        if isinstance(bots, dict) and str(bot_id) in bots:
+            return _clean_table(bots[str(bot_id)])
+        return _clean_table(raw.get("default"))
+    return {}
+
+
+def proposal_table(bot_id: str) -> dict[str, float]:
+    """Tabla propuesta (sección `proposal:`): solo para informes."""
+    cond_file = CONFIG_DIR / "conditioners.yaml"
+    if not cond_file.exists():
         return {}
     try:
-        import yaml
-
-        raw = yaml.safe_load(file_path.read_text(encoding="utf-8")) or {}
+        raw = yaml.safe_load(cond_file.read_text(encoding="utf-8")) or {}
     except Exception:
         return {}
-    for bot in raw.get("bots") or []:
-        if str(bot.get("id")) != str(bot_id):
-            continue
-        table = bot.get("conditioners") or {}
-        if not isinstance(table, dict):
-            return {}
-        out: dict[str, float] = {}
-        for flag, value in table.items():
-            try:
-                out[str(flag)] = float(value)
-            except (TypeError, ValueError):
-                continue
-        return out
-    return {}
+    bots = raw.get("bots") or {}
+    if isinstance(bots, dict) and str(bot_id) in bots:
+        return _clean_table(bots[str(bot_id)])
+    return _clean_table(raw.get("proposal"))
