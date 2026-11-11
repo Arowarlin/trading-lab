@@ -7011,6 +7011,109 @@ def research_intraday_cmd(
     )
 
 
+@app.command("research-swing")
+def research_swing_cmd(
+    symbols: str = typer.Option(
+        None, "--symbols", help="Lista separada por comas (US100.CASH,XAUUSD)"
+    ),
+    paths: int = typer.Option(2_000, "--paths", help="Simulaciones Monte Carlo"),
+    horizon: int = typer.Option(120, "--horizon", help="Días por simulación"),
+    block_size: int = typer.Option(5, "--block-size", help="Bootstrap por bloques"),
+    firm: str = typer.Option(None, "--firm"),
+    phase: str = typer.Option(None, "--phase"),
+    account_size: float = typer.Option(None, "--account-size"),
+    out: str = typer.Option(None, "--out"),
+    top: int = typer.Option(10, "--top"),
+) -> None:
+    """Tendencia diaria en CFDs de tick grande sobre caché H4 de MT5.
+
+    DSR, PBO, walk-forward, holdout y Monte Carlo FTMO 100k. Registra cada
+    variante en `strategy_trials` y escribe `reports/research/swing_cfd/`.
+    No activa nada: como mucho registra un candidato en el ciclo de vida.
+    """
+    from .swing import SYMBOLS, run_swing
+
+    settings = get_settings()
+    rules = _prop_rules(firm, phase, account_size)
+    selected = tuple(
+        item.strip().upper()
+        for item in (symbols or ",".join(SYMBOLS)).split(",")
+        if item.strip()
+    )
+    out_dir = Path(out) if out else ROOT / "reports" / "research" / "swing_cfd"
+    report = run_swing(
+        DEFAULT_DB,
+        rules,
+        settings.data.cache_dir,
+        symbols=selected,
+        out_dir=out_dir,
+        paths=paths,
+        horizon=horizon,
+        block_size=block_size,
+    )
+    table = Table(title="Tendencia diaria · CFDs de tick grande")
+    for column in (
+        "Activo",
+        "Rápida",
+        "Lenta",
+        "Stop",
+        "Sharpe",
+        "MaxDD",
+        "Trades",
+        "DSR",
+        "P(pasar)",
+        "P(breach)",
+        "Pasa",
+    ):
+        table.add_column(column, overflow="fold")
+    for row in report["results"][: max(1, int(top))]:
+        table.add_row(
+            row["symbol"],
+            str(row["params"]["fast"]),
+            str(row["params"]["slow"]),
+            f"{row['params']['stop_atr']:g}",
+            f"{row['sharpe']:.2f}",
+            f"{row['max_drawdown'] * 100:.1f}%",
+            str(row["num_trades"]),
+            f"{(row['dsr'] or 0):.0%}",
+            f"{row['pass_rate']:.1%}",
+            f"{row['breach_rate']:.1%}",
+            "sí" if row["passed"] else "no",
+        )
+    if not report["results"]:
+        table.add_row("Sin datos", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-")
+    console.print(table)
+    data_lines = []
+    for symbol, status in report["data"].items():
+        h4 = status.get("h4") or {}
+        d1 = status.get("d1") or {}
+        data_lines.append(
+            f"{symbol}: H4 {h4.get('rows', 0):,} barras"
+            if h4.get("exists")
+            else f"{symbol}: H4 Sin datos"
+        )
+        data_lines.append(
+            f"  D1: {d1.get('status') or ('ok' if d1.get('exists') else 'Sin datos')}"
+        )
+    console.print(
+        Panel(
+            "\n".join(data_lines)
+            + "\nPBO global: "
+            + (f"{report['pbo']['pbo']:.1%}" if report.get("pbo") else "Sin datos")
+            + "\nWalk-forward: "
+            + (
+                str((report.get("walk_forward") or {}).get("verdict") or "Sin datos")
+            )
+            + f"\nTrials: {report['dsr_n_trials']} · run {report['run_id']}"
+            + f"\nPasan {report['passed']}/{len(report['results'])}",
+            title="Research swing",
+        )
+    )
+    for item in report.get("errors") or []:
+        console.print(f"  [yellow]{item}[/yellow]")
+    console.print(f"[dim]{report['files']['markdown']}[/dim]")
+
+
 @app.command("research-trials")
 def research_trials_cmd(
     symbol: str = typer.Option(None, "--symbol"),

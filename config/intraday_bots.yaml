@@ -177,3 +177,33 @@ bots:
     params: {window_min: 60, side: "short_usd"}
     grid: {window_min: [30, 60, 90]}
     description: "Flujo del fix del BCE: corto EURUSD en la ventana previa al fix."
+
+  # --- Tendencia diaria en CFDs de tick grande (Etapa 3m): todos enabled:false ---
+  - id: us100-trend-d1
+    type: deterministic
+    profile: swing_cfd
+    cluster: swing_cfd
+    account: ftmo_demo
+    strategy: trend_daily_atr
+    family: trend
+    universe: [US100.cash]
+    timeframe: H4
+    enabled: false
+    exposure: 0.25
+    params: {fast: 20, slow: 100, regime: 200, stop_atr: 2.0, atr_window: 14}
+    grid: {fast: [20, 50], slow: [100, 200], stop_atr: [2.0, 3.0]}
+    description: "Tendencia diaria sobre US100.cash (senal D1, ejecucion H4, stop ATR)."
+  - id: xauusd-trend-d1
+    type: deterministic
+    profile: swing_cfd
+    cluster: swing_cfd
+    account: ftmo_demo
+    strategy: trend_daily_atr
+    family: trend
+    universe: [XAUUSD]
+    timeframe: H4
+    enabled: false
+    exposure: 0.25
+    params: {fast: 20, slow: 200, regime: 200, stop_atr: 2.0, atr_window: 14}
+    grid: {fast: [20, 50], slow: [100, 200], stop_atr: [2.0, 3.0]}
+    description: "Tendencia diaria sobre XAUUSD (senal D1, ejecucion H4, stop ATR)."

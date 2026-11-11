@@ -10,12 +10,20 @@ from tradinglab.prop.rules import ftmo
 
 def test_profiles_definidos_y_bots_con_perfil():
     profiles = load_profiles()
-    assert set(profiles) == {"swing_equity", "intraday_fx", "intraday_futures"}
+    assert set(profiles) == {
+        "swing_equity",
+        "intraday_fx",
+        "intraday_futures",
+        "swing_cfd",
+    }
     assert profiles["swing_equity"].timeframe == "1d"
     assert profiles["intraday_fx"].timeframe == "M15"
     assert profiles["intraday_fx"].max_risk_pct == 0.0025
     assert profiles["intraday_futures"].validation.min_trades == 80
     assert profiles["swing_equity"].max_cluster_risk_pct == 0.01
+    assert profiles["swing_cfd"].timeframe == "H4"
+    assert profiles["swing_cfd"].max_risk_pct == 0.005
+    assert profiles["swing_cfd"].validation.min_trades == 20
     from tradinglab.orchestrator import load_bots
 
     assert all(spec.profile for spec in load_bots())

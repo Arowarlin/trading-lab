@@ -875,6 +875,28 @@ lab research-trials              # cementerio, presupuesto y contador DSR
 lab research-trials --symbol EURUSD --limit 50
 ```
 
+### Tendencia diaria en CFDs de tick grande (etapa 3m)
+
+Una sola familia nueva (`trend`) con mecanismo: señal diaria reutilizando
+`trend_signal`, ejecución en H4 con la señal del día anterior, stop ATR 2×/3×
+sobre cierres y costes FTMO del catálogo (índices 0, oro 0,0007 %/lado) más
+spread medido en las velas y slippage 0,5/2 bps.
+
+```powershell
+lab mt5 fetch US100.cash --timeframe H4 --bars 50000
+lab mt5 fetch XAUUSD --timeframe H4 --bars 50000
+lab research-swing               # DSR/PBO/WF/holdout/MC FTMO 100k
+```
+
+- Perfil `swing_cfd` (riesgo 0,5 %, `target_vol` 0,10, `vol_target.enabled:
+  false`) y bots `us100-trend-d1` / `xauusd-trend-d1` con **`enabled: false`**.
+- La caché **D1 no está disponible**: la inferencia de offset por tramos no
+  puede confirmar D1 sin ambigüedad, así que la serie diaria se construye
+  desde H4 (ya corregido a UTC). El informe lo marca como **Sin datos** y no
+  se inventa un offset global.
+- Si una variante pasa, entra en el ciclo de vida como `candidato` (nunca
+  `enabled`); si no pasa ninguna, se documenta y se para.
+
 Evidencia: `pytest tests/test_trials.py tests/test_intraday.py -q` → **18
 passed**; suite completa **436 passed**; `ruff` limpio; `lab doctor` OK;
 `lab f13 config-check` OK antes y después de la etapa (hash

@@ -63,3 +63,24 @@ profiles:
       max_pbo: 0.30
       require_walk_forward: true
       require_regimes: true
+
+  swing_cfd:
+    target_vol: 0.10
+    vol_target:
+      enabled: false
+    description: "Tendencia diaria en CFDs de tick grande; señal D1 y ejecución H4."
+    timeframe: "H4"
+    schedule:
+      tz: "UTC"
+      start: "00:00"
+      end: "23:59"
+      days: ["Mon", "Tue", "Wed", "Thu", "Fri"]
+    max_risk_pct: 0.005
+    max_trades_per_day: 1
+    max_cluster_risk_pct: 0.01
+    validation:
+      min_trades: 20
+      min_dsr: 0.90
+      max_pbo: 0.30
+      require_walk_forward: true
+      require_regimes: true

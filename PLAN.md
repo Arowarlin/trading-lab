@@ -1481,6 +1481,70 @@ etapa.
   completa **827 passed, 1 skipped**; `lab doctor` OK con los WARN conocidos;
   `lab f13 status|check|report` OK. Sin push.
 
+### Etapa 3m - Tendencia diaria en CFDs de tick grande (2026-11-11)
+
+- [x] **Datos (solo lectura, mercado abierto y offset conocido)**
+  - `lab mt5 status`: FTMO-Demo, `trade_allowed=True`, offset +2,00 detectado.
+  - `lab mt5 fetch US100.cash --timeframe H4 --bars 50000` -> 9.761 barras
+    (2017-12-28 -> 2026-11-11, 19 tramos de offset).
+  - `lab mt5 fetch XAUUSD --timeframe H4 --bars 50000` -> 34.372 barras
+    (2004-06-11 -> 2026-11-11, 46 tramos).
+  - `lab mt5 fetch ... --timeframe D1` **falla** en ambos: la inferencia de
+    offset por tramos no puede confirmar D1 sin ambigüedad (la apertura
+    semanal no concuerda con el cierre del viernes). No se aplica un offset
+    global: D1 queda **Sin datos** y la serie diaria se construye desde H4.
+  - Datacheck obligatorio: H4 `aviso` (calendario no configurado para 4h,
+    ajuste no declarado) y diario `aviso` (US100 con 7,3 % de huecos); ninguno
+    es `falla`.
+- [x] **Una sola familia nueva, `trend`, con mecanismo**
+  - `strategies/swing.py`: reutiliza `trend_signal` sobre barras diarias (sin
+    copiar el indicador) y añade la ejecución H4 con la señal del día
+    anterior, el stop ATR 2×/3× sobre cierres (sin reentrar hasta que la
+    señal vuelve a 0) y el tratamiento del domingo como lunes de mercado.
+  - Estrategia registrada como `trend_daily_atr`; `family: trend`.
+- [x] **Perfil y bots (nada enabled)**
+  - `config/profiles.yaml`: `swing_cfd` con riesgo 0,5 % por operación,
+    `target_vol` 0,10, `vol_target.enabled: false`, `min_trades` 20.
+  - `config/intraday_bots.yaml`: `us100-trend-d1` y `xauusd-trend-d1`,
+    `enabled: false`, rejilla de **5 variantes por activo** (rápida 20/50,
+    lenta 100/200, stop ATR 2/3).
+- [x] **Costes FTMO reales**
+  - Índices comisión 0 y oro 0,0007 %/lado (catálogo `config/costs.yaml`).
+  - Spread medido en las velas H4 en bps (punto 0,01): US100 0,50 bps de
+    mediana (p95 1,18) y XAUUSD 0,39 (p95 3,34); se usa la mediana de los
+    últimos 3 años (0,58 y 0,67 bps) más slippage conservador 2 bps.
+  - `backtest.run` con sesión explícita y `flat_dates` (sin vencimientos en
+    CFDs al contado).
+- [x] **`lab research-swing`**
+  - DSR (n_trials = variantes + intentos previos), PBO CSCV global y por
+    activo, walk-forward (504/126 días), holdout del 30 % y Monte Carlo FTMO
+    100k (2.000 paths, 120 días).
+  - Registra cada variante en `strategy_trials` (familia `TREND`, fuente
+    `sweep`, run_id por pasada) y respeta el presupuesto semanal.
+  - Informe en `reports/research/swing_cfd/swing.json|md`.
+- [x] **Resultado medido (run `d2316a4be339`)**
+  - **0 de 10 variantes pasan.** PBO global 80,3 % (US100 79,5 %, XAUUSD
+    30,1 %); walk-forward global `ok`; DSR 1,000 en las variantes US100 y
+    0,000-1,000 en oro.
+  - US100: Sharpe 0,77-0,81, CAGR 11,1-11,7 %, MaxDD -26/-29 %, P(pasar)
+    54-55 %, **P(breach) 45-46 %**.
+  - XAUUSD: Sharpe 0,24-0,66, CAGR 1,9-8,9 %, MaxDD -25/-30 %, P(pasar)
+    42-55 %, **P(breach) 46-53 %**.
+  - El motivo es el riesgo de la cuenta: el MaxDD de la estrategia
+    (-25/-30 %) es mayor que el límite máximo de FTMO (10 %), así que la
+    probabilidad de reventar es alta aunque el Sharpe sea positivo. Se
+    documenta y se para; no se relajan umbrales ni se activa ningún bot.
+  - Presupuesto semanal tras la pasada: US100.CASH 5/5 y XAUUSD 4/5.
+  - Las dos pasadas anteriores (`d3207dca0458`, `8ecc653cfc71`) quedaron
+    invalidadas por dos bugs propios: el veredicto del walk-forward no se
+    anadia al informe y el Sharpe/CAGR se anualizaban con 252 barras H4 en
+    vez de con dias. Se corrigieron antes de la pasada valida; las filas
+    antiguas se conservan en el cementerio (no se borran).
+- Evidencia: `ruff` limpio; `pytest tests/test_swing.py tests/test_profiles.py
+  -q` -> 18 passed; suite completa **840 passed, 1 skipped**; `lab doctor` OK
+  con los WARN conocidos; `lab f13 config-check` OK (`7fe0f5a6.`, sin tocar).
+  Sin push.
+
 ### Etapa 4 — Presupuesto de riesgo neto por activo
 
 - [x] **`config/risk_budget.yaml`**
@@ -1761,4 +1825,5 @@ etapa.
 | 2026-11-11 | Reversion overnight | Sharpe -0,15, MaxDD -18,18%, retorno -8,28%, P(pasar) 16,95%, P(breach) 37,55%; falla, se documenta y se para (pesos normalizados a bruto <= 1) |
 | 2026-11-11 | Familias de sesion | `research-intraday` EURUSD 0/52 y USDJPY 0/52 con `session_hold` y `fix_flow` (stop ATR real); informe en `reports/research/intraday_session/`; suite 805 passed, 1 skipped; ruff limpio |
 | 2026-11-11 | F13 re-congelado | `lab f13 refreeze --reason "cambio ajeno al bot: bloque daytrader (carril AAPL)" --yes` -> 54b42036 -> 7fe0f5a6; solo `lab.yaml`; baseline `git:0a6f867`; `config-check` OK; historial en `f13_refreezes` y auditoria `f13_refreeze`; sin push |
+| 2026-11-11 | Tendencia diaria en CFDs | `mt5 fetch` H4 US100.cash 9.761 y XAUUSD 34.372 barras; D1 Sin datos (offset no confirmable); perfil `swing_cfd` y bots `enabled: false`; `lab research-swing` -> 0/10, PBO 80,3%, P(breach) 45-53%; se documenta y se para; DSR 395 pruebas |
 |  |  |  |
