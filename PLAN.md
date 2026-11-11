@@ -1687,6 +1687,11 @@ etapa.
     `lab f13 config-check` OK (`7fe0f5a6.`).
   - Push **no** ejecutado: queda para `/push` con confirmación por Telegram.
 
+- **Correcci?n (2026-11-11):** el deep de agentes reintentaba analista por
+  analista con 1.800 s **cada uno** (hasta 2,5 h colgado). Ahora hay un
+  presupuesto **total** (`--deep-timeout`, 1.800 s) que comparten todos los
+  reintentos; con el presupuesto agotado no se lanza ninguno. Tests: no
+  reintenta sin presupuesto y reintenta uno a uno si el fallo es r?pido.
 ### Etapa 4 — Presupuesto de riesgo neto por activo
 
 - [x] **`config/risk_budget.yaml`**

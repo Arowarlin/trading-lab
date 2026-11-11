@@ -1020,6 +1020,9 @@ def agent_compare_cmd(
     ),
     report_only: bool = typer.Option(False, "--report", help="Solo muestra el reporte"),
     min_sample: int = typer.Option(30, "--min-sample", help="Mínimo para conclusiones"),
+    deep_timeout: int = typer.Option(
+        1800, "--deep-timeout", help="Presupuesto total del deep en segundos (reintentos incluidos)"
+    ),
 ) -> None:
     """Compara lite vs deep sobre el mismo activo y fecha, sin enviar órdenes."""
     from .agent_compare import CompareError, run_comparison
@@ -1036,6 +1039,7 @@ def agent_compare_cmd(
                 analysts=names,
                 retrospective=retrospective,
                 settings=get_settings(),
+                deep_timeout=deep_timeout,
             )
         except CompareError as exc:
             console.print(f"[red]{exc}[/red]")

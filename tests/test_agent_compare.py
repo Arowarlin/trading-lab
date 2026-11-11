@@ -6,6 +6,7 @@ import pytest
 
 from tradinglab.agent_compare import (
     CompareError,
+    _run_deep,
     comparisons,
     report,
     run_comparison,
@@ -151,3 +152,36 @@ def test_ticker_invalido(tmp_path):
     init_db(db)
     with pytest.raises(CompareError, match="ticker"):
         run_comparison(db, "  ", settings=Settings())
+
+def test_el_deep_no_reintenta_sin_presupuesto():
+    """Con el presupuesto agotado no se llama al runner ni una vez."""
+    calls: list[str] = []
+
+    def runner(ticker, day, names):
+        calls.append(names)
+        return _deep()
+
+    result, failed, error = _run_deep(
+        "SPY", "2026-11-11", ["market", "news"], runner, budget={"remaining": 60}
+    )
+    assert result is None
+    assert calls == []
+    assert failed == ["market", "news"]
+    assert "presupuesto" in error
+
+
+def test_el_deep_reintenta_uno_a_uno_si_falla_rapido():
+    calls: list[str] = []
+
+    def runner(ticker, day, names):
+        calls.append(names)
+        raise RuntimeError("400 del modelo")
+
+    result, failed, error = _run_deep(
+        "SPY", "2026-11-11", ["market", "news"], runner, budget={"remaining": 1800}
+    )
+    assert result is None
+    assert calls == ["market,news", "market", "news"]
+    assert failed == ["market", "news"]
+    assert "400" in error
+

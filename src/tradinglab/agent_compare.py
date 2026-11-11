@@ -52,15 +52,31 @@ def _run_deep(
     day: str,
     analysts: list[str],
     runner,
+    *,
+    budget: dict | None = None,
 ) -> tuple[dict | None, list[str], str | None]:
-    """Intenta todos los analistas; si falla, usa el primero que funcione solo."""
+    """Intenta todos los analistas; si falla, usa el primero que funcione solo.
+
+    `budget["remaining"]` es el presupuesto total del deep en segundos: los
+    reintentos uno a uno consumen el mismo presupuesto, no uno nuevo por
+    analista (antes 4 analistas podían colgar el proceso 2,5 h).
+    """
+
+    def left() -> float | None:
+        return None if budget is None else float(budget.get("remaining", 0.0))
+
     try:
+        if (left() is not None and left() < 120):
+            return None, list(analysts), "presupuesto del deep agotado"
         result = runner(ticker, day, ",".join(analysts))
         return result, list(analysts), None
     except Exception as exc:
         first_error = _sanitize(exc)
     failed: list[str] = []
     for analyst in analysts:
+        if left() is not None and left() < 120:
+            failed.append(analyst)
+            continue
         try:
             result = runner(ticker, day, analyst)
             return result, [analyst], None
@@ -79,6 +95,7 @@ def run_comparison(
     retrospective: bool = False,
     lite_runner=None,
     deep_runner=None,
+    deep_timeout: int = 1800,
 ) -> dict:
     settings = settings or Settings()
     target_day = day or date.today().isoformat()
@@ -99,11 +116,19 @@ def run_comparison(
         def lite_runner(symbol, when, cfg):
             return run_lite_agent(symbol, when, cfg)
 
+    budget = {"remaining": float(max(120, int(deep_timeout)))}
     if deep_runner is None:
+        import time
+
         from .agents.bridge import run_tradingagents
 
         def deep_runner(symbol, when, names):
-            return run_tradingagents(symbol, when, names, save=True)
+            timeout = max(60, int(budget["remaining"]))
+            started = time.monotonic()
+            try:
+                return run_tradingagents(symbol, when, names, save=True, timeout=timeout)
+            finally:
+                budget["remaining"] -= time.monotonic() - started
 
     lite: dict | None = None
     lite_error = None
@@ -112,7 +137,11 @@ def run_comparison(
     except Exception as exc:
         lite_error = _sanitize(exc)
     deep, deep_analysts, deep_error = _run_deep(
-        ticker, target_day, analyst_list, deep_runner
+        ticker,
+        target_day,
+        analyst_list,
+        deep_runner,
+        budget=budget if deep_runner is not None else None,
     )
 
     if lite:
