@@ -947,6 +947,129 @@ def asian_range_reversal(
     )
 
 
+def session_hold(
+    df: pd.DataFrame,
+    *,
+    session: str = "LDN",
+    direction: int = 1,
+    atr_k: float = 1.5,
+    atr_window: int = 14,
+) -> StrategyResult:
+    """Entrada en la apertura de sesión, salida al cierre de la sesión.
+
+    - `session`: `LDN` (Londres, 08:00 Europe/London) o `NY` (13:30
+      Europe/London, con DST).
+    - `direction`: `1` en el sentido del retorno de la sesión anterior,
+      `-1` en el contrario.
+    - Stop: ATR(`atr_window`) × `atr_k`. Una sola operación por sesión.
+    """
+    close = df["close"].astype(float)
+    atr_s = atr(df)
+    index = pd.DatetimeIndex(df.index)
+    if index.tz is None:
+        index = index.tz_localize("UTC")
+    london = index.tz_convert("Europe/London")
+
+    open_hour = 8 if str(session).upper() == "LDN" else 13
+    close_hour = 16 if str(session).upper() == "LDN" else 20
+
+    target = pd.Series(0.0, index=df.index)
+    days = {}
+    for stamp, local in zip(index, london):
+        days.setdefault(local.date(), []).append((stamp, local))
+
+    for day, bars in days.items():
+        day_bars = [item for item in bars if open_hour <= item[1].hour < close_hour]
+        if not day_bars:
+            continue
+        # retorno de la sesión anterior (mismo horario, día previo)
+        previous = None
+        for other_day, other_bars in days.items():
+            if other_day >= day:
+                continue
+            other_session = [
+                item for item in other_bars if open_hour <= item[1].hour < close_hour
+            ]
+            if other_session:
+                previous = other_session
+        if previous is None:
+            continue
+        first_open = float(df["open"].get(day_bars[0][0], close.iloc[0]))
+        prev_close = float(close.get(previous[-1][0], first_open))
+        if not prev_close:
+            continue
+        move = (first_open / prev_close) - 1.0
+        side = int(direction) if move >= 0 else -int(direction)
+        atr_value = float(atr_s.get(day_bars[0][0], 0.0))
+        if atr_value <= 0:
+            continue
+        for stamp, _local in day_bars:
+            target.loc[stamp] = float(side)
+    return StrategyResult(
+        "session_hold",
+        target,
+        {
+            "session": session,
+            "direction": int(direction),
+            "atr_k": float(atr_k),
+            "atr_window": int(atr_window),
+        },
+    )
+
+
+def fix_flow(
+    df: pd.DataFrame,
+    *,
+    window_min: int = 60,
+    side: str = "long_usd",
+    fix: str = "ecb",
+    vol_filter: float | None = None,
+    vol_window: int = 60,
+) -> StrategyResult:
+    """Flujo del fix: largo USD (corto EURUSD/GBPUSD, largo USDJPY).
+
+    - Ventana: `window_min` minutos antes del fix (ECB 13:15 UTC o London
+      16:00 Europe/London, con DST) hasta el fix. Después, plano.
+    - `vol_filter`: si se indica, no opera cuando la volatilidad horaria está
+      por encima de supercentil `vol_filter` de `vol_window` barras.
+    """
+    index = pd.DatetimeIndex(df.index)
+    if index.tz is None:
+        index = index.tz_localize("UTC")
+    london = index.tz_convert("Europe/London")
+    close = df["close"].astype(float)
+    ret = close.pct_change()
+    vol = ret.rolling(int(vol_window), min_periods=20).std(ddof=0)
+    threshold = None
+    if vol_filter is not None:
+        threshold = float(vol.quantile(float(vol_filter)))
+
+    fix_utc_hour = 13 if str(fix).lower() == "ecb" else 16
+    target = pd.Series(0.0, index=df.index)
+    for stamp, local in zip(index, london):
+        minutes = local.hour * 60 + local.minute
+        fix_minute = fix_utc_hour * 60 + 15 if str(fix).lower() == "ecb" else 16 * 60
+        offset = fix_minute - minutes
+        if offset < 0 or offset > int(window_min):
+            continue
+        if threshold is not None:
+            value = float(vol.get(stamp, 0.0))
+            if value > threshold:
+                continue
+        target.loc[stamp] = 1.0 if str(side) == "long_usd" else -1.0
+    return StrategyResult(
+        "fix_flow",
+        target,
+        {
+            "window_min": int(window_min),
+            "side": side,
+            "fix": fix,
+            "vol_filter": vol_filter,
+            "vol_window": int(vol_window),
+        },
+    )
+
+
 STRATEGIES = {
     "orb": opening_range_breakout,
     "pullback": trend_pullback,
@@ -958,6 +1081,8 @@ STRATEGIES = {
     "london_pullback": london_pullback,
     "session_trend": session_trend,
     "tokyo_breakout": tokyo_breakout,
+    "session_hold": session_hold,
+    "fix_flow": fix_flow,
 }
 
 

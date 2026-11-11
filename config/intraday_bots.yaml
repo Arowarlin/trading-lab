@@ -133,3 +133,47 @@ bots:
     params: {session: "Tokyo"}
     grid: {range_bars: [4, 8], buffer_atr: [0.1, 0.25], max_hold: [4, 12]}
     description: "Ruptura tras la sesión de Tokio sobre USDJPY."
+
+  # --- Familias de sesión (Etapa 3h): todas enabled:false ---
+  - id: eurusd-session-hold
+    type: deterministic
+    profile: intraday_fx
+    cluster: intraday_fx
+    account: ftmo_demo
+    strategy: session_hold
+    family: session_hold
+    universe: [EURUSD]
+    timeframe: M15
+    enabled: false
+    exposure: 0.25
+    params: {session: "LDN", direction: 1}
+    grid: {atr_k: [1.0, 1.5, 2.0]}
+    description: "Entrada en la apertura de Londres y salida al cierre de la sesión."
+  - id: usdjpy-session-hold-ny
+    type: deterministic
+    profile: intraday_fx
+    cluster: intraday_fx
+    account: ftmo_demo
+    strategy: session_hold
+    family: session_hold
+    universe: [USDJPY]
+    timeframe: M15
+    enabled: false
+    exposure: 0.25
+    params: {session: "NY", direction: 1}
+    grid: {atr_k: [1.0, 1.5, 2.0]}
+    description: "Entrada en la apertura de Nueva York y salida al cierre de la sesión."
+  - id: eurusd-fix-flow
+    type: deterministic
+    profile: intraday_fx
+    cluster: intraday_fx
+    account: ftmo_demo
+    strategy: fix_flow
+    family: fix_flow
+    universe: [EURUSD]
+    timeframe: M15
+    enabled: false
+    exposure: 0.25
+    params: {window_min: 60, side: "short_usd"}
+    grid: {window_min: [30, 60, 90]}
+    description: "Flujo del fix del BCE: corto EURUSD en la ventana previa al fix."

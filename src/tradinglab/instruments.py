@@ -165,6 +165,17 @@ class Instrument:
             base += f" spread=Sin datos ({self.spread_note})"
         return base
 
+    def tick_ratio(self, price: float | None = None, daily_vol: float | None = None) -> float | None:
+        """`tick_size / (precio × volatilidad diaria)`: cuánto pesa un tick.
+
+        Sin precio o sin volatilidad no se puede calcular: `None` (sin datos).
+        """
+        px = float(price or 0.0)
+        vol = float(daily_vol or 0.0)
+        if px <= 0 or vol <= 0:
+            return None
+        return float(self.tick_size) / (px * vol)
+
     def catalog_row(self) -> dict:
         row = asdict(self)
         row["pip_size"] = self.pip_size() if self.is_fx else None
