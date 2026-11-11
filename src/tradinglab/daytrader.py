@@ -23,6 +23,7 @@ from zoneinfo import ZoneInfo
 from .accounts import load_accounts
 from .config import DEFAULT_DB, Settings
 from .db import utcnow
+from .equities_lane import LaneError, load_lane
 from .operator import OperatorService
 
 SYMBOL_RE = re.compile(r"^[A-Z0-9.\-=^]{1,12}$")
@@ -417,6 +418,16 @@ def plan_orders(
         OperatorService(settings, DEFAULT_DB) if orders else None
     )
     results: list[dict] = []
+    # El carril de acciones tiene un ticker fijo (decisión del operador). Una
+    # orden de otro símbolo se rechaza antes de tocar los guards.
+    try:
+        lane = load_lane()
+        lane_ticker = lane.ticker
+        lane_error = ""
+    except LaneError as exc:
+        lane = None
+        lane_ticker = None
+        lane_error = str(exc)
     for order in orders:
         external = verdicts.get(order.fingerprint, "BLOCK")
         plan_entry = None
@@ -442,6 +453,21 @@ def plan_orders(
             "reason": "",
             "order": order.raw,
         }
+        if lane is None:
+            item["guard_verdict"] = "BLOCK"
+            item["action"] = "rechazada"
+            item["reason"] = f"sin carril de acciones: {lane_error}"
+            results.append(item)
+            continue
+        if not lane.allows(order.symbol):
+            item["guard_verdict"] = "BLOCK"
+            item["action"] = "rechazada"
+            item["reason"] = (
+                f"ticker fuera del carril de acciones ({lane_ticker}): {order.symbol}"
+            )
+            results.append(item)
+            continue
+
         if external != "PASS":
             if not risk_path.exists():
                 item["reason"] = (
@@ -505,6 +531,7 @@ def plan_orders(
         "account": settings.daytrader.account,
         "paper": bool(paper),
         "can_execute": can_execute,
+        "lane_ticker": lane_ticker,
         "orders": results,
     }
 

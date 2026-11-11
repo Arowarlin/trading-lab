@@ -270,6 +270,8 @@ directo con `scripts/create_console_shortcut.ps1`.
   restic vs Kopia y copia externa cifrada.
 - [`docs/dependencias.md`](docs/dependencias.md): versiones verificadas y
   política de dependencias.
+- [`docs/equities_lane.md`](docs/equities_lane.md): carril de acciones (ORB) en
+  paper, ticker fijo y guard de símbolo.
 
 La Sala pixel es arte propio (HTML/CSS/SVG). No se copió código ni arte de los
 repos auditados; si en el futuro se usan assets MIT, se conservará su licencia.

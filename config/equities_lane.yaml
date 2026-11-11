@@ -1,0 +1,24 @@
+# Carril de acciones (ORB) del laboratorio, en paper.
+#
+# El ticker NO lo elige el scan: es decisión del operador y vive aquí para que
+# el laboratorio, el pipeline externo y las skills usen el mismo símbolo.
+#
+# Decisión 2026-11-11: **AAPL** (el mismo que usa el pipeline externo en
+# `trader/entry.json` y el 13F de Berkshire que da los pesos de referencia).
+#
+# `only_ticker: true` hace que el laboratorio rechace cualquier orden que no
+# sea de este ticker: el carril es de un solo símbolo.
+version: 1
+ticker: AAPL
+setup: orb
+interval: 5m
+opening_range_minutes: 15
+account: alpaca_paper
+only_ticker: true
+# Ventana y límites: los del pipeline externo (config.json del trader).
+entry_start: "09:30"
+entry_end: "15:30"
+flat_by: "15:55"
+max_trades_per_day: 3
+max_loss_per_trade_usd: 50
+notes: "Carril de acciones en paper sobre Alpaca. Sin ordenes hasta que la senal externa sea PASS y los guards del lab lo permitan."

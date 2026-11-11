@@ -29,7 +29,11 @@ execution:
 daytrader:
   dir: "C:/Users/PC/Proyectos/trading/trader"
   account: alpaca_paper
-  enabled: false
+  # Activado por decision del operador (2026-11-11): el carril de acciones
+  # (ORB) queda habilitado en paper. Sigue necesitando --execute, el
+  # veredicto PASS del pipeline externo y los guards del laboratorio, y solo
+  # acepta el ticker de config/equities_lane.yaml (AAPL).
+  enabled: true
 
 data:
   provider: yahoo             # yahoo | alpaca
