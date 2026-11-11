@@ -4254,12 +4254,13 @@ function renderJournal() {
   );
 
   const trades = payload.trades || [];
-  $("#journal-trades-meta").textContent = `${num(payload.total_trades, 0)} operaciones · mostrando ${num(trades.length, 0)}`;
+  $("#journal-trades-meta").textContent = `${num(payload.total_trades, 0)} operaciones · ${num(payload.manual_trades, 0)} manuales · mostrando ${num(trades.length, 0)}`;
   $("#journal-trades").innerHTML = grid(
-    [{ label: "Salida" }, { label: "Bot" }, { label: "Cuenta" }, { label: "Perfil" }, { label: "Activo" }, { label: "Qty", num: true }, { label: "Entrada", num: true }, { label: "Salida", num: true }, { label: "PnL", num: true }, { label: "Ret.", num: true }, { label: "Riesgo", num: true }, { label: "R", num: true }, { label: "Horas", num: true }],
+    [{ label: "Salida" }, { label: "Bot" }, { label: "Modo" }, { label: "Cuenta" }, { label: "Perfil" }, { label: "Activo" }, { label: "Qty", num: true }, { label: "Entrada", num: true }, { label: "Salida", num: true }, { label: "PnL", num: true }, { label: "Ret.", num: true }, { label: "Riesgo", num: true }, { label: "R", num: true }, { label: "Horas", num: true }],
     trades.map((trade) => [
       esc(dateTime(trade.exit_ts)),
       esc(trade.bot),
+      trade.manual ? '<span class="badge">manual</span>' : '<span class="badge ok">bot</span>',
       esc(trade.account || "sin datos"),
       esc(trade.profile || "sin datos"),
       `<b>${esc(trade.ticker)}</b>`,
