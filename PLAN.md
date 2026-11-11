@@ -1600,6 +1600,13 @@ etapa.
   passed; suite completa **850 passed, 1 skipped**; `lab doctor` OK con los
   WARN conocidos; `lab f13 config-check` OK (`7fe0f5a6.`). Sin push.
 
+
+- **Correcci?n (2026-11-11):** el guard de riesgo abierto multiplicaba los
+  lotes de **todos** los s?mbolos por el `$/lote` del s?mbolo propuesto
+  (bloqueaba el oro por los 2,04 lotes de EURUSD: 13.985 USD de riesgo
+  inexistente). `PropGuard.evaluate` acepta `open_risk_usd` y `lab mt5 run`
+  lo calcula por posici?n con el `$/lote` de cada instrumento; dos tests
+  nuevos en `tests/test_prop.py`.
 ### Etapa 4 — Presupuesto de riesgo neto por activo
 
 - [x] **`config/risk_budget.yaml`**

@@ -118,6 +118,7 @@ class PropGuard:
         *,
         proposed_lots: float = 0.0,
         risk_per_lot: float = 0.0,
+        open_risk_usd: float | None = None,
         closing: bool = False,
         new_position: bool = True,
         blocked_by_calendar: bool = False,
@@ -240,7 +241,12 @@ class PropGuard:
                 )
 
         if rules.max_open_risk_pct is not None and risk_per_lot > 0:
-            open_risk = (state.open_lots + proposed_lots) * risk_per_lot
+            if open_risk_usd is not None:
+                # Riesgo real por posición (cada símbolo tiene su $/lote); no se
+                # multiplican los lotes de otro símbolo por este riesgo/lote.
+                open_risk = max(0.0, float(open_risk_usd)) + proposed_risk
+            else:
+                open_risk = (state.open_lots + proposed_lots) * risk_per_lot
             cap = rules.account_size * rules.max_open_risk_pct
             if open_risk > cap:
                 return report(

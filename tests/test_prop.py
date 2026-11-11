@@ -126,6 +126,37 @@ def test_max_lots_blocks():
     assert "lotes" in report.reason
 
 
+def test_el_riesgo_de_otro_simbolo_no_se_multiplica_por_este_lote():
+    """2,04 lotes de EURUSD no valen el riesgo/lote del oro (bug de agregación)."""
+    rules = ftmo(100_000, max_open_risk_pct=0.02)  # tope 2 % -> 2.000 USD
+    guard = PropGuard(rules)
+    st = state(100_000, open_lots=2.04)
+    # sin open_risk_usd: (2,04 + 0,07) x 6.628 = 13.985 -> bloquea
+    blocked = guard.evaluate(st, proposed_lots=0.07, risk_per_lot=6_628.14)
+    assert not blocked.allowed
+    assert "riesgo abierto" in blocked.reason
+    # con el riesgo real del símbolo (500 EURUSD + 464 oro) -> permite
+    allowed = guard.evaluate(
+        st,
+        proposed_lots=0.07,
+        risk_per_lot=6_628.14,
+        open_risk_usd=500.0,
+    )
+    assert allowed.allowed
+
+
+def test_el_riesgo_abierto_en_usd_respeta_el_tope():
+    rules = ftmo(100_000, max_open_risk_pct=0.02)
+    report = PropGuard(rules).evaluate(
+        state(100_000, open_lots=2.04),
+        proposed_lots=0.07,
+        risk_per_lot=6_628.14,
+        open_risk_usd=1_800.0,
+    )
+    assert not report.allowed
+    assert "riesgo abierto" in report.reason
+
+
 def test_consistency_is_a_warning_not_a_block():
     rules = ftmo(100_000, consistency_pct=0.5)
     st = state(105_000, closed_pnl_today=6_000, total_profit=10_000)

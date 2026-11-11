@@ -6032,7 +6032,36 @@ def mt5_run(
         base_report = guard.evaluate(state)
         budget = min(rules.account_size * risk_pct, max(base_report.remaining_usd * 0.5, 0.0))
         lots = inst.lots_for_risk(budget, stop_distance, quote_rate=qr, cap_lots=rules.max_lots)
-        report = guard.evaluate(state, proposed_lots=lots, risk_per_lot=risk_per_lot)
+        # Riesgo abierto de TODAS las posiciones, cada una con su $/lote.
+        # Sin esto, los lotes de otro símbolo se multiplicaban por este riesgo/lote.
+        open_risk_usd = 0.0
+        for position in broker.positions():
+            volume = float(position["volume"])
+            stop_price = float(position.get("sl") or 0.0)
+            distance = (
+                abs(float(position["price_open"]) - stop_price)
+                if stop_price > 0
+                else 0.0
+            )
+            try:
+                other = broker.instrument(position["symbol"])
+                other_rate = _quote_rate(broker, other)
+            except Exception:
+                # Sin instrumento/cambio: se usa el riesgo/lote de la orden actual.
+                open_risk_usd += volume * max(risk_per_lot, 0.0)
+                continue
+            if distance > 0:
+                open_risk_usd += volume * other.risk_per_lot(
+                    distance, quote_rate=other_rate
+                )
+            else:
+                open_risk_usd += volume * max(risk_per_lot, 0.0)
+        report = guard.evaluate(
+            state,
+            proposed_lots=lots,
+            risk_per_lot=risk_per_lot,
+            open_risk_usd=open_risk_usd,
+        )
 
         console.print(
             f"Stop: {stop_distance:.5f} · riesgo/lote: {risk_per_lot:,.2f} USD · "
