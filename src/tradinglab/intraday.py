@@ -49,13 +49,26 @@ INTRADAY_GRIDS = {
         "force_exit": ["15:45"],
         "max_trades_per_day": [1],
     },
+    # Familias de sesión (Etapa 3h). Rejillas acotadas a propósito: cada
+    # variante cuenta como un intento en el DSR y en el presupuesto semanal.
+    "session_hold": {
+        "session": ["LDN", "NY"],
+        "direction": [1, -1],
+        "atr_k": [1.0, 1.5, 2.0],
+    },
+    "fix_flow": {
+        "window_min": [30, 60],
+        "side": ["long_usd", "short_usd"],
+        "fix": ["ecb", "london"],
+        "vol_filter": [None, 0.9],
+    },
 }
 ASSET_FAMILIES = {
     "US100.CASH": ("orb_ny", "trend_intraday", "caja_ny"),
     "NASDAQ": ("orb_ny", "trend_intraday", "caja_ny"),
     "XAUUSD": ("asian_rev", "overlap_breakout"),
-    "EURUSD": ("range_reversal", "london_pullback"),
-    "USDJPY": ("session_trend", "tokyo_breakout"),
+    "EURUSD": ("range_reversal", "london_pullback", "session_hold", "fix_flow"),
+    "USDJPY": ("session_trend", "tokyo_breakout", "session_hold", "fix_flow"),
 }
 DEFAULT_HORIZONS = (22, 44, 120)
 COST_GRID_BPS = (0.0, 0.5, 1.0, 2.0, 3.0)
@@ -104,6 +117,14 @@ FAMILY_HYPOTHESES = {
         "Caja de apertura de Nueva York: tras el rango 09:15-09:35 NY, la "
         "ruptura con retroceso limitado al borde roto tiene ventaja si el stop "
         "está fuera del rango o a N×ATR."
+    ),
+    "session_hold": (
+        "Mantener la sesión: entrar en la apertura de Londres o de Nueva York y "
+        "salir al cierre de esa sesión, con stop de ATR."
+    ),
+    "fix_flow": (
+        "Flujo del fix: en la ventana previa al fix del BCE (13:15 hora de "
+        "Londres) el flujo comprador de USD tiene ventaja estructural."
     ),
 }
 
@@ -961,10 +982,15 @@ def session_hold(
       Europe/London, con DST).
     - `direction`: `1` en el sentido del retorno de la sesión anterior,
       `-1` en el contrario.
-    - Stop: ATR(`atr_window`) × `atr_k`. Una sola operación por sesión.
+    - Stop: ATR(`atr_window`) × `atr_k`, comprobado con el mínimo/máximo de la
+      vela que rompe el nivel. El motor de serie cierra en el cierre de esa
+      vela (no hay ejecución intrabarra), así que el resultado es conservador
+      respecto de un stop real-fill.
     """
     close = df["close"].astype(float)
-    atr_s = atr(df)
+    high = df["high"].astype(float)
+    low = df["low"].astype(float)
+    atr_s = atr(df, window=int(atr_window))
     index = pd.DatetimeIndex(df.index)
     if index.tz is None:
         index = index.tz_localize("UTC")
@@ -974,36 +1000,46 @@ def session_hold(
     close_hour = 16 if str(session).upper() == "LDN" else 20
 
     target = pd.Series(0.0, index=df.index)
-    days = {}
+    per_day: dict[object, list[tuple[pd.Timestamp, object]]] = {}
     for stamp, local in zip(index, london):
-        days.setdefault(local.date(), []).append((stamp, local))
+        per_day.setdefault(local.date(), []).append((stamp, local))
 
-    for day, bars in days.items():
-        day_bars = [item for item in bars if open_hour <= item[1].hour < close_hour]
-        if not day_bars:
+    days_with_session: list[tuple[object, list[tuple[pd.Timestamp, object]]]] = []
+    for day in sorted(per_day):
+        bars = [
+            item for item in per_day[day] if open_hour <= item[1].hour < close_hour
+        ]
+        if bars:
+            days_with_session.append((day, bars))
+
+    for position, (_day, day_bars) in enumerate(days_with_session):
+        if position == 0:
+            # Sin sesión previa no hay referencia de dirección.
             continue
-        # retorno de la sesión anterior (mismo horario, día previo)
-        previous = None
-        for other_day, other_bars in days.items():
-            if other_day >= day:
-                continue
-            other_session = [
-                item for item in other_bars if open_hour <= item[1].hour < close_hour
-            ]
-            if other_session:
-                previous = other_session
-        if previous is None:
-            continue
+        _prev_day, prev_bars = days_with_session[position - 1]
+        prev_close = float(close.get(prev_bars[-1][0], 0.0))
         first_open = float(df["open"].get(day_bars[0][0], close.iloc[0]))
-        prev_close = float(close.get(previous[-1][0], first_open))
-        if not prev_close:
+        if not prev_close or not first_open:
             continue
         move = (first_open / prev_close) - 1.0
         side = int(direction) if move >= 0 else -int(direction)
         atr_value = float(atr_s.get(day_bars[0][0], 0.0))
         if atr_value <= 0:
             continue
-        for stamp, _local in day_bars:
+        stop = first_open - side * float(atr_k) * atr_value
+        for idx, (stamp, _local) in enumerate(day_bars):
+            if idx > 0:
+                bar_low = float(low.get(stamp, np.nan))
+                bar_high = float(high.get(stamp, np.nan))
+                broken = (side > 0 and bar_low <= stop) or (
+                    side < 0 and bar_high >= stop
+                )
+                if broken:
+                    # La vela que rompe el stop se mantiene (pos = target[t-1])
+                    # y a partir de ahí la sesión queda plana.
+                    for rest, _ in day_bars[idx:]:
+                        target.loc[rest] = 0.0
+                    break
             target.loc[stamp] = float(side)
     return StrategyResult(
         "session_hold",
@@ -1028,8 +1064,9 @@ def fix_flow(
 ) -> StrategyResult:
     """Flujo del fix: largo USD (corto EURUSD/GBPUSD, largo USDJPY).
 
-    - Ventana: `window_min` minutos antes del fix (ECB 13:15 UTC o London
-      16:00 Europe/London, con DST) hasta el fix. Después, plano.
+    - Ventana: `window_min` minutos antes del fix (ECB 13:15 Europe/London,
+      equivalente a 14:15 CET, o el fix de Londres a las 16:00 Europe/London)
+      hasta el fix. Después, plano.
     - `vol_filter`: si se indica, no opera cuando la volatilidad horaria está
       por encima de supercentil `vol_filter` de `vol_window` barras.
     """

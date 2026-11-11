@@ -14,6 +14,7 @@ from tradinglab.intraday import (
     break_even_cost_bps,
     cache_metadata,
     families_for_symbol,
+    fix_flow,
     load_bars,
     london_pullback,
     opening_range_breakout,
@@ -23,6 +24,7 @@ from tradinglab.intraday import (
     render_markdown,
     run_intraday,
     save_bars,
+    session_hold,
     session_trend,
     tokyo_breakout,
     trend_intraday,
@@ -206,8 +208,18 @@ def test_familias_por_activo():
         "caja_ny",
     )
     assert families_for_symbol("XAUUSD") == ("asian_rev", "overlap_breakout")
-    assert families_for_symbol("EURUSD") == ("range_reversal", "london_pullback")
-    assert families_for_symbol("USDJPY") == ("session_trend", "tokyo_breakout")
+    assert families_for_symbol("EURUSD") == (
+        "range_reversal",
+        "london_pullback",
+        "session_hold",
+        "fix_flow",
+    )
+    assert families_for_symbol("USDJPY") == (
+        "session_trend",
+        "tokyo_breakout",
+        "session_hold",
+        "fix_flow",
+    )
 
 
 def test_nuevas_familias_generan_targets():
@@ -220,10 +232,28 @@ def test_nuevas_familias_generan_targets():
         london_pullback,
         session_trend,
         tokyo_breakout,
+        session_hold,
+        fix_flow,
     ):
         result = fn(df)
         assert len(result.target) == len(df)
         assert result.target.abs().max() <= 1.0
+
+
+def test_session_hold_el_stop_atreve_una_sesion():
+    """Con un stop muy corto la posición se cierra antes del cierre de sesión."""
+    df = _bars(days=45)
+    abierto = session_hold(df, session="LDN", direction=1, atr_k=0.01).target
+    ancho = session_hold(df, session="LDN", direction=1, atr_k=50.0).target
+    assert float(abierto.abs().sum()) < float(ancho.abs().sum())
+    assert float(ancho.abs().sum()) > 0.0
+
+
+def test_fix_flow_solo_opera_en_la_ventana_del_fix():
+    df = _bars(days=45)
+    target = fix_flow(df, window_min=60, side="long_usd", fix="ecb").target
+    assert float(target.abs().sum()) > 0.0
+    assert set(target.unique().tolist()) <= {-1.0, 0.0, 1.0}
 
 
 def test_write_guarda_informe_por_activo(tmp_path):
@@ -271,7 +301,7 @@ def test_run_intraday_registra_las_variantes_probadas(tmp_path):
     df = _bars(days=30)
     report = run_intraday(df, paths=10, db_path=db)
     assert report["trials_recorded"] == len(report["outcomes"])
-    rows = list_trials(db)
+    rows = list_trials(db, limit=500)
     assert len(rows) == report["trials_recorded"]
     assert {row["outcome"] for row in rows} <= {"passed", "failed"}
     assert all(row["reason"] for row in rows if row["outcome"] == "failed")
