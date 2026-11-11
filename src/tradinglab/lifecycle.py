@@ -251,7 +251,7 @@ def report_bot(
             else None
         ),
     )
-    trades = [trade for trade in trades if trade.bot == bot]
+    trades = [trade for trade in trades if trade.bot == bot and not trade.manual]
     summary = summarize(trades, load_accounts())
     from .f13 import execution_metrics
 

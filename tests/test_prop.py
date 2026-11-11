@@ -248,3 +248,39 @@ def test_monte_carlo_is_deterministic():
     b = monte_carlo(rules, rets, n_paths=300, horizon=60, seed=42)
     assert a["pass_rate"] == b["pass_rate"]
     assert a["breach_rate"] == b["breach_rate"]
+
+def test_riesgo_abierto_suma_cada_simbolo_con_su_propio_lote():
+    """EURUSD + XAUUSD + US100 abiertos: se suma el riesgo real de cada uno.
+
+    $/lote al stop: EURUSD 250, XAUUSD 6.628,14, US100.cash 609,97.
+    """
+    rules = ftmo(100_000, max_open_risk_pct=0.02)  # tope 2 % -> 2.000 USD
+    guard = PropGuard(rules)
+    positions = [
+        {"symbol": "EURUSD", "volume": 1.0, "risk_per_lot": 250.0},
+        {"symbol": "XAUUSD", "volume": 0.05, "risk_per_lot": 6_628.14},
+        {"symbol": "US100.cash", "volume": 0.5, "risk_per_lot": 609.97},
+    ]
+    open_risk = sum(p["volume"] * p["risk_per_lot"] for p in positions)
+    assert open_risk == pytest.approx(886.39, abs=0.02)
+    state_ = state(100_000, open_lots=1.55)
+    # una propuesta peque?a de oro cabe: no se bloquea por riesgo inexistente
+    small = guard.evaluate(
+        state_,
+        proposed_lots=0.02,
+        risk_per_lot=6_628.14,
+        open_risk_usd=open_risk,
+    )
+    assert small.allowed
+    # pero el riesgo real manda: 0,20 lotes de oro se pasa del 2 %
+    big = guard.evaluate(
+        state_,
+        proposed_lots=0.20,
+        risk_per_lot=6_628.14,
+        open_risk_usd=open_risk,
+    )
+    assert not big.allowed and "riesgo abierto" in big.reason
+    # sin open_risk_usd (f?rmula vieja) tambi?n bloquear?a la peque?a
+    old = guard.evaluate(state_, proposed_lots=0.02, risk_per_lot=6_628.14)
+    assert not old.allowed
+

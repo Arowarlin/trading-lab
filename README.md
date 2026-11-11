@@ -272,6 +272,8 @@ directo con `scripts/create_console_shortcut.ps1`.
   política de dependencias.
 - [`docs/equities_lane.md`](docs/equities_lane.md): carril de acciones (ORB) en
   paper, ticker fijo y guard de símbolo.
+- [`docs/estado.md`](docs/estado.md): procesos en marcha, muestra que les falta
+  y la lista "no construir hasta".
 
 La Sala pixel es arte propio (HTML/CSS/SVG). No se copió código ni arte de los
 repos auditados; si en el futuro se usan assets MIT, se conservará su licencia.

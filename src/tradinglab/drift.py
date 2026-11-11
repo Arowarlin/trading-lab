@@ -145,7 +145,10 @@ def build_drift(
         },
     )
     by_bot: dict[str, list] = {}
+    manual = [trade for trade in trades if trade.manual]
     for trade in trades:
+        if trade.manual:
+            continue
         by_bot.setdefault(trade.bot, []).append(trade)
     criteria = load_criteria()
     max_p50 = float(criteria.get("max_slippage_bps_p50", 10.0))
@@ -270,6 +273,7 @@ def build_drift(
         "bootstrap_paths": BOOTSTRAP_PATHS,
         "seed": SEED,
         "backtest_slippage_bps": backtest_bps,
+        "manual_excluded": len(manual),
         "summary": counts,
         "bots": rows,
     }

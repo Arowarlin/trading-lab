@@ -38,10 +38,11 @@ def _fill(
     commission: float = 0.0,
     risk_usd: float | None = None,
     stop_price: float | None = None,
+    magic: int | None = None,
 ) -> int:
     cursor = con.execute(
         "INSERT INTO orders(ts, ticker, side, qty, order_type, status, bot, reason, "
-        "risk_usd, stop_price) VALUES(?,?,?,?,?,?,?,?,?,?)",
+        "risk_usd, stop_price, magic) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
         (
             ts,
             ticker,
@@ -53,6 +54,7 @@ def _fill(
             "test",
             risk_usd,
             stop_price,
+            magic,
         ),
     )
     order_id = int(cursor.lastrowid)
@@ -474,3 +476,49 @@ def test_api_journal_responde(tmp_path: Path, monkeypatch) -> None:
         server.shutdown()
         server.server_close()
         thread.join(timeout=2)
+
+def test_magic_fuera_del_laboratorio_es_manual(tmp_path):
+    """ftmo_demo + magic que no es del lab -> manual; el bot del forward, no."""
+    db = _db(tmp_path)
+    with connect(db) as con:
+        for symbol in ("EURUSD", "XAUUSD", "US100.cash"):
+            con.execute(
+                "INSERT INTO asset_aliases(canonical, broker_symbol, asset_class, "
+                "profile, discovered_at, source) VALUES(?,?,?,?,?,?)",
+                (symbol, symbol, "cfd", "intraday_fx", "2026-11-11", "test"),
+            )
+        # forward (magic del laboratorio)
+        _fill(con, bot="forward:eurusd-london-pullback-forward", ticker="EURUSD",
+              side="buy", qty=0.1, price=1.10, ts="2026-11-10T10:00:00+00:00", magic=20261151)
+        _fill(con, bot="forward:eurusd-london-pullback-forward", ticker="EURUSD",
+              side="sell", qty=0.1, price=1.11, ts="2026-11-10T12:00:00+00:00", magic=20261151)
+        # manual con el magic por defecto del CLI (largo: el diario solo
+        # reconstruye largos; los cortos quedan como lotes abiertos)
+        _fill(con, bot="forex:trend-ls", ticker="XAUUSD", side="buy",
+              qty=0.1, price=3990, ts="2026-11-11T10:00:00+00:00", magic=20261105)
+        _fill(con, bot="forex:trend-ls", ticker="XAUUSD", side="sell",
+              qty=0.1, price=4000, ts="2026-11-11T12:00:00+00:00", magic=20261105)
+        # legacy (sin magic) en un s?mbolo MT5 y bot que no es del lab
+        _fill(con, bot="forex:trend-ls", ticker="EURUSD", side="buy",
+              qty=0.1, price=1.09, ts="2026-11-11T13:00:00+00:00")
+        _fill(con, bot="forex:trend-ls", ticker="EURUSD", side="sell",
+              qty=0.1, price=1.10, ts="2026-11-11T14:00:00+00:00")
+        # papel (SPY) sin magic: no es de la cuenta MT5
+        _fill(con, bot="SPY:trend", ticker="SPY", side="buy", qty=1,
+              price=100, ts="2026-11-10T15:00:00+00:00")
+        _fill(con, bot="SPY:trend", ticker="SPY", side="sell", qty=1,
+              price=101, ts="2026-11-10T16:00:00+00:00")
+    trades, _ = load_closed_trades(db, bots={})
+    forward = next(t for t in trades if t.bot.startswith("forward:"))
+    assert forward.manual is False and forward.magic == 20261151
+    manual = next(t for t in trades if t.magic == 20261105)
+    assert manual.manual is True and manual.account == "ftmo_demo"
+    legacy = next(
+        t for t in trades if t.magic is None and t.bot == "forex:trend-ls"
+    )
+    assert legacy.manual is True and legacy.account == "ftmo_demo"
+    spy = next(t for t in trades if t.ticker == "SPY")
+    assert spy.manual is False and spy.account is None
+    payload = build_journal(db)
+    assert payload["manual_trades"] == 2
+

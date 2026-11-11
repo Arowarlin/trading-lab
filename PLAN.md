@@ -1652,6 +1652,41 @@ etapa.
 - Evidencia: `ruff` limpio; suite completa pendiente; `lab doctor` OK; `lab
   f13 config-check` OK (`7fe0f5a6.`). Sin push.
 
+### Etapa 3p - Cierre: operaciones manuales, estado y backup (2026-11-11)
+
+- [x] **Diario: operaciones manuales**
+  - `orders.magic` (columna aditiva) se guarda al enviar en MT5; el Diario
+    marca `manual` toda operación de la cuenta MT5 cuyo magic no está en
+    `config/intraday_forward.yaml` (o, en filas anteriores a la columna, cuyo
+    bot no es del laboratorio y el símbolo es del universo MT5).
+  - La vista Diario muestra la columna **Modo** (`bot`/`manual`) y el resumen
+    cuenta las manuales; `lab journal` añade la fila.
+  - `drift.py` excluye las manuales del cálculo de deriva (y publica
+    `manual_excluded`); `lifecycle` no las cuenta para la incubación.
+  - **Health y guardián no las excluyen**: la equity real es la que es.
+- [x] **Riesgo abierto con tres símbolos**
+  - Test en `tests/test_prop.py`: EURUSD 1,0 lote ($250 al stop) + XAUUSD 0,05
+    ($331) + US100.cash 0,5 ($305) abiertos; una propuesta de 0,02 lotes de oro
+    pasa (886 + 132 < 2.000) y una de 0,20 se bloquea (886 + 1.326 > 2.000).
+    La fórmula vieja (lotes totales × un solo `$/lote`) habría bloqueado la
+    pequeña.
+- [x] **`docs/estado.md`**
+  - Tabla de procesos en marcha (F13, Agents, LLMCompare, DeepCompare,
+    IntradayForward, Drill, Guardian): qué mide, desde cuándo, cuándo tiene
+    muestra y qué comando lo revisa.
+  - Lista **"no construir hasta"**: guardián 5/5 → CLOSE; forward US100 60 días
+    → decisión de challenge; decisiones n≥30 → lecciones; 30 operaciones
+    cerradas → MFE/MAE y replay.
+- [x] **Backup con restore test**
+  - `scripts/backup.ps1` ya restaura el zip en una carpeta temporal
+    (`restore_test.ps1`) y verifica archivos mínimos, ausencia de `.env`,
+    secretos en claro y `PRAGMA integrity_check`.
+  - Ejecutado real: zip nuevo en `F:\TradingLabBackups` y restore test en PASS.
+- [x] **Cierre**
+  - Suite completa **861 passed, 1 skipped**; `ruff` limpio; `lab doctor` OK;
+    `lab f13 config-check` OK (`7fe0f5a6.`).
+  - Push **no** ejecutado: queda para `/push` con confirmación por Telegram.
+
 ### Etapa 4 — Presupuesto de riesgo neto por activo
 
 - [x] **`config/risk_budget.yaml`**

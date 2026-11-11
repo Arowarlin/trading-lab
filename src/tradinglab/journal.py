@@ -14,6 +14,8 @@ from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+import yaml
+
 from .accounts import (
     AccountDefinition,
     effective_limits,
@@ -58,6 +60,8 @@ class ClosedTrade:
     exit_fill_id: int
     risk_usd: float | None = None
     r_multiple: float | None = None
+    magic: int | None = None
+    manual: bool = False
 
 
 def _zone(name: str | None) -> ZoneInfo:
@@ -144,6 +148,30 @@ def _distribution(values: list[float]) -> dict:
     }
 
 
+def _lab_magics() -> set[int]:
+    """Magics de los bots del laboratorio (los del forward demo)."""
+    path = Path(__file__).resolve().parents[2] / "config" / "intraday_forward.yaml"
+    try:
+        raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except Exception:
+        return set()
+    out = set()
+    for bot in raw.get("bots") or []:
+        try:
+            out.add(int(bot.get("magic")))
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
+def _mt5_account() -> str | None:
+    """Cuenta del laboratorio en MT5 (la única con bróker mt5)."""
+    for account in load_accounts().values():
+        if str(account.broker) == "mt5" or str(account.platform) == "mt5":
+            return account.id
+    return None
+
+
 def _read_fills(db_path: str | Path) -> tuple[list[sqlite3.Row], dict]:
     path = Path(db_path)
     diagnostics: dict[str, Any] = {
@@ -173,17 +201,28 @@ def _read_fills(db_path: str | Path) -> tuple[list[sqlite3.Row], dict]:
         }
         risk_expr = "o.risk_usd" if "risk_usd" in order_columns else "NULL"
         stop_expr = "o.stop_price" if "stop_price" in order_columns else "NULL"
+        magic_expr = "o.magic" if "magic" in order_columns else "NULL"
         total = connection.execute("SELECT COUNT(*) AS n FROM fills").fetchone()["n"]
         rows = connection.execute(
             "SELECT f.id AS fill_id, f.ts AS fill_ts, f.qty AS fill_qty, "
             "f.price AS fill_price, f.commission AS commission, "
             "o.id AS order_id, o.ts AS order_ts, o.ticker, o.side, o.bot, "
-            f"{risk_expr} AS risk_usd, {stop_expr} AS stop_price "
+            f"{risk_expr} AS risk_usd, {stop_expr} AS stop_price, "
+            f"{magic_expr} AS magic "
             "FROM fills f JOIN orders o ON o.id = f.order_id "
             "ORDER BY f.ts, f.id"
         ).fetchall()
         diagnostics["fills_total"] = int(total)
         diagnostics["joined_fills"] = len(rows)
+        try:
+            aliases = connection.execute(
+                "SELECT broker_symbol FROM asset_aliases"
+            ).fetchall()
+            diagnostics["mt5_symbols"] = sorted(
+                {str(row["broker_symbol"]).upper() for row in aliases}
+            )
+        except sqlite3.Error:
+            diagnostics["mt5_symbols"] = []
         return rows, diagnostics
     except sqlite3.Error as exc:
         diagnostics["error"] = f"sin tabla fills/orders: {exc}"[:300]
@@ -202,6 +241,10 @@ def load_closed_trades(
     rows, diagnostics = _read_fills(db_path)
     zone = _zone(tz)
     bot_map = bots or {}
+    lab_bots = {spec.id for spec in load_bots()}
+    lab_magics = _lab_magics()
+    mt5_account = _mt5_account()
+    mt5_symbols = {str(item).upper() for item in diagnostics.get("mt5_symbols") or []}
     lots: dict[tuple[str, str], list[dict]] = {}
     trades: list[ClosedTrade] = []
 
@@ -281,10 +324,27 @@ def load_closed_trades(
             0.0, (exit_stamp - entry_stamp).total_seconds() / 3600.0
         )
         mapping = bot_map.get(bot_id) or {}
+        account = mapping.get("account")
+        magic = int(row["magic"]) if row["magic"] is not None else None
+        if account is None and (magic is not None or ticker in mt5_symbols):
+            account = mt5_account
+        # Manual: operación de la cuenta MT5 que no lleva un magic del
+        # laboratorio (o, antes de guardar el magic, un bot que no es del lab).
+        manual = bool(
+            account == mt5_account
+            and (
+                (magic is not None and magic not in lab_magics)
+                or (
+                    magic is None
+                    and bot_id not in lab_bots
+                    and not bot_id.startswith("forward:")
+                )
+            )
+        )
         trades.append(
             ClosedTrade(
                 bot=bot_id,
-                account=mapping.get("account"),
+                account=account,
                 profile=mapping.get("profile"),
                 ticker=ticker,
                 qty=round(consumed_qty, 8),
@@ -311,10 +371,13 @@ def load_closed_trades(
                     if has_risk and entry_risk > 0
                     else None
                 ),
+                magic=magic,
+                manual=manual,
             )
         )
 
     diagnostics["closed_trades"] = len(trades)
+    diagnostics["manual_trades"] = sum(1 for trade in trades if trade.manual)
     diagnostics["open_lots_qty"] = round(
         sum(float(lot["remaining"]) for queue in lots.values() for lot in queue), 8
     )
@@ -788,6 +851,7 @@ def build_journal(
             "tickers": sorted({trade.ticker for trade in all_trades}),
         },
         "diagnostics": diagnostics,
+        "manual_trades": sum(1 for trade in all_trades if trade.manual),
         "summary": summary,
         "groups": group_summaries(filtered, group_by, accounts),
         "by_account": group_summaries(filtered, "account", accounts),

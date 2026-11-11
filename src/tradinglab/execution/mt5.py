@@ -641,6 +641,7 @@ class MT5Broker:
         tick = self.tick(symbol)
         price = tick["ask"] if volume > 0 else tick["bid"]
         digits = spec["digits"]
+        effective_magic = self.magic if magic is None else int(magic)
 
         stop_distance = spec["stops_level"] * spec["point"]
         if sl is not None:
@@ -665,7 +666,7 @@ class MT5Broker:
             "type": mt5.ORDER_TYPE_BUY if volume > 0 else mt5.ORDER_TYPE_SELL,
             "price": price,
             "deviation": self.deviation,
-            "magic": self.magic if magic is None else int(magic),
+            "magic": effective_magic,
             "comment": comment[:31],
             "type_time": mt5.ORDER_TIME_GTC,
         }
@@ -726,6 +727,7 @@ class MT5Broker:
                     run_id=run_id,
                     risk_usd=risk_usd,
                     stop_price=stop_price,
+                    magic=effective_magic,
                 )
             if result.retcode != mt5.TRADE_RETCODE_INVALID_FILL:
                 raise MT5Error(
@@ -749,6 +751,7 @@ class MT5Broker:
         run_id,
         risk_usd=None,
         stop_price=None,
+        magic: int | None = None,
     ) -> dict:
         payload = {
             "ok": True,
@@ -763,6 +766,7 @@ class MT5Broker:
             "sl": sl,
             "tp": tp,
             "comment": result.comment,
+            "magic": magic,
         }
         if self.db_path:
             try:
@@ -783,6 +787,7 @@ class MT5Broker:
                             "run_id": run_id,
                             "risk_usd": None if risk_usd is None else float(risk_usd),
                             "stop_price": None if stop_price is None else float(stop_price),
+                            "magic": None if magic is None else int(magic),
                         },
                     )
             except Exception:

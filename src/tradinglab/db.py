@@ -49,6 +49,7 @@ CREATE TABLE IF NOT EXISTS orders (
     run_id INTEGER,
     risk_usd REAL,
     stop_price REAL,
+    magic INTEGER,
     prev_hash TEXT,
     row_hash TEXT
 );
@@ -731,7 +732,7 @@ def _migrate_equity(con: sqlite3.Connection) -> None:
 
 
 def _migrate_orders(con: sqlite3.Connection) -> None:
-    """Añade el riesgo inicial a órdenes antiguas sin recrear la tabla."""
+    """Añade el riesgo inicial, el stop y el magic a órdenes antiguas."""
     columns = [
         row["name"] for row in con.execute("PRAGMA table_info(orders)").fetchall()
     ]
@@ -739,6 +740,8 @@ def _migrate_orders(con: sqlite3.Connection) -> None:
         con.execute("ALTER TABLE orders ADD COLUMN risk_usd REAL")
     if columns and "stop_price" not in columns:
         con.execute("ALTER TABLE orders ADD COLUMN stop_price REAL")
+    if columns and "magic" not in columns:
+        con.execute("ALTER TABLE orders ADD COLUMN magic INTEGER")
 
 
 def _migrate_audit_chain(con: sqlite3.Connection) -> None:

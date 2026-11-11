@@ -1813,6 +1813,7 @@ def journal_cmd(
     t.add_column("Métrica", style="bold")
     t.add_column("Valor", justify="right")
     t.add_row("Operaciones", str(summary["n"]))
+    t.add_row("Manuales (fuera de drift/incubación)", str(payload.get("manual_trades", 0)))
     t.add_row("Neto", f"{summary['net_pnl']:,.2f}")
     t.add_row("Retorno", _fmt_pct(summary["total_return"]) if summary["total_return"] is not None else "sin datos")
     t.add_row("Win rate", _fmt_pct(summary["win_rate"]) if summary["win_rate"] is not None else "sin datos")
@@ -2046,7 +2047,8 @@ def drift_cmd(
     console.print(t)
     console.print(
         f"[dim]ok={summary.get('ok', 0)} · vigilar={summary.get('vigilar', 0)} · "
-        f"deriva={summary.get('deriva', 0)} · sin datos={summary.get('sin datos', 0)}[/dim]"
+        f"deriva={summary.get('deriva', 0)} · sin datos={summary.get('sin datos', 0)} · "
+        f"manuales excluidas={payload.get('manual_excluded', 0)}[/dim]"
     )
     for row in payload["bots"]:
         if row["status"] in {"vigilar", "deriva"}:
