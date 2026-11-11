@@ -997,6 +997,19 @@ etapa.
   sin cambios respecto al estado previo: el hash ya estaba `changed`
   (`6250d4c0…`) por el bloque `daytrader`; este bloque no toca archivos F13.
   Sin activar bots, sin órdenes y sin push.
+- Correccion 2026-11-11: hay **dos** terminales de MetaTrader 5 instalados y
+  la API de Python se conectaba al que no tiene el EA, asi que la puerta
+  backward se leia como 0 de 5 sesiones.
+  - `config/guardian.yaml` (nuevo, fuera del hash de F13) fija el terminal del
+    EA: `terminal_data_path()` lo busca primero y luego `lab.yaml`.
+  - Si el terminal configurado no tiene log, `guardian_sessions` busca el log
+    del EA en los demas terminales y avisa de ello; una ruta explicita no
+    dispara esa busqueda.
+  - `lab guardian export` vuelve a escribir el JSON directamente en
+    `MQL5/Files` del terminal correcto (antes caia en `data/guardian.json`).
+  - Estado real: **2 de 5 sesiones** (2026.11.10 y 2026.11.11), 0 disparos,
+    puerta CLOSE pendiente.
+
 - Estado operativo 2026-11-10 23:42 UTC: EA compilado con **0 errores, 0
   warnings**, JSON copiado a `MQL5/Files`, EA cargado en **EURUSD H1** del
   perfil y corriendo en **ALERT** (log `INIT` + `START` + `CONFIG`), cuenta
@@ -1398,6 +1411,39 @@ etapa.
 - [x] **`docs/paper_vs_live.md`**: huecos de paper/demo y cómo se cubren.
 - [x] **Tests**: embudo y disciplina sin datos, ticker ratio, familias de
   sesión y overnight.
+
+### Etapa 3k - Carril de acciones con ticker fijo y simulacro mensual (2026-11-11)
+
+- [x] **Decisiones del operador (2026-11-11)**
+  - Ticker del carril de acciones: **AAPL** (el del pipeline externo y el 13F
+    de Berkshire que da los pesos de referencia).
+  - `daytrader.enabled: true` en `config/lab.yaml`: el carril queda
+    habilitado en **paper**. Sigue necesitando `--execute`, el veredicto
+    `PASS` del pipeline externo y los guards del laboratorio.
+  - Tarea programada del simulacro: **registrada** (`TradingLab-Drill`,
+    domingo 03:00).
+- [x] **`config/equities_lane.yaml` y `equities_lane.py`** (nuevo)
+  - El ticker del carril vive en la configuracion: el scan no elige.
+  - `lab daytrader lane` muestra ticker, cuenta, si puede ejecutar, la entrada
+    pendiente, los hits del ticker en el watchlist y el peso de referencia.
+- [x] **Guard de simbolo en `daytrader.plan_orders`**
+  - Una orden que no sea del ticker del carril se rechaza con `BLOCK` antes
+    de los guards: el carril es de un solo simbolo.
+- [x] **Simulacion del simulacro (`lab drill --dry-run`)**
+  - Informa de ordenes abiertas, posiciones, kill-switch y canales **sin**
+    cancelar, cerrar, activar el kill-switch ni enviar avisos; deja rastro en
+    `console_actions` con actor `drill`.
+  - `scripts/drill_monthly.ps1` usa la simulacion por defecto; el simulacro
+    real (`-Confirm`) sigue exigiendo operador armado, y el estado "armado"
+    vive en memoria, asi que una tarea programada nunca lo ve.
+  - `scripts/register_drill_task.ps1` registra la tarea de simulacion.
+- [x] **Bug corregido**: el aviso de Telegram del simulacro nunca salia
+  (`from .telegram import send`, funcion que no existe). Ahora usa
+  `send_configured`.
+- Evidencia: `ruff` limpio; `pytest tests/test_drill.py
+  tests/test_equities_lane.py tests/test_daytrader.py -q` -> 20 passed; tarea
+  `TradingLab-Drill` en estado Ready (proxima: domingo 03:00); hash F13
+  `7fe0f5a6.` (sigue `changed` por el bloque `daytrader`).
 
 ### Etapa 4 — Presupuesto de riesgo neto por activo
 
