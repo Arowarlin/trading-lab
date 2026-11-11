@@ -957,8 +957,6 @@ etapa.
   **670 passed**; `ruff` limpio; F13 intacto
   (`54b420360f17c75d…`). Sin activar bots, sin órdenes reales y sin tocar
   `bots.yaml`, `lab.yaml`, `prop.yaml` ni `f13.yaml`.
-- Pendiente: validación explícita del operador para poner `enabled:true` y
-  ejecutar la primera orden demo a volumen mínimo.
 
 ### Etapa 3c — Guardián de equity en MetaTrader 5 (2026-11-10)
 
@@ -1242,6 +1240,17 @@ etapa.
 - [x] **Tests**: el factor baja con la volatilidad, tope de apalancamiento,
   truncado vs completo, rebalance semanal, exposición menor en el backtest y
   umbrales por perfil.
+- **Resultado medido (2026-11-11, `reports/research/vol_target/comparison.md`)**
+  - | Bot | Sharpe | MaxDD | P(pasar) FTMO |
+    |---|---:|---:|---:|
+    | `qqq-trend-f13` | 0,83 → 0,81 | −8,57 % → −3,82 % | 65,65 % → **10,65 %** |
+    | `trend-spy` | 0,75 → 0,71 | −24,15 % → −14,33 % | 59,60 % → 63,10 % |
+    | `meanrev-large` | 0,22 → 0,23 | −36,94 % → −11,04 % | 38,45 % → **12,70 %** |
+  - Resultado **mixto**: el objetivo de volatilidad recorta el|MaxDD (hasta la
+    mitad) pero hunde la probabilidad de pasar el challenge FTMO en dos de los
+    tres bots, porque la exposición se reduce justo en los tramos de retorno.
+  - **No se activa**: `vol_target.enabled: false` en todos los perfiles. Queda
+    medido y documentado, sin relajar umbrales.
 
 ### Etapa 3f — TCA: coste de ejecución real (2026-11-11)
 
@@ -1289,6 +1298,17 @@ etapa.
     pestaña Mercado (flags de la última sesión).
 - [x] **Tests**: multiplicador, causalidad (truncado vs completo), flags sin
   calendario y días hábiles.
+- **Resultado medido (2026-11-11, `reports/research/conditioners/`)**
+  - Tabla propuesta: `pre_fomc` 0,5 · `tom_window` 0,75 · `month_end_selloff`
+    0,75 · `monday_overnight` 0,75 · `boundary_extreme` 0,5 · `regime_ok` 1,0.
+  - `qqq-trend-f13` con **1.498 días afectados**: Sharpe 0,83 → **0,76** y
+    retorno 69,97 % → **49,67 %**, por un MaxDD que solo mejora de −8,57 % a
+    −8,09 %. `trend-spy` y `meanrev-large` igual: sin mejora de Sharpe.
+  - **No compensa**: los multiplicadores quedan como **propuesta** en
+    `config/conditioners.yaml` (`default: {}` y `bots: {}`, sin efecto en
+    producción). `proposal_table()` los deja disponibles solo para informes.
+  - El multiplicador **sí** quedó conectado al orquestador (antes de los
+    guards de apertura); con la tabla vacía no cambia el comportamiento.
 
 ### Etapa 3h — Familias de sesión intradía (2026-11-11)
 
@@ -1296,17 +1316,36 @@ etapa.
   13:30 Europe/London, con DST), en el sentido del retorno de la sesión
   anterior (o el contrario con `direction`), stop ATR(14) × `k` y salida al
   cierre de la sesión. **Una operación por sesión.**
-- [x] **`fix_flow`**: flujo del fix (ECB 13:15 UTC o London 16:00 Europe/London
-  con DST): ventana de 30/60/90 min antes del fix, plano después, con filtro
-  opcional de volatilidad.
+  - El stop se comprueba con el mínimo/máximo de la vela que lo rompe y la
+    posición se cierra en el cierre de esa vela: el motor de serie no ejecuta
+    intrabarra, así que el resultado es conservador frente a un stop real-fill.
+  - El emparejado con la sesión anterior es lineal (antes era cuadrático).
+- [x] **`fix_flow`**: flujo del fix (ECB 13:15 Europe/London, que equivale a
+  14:15 CET, o London 16:00 Europe/London con DST): ventana de 30/60 min antes
+  del fix, plano después, con filtro opcional de volatilidad.
 - [x] **Bots** en `config/intraday_bots.yaml` con `enabled: false`
   (`eurusd-session-hold`, `usdjpy-session-hold-ny`, `eurusd-fix-flow`).
 - [x] **Catálogo**: `Instrument.tick_ratio = tick_size / (precio × volatilidad
   diaria)` y visible en Mercado.
-- [x] **Tests**: una operación por sesión, ventana del fix, causalidad.
-- Pendiente: el informe `reports/research/intraday_session/` con la tabla de
-  DSR/PBO/WF requiere la corrida de research intradía de las familias nuevas;
-  los módulos y los bots ya están listos y **no se activa ninguno**.
+- [x] **Catálogo de research**: `session_hold` y `fix_flow` están en
+  `INTRADAY_GRIDS` y asignadas a EURUSD y USDJPY (`ASSET_FAMILIES`) con
+  rejillas acotadas (`session` × `direction` × `atr_k`; `window_min` × `side`
+  × `fix` × `vol_filter`).
+- [x] **Tests**: una operación por sesión, ventana del fix, causalidad, el stop
+  recorta la exposición y el fix solo opera dentro de su ventana.
+
+- **Resultado medido (2026-11-11, `reports/research/intraday_session/`)**
+  - `session_hold` y `fix_flow` entran en la validacion intradia de EURUSD y
+    USDJPY: **0 de 56 variantes pasan** (EURUSD 0/52, USDJPY 0/52).
+  - Mejor Sharpe: **-2,33** (USDJPY `session_hold` LDN, `direction` -1, ATR
+    x2,0) y **-4,04** en EURUSD; PBO 0,5-0,6 %; WF global **fallido**;
+    DSR 0 en todas; P(pasar) FTMO 0,000.
+  - El motivo es de costes, no de inestabilidad: el neto va de -0,14 % a -0,33 % y
+    el equilibrio (0,00-0,94 bps) queda por debajo del coste calibrado del
+    activo (2,51-3,16 bps). No hay edge que conservar.
+  - **Se documenta y se para**: no se relajan umbrales, no se crea ningun bot y
+    los tres bots de `config/intraday_bots.yaml` siguen `enabled: false`.
+  - DSR acumulado: 365 pruebas; presupuesto semanal EURUSD 4/5 y USDJPY 3/5.
 
 ### Etapa 3i — Reversión overnight (2026-11-11)
 
@@ -1322,8 +1361,19 @@ etapa.
   `reports/research/overnight_reversal/` con Sharpe, CAGR, MaxDD, retorno,
   operaciones, turnover y el Monte Carlo de FTMO 100k (P(pasar) y P(breach)).
 - [x] **Tests**: retornos overnight, terciles, simulación sin posición nocturna.
-- Pendiente: la corrida completa del informe y, si pasara, el bot en
-  `config/bots.yaml` con `enabled: false` (no se crea sin pasar la puerta).
+
+- **Resultado medido (2026-11-11, `reports/research/overnight_reversal/report.md`)**
+  - Universo de 17 ETFs, seleccion transversal (tercil mas bajo largo, tercil
+    mas alto corto), 0 bps por lado: Sharpe **-0,15**, CAGR -1,03 %, MaxDD
+    -18,18 %, retorno total **-8,28 %**, 2.110 operaciones, P(pasar) FTMO
+    **16,95 %** y P(breach) **37,55 %** (2 bps: -8,57 %; 5 bps: -9,00 %).
+  - **Falla**: edge negativo y probabilidad de breach alta. **Se documenta y se
+    para**: no se crea bot, no se toca `config/bots.yaml` y no se relaja ningun
+    umbral.
+  - Correccion aplicada antes de medir: los pesos de los terciles se normalizan
+    a **bruto <= 1** (`simulate_daily`). Sin esa normalizacion, doce activos a
+    1/3 son ~4x de apalancamiento y el informe salia en -91,75 % con
+    MaxDD -96,01 %: era apalancamiento, no estrategia.
 
 ### Etapa 3j — Embudo, disciplina, presupuesto de alertas y simulacro (2026-11-11)
 
@@ -1622,4 +1672,10 @@ etapa.
 | 2026-11-09 | MoE 30B vs actual | `lab llm compare` SPY/QQQ/NVDA -> Hold/Hold, media 62%/60%, 190-235s vs 71-79s, acuerdo 100%, n=3/30 |
 | 2026-11-09 | Tarea LLMCompare | `TradingLab-LLMCompare` Ready, L-V 18:30, `IgnoreNew`; preflight OK; suite 533 passed; sin ordenes |
 | 2026-11-09 | Comparacion 84 variantes eventos | `execution_model` antes `a8743f9` vs actual: tablas identicas, 0/84 cambios; es modelo de costes, no motor de eventos. Serie por activo (mediana): EURUSD Sharpe -6.79, coste 4.62 bps/op, equilibrio 0.00, 0 pasan; USDJPY -7.03, 5.38, 0.00, 0; XAUUSD -2.55, 6.27, 0.74, 0; US100 -2.01, 5.44, 0.00, 0. Evento real solo `caja_ny` US100 (4 variantes): Sharpe neto medio -3.10 -> -3.57 (-15.0%), session_skipped 0 -> 31.510/variante, DSR 121/116 sin cambios. No se invento session_skipped para las 84. |
+| 2026-11-11 | Guardian MQL5 (ALERT) | `lab guardian status` -> 2 de 5 sesiones (2026.11.10, 2026.11.11), 0 disparos; puerta CLOSE pendiente (faltan 3) |
+| 2026-11-11 | Sesion de Tokio | forward 04:02/04:17/07:02/07:17/13:32 UTC -> 0 ordenes, 0 deals, 0 posiciones (los dos candidatos, flat sin posicion) |
+| 2026-11-11 | Objetivo de volatilidad | `vol_report.compare` -> qqq-trend-f13 MaxDD -8,57%->-3,82% pero P(pasar) 65,65%->10,65%; trend-spy 59,60%->63,10%; meanrev-large 38,45%->12,70%; mixto, no se activa |
+| 2026-11-11 | Condicionadores | propuesta con 1.498 dias afectados: Sharpe 0,83->0,76, retorno 69,97%->49,67%, MaxDD -8,57%->-8,09%; no compensa, queda como propuesta (`default: {}`) |
+| 2026-11-11 | Reversion overnight | Sharpe -0,15, MaxDD -18,18%, retorno -8,28%, P(pasar) 16,95%, P(breach) 37,55%; falla, se documenta y se para (pesos normalizados a bruto <= 1) |
+| 2026-11-11 | Familias de sesion | `research-intraday` EURUSD 0/52 y USDJPY 0/52 con `session_hold` y `fix_flow` (stop ATR real); informe en `reports/research/intraday_session/`; suite 805 passed, 1 skipped; ruff limpio |
 |  |  |  |
