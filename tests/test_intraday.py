@@ -9,12 +9,14 @@ import pytest
 from tradinglab.intraday import (
     BARS_PER_SESSION,
     _bars_per_year,
+    _scale_range_bars,
     asian_range_reversal,
     backtest_intraday,
     break_even_cost_bps,
     cache_metadata,
     families_for_symbol,
     fix_flow,
+    h1_orb_session,
     load_bars,
     london_pullback,
     opening_range_breakout,
@@ -206,8 +208,13 @@ def test_familias_por_activo():
         "orb_ny",
         "trend_intraday",
         "caja_ny",
+        "h1_orb",
     )
-    assert families_for_symbol("XAUUSD") == ("asian_rev", "overlap_breakout")
+    assert families_for_symbol("XAUUSD") == (
+        "asian_rev",
+        "overlap_breakout",
+        "h1_orb",
+    )
     assert families_for_symbol("EURUSD") == (
         "range_reversal",
         "london_pullback",
@@ -234,10 +241,61 @@ def test_nuevas_familias_generan_targets():
         tokyo_breakout,
         session_hold,
         fix_flow,
+        h1_orb_session,
     ):
         result = fn(df)
         assert len(result.target) == len(df)
         assert result.target.abs().max() <= 1.0
+
+
+def _h1_con_ruptura(hour: int = 7) -> pd.DataFrame:
+    """H1 sintético: rango estrecho y una ruptura limpia una hora después."""
+    idx = pd.date_range("2025-01-01", periods=12 * 24, freq="1h", tz="UTC")
+    frame = pd.DataFrame(
+        {
+            "open": 1.10,
+            "high": 1.1005,
+            "low": 1.0995,
+            "close": 1.10,
+            "volume": 1000.0,
+        },
+        index=idx,
+    )
+    at_range = pd.Timestamp("2025-01-06", tz="UTC") + pd.Timedelta(hours=hour)
+    at_break = at_range + pd.Timedelta(hours=1)
+    frame.loc[at_range, ["high", "low", "close"]] = [1.1010, 1.0990, 1.1000]
+    frame.loc[at_break, "close"] = 1.1030
+    return frame
+
+
+def test_h1_orb_usa_la_primera_hora_y_entra_en_la_ruptura():
+    df = _h1_con_ruptura()
+    target = h1_orb_session(df, session="LDN", buffer_atr=0.0, max_hold=4).target
+    assert float(target.loc["2025-01-06 07:00"]) == 0.0  # barra del rango
+    assert float(target.loc["2025-01-06 08:00"]) == 1.0  # ruptura
+    assert float(target.loc["2025-01-06 12:00"]) == 0.0  # sale por max_hold
+
+
+def test_h1_orb_filtro_atr_bloquea_la_entrada():
+    df = _h1_con_ruptura()
+    target = h1_orb_session(
+        df, session="LDN", buffer_atr=0.0, atr_ratio_min=1e9
+    ).target
+    assert float(target.abs().sum()) == 0.0
+
+
+def test_h1_orb_sesion_desconocida_falla():
+    with pytest.raises(ValueError, match="sesión desconocida"):
+        h1_orb_session(_h1_con_ruptura(), session="ASIA")
+
+
+def test_orb_ny_en_h1_escala_el_rango_a_la_primera_hora():
+    df = _h1_con_ruptura(hour=13)  # apertura NY
+    target = orb_ny(df, range_bars=4, buffer_atr=0.0, max_hold=4).target
+    assert float(target.loc["2025-01-06 13:00"]) == 0.0  # rango, no opera
+    assert float(target.loc["2025-01-06 14:00"]) == 1.0  # ruptura
+    # En M15 la rejilla sigue en barras: 4 barras = 1 hora, sin cambios.
+    assert float(_scale_range_bars(_bars(days=2), 4)) == 4.0
 
 
 def test_session_hold_el_stop_atreve_una_sesion():

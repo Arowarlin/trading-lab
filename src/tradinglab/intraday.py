@@ -62,11 +62,20 @@ INTRADAY_GRIDS = {
         "fix": ["ecb", "london"],
         "vol_filter": [None, 0.9],
     },
+    # H1: rango de la primera hora de la sesión. range_bars se calcula solo
+    # desde la frecuencia de las velas (60 min / bar_minutes), así que la misma
+    # familia sirve en M15 (4 barras) y en H1 (1 barra).
+    "h1_orb": {
+        "session": ["LDN", "NY"],
+        "buffer_atr": [0.0, 0.1, 0.25],
+        "atr_ratio_min": [None, 1.0],
+        "max_hold": [4, 8],
+    },
 }
 ASSET_FAMILIES = {
-    "US100.CASH": ("orb_ny", "trend_intraday", "caja_ny"),
-    "NASDAQ": ("orb_ny", "trend_intraday", "caja_ny"),
-    "XAUUSD": ("asian_rev", "overlap_breakout"),
+    "US100.CASH": ("orb_ny", "trend_intraday", "caja_ny", "h1_orb"),
+    "NASDAQ": ("orb_ny", "trend_intraday", "caja_ny", "h1_orb"),
+    "XAUUSD": ("asian_rev", "overlap_breakout", "h1_orb"),
     "EURUSD": ("range_reversal", "london_pullback", "session_hold", "fix_flow"),
     "USDJPY": ("session_trend", "tokyo_breakout", "session_hold", "fix_flow"),
 }
@@ -125,6 +134,12 @@ FAMILY_HYPOTHESES = {
     "fix_flow": (
         "Flujo del fix: en la ventana previa al fix del BCE (13:15 hora de "
         "Londres) el flujo comprador de USD tiene ventaja estructural."
+    ),
+    "h1_orb": (
+        "Ruptura del rango de la primera hora de la sesión (Londres o NY) en "
+        "H1: si la primera hora marca el rango y el precio lo rompe con "
+        "volatilidad (ATR) por encima de su mediana, la continuación dura el "
+        "resto de la sesión."
     ),
 }
 
@@ -783,10 +798,17 @@ def opening_range_breakout(
     max_hold: int = 8,
     start_hour: int = 7,
     end_hour: int = 16,
+    atr_ratio_min: float | None = None,
 ) -> StrategyResult:
-    """Ruptura del rango de apertura de Londres/NY (UTC)."""
+    """Ruptura del rango de apertura de Londres/NY (UTC).
+
+    `atr_ratio_min` es un filtro opcional de volatilidad: solo se entra si el
+    ATR de la barra supera esa fracción de su mediana móvil (50 barras). Sin
+    él, el comportamiento es el de siempre.
+    """
     target = pd.Series(0.0, index=df.index)
     atr_s = atr(df)
+    atr_med = atr_s.rolling(50, min_periods=10).median()
     mask = _session_mask(df.index, start_hour, end_hour)
     for day in sorted({ts.date() for ts in df.index}):
         session = df[mask & (pd.Index(df.index.date) == day)]
@@ -799,9 +821,13 @@ def opening_range_breakout(
             bar = session.iloc[i]
             if pos == 0.0:
                 atr_value = float(atr_s.loc[bar.name]) if bar.name in atr_s.index else 0.0
-                if bar["close"] > hi + buffer_atr * atr_value:
+                blocked = False
+                if atr_ratio_min is not None:
+                    median = float(atr_med.loc[bar.name]) if bar.name in atr_med.index else float("nan")
+                    blocked = not (median > 0 and atr_value >= atr_ratio_min * median)
+                if not blocked and bar["close"] > hi + buffer_atr * atr_value:
                     pos = 1.0
-                elif bar["close"] < lo - buffer_atr * atr_value:
+                elif not blocked and bar["close"] < lo - buffer_atr * atr_value:
                     pos = -1.0
             else:
                 hold += 1
@@ -812,7 +838,59 @@ def opening_range_breakout(
     return StrategyResult(
         "orb",
         target,
-        {"range_bars": range_bars, "buffer_atr": buffer_atr, "max_hold": max_hold},
+        {
+            "range_bars": range_bars,
+            "buffer_atr": buffer_atr,
+            "max_hold": max_hold,
+            "atr_ratio_min": atr_ratio_min,
+        },
+    )
+
+
+SESSION_HOURS = {"LDN": (7, 16), "NY": (13, 20)}
+
+
+def _bar_minutes(index: pd.DatetimeIndex) -> float:
+    """Minutos por barra; la mediana ignora huecos de fin de semana y festivos."""
+    if len(index) < 2:
+        return 60.0
+    diffs = pd.Series(index).diff().dropna()
+    minutes = float(diffs.dt.total_seconds().median() / 60.0)
+    return minutes if minutes > 0 else 60.0
+
+
+def h1_orb_session(
+    df: pd.DataFrame,
+    *,
+    session: str = "LDN",
+    buffer_atr: float = 0.1,
+    atr_ratio_min: float | None = None,
+    max_hold: int = 8,
+) -> StrategyResult:
+    """Ruptura del rango de la primera hora de la sesión (LDN o NY).
+
+    El rango se calcula con las barras de la primera hora (en H1, una barra);
+    en otros timeframes se deriva de la frecuencia. Sale por `max_hold` o al
+    cerrar la sesión, nunca de un día para otro.
+    """
+    key = str(session).upper()
+    if key not in SESSION_HOURS:
+        raise ValueError(f"sesión desconocida: {session!r}; usa LDN o NY")
+    start_hour, end_hour = SESSION_HOURS[key]
+    range_bars = max(1, int(round(60.0 / _bar_minutes(df.index))))
+    result = opening_range_breakout(
+        df,
+        range_bars=range_bars,
+        buffer_atr=buffer_atr,
+        max_hold=max_hold,
+        start_hour=start_hour,
+        end_hour=end_hour,
+        atr_ratio_min=atr_ratio_min,
+    )
+    return StrategyResult(
+        "h1_orb",
+        result.target,
+        {**result.params, "session": key},
     )
 
 
@@ -908,8 +986,25 @@ def range_reversal(
     )
 
 
+def _scale_range_bars(df: pd.DataFrame, bars: int) -> int:
+    """La rejilla expresa `range_bars` en barras M15; se convierte al timeframe.
+
+    En M15 el factor es 1 (4 barras = 1 hora) y el comportamiento no cambia.
+    En H1, 4 barras M15 pasan a 1 barra; sin esto las familias de rango se
+    quedan sin sesión suficiente y no operan (0 trades).
+    """
+    return max(1, int(round(float(bars) * 15.0 / _bar_minutes(df.index))))
+
+
 def orb_ny(df: pd.DataFrame, **kwargs) -> StrategyResult:
-    return opening_range_breakout(df, start_hour=13, end_hour=20, **kwargs)
+    bars = kwargs.pop("range_bars", 4)
+    return opening_range_breakout(
+        df,
+        range_bars=_scale_range_bars(df, bars),
+        start_hour=13,
+        end_hour=20,
+        **kwargs,
+    )
 
 
 def trend_intraday(df: pd.DataFrame, **kwargs) -> StrategyResult:
@@ -917,7 +1012,14 @@ def trend_intraday(df: pd.DataFrame, **kwargs) -> StrategyResult:
 
 
 def overlap_breakout(df: pd.DataFrame, **kwargs) -> StrategyResult:
-    return opening_range_breakout(df, start_hour=12, end_hour=16, **kwargs)
+    bars = kwargs.pop("range_bars", 4)
+    return opening_range_breakout(
+        df,
+        range_bars=_scale_range_bars(df, bars),
+        start_hour=12,
+        end_hour=16,
+        **kwargs,
+    )
 
 
 def london_pullback(df: pd.DataFrame, **kwargs) -> StrategyResult:
@@ -929,7 +1031,14 @@ def session_trend(df: pd.DataFrame, **kwargs) -> StrategyResult:
 
 
 def tokyo_breakout(df: pd.DataFrame, **kwargs) -> StrategyResult:
-    return opening_range_breakout(df, start_hour=0, end_hour=3, **kwargs)
+    bars = kwargs.pop("range_bars", 4)
+    return opening_range_breakout(
+        df,
+        range_bars=_scale_range_bars(df, bars),
+        start_hour=0,
+        end_hour=3,
+        **kwargs,
+    )
 
 
 def asian_range_reversal(
@@ -1120,6 +1229,7 @@ STRATEGIES = {
     "tokyo_breakout": tokyo_breakout,
     "session_hold": session_hold,
     "fix_flow": fix_flow,
+    "h1_orb": h1_orb_session,
 }
 
 
