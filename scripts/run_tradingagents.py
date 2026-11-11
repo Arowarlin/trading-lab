@@ -9,6 +9,7 @@ import argparse
 import json
 import os
 import sys
+import threading
 import time
 import traceback
 from datetime import date
@@ -17,6 +18,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 MIN_CONTEXT = 16_384
+DEFAULT_TIMEOUT_S = 1800
 
 
 def _loaded_context(base_url: str, model: str) -> int | None:
@@ -58,11 +60,44 @@ def main() -> int:
     parser.add_argument("--max-tokens", type=int, default=2048)
     parser.add_argument("--out", required=True)
     parser.add_argument("--save", action="store_true")
+    parser.add_argument(
+        "--timeout-s",
+        type=int,
+        default=DEFAULT_TIMEOUT_S,
+        help="Presupuesto de tiempo del run; al agotarlo se aborta con un mensaje",
+    )
     args = parser.parse_args()
 
     out_path = Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     started = time.time()
+
+    def _abort() -> None:
+        """Watchdog: si el run se pasa de presupuesto, se corta con un error claro."""
+        message = (
+            f"TradingAgents excedió el presupuesto de {args.timeout_s}s "
+            f"para {args.ticker.upper()}"
+        )
+        payload = {
+            "ok": False,
+            "ticker": args.ticker.upper(),
+            "date": args.date,
+            "error": message,
+            "elapsed_s": round(time.time() - started, 1),
+        }
+        try:
+            out_path.write_text(
+                json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+        except Exception:
+            pass
+        print(json.dumps({"ok": False, "error": message}, ensure_ascii=False), flush=True)
+        os._exit(3)
+
+    if args.timeout_s > 0:
+        watchdog = threading.Timer(args.timeout_s, _abort)
+        watchdog.daemon = True
+        watchdog.start()
 
     try:
         from dotenv import load_dotenv

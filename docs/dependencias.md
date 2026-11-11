@@ -92,8 +92,12 @@ Fecha de verificación: 2026-11-11.
 
 - El deep exige que el modelo de LM Studio esté cargado con **≥16.384 tokens de
   contexto**; con 8.192 el run falla rápido con un mensaje explícito. Con 32.768
-  el run deep de `lab agent-compare` **superó la hora** en esta máquina: no es
-  viable aquí y queda documentado, no corregido a la fuerza.
+  el run deep de `lab agent-compare` **superó la hora** en esta máquina.
+- **Presupuesto de tiempo**: el deep tiene un límite de **1.800 s (30 min)** por
+  defecto (`scripts/run_tradingagents.py --timeout-s`, y `timeout` en
+  `agents/bridge.run_tradingagents`). Al agotarlo, el script se corta solo con
+  un error claro y `lab agent-compare` sigue con el lado lite. Para darle más
+  margen hace falta más VRAM (y contexto 32.768) o menos analistas.
 
 ## Operación de LM Studio (nota)
 

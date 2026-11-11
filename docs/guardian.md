@@ -149,6 +149,29 @@ Nota operativa: el chart de EURUSD H1 del perfil quedó con `expertmode=0`
 que el algo trading del terminal está activo. Con `expertmode=0` el EA calcula
 y avisa, pero no puede cerrar.
 
+### La puerta se comprueba sola
+
+```powershell
+.\.venv\Scripts\lab.exe guardian status          # sesiones, disparos y puerta
+.\.venv\Scripts\lab.exe guardian status --json   # lo mismo, en JSON
+```
+
+`guardian status` lee el log del EA (`MQL5/Files/tradinglab_guardian.log`),
+cuenta las sesiones con línea `INIT` y los disparos con línea `TRIGGER`, y dice
+si la puerta está cumplida.
+
+### El cambio está protegido
+
+```powershell
+powershell -File scripts\guardian_enable_close.ps1 -DryRun   # simula
+powershell -File scripts\guardian_enable_close.ps1           # aplica
+```
+
+Si la puerta **no** está cumplida el script no toca nada y sale con código 1.
+Si está cumplida aplica tres cambios: el preset del EA (`Mode=ALERT` →
+`Mode=CLOSE`), el `expertmode=0` → `1` del chart del perfil (para que el EA
+pueda cerrar) y `defense: report` → `enforce` en el forward.
+
 ## Comandos
 
 ```powershell

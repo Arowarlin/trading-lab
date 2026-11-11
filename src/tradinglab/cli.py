@@ -2202,17 +2202,26 @@ def guardian_export_cmd(
 @guardian_app.command("status")
 def guardian_status_cmd(
     account: str = typer.Option(None, "--account", help="Filtra por cuenta"),
+    as_json: bool = typer.Option(False, "--json", help="Salida en JSON"),
+    required_sessions: int = typer.Option(
+        5, "--required-sessions", help="Sesiones en ALERT para la puerta de CLOSE"
+    ),
 ) -> None:
-    """Último JSON exportado, su destino y su antigüedad."""
-    from .guardian import GuardianError, read_exported
+    """Último JSON exportado, su destino y las sesiones en ALERT."""
+    from .guardian import GuardianError, guardian_sessions, read_exported
 
     try:
         state = read_exported()
+        sessions = guardian_sessions(required=required_sessions)
     except GuardianError as exc:
         console.print(
             Panel(str(exc), title="Guardián no disponible", style="bold red")
         )
         raise typer.Exit(1) from exc
+
+    if as_json:
+        console.print_json(data={"export": state, "sessions": sessions})
+        return
 
     if not state["exists"]:
         console.print(
@@ -2242,6 +2251,21 @@ def guardian_status_cmd(
     t.add_row("Reset", f"{cfg.get('reset_time', '-')} {cfg.get('reset_tz', '-')}")
     magics = cfg.get("magics") or []
     t.add_row("Magics", ", ".join(str(item) for item in magics) or "Sin datos")
+    t.add_row(
+        "Sesiones ALERT",
+        f"{sessions.get('sessions', 0)} de {sessions.get('required', required_sessions)}"
+        + (f" · días {', '.join(sessions.get('session_days') or [])}" if sessions.get("session_days") else ""),
+    )
+    t.add_row(
+        "Disparos (TRIGGER)",
+        str(sessions.get("triggers", 0)) if sessions.get("ok") else "Sin datos",
+    )
+    t.add_row(
+        "Puerta CLOSE",
+        "[green]cumple[/green]"
+        if sessions.get("gate_ok")
+        else f"[yellow]pendiente[/yellow] ({sessions.get('reason', 'sin datos')})",
+    )
     console.print(t)
     if state["warning"]:
         console.print(f"[yellow]{state['warning']}[/yellow]")

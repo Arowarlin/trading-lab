@@ -261,6 +261,97 @@ def read_exported(
     return result
 
 
+def _terminal_data_path() -> Path | None:
+    """Ruta de datos del terminal: `lab.yaml` y, si falta, la API de MT5."""
+    try:
+        configured = terminal_data_path()
+    except GuardianError:
+        configured = None
+    if configured is not None:
+        return configured
+    try:
+        import MetaTrader5 as mt5
+
+        if not mt5.initialize():
+            return None
+        info = mt5.terminal_info()
+        mt5.shutdown()
+        raw = getattr(info, "data_path", None) if info else None
+        return Path(str(raw)) if raw else None
+    except Exception:
+        return None
+
+
+def guardian_sessions(*, required: int = 5, data_path: Path | None = None) -> dict:
+    """Sesiones ALERT observadas en el log del EA y si la puerta está cumplida.
+
+    La puerta del guardián son `required` sesiones de sesión **sin ningún
+    disparo**: `gate_ok` solo es True si se han visto esas sesiones y el log
+    no registra ningún `TRIGGER`.
+    """
+    base = Path(data_path) if data_path is not None else _terminal_data_path()
+    if base is None:
+        return {
+            "ok": False,
+            "error": "sin ruta del terminal",
+            "sessions": 0,
+            "triggers": 0,
+            "required": int(required),
+            "gate_ok": False,
+            "session_days": [],
+            "modes": [],
+        }
+    log = base / "MQL5" / "Files" / "tradinglab_guardian.log"
+    state: dict = {
+        "ok": True,
+        "path": str(log),
+        "terminal_path": str(base),
+        "sessions": 0,
+        "triggers": 0,
+        "required": int(required),
+        "gate_ok": False,
+        "session_days": [],
+        "modes": [],
+        "exists": log.exists(),
+    }
+    if not log.exists():
+        state["reason"] = "el EA todavía no ha escrito el log"
+        return state
+
+    days: dict[str, str] = {}
+    triggers = 0
+    modes: set[str] = set()
+    for line in log.read_text(encoding="utf-8", errors="replace").splitlines():
+        parts = line.split()
+        if len(parts) < 3:
+            continue
+        if parts[2] == "INIT":
+            days[parts[0]] = " ".join(parts[:2])
+            for part in parts[3:]:
+                if part.startswith("mode="):
+                    modes.add(part.split("=", 1)[1])
+        elif parts[2] == "TRIGGER":
+            triggers += 1
+
+    sessions = len(days)
+    state["sessions"] = sessions
+    state["session_days"] = sorted(days)
+    state["triggers"] = triggers
+    state["modes"] = sorted(modes)
+    state["gate_ok"] = sessions >= int(required) and triggers == 0
+    if triggers:
+        state["reason"] = (
+            f"{triggers} disparo(s) en el log: la puerta exige cero falsos positivos"
+        )
+    elif sessions < int(required):
+        state["reason"] = (
+            f"solo {sessions} de {int(required)} sesiones; faltan {int(required) - sessions}"
+        )
+    else:
+        state["reason"] = f"{sessions} sesiones sin disparos: puerta cumplida"
+    return state
+
+
 __all__ = [
     "GUARDIAN_FILENAME",
     "GUARDIAN_GLOBAL_BLOCK",
@@ -268,6 +359,7 @@ __all__ = [
     "GuardianError",
     "build_config",
     "export_config",
+    "guardian_sessions",
     "read_exported",
     "resolve_target",
     "terminal_data_path",

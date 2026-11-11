@@ -16,6 +16,7 @@ from tradinglab.guardian import (
     GuardianError,
     build_config,
     export_config,
+    guardian_sessions,
     read_exported,
     resolve_target,
     terminal_data_path,
@@ -267,6 +268,73 @@ def test_read_exported_json_invalido(tmp_path):
     target.write_text("{", encoding="utf-8")
     with pytest.raises(GuardianError, match="JSON inválido"):
         read_exported(target_path=target)
+
+
+def _write_log(base: Path, lines: list[str]) -> Path:
+    log = base / "MQL5" / "Files" / "tradinglab_guardian.log"
+    log.parent.mkdir(parents=True, exist_ok=True)
+    log.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return log
+
+
+def test_sesiones_alert_cuentan_dias_del_log(tmp_path: Path) -> None:
+    base = tmp_path / "terminal"
+    _write_log(
+        base,
+        [
+            "2026.11.10 23:42:39 INIT mode=ALERT account=ftmo_demo daily=0.0450",
+            "2026.11.11 00:00:12 START day=20261111 equity=100000.00",
+            "2026.11.11 23:59:01 INIT mode=ALERT account=ftmo_demo daily=0.0450",
+        ],
+    )
+    state = guardian_sessions(required=5, data_path=base)
+    assert state["ok"] is True
+    assert state["sessions"] == 2
+    assert state["session_days"] == ["2026.11.10", "2026.11.11"]
+    assert state["triggers"] == 0
+    assert state["gate_ok"] is False
+    assert "faltan 3" in state["reason"]
+
+
+def test_puerta_cumple_con_cinco_sesiones_sin_disparos(tmp_path: Path) -> None:
+    base = tmp_path / "terminal"
+    _write_log(
+        base,
+        [
+            f"2026.11.{day:02d} 00:00:12 INIT mode=ALERT account=ftmo_demo daily=0.0450"
+            for day in (10, 11, 12, 13, 16)
+        ],
+    )
+    state = guardian_sessions(required=5, data_path=base)
+    assert state["sessions"] == 5
+    assert state["triggers"] == 0
+    assert state["gate_ok"] is True
+    assert "puerta cumplida" in state["reason"]
+
+
+def test_un_disparo_bloquea_la_puerta(tmp_path: Path) -> None:
+    base = tmp_path / "terminal"
+    _write_log(
+        base,
+        [
+            f"2026.11.{day:02d} 00:00:12 INIT mode=ALERT account=ftmo_demo daily=0.0450"
+            for day in (10, 11, 12, 13, 16)
+        ]
+        + ["2026.11.16 12:00:00 TRIGGER daily loss 5.00% >= 4.50%"],
+    )
+    state = guardian_sessions(required=5, data_path=base)
+    assert state["sessions"] == 5
+    assert state["triggers"] == 1
+    assert state["gate_ok"] is False
+    assert "falsos positivos" in state["reason"]
+
+
+def test_sesiones_sin_log_no_inventan_datos(tmp_path: Path) -> None:
+    state = guardian_sessions(required=5, data_path=tmp_path / "terminal")
+    assert state["ok"] is True
+    assert state["sessions"] == 0
+    assert state["gate_ok"] is False
+    assert state["exists"] is False
 
 
 def test_cli_guardian_export(monkeypatch, tmp_path):

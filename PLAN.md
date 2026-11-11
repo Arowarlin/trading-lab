@@ -1136,6 +1136,34 @@ etapa.
   OK con los WARN conocidos; F13 sin cambios respecto al estado previo
   (`6250d4c0…`). Sin push, sin activar bots y sin órdenes.
 
+### Etapa 3h — Puerta automática del guardián y presupuesto del deep (2026-11-11)
+
+- [x] **La puerta de las 5 sesiones es automática**
+  - `guardian.guardian_sessions()` lee el log del EA
+    (`MQL5/Files/tradinglab_guardian.log`), cuenta las sesiones con línea
+    `INIT` y los disparos con línea `TRIGGER`, y marca `gate_ok` solo con 5
+    sesiones **y cero disparos**.
+  - `lab guardian status` muestra sesiones, disparos y si la puerta está
+    cumplida; `--json` lo deja disponible para scripts.
+  - `scripts/guardian_enable_close.ps1` **se niega a tocar nada** si la puerta
+    no está cumplida (código 1). Si lo está, aplica los tres cambios: preset
+    del EA a `Mode=CLOSE`, `expertmode=1` en el chart del perfil y
+    `defense: enforce` en el forward. Con `--DryRun` simula.
+  - Estado real: **1 de 5 sesiones** (2026.11.10), 0 disparos → puerta
+    **pendiente**; probado que el script se niega y no modifica nada.
+- [x] **El deep ya no puede colgarse**
+  - `scripts/run_tradingagents.py` acepta `--timeout-s` (1.800 s por defecto)
+    con watchdog propio: al agotarse escribe el error y corta el proceso.
+  - `agents/bridge.run_tradingagents` baja el presupuesto de 7.200 s a
+    **1.800 s** y lo propaga al script.
+  - Decisión: en esta máquina el deep no cabe (necesita ≥16k de contexto y con
+    32k tardó más de una hora). Con el presupuesto acotado **falla rápido y
+    claro** y el lado lite sigue su curso; para más margen hace falta más
+    VRAM o menos analistas.
+- Evidencia: `ruff` limpio; suite completa **759 passed, 1 skipped**; `lab doctor`
+  OK; F13 sin cambios (`6250d4c0…`). Commit local pendiente de push en este
+  bloque; sin activar bots y sin órdenes.
+
 ### Etapa 4 — Presupuesto de riesgo neto por activo
 
 - [x] **`config/risk_budget.yaml`**

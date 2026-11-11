@@ -32,11 +32,17 @@ def run_tradingagents(
     risk_rounds: int = 1,
     language: str = "Spanish",
     save: bool = True,
-    timeout: int = 7200,
+    timeout: int = 1800,
     max_tool_rounds: int = 8,
     max_tokens: int = 2048,
 ) -> dict:
-    """Lanza un run de TradingAgents en su propio venv y devuelve la decisión."""
+    """Lanza un run de TradingAgents en su propio venv y devuelve la decisión.
+
+    `timeout` es el presupuesto de tiempo del run (por defecto 30 min): el
+    script se corta solo con un error claro y el padre mata el proceso si
+    aun así se pasa. Con el modelo de 27B en esta máquina el deep no cabe en
+    ese presupuesto, así que falla rápido y el lado lite sigue su curso.
+    """
     if not TA_PYTHON.exists():
         raise AgentError(f"No existe el intérprete de TradingAgents: {TA_PYTHON}")
     if not TA_SCRIPT.exists():
@@ -68,6 +74,8 @@ def run_tradingagents(
         str(max_tokens),
         "--out",
         str(out_path),
+        "--timeout-s",
+        str(max(60, int(timeout) - 60)),
     ]
     if save:
         cmd.append("--save")
