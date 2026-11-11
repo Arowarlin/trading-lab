@@ -30,12 +30,15 @@ def test_pilotos_iniciales_y_bloqueos(tmp_path: Path) -> None:
     assert status["count"] == 3
     rows = {row["market"]: row for row in status["pilots"]}
     assert rows["equity"]["bot"] == "qqq-trend-f13"
-    assert rows["equity"]["status"] == "not_started"
-    assert rows["forex"]["status"] == "blocked"
+    assert rows["equity"]["status"] == "paper"
+    assert rows["forex"]["bot"] == "eurusd-london-pullback-forward"
+    assert rows["forex"]["status"] == "paper"
+    # Futuros sigue bloqueado por ProjectX (sin credenciales): no se selecciona.
+    assert rows["futures"]["status"] == "blocked"
     with pytest.raises(PilotError):
         select_pilot(db, "equity", confirm=False)
     with pytest.raises(PilotError):
-        select_pilot(db, "forex", confirm=True)
+        select_pilot(db, "futures", confirm=True)
 
 
 def test_un_mercado_a_la_vez_y_limpieza(tmp_path: Path) -> None:

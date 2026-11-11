@@ -1,20 +1,25 @@
 # Pilotos por mercado. Seleccionar un piloto NO activa bots ni F13.
+#
+# `status` es descriptivo (el panel lo muestra tal cual); `select_pilot` solo
+# rechaza los mercados en `blocked`. Sin piloto activo, TODOS los mercados
+# pueden abrir por el operador; seleccionar uno limita las aperturas manuales a
+# ese mercado (cierres y reducciones nunca se bloquean).
 pilots:
   equity:
     label: "Acciones / ETF"
     bot: qqq-trend-f13
     profile: swing_equity
-    status: not_started
-    reason: "Mini-F13 de equity; el bot sigue enabled:false hasta aprobación."
+    status: paper
+    reason: "F13 activo en paper desde 2026-11-09 (qqq-trend-f13 enabled:true); 2/2 ciclos diarios, 0 órdenes."
   forex:
     label: "Forex / CFD"
-    bot: null
+    bot: eurusd-london-pullback-forward
     profile: intraday_fx
-    status: blocked
-    reason: "Sin M15/H1 reales (offset desconocido y mercado cerrado)."
+    status: paper
+    reason: "Forward demo activo (eurusd-london-pullback + usdjpy-tokyo-breakout); M15/H1 en caché y offset +2 detectado."
   futures:
     label: "Futuros"
     bot: null
     profile: intraday_futures
     status: blocked
-    reason: "ProjectX sin credenciales/suscripción; solo proxy diario."
+    reason: "ProjectX sin credenciales/suscripción; solo proxy diario (ES=F/NQ=F)."
