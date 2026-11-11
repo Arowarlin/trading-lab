@@ -341,6 +341,14 @@ CREATE TABLE IF NOT EXISTS tca_state (
     updated_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS alert_budget (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts TEXT NOT NULL,
+    event TEXT NOT NULL,
+    channel TEXT,
+    severity TEXT
+);
+
 CREATE TABLE IF NOT EXISTS console_actions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     ts TEXT NOT NULL,

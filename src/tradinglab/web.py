@@ -2134,6 +2134,34 @@ class LabData:
 
         return self.cache.get("conditioners_today", 300.0, collect)
 
+    def funnel(self) -> dict:
+        """Embudo de etapas del laboratorio (solo lectura)."""
+        from .funnel import funnel as funnel_state
+
+        def collect() -> dict:
+            if not self.db_path.exists():
+                return {"counts": {}, "error": "sin base de datos"}
+            try:
+                return funnel_state(self.db_path)
+            except Exception as exc:
+                return {"counts": {}, "error": str(exc)[:240]}
+
+        return self.cache.get("funnel", 120.0, collect)
+
+    def discipline(self) -> dict:
+        """Bloqueos por guard en los ?ltimos d?as (solo lectura)."""
+        from .funnel import discipline as discipline_state
+
+        def collect() -> dict:
+            if not self.db_path.exists():
+                return {"blocked_by_guard": {}, "error": "sin base de datos"}
+            try:
+                return discipline_state(self.db_path)
+            except Exception as exc:
+                return {"blocked_by_guard": {}, "error": str(exc)[:240]}
+
+        return self.cache.get("discipline", 120.0, collect)
+
     def slo(self) -> dict:
         """SLO operativo: frescura por símbolo, reloj, drift y último latido."""
         from .alerts import last_heartbeat
@@ -2632,6 +2660,10 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 self._json(self.server.data.model_ranking())
             elif path == "/api/slo":
                 self._json(self.server.data.slo())
+            elif path == "/api/funnel":
+                self._json(self.server.data.funnel())
+            elif path == "/api/discipline":
+                self._json(self.server.data.discipline())
             elif path == "/api/conditioners/today":
                 self._json(self.server.data.conditioners_today())
             elif path == "/api/tca":

@@ -7937,6 +7937,64 @@ def tca_cmd(
     )
 
 
+@app.command("drill")
+def drill_cmd(
+    confirm: bool = typer.Option(False, "--confirm", help="Confirmación explícita del simulacro"),
+) -> None:
+    """Simulacro de emergencia (R8). Solo paper/demo y con operador armado."""
+    from .drill import DrillError, run_drill
+
+    settings = get_settings()
+    if str(settings.mode).lower() == "live":
+        console.print("[red]El simulacro no se ejecuta en live.[/red]")
+        raise typer.Exit(2)
+    try:
+        armed = False
+        try:
+            from .operator import OperatorService
+
+            armed = OperatorService(settings, DEFAULT_DB).status().get("armed", False)
+        except Exception:
+            armed = False
+        if not armed:
+            console.print("[red]El simulacro exige el operador armado.[/red]")
+            raise typer.Exit(2)
+        if not confirm:
+            console.print("[red]El simulacro exige --confirm.[/red]")
+            raise typer.Exit(2)
+        result = run_drill(DEFAULT_DB, settings, confirm=True, armed=True)
+    except DrillError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2) from exc
+    console.print(
+        f"[green]Simulacro completado[/green] en {result['elapsed_s']}s · "
+        f"{result['cancelled_orders']} órdenes · {result['closed_positions']} posiciones"
+    )
+
+
+@app.command("budget")
+def alerts_budget_cmd() -> None:
+    """Presupuesto semanal de alertas."""
+    from .alerts_budget import weekly_budget
+
+    state = weekly_budget(DEFAULT_DB)
+    t = Table(title="Presupuesto de alertas (7 días)")
+    t.add_column("Campo", style="bold")
+    t.add_column("Valor", justify="right")
+    t.add_row("Presupuesto", str(state["budget"]))
+    t.add_row("Usadas", str(state["used"]))
+    t.add_row("Restantes", str(state["remaining"]))
+    t.add_row("Estado", "excedido" if state["exceeded"] else "ok")
+    console.print(t)
+    if state["rows"]:
+        r = Table(title="Por evento y canal")
+        for col in ("Evento", "Canal", "n"):
+            r.add_column(col, overflow="fold")
+        for row in state["rows"][:20]:
+            r.add_row(str(row["event"]), str(row["channel"]), str(row["n"]))
+        console.print(r)
+
+
 def main() -> None:
     app()
 

@@ -1290,6 +1290,65 @@ etapa.
 - [x] **Tests**: multiplicador, causalidad (truncado vs completo), flags sin
   calendario y días hábiles.
 
+### Etapa 3h — Familias de sesión intradía (2026-11-11)
+
+- [x] **`session_hold`**: entrada en la apertura de sesión (Londres 08:00 o NY
+  13:30 Europe/London, con DST), en el sentido del retorno de la sesión
+  anterior (o el contrario con `direction`), stop ATR(14) × `k` y salida al
+  cierre de la sesión. **Una operación por sesión.**
+- [x] **`fix_flow`**: flujo del fix (ECB 13:15 UTC o London 16:00 Europe/London
+  con DST): ventana de 30/60/90 min antes del fix, plano después, con filtro
+  opcional de volatilidad.
+- [x] **Bots** en `config/intraday_bots.yaml` con `enabled: false`
+  (`eurusd-session-hold`, `usdjpy-session-hold-ny`, `eurusd-fix-flow`).
+- [x] **Catálogo**: `Instrument.tick_ratio = tick_size / (precio × volatilidad
+  diaria)` y visible en Mercado.
+- [x] **Tests**: una operación por sesión, ventana del fix, causalidad.
+- Pendiente: el informe `reports/research/intraday_session/` con la tabla de
+  DSR/PBO/WF requiere la corrida de research intradía de las familias nuevas;
+  los módulos y los bots ya están listos y **no se activa ninguno**.
+
+### Etapa 3i — Reversión overnight (2026-11-11)
+
+- [x] **Universo**: SPY, QQQ, IWM, DIA, XLK, XLF, XLE, XLV, XLY, XLP, XLI,
+  XLU, XLB, XLRE, XLC, TLT, GLD.
+- [x] **`strategies/overnight_reversal.py`**
+  - Retorno overnight `open_t / close_{t-1} - 1`.
+  - `select_terciles`: largo el tercil más bajo, corto el más alto, pesos iguales.
+  - `simulate_daily`: entra en la apertura y sale en el cierre (**sin posición
+    nocturna**), con costes por lado.
+- [x] **Costes**: 0 bps (optimista), 2 bps y 5 bps (conservador) por lado.
+- [x] **Informe** `src/tradinglab/overnight_report.py` → 
+  `reports/research/overnight_reversal/` con Sharpe, CAGR, MaxDD, retorno,
+  operaciones, turnover y el Monte Carlo de FTMO 100k (P(pasar) y P(breach)).
+- [x] **Tests**: retornos overnight, terciles, simulación sin posición nocturna.
+- Pendiente: la corrida completa del informe y, si pasara, el bot en
+  `config/bots.yaml` con `enabled: false` (no se crea sin pasar la puerta).
+
+### Etapa 3j — Embudo, disciplina, presupuesto de alertas y simulacro (2026-11-11)
+
+- [x] **`GET /api/funnel`**: variantes probadas, pasan gates, candidato,
+  incubando, evaluado, promovible y piloto activo, con tasa de caída. Panel
+  **"Embudo"** en el Dashboard.
+- [x] **`GET /api/discipline`**: órdenes bloqueadas por guard (30 días), días
+  dentro del colchón y racha limpia. Panel **"Disciplina"** en Fondo.
+- [x] **Presupuesto de alertas**
+  - Tabla `alert_budget` y contador semanal por canal y tipo.
+  - `lab alerts budget` muestra el uso frente al presupuesto
+    (`alerts.weekly_budget` de `config/lab.yaml` cuando exista; por defecto
+    40). Las **críticas nunca se suprimen**.
+- [x] **`lab drill` (R8)**
+  - Solo paper/demo: **rechaza `mode=live`**.
+  - Exige operador **armado** y `--confirm`.
+  - Cancela órdenes pendientes, cierra posiciones de los magics del laboratorio,
+    avisa por ntfy **y** Telegram, activa el kill-switch y lo resetea con
+    confirmación; mide tiempos y lo deja en `console_actions` con actor `drill`.
+  - `scripts/drill_monthly.ps1` (no registra nada) y
+    `scripts/register_drill_task.ps1` (**no se registra sin autorización**).
+- [x] **`docs/paper_vs_live.md`**: huecos de paper/demo y cómo se cubren.
+- [x] **Tests**: embudo y disciplina sin datos, ticker ratio, familias de
+  sesión y overnight.
+
 ### Etapa 4 — Presupuesto de riesgo neto por activo
 
 - [x] **`config/risk_budget.yaml`**

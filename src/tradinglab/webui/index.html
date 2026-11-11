@@ -1313,7 +1313,13 @@
         <div class="panel-head"><h2>Actividad en vivo</h2><span class="muted tiny">señales · alertas · agentes</span></div>
         <div id="live-feed"></div>
       </div>
-    </section>
+    
+      <div class="panel" style="margin-bottom:14px">
+        <div class="panel-head"><h2>Embudo</h2><span class="muted tiny" id="funnel-meta"></span></div>
+        <div id="funnel-table"></div>
+        <div class="note">Conteos por etapa y tasa de caída. Solo lectura.</div>
+      </div>
+</section>
 
     <!-- ============================================================= MERCADO -->
     <section class="view" id="view-market">
@@ -1509,7 +1515,13 @@
         <div class="panel-head"><h2>Historial de límites</h2><span class="muted tiny" id="fund-history-title"></span></div>
         <div id="fund-history"></div>
       </div>
-    </section>
+    
+      <div class="panel" style="margin-bottom:14px">
+        <div class="panel-head"><h2>Disciplina</h2><span class="muted tiny" id="discipline-meta"></span></div>
+        <div id="discipline-table"></div>
+        <div class="note">Órdenes bloqueadas por guard en los últimos 30 días. Solo lectura.</div>
+      </div>
+</section>
 
     <!-- =============================================================== DIARIO -->
     <section class="view" id="view-journal">
@@ -2397,7 +2409,7 @@ async function loadAll(manual = false) {
   button.disabled = true;
   button.classList.add("loading");
   $("#refresh-label").textContent = "Actualizando…";
-  const [overviewResult, riskResult, accountsResult, fundResult, operatorResult, driftResult, instrumentsResult, marketsResult, rankingResult, sloResult, tcaResult, conditionersResult] = await Promise.allSettled([
+  const [overviewResult, riskResult, accountsResult, fundResult, operatorResult, driftResult, instrumentsResult, marketsResult, rankingResult, sloResult, tcaResult, conditionersResult, funnelResult, disciplineResult] = await Promise.allSettled([
     getJSON("/api/overview"),
     getJSON("/api/risk"),
     getJSON("/api/accounts"),
@@ -2409,6 +2421,8 @@ async function loadAll(manual = false) {
     getJSON("/api/models/ranking"),
     getJSON("/api/slo"),
     getJSON("/api/conditioners/today"),
+    getJSON("/api/funnel"),
+    getJSON("/api/discipline"),
     getJSON("/api/tca"),
   ]);
   if (overviewResult.status === "fulfilled") {
@@ -2447,6 +2461,14 @@ async function loadAll(manual = false) {
   if (sloResult.status === "fulfilled") {
     S.slo = sloResult.value;
     renderSlo(sloResult.value);
+  }
+  if (funnelResult.status === "fulfilled") {
+    S.funnel = funnelResult.value;
+    renderFunnel(funnelResult.value);
+  }
+  if (disciplineResult.status === "fulfilled") {
+    S.discipline = disciplineResult.value;
+    renderDiscipline(disciplineResult.value);
   }
   if (conditionersResult.status === "fulfilled") {
     S.conditioners = conditionersResult.value;
@@ -5032,6 +5054,49 @@ function renderConditioners(data) {
   ]);
   host.innerHTML = grid(
     [{ label: "Símbolo" }, { label: "Sesión" }, { label: "Flags" }],
+    body,
+    { empty: "Sin datos." }
+  );
+}
+
+function renderFunnel(data) {
+  const host = $("#funnel-table");
+  if (!host) return;
+  const meta = $("#funnel-meta");
+  const counts = (data && data.counts) || {};
+  const rates = (data && data.rates) || {};
+  if (!Object.keys(counts).length) {
+    if (meta) meta.textContent = (data && data.error) || "sin datos";
+    host.innerHTML = `<div class="empty">Sin datos: el embudo está vacío.</div>`;
+    return;
+  }
+  const body = Object.keys(counts).map((key) => [
+    esc(key.replace(/_/g, " ")),
+    num(counts[key], 0),
+    rates[key] == null ? "-" : pct(rates[key], 1),
+  ]);
+  host.innerHTML = grid(
+    [{ label: "Etapa" }, { label: "n", num: true }, { label: "% del total" }],
+    body,
+    { empty: "Sin datos." }
+  );
+}
+
+function renderDiscipline(data) {
+  const host = $("#discipline-table");
+  if (!host) return;
+  const meta = $("#discipline-meta");
+  const rows = (data && data.blocked_by_guard) || {};
+  const total = (data && data.total_blocked) || 0;
+  if (!total) {
+    if (meta) meta.textContent = "0 bloqueos";
+    host.innerHTML = `<div class="empty">Sin datos: no hay bloqueos registrados en el periodo.</div>`;
+    return;
+  }
+  if (meta) meta.textContent = `${total} bloqueos en ${data.days} días`;
+  const body = Object.keys(rows).map((key) => [esc(key), num(rows[key], 0)]);
+  host.innerHTML = grid(
+    [{ label: "Guard" }, { label: "Bloqueos", num: true }],
     body,
     { empty: "Sin datos." }
   );
