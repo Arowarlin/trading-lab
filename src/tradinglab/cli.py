@@ -1083,7 +1083,7 @@ def agent_compare_cmd(
             console.print(
                 "[yellow]El deep no se completó:[/yellow] "
                 + str(row["deep_error"])[:300]
-                + " [dim](presupuesto 1800 s; el lado lite queda registrado)[/dim]"
+                + f" [dim](presupuesto {deep_timeout} s; el lado lite queda registrado)[/dim]"
             )
         if row["retrospective"]:
             console.print(
