@@ -63,6 +63,35 @@ USDJPY_SPEC = {
 }
 
 
+def _ok_freshness(symbol, timeframe, *args, **kwargs):
+    return {
+        "status": "ok",
+        "reason": "test",
+        "symbol": symbol,
+        "timeframe": timeframe,
+        "age_s": 0.0,
+        "aviso_s": 60.0,
+        "falla_s": 120.0,
+        "source": "test",
+        "last_bar_utc": None,
+        "fetched_at_utc": None,
+        "bar_age_s": None,
+        "checked_at": None,
+    }
+
+
+def _ok_clock(*args, **kwargs):
+    return {
+        "status": "ok",
+        "reason": "test",
+        "skew_s": 0.0,
+        "sources": {},
+        "aviso_s": 2.0,
+        "falla_s": 10.0,
+        "checked_at": None,
+    }
+
+
 def _bars(
     *,
     end: str = "2026-11-10 14:45",
@@ -320,6 +349,8 @@ class FakeBroker:
 
 @pytest.fixture
 def guards(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(fwd, "check_freshness", _ok_freshness)
+    monkeypatch.setattr(fwd, "check_clock", _ok_clock)
     monkeypatch.setattr(
         fwd,
         "session_block",

@@ -12,6 +12,35 @@ from tradinglab.intel.calendar import BlackoutResult, CalendarStatus
 from tradinglab.session import SessionBlock
 
 
+def _ok_freshness(symbol, timeframe, *args, **kwargs):
+    return {
+        "status": "ok",
+        "reason": "test",
+        "symbol": symbol,
+        "timeframe": timeframe,
+        "age_s": 0.0,
+        "aviso_s": 60.0,
+        "falla_s": 120.0,
+        "source": "test",
+        "last_bar_utc": None,
+        "fetched_at_utc": None,
+        "bar_age_s": None,
+        "checked_at": None,
+    }
+
+
+def _ok_clock(*args, **kwargs):
+    return {
+        "status": "ok",
+        "reason": "test",
+        "skew_s": 0.0,
+        "sources": {},
+        "aviso_s": 2.0,
+        "falla_s": 10.0,
+        "checked_at": None,
+    }
+
+
 def _frame(n: int = 400) -> pd.DataFrame:
     idx = pd.bdate_range("2025-01-01", periods=n)
     close = [100 + i * 0.5 for i in range(n)]
@@ -75,6 +104,8 @@ def test_f13_dry_run_alpaca_evalua_filtros_y_no_envia(monkeypatch, tmp_path):
     calls = {"ks": 0, "blackout": 0, "session": 0, "guard": 0}
 
     monkeypatch.setattr(orch, "fetch", lambda *a, **k: _frame())
+    monkeypatch.setattr(orch, "check_freshness", _ok_freshness)
+    monkeypatch.setattr(orch, "check_clock", _ok_clock)
     monkeypatch.setattr(orch, "_trades_today", lambda *a, **k: 0)
     monkeypatch.setattr(
         orch,

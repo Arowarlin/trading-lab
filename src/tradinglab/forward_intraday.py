@@ -1003,7 +1003,7 @@ def run_forward_bot(
 
     # Datos frescos y reloj sano: sin esto no se abre nada. El cierre de una
     # posición ya está gestionado antes (rama `position is not None`).
-    fresh = check_freshness(symbol, bot.timeframe)
+    fresh = check_freshness(symbol, bot.timeframe, db_path=db_path)
     guards["freshness"] = f"{fresh['status']}: {fresh['reason']}"
     if fresh["status"] == FRESHNESS_FALLA:
         _record_signal(

@@ -65,7 +65,7 @@ def test_dias_habiles_alrededor():
     assert all(dia.weekday() < 5 for dia in dias)
 
 
-def test_fomc_sin_tabla_devuelve_error():
-    fechas, error = fomc_dates("no-existe.db")
+def test_fomc_sin_tabla_devuelve_error(tmp_path):
+    fechas, error = fomc_dates(str(tmp_path / "no-existe.db"))
     assert fechas == []
     assert error

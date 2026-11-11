@@ -35,6 +35,35 @@ class FakeSpecBroker:
         raise ValueError(f"no existe {symbol}")
 
 
+def _ok_freshness(symbol, timeframe, *args, **kwargs):
+    return {
+        "status": "ok",
+        "reason": "test",
+        "symbol": symbol,
+        "timeframe": timeframe,
+        "age_s": 0.0,
+        "aviso_s": 60.0,
+        "falla_s": 120.0,
+        "source": "test",
+        "last_bar_utc": None,
+        "fetched_at_utc": None,
+        "bar_age_s": None,
+        "checked_at": None,
+    }
+
+
+def _ok_clock(*args, **kwargs):
+    return {
+        "status": "ok",
+        "reason": "test",
+        "skew_s": 0.0,
+        "sources": {},
+        "aviso_s": 2.0,
+        "falla_s": 10.0,
+        "checked_at": None,
+    }
+
+
 def _frame(n: int = 400) -> pd.DataFrame:
     idx = pd.bdate_range("2025-01-01", periods=n)
     close = [100 + index * 0.5 for index in range(n)]
@@ -90,6 +119,8 @@ def _settings() -> Settings:
 def _prepare(monkeypatch, tmp_path, target: float) -> None:
     db = tmp_path / "lab.db"
     init_db(db)
+    monkeypatch.setattr(orch, "check_freshness", _ok_freshness)
+    monkeypatch.setattr(orch, "check_clock", _ok_clock)
     discover(db, FakeSpecBroker())
     from tradinglab.asset_aliases import symbol_allowed as real
 
@@ -118,7 +149,7 @@ def _prepare(monkeypatch, tmp_path, target: float) -> None:
 def test_load_bots_incluye_intraday_sin_tocar_bots_yaml():
     specs = load_bots()
     intra = [spec for spec in specs if spec.profile == "intraday_fx"]
-    assert len(intra) == 9
+    assert len(intra) == 12
     assert INTRADAY_IDS <= {spec.id for spec in intra}
     assert all(not spec.enabled for spec in intra)
     assert all(spec.yaml_enabled is False for spec in intra)
@@ -133,7 +164,7 @@ def test_load_bots_incluye_intraday_sin_tocar_bots_yaml():
         assert spec.universe and all(t in ALLOWED_SYMBOLS for t in spec.universe)
     assert sum(1 for spec in intra if spec.timeframe == "M5") == 1
     # Los parámetros no se comparten entre activos.
-    assert len({json.dumps(spec.grid, sort_keys=True) for spec in intra}) == 9
+    assert len({json.dumps(spec.grid, sort_keys=True) for spec in intra}) == 11
 
 
 def test_guard_bloquea_apertura_fuera_del_universo(monkeypatch, tmp_path):
