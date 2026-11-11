@@ -80,6 +80,18 @@ def test_ohlc_inconsistente_es_falla() -> None:
     assert "OHLC inconsistente" in result["checks"]["ohlc"]["reason"]
 
 
+def test_ruido_de_coma_flotante_en_ohlc_no_es_falla() -> None:
+    """Yahoo ajustado deja close == high + 3e-15; eso no es un dato roto."""
+    frame = _frame()
+    frame.loc[frame.index[5], "close"] = frame["high"].iloc[5] + 3.55e-15
+    result = check_frame(frame, "SPY")
+    assert result["checks"]["ohlc"]["status"] == "ok"
+    # un céntimo de verdad sí falla
+    frame.loc[frame.index[6], "close"] = frame["high"].iloc[6] + 0.01
+    result = check_frame(frame, "SPY")
+    assert result["checks"]["ohlc"]["status"] == "falla"
+
+
 def test_huecos_de_calendario_aviso_y_falla() -> None:
     frame = _frame(rows=300)
     small_gap = frame.drop(frame.index[100:110])

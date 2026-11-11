@@ -37,27 +37,45 @@ HORIZON_MAX = 750
 MONTH_DAYS = 21
 DEFAULT_FEE_EUR = 540.0
 DEFAULT_SPLIT = 0.80
+# FTMO 2-Step: la cuota se devuelve con la primera retirada de Reward.
+# Fuente: FTMO FAQ "Is the entry fee refunded?" (actualizada 2026-10-06)
+# https://ftmo.com/en/faq/is-the-entry-fee-refunded/
+FEE_REFUND_DEFAULT = True
+FEE_REFUND_SOURCE = (
+    "FTMO FAQ 'Is the entry fee refunded?' (2-Step: se devuelve con la primera "
+    "retirada de Reward; 1-Step/Instant no) · "
+    "https://ftmo.com/en/faq/is-the-entry-fee-refunded/ · consultado 2026-11-11"
+)
 
 
 class SweepError(RuntimeError):
     """Falta el artefacto o la variante no es simulable."""
 
 
-def _economics(fee_eur: float | None, split: float | None) -> dict:
-    """Cuota y split: `prop.yaml -> economics` si existe; si no, parámetros."""
+def _economics(
+    fee_eur: float | None,
+    split: float | None,
+    fee_refund_on_pass: bool | None = None,
+) -> dict:
+    """Cuota, split y reembolso: `prop.yaml -> economics` o parámetros."""
     data: dict = {}
     if PROP_CONFIG.exists():
         raw = yaml.safe_load(PROP_CONFIG.read_text(encoding="utf-8")) or {}
         data = raw.get("economics") or {}
     fee = fee_eur if fee_eur is not None else data.get("challenge_fee_eur")
     share = split if split is not None else data.get("profit_split")
+    refund = data.get("fee_refund_on_pass") if fee_refund_on_pass is None else fee_refund_on_pass
     if fee is None:
         fee = DEFAULT_FEE_EUR
     if share is None:
         share = DEFAULT_SPLIT
+    if refund is None:
+        refund = FEE_REFUND_DEFAULT
     return {
         "fee_eur": float(fee),
         "profit_split": float(share),
+        "fee_refund_on_pass": bool(refund),
+        "refund_source": FEE_REFUND_SOURCE,
         "source": (
             "config/prop.yaml:economics"
             if data
@@ -198,6 +216,58 @@ def funded_month_payout(
     }
 
 
+def bootstrap_ci(
+    returns: pd.Series,
+    rules: PropRules,
+    *,
+    k: float,
+    resamples: int = 200,
+    paths: int = 500,
+    block: int = BLOCK,
+    seed: int = SEED,
+) -> dict:
+    """IC 90 % de P(pasar) remuestreando los retornos (bootstrap por bloques).
+
+    Cada remuestreo reordenar los retornos en bloques del mismo tamaño que la
+    muestra original y corre el MC sin límite con `paths` simulaciones. Devuelve
+    los percentiles 5/95 de la distribución de P(pasar).
+    """
+    r = np.asarray(returns, dtype=float) * float(k)
+    r = r[np.isfinite(r)]
+    count = int(resamples)
+    if count <= 0 or r.size == 0:
+        return {"low": None, "high": None, "resamples": 0, "paths": int(paths)}
+    rng = np.random.default_rng(seed)
+    size = r.size
+    block_size = max(1, int(block))
+    values: list[float] = []
+    for index in range(count):
+        sample = np.empty(size, dtype=float)
+        filled = 0
+        while filled < size:
+            start = int(rng.integers(0, max(1, size - block_size + 1)))
+            take = min(block_size, size - filled)
+            sample[filled : filled + take] = r[start : start + take][:take]
+            filled += take
+        result = monte_carlo(
+            rules,
+            sample,
+            n_paths=int(paths),
+            horizon=_horizon_blocks(HORIZON_MAX, block_size),
+            block_size=block_size,
+            seed=int(seed) + index,
+        )
+        values.append(float(result["pass_rate"]))
+    low, high = np.percentile(values, [5, 95])
+    return {
+        "low": float(low),
+        "high": float(high),
+        "resamples": count,
+        "paths": int(paths),
+        "median": float(np.median(values)),
+    }
+
+
 def sweep(
     returns: pd.Series,
     rules: PropRules,
@@ -208,13 +278,17 @@ def sweep(
     block: int = BLOCK,
     fee_eur: float | None = None,
     split: float | None = None,
+    fee_refund_on_pass: bool | None = None,
     eurusd: float | None = None,
     oracle: bool = True,
+    bootstrap: int = 0,
+    bootstrap_paths: int = 500,
 ) -> dict:
-    """Barrido completo: MC por k, EV y (si está) oráculo prop-ev."""
-    economics = _economics(fee_eur, split)
+    """Barrido completo: MC por k, EV (con y sin reembolso) y oráculo."""
+    economics = _economics(fee_eur, split, fee_refund_on_pass)
     rate = float(eurusd) if eurusd else None
     fee_usd = economics["fee_eur"] * rate if rate else None
+    refund_eur = economics["fee_eur"] if economics["fee_refund_on_pass"] else 0.0
     rows: list[dict] = []
     for k in k_values:
         scaled = returns * float(k)
@@ -246,8 +320,26 @@ def sweep(
         )
         payout_eur = month["expected_payout_usd"] / rate if rate else None
         ev_eur = (
+            float(mcmax["pass_rate"]) * (payout_eur + refund_eur) - economics["fee_eur"]
+            if payout_eur is not None
+            else None
+        )
+        ev_no_refund = (
             float(mcmax["pass_rate"]) * payout_eur - economics["fee_eur"]
             if payout_eur is not None
+            else None
+        )
+        ci90 = (
+            bootstrap_ci(
+                returns,
+                rules,
+                k=float(k),
+                resamples=int(bootstrap),
+                paths=int(bootstrap_paths),
+                block=int(block),
+                seed=int(seed),
+            )
+            if bootstrap
             else None
         )
         oracle_payout_eur = (
@@ -287,9 +379,11 @@ def sweep(
                     "p5_max_drawdown": mcmax["p5_max_drawdown"],
                     "worst_max_drawdown": mcmax["worst_max_drawdown"],
                 },
+                "ci90": ci90,
                 "funded_month": month,
                 "payout_eur": payout_eur,
                 "ev_eur": ev_eur,
+                "ev_no_refund_eur": ev_no_refund,
                 "oracle_payout_eur": oracle_payout_eur,
                 "oracle_ev_eur": oracle_ev_eur,
             }
@@ -307,6 +401,11 @@ def sweep(
         "horizon_max": HORIZON_MAX,
         "horizon_120_blocks": _horizon_blocks(HORIZON_120, block),
         "horizon_max_blocks": _horizon_blocks(HORIZON_MAX, block),
+        "bootstrap": {
+            "resamples": int(bootstrap),
+            "paths": int(bootstrap_paths) if bootstrap else 0,
+            "method": "bootstrap por bloques de los retornos; MC sin límite",
+        },
         "oracle": _oracle(returns, rules, k_values) if oracle else None,
     }
 
@@ -477,6 +576,8 @@ def render_report(payload: dict) -> str:
     lines += [
         f"- Origen: run `{payload.get('run_id')}` · {payload.get('sample_days')} días "
         f"({payload.get('start')} → {payload.get('end')})",
+        f"- Muestra: {payload.get('num_trades') if payload.get('num_trades') is not None else 'Sin datos'} "
+        f"operaciones · {payload.get('sample_days')} días",
         f"- Reglas: {payload['rules']}",
         f"- MC: {payload['paths']} paths · bloques de {payload['block_size']} · "
         f"seed {payload['seed']}",
@@ -486,20 +587,30 @@ def render_report(payload: dict) -> str:
         f"{payload['horizon_max_blocks']} bloques)",
         f"- Economía: cuota {_fmt(payload['economics']['fee_eur'], 0)} EUR · "
         f"split {payload['economics']['profit_split']:.0%} · "
+        f"reembolso al pasar: "
+        f"{'sí' if payload['economics']['fee_refund_on_pass'] else 'no'} · "
         f"EURUSD {_fmt((payload.get('eurusd') or {}).get('rate'), 5)}",
         f"- Fuente EURUSD: {(payload.get('eurusd') or {}).get('source')} "
         f"({(payload.get('eurusd') or {}).get('as_of')})",
+        f"- Fuente reembolso: {payload['economics'].get('refund_source')}",
         "",
         "## Challenge FTMO 100k",
         "",
-        "| k | Horizonte | P(pasar) | P(breach) | Sin resolver | Mediana días | MaxDD mediano | Peor 5 % |",
-        "|---:|---|---:|---:|---:|---:|---:|---:|",
+        "| k | Horizonte | P(pasar) | IC 90 % | P(breach) | Sin resolver | Mediana días | MaxDD mediano | Peor 5 % |",
+        "|---:|---|---:|---|---:|---:|---:|---:|---:|",
     ]
     for row in rows:
+        ci = row.get("ci90") or {}
+        ci_text = (
+            f"{ci['low']:.1%} – {ci['high']:.1%}"
+            if ci.get("low") is not None and ci.get("high") is not None
+            else "—"
+        )
         for label, key in (("120 d", "horizon_120"), ("sin límite", "sin_limite")):
             block = row[key]
             lines.append(
                 f"| {row['k']:g} | {label} | {block['pass_rate']:.1%} | "
+                f"{ci_text if key == 'sin_limite' else '—'} | "
                 f"{block['breach_rate']:.1%} | "
                 f"{block['timeout_rate']:.1%} | "
                 f"{_fmt(block['median_days_to_pass'], 0)} | "
@@ -511,13 +622,14 @@ def render_report(payload: dict) -> str:
         "## Valor esperado",
         "",
         "| k | P(pasar) sin límite | Pago mes 1 (EUR) | EV neto (EUR) | "
-        "EV oráculo (EUR) |",
-        "|---:|---:|---:|---:|---:|",
+        "EV sin reembolso (EUR) | EV oráculo (EUR) |",
+        "|---:|---:|---:|---:|---:|---:|",
     ]
     for row in rows:
         lines.append(
             f"| {row['k']:g} | {row['sin_limite']['pass_rate']:.1%} | "
             f"{_fmt(row['payout_eur'], 0)} | {_signed(row['ev_eur'], 0)} | "
+            f"{_signed(row.get('ev_no_refund_eur'), 0)} | "
             f"{_signed(row['oracle_ev_eur'], 0)} |"
         )
     lines += [
@@ -528,9 +640,11 @@ def render_report(payload: dict) -> str:
         "",
         "El **pago del mes 1** es el bootstrap de 21 días desde una cuenta ya",
         "fondeada: si el path revienta el diario (5 %) o el total (10 %), paga 0.",
-        "El **EV oráculo** usa la convención de prop-ev (un objetivo de beneficio",
-        "completo, 10 % × cuenta × split); se muestra como contraste, no como",
-        "criterio de decisión.",
+        "El **EV neto** suma la devolución de la cuota cuando se pasa (2-Step:",
+        "se devuelve con la primera retirada); **sin reembolso** es la fórmula",
+        "anterior, para comparar. El **EV oráculo** usa la convención de prop-ev",
+        "(un objetivo de beneficio completo, 10 % × cuenta × split); se muestra",
+        "como contraste, no como criterio de decisión.",
         "",
     ]
     oracle = payload.get("oracle")
@@ -559,8 +673,36 @@ def render_report(payload: dict) -> str:
         ]
     else:
         lines += ["## Oráculo", "", "Sin oráculo (prop-ev no disponible).", ""]
+    comparisons = payload.get("comparison") or []
+    conclusion = payload.get("comparison_conclusion") or {}
+    if comparisons:
+        other = comparisons[0]
+        lines += [
+            f"## Comparación con `{other.get('bot')}`",
+            "",
+            f"- {other.get('bot')}: {other.get('num_trades')} operaciones · "
+            f"{other.get('sample_days')} días",
+            f"- {bot}: {payload.get('num_trades')} operaciones · "
+            f"{payload.get('sample_days')} días",
+            "",
+            f"| k | P(pasar) {other.get('bot')} | IC 90 % | P(pasar) {bot} | IC 90 % |",
+            "|---:|---:|---|---:|---|",
+        ]
+        by_k = {row.get("k"): row for row in (other.get("rows") or [])}
+        for row in rows:
+            previous = by_k.get(row["k"]) or {}
+            prev_ci = previous.get("ci90") or {}
+            now_ci = row.get("ci90") or {}
+            lines.append(
+                f"| {row['k']:g} | "
+                f"{(previous.get('pass_rate') or 0):.1%} | "
+                f"{prev_ci.get('low', 0):.1%} – {prev_ci.get('high', 0):.1%} | "
+                f"{row['sin_limite']['pass_rate']:.1%} | "
+                f"{now_ci.get('low', 0):.1%} – {now_ci.get('high', 0):.1%} |"
+            )
+        lines.append("")
     lines += [
-        "## Recomendación",
+        "## Conclusión",
         "",
         f"**{rec['text']}**"
         + (
@@ -570,6 +712,63 @@ def render_report(payload: dict) -> str:
         ),
         "",
     ]
+    if conclusion:
+        k_before = conclusion.get("k_before")
+        k_now = conclusion.get("k_now")
+        ratio = conclusion.get("ci_ratio")
+        width_now = conclusion.get("ci_width_now")
+        width_before = conclusion.get("ci_width_before")
+        lines += [
+            f"- k óptima con la muestra larga: **{k_now:g}**"
+            if k_now is not None
+            else "- k óptima con la muestra larga: Sin datos",
+            f"- k óptima con la muestra corta: **{k_before:g}**"
+            if k_before is not None
+            else "- k óptima con la muestra corta: Sin datos",
+            (
+                f"- IC 90 % mediano: {width_before * 100:.1f} pp → "
+                f"{width_now * 100:.1f} pp (factor {ratio:.2f})"
+                if width_now is not None and width_before
+                else "- IC 90 %: Sin datos"
+            ),
+            f"- Operaciones: {conclusion.get('trades_before')} → "
+            f"{conclusion.get('trades_now')} · días: "
+            f"{conclusion.get('days_before')} → {conclusion.get('days_now')}",
+            "",
+        ]
+        if (
+            k_now is not None
+            and k_before is not None
+            and abs(float(k_now) - float(k_before)) > 1e-9
+        ):
+            lines.append(
+                f"La k cambia de {k_before:g} a {k_now:g} con la muestra larga."
+            )
+        elif k_now is not None:
+            lines.append("La k **no cambia** con la muestra larga: se mantiene.")
+        lines.append("")
+    adopted = payload.get("adopted_k")
+    if adopted is not None:
+        adopted_row = next(
+            (row for row in rows if abs(float(row["k"]) - float(adopted)) < 1e-9),
+            None,
+        )
+        if adopted_row is not None:
+            breach = adopted_row["sin_limite"]["breach_rate"]
+            lines += [
+                f"- Decisión adoptada: **k={adopted:g}** · óptima: "
+                f"**{rec.get('best_k') if rec.get('best_k') is not None else 'Sin datos'}**"
+                + (
+                    " (no coincide; el óptimo de EV no es la elección de riesgo)"
+                    if rec.get("best_k") is not None
+                    and abs(float(rec["best_k"]) - float(adopted)) > 1e-9
+                    else " (coincide)"
+                ),
+                f"- En k={adopted:g}: EV {_signed(adopted_row.get('ev_eur'), 0)} EUR · "
+                f"breach {breach:.1%} · peor 5 % MaxDD "
+                f"{adopted_row['sin_limite']['p5_max_drawdown'] * 100:.1f}%",
+                "",
+            ]
     if not rec.get("positive"):
         lines += [
             "Con la cuota de 540 EUR y el beneficio del primer mes fondeado, el",
@@ -580,11 +779,10 @@ def render_report(payload: dict) -> str:
         ]
     else:
         lines += [
-            "El óptimo es plano: k=0.5, 0.75 y 1.0 quedan a menos de 310 EUR de",
-            "diferencia y el EV depende del modelo del mes 1. Subir k mejora el",
-            "EV pero también el breach (45 % a k=1) y el peor 5 % de MaxDD",
-            "(−34 % a k=1 frente a −18 % a k=0.5). Esto es un estudio: no se",
-            "cambia la exposición de ningún bot ni se activa nada.",
+            "El óptimo es plano y el EV depende del modelo del mes 1. Subir k",
+            "mejora el EV pero también el breach y el peor 5 % de MaxDD. Esto es",
+            "un estudio: no se cambia la exposición de ningún bot ni se activa",
+            "nada.",
             "",
         ]
     lines += [
@@ -596,16 +794,88 @@ def render_report(payload: dict) -> str:
     return "\n".join(lines)
 
 
-def write_report(payload: dict, out_dir: Path) -> dict:
+def write_report(payload: dict, out_dir: Path, name: str = "exposure_sweep") -> dict:
     out_dir.mkdir(parents=True, exist_ok=True)
-    json_path = out_dir / "exposure_sweep.json"
-    md_path = out_dir / "exposure_sweep.md"
+    json_path = out_dir / f"{name}.json"
+    md_path = out_dir / f"{name}.md"
     json_path.write_text(
         json.dumps(payload, indent=2, ensure_ascii=False, default=str),
         encoding="utf-8",
     )
     md_path.write_text(render_report(payload), encoding="utf-8")
     return {"json": str(json_path), "markdown": str(md_path)}
+
+
+def _report_name(bot: str) -> str:
+    if bot == "us100-trend-d1":
+        return "exposure_sweep"
+    return f"exposure_sweep_{bot.replace('-', '_')}"
+
+
+def _load_comparison(bot: str, out: Path) -> dict | None:
+    """Payload de un barrido anterior para la comparación lado a lado."""
+    path = out / f"{_report_name(bot)}.json"
+    if not path.exists():
+        return None
+    try:
+        doc = json.loads(path.read_text(encoding="utf-8"))
+    except ValueError:
+        return None
+    return {
+        "bot": bot,
+        "num_trades": doc.get("num_trades"),
+        "sample_days": doc.get("sample_days"),
+        "recommendation": doc.get("recommendation"),
+        "rows": [
+            {
+                "k": row.get("k"),
+                "pass_rate": (row.get("sin_limite") or {}).get("pass_rate"),
+                "ci90": row.get("ci90"),
+                "ev_eur": row.get("ev_eur"),
+                "ev_no_refund_eur": row.get("ev_no_refund_eur"),
+            }
+            for row in (doc.get("rows") or [])
+        ],
+    }
+
+
+def _ci_width(rows: list[dict]) -> float | None:
+    widths = [
+        float(row["ci90"]["high"]) - float(row["ci90"]["low"])
+        for row in rows
+        if row.get("ci90")
+        and row["ci90"].get("high") is not None
+        and row["ci90"].get("low") is not None
+    ]
+    return float(np.median(widths)) if widths else None
+
+
+def comparison_conclusion(payload: dict, comparisons: list[dict]) -> dict | None:
+    """k óptima y estrechamiento del IC frente a la muestra corta."""
+    if not comparisons:
+        return None
+    other = comparisons[0]
+    rec = payload.get("recommendation") or {}
+    other_rec = other.get("recommendation") or {}
+    width_now = _ci_width(payload.get("rows") or [])
+    width_before = _ci_width(other.get("rows") or [])
+    ratio = (
+        width_now / width_before
+        if width_now is not None and width_before not in (None, 0)
+        else None
+    )
+    return {
+        "bot": other.get("bot"),
+        "k_now": rec.get("best_k"),
+        "k_before": other_rec.get("best_k"),
+        "trades_now": payload.get("num_trades"),
+        "trades_before": other.get("num_trades"),
+        "days_now": payload.get("sample_days"),
+        "days_before": other.get("sample_days"),
+        "ci_width_now": width_now,
+        "ci_width_before": width_before,
+        "ci_ratio": ratio,
+    }
 
 
 def run_sweep(
@@ -621,7 +891,13 @@ def run_sweep(
     block: int = BLOCK,
     fee_eur: float | None = None,
     split: float | None = None,
+    fee_refund_on_pass: bool | None = None,
     oracle: bool = True,
+    bootstrap: int = 200,
+    bootstrap_paths: int = 500,
+    name: str | None = None,
+    compare_with: tuple[str, ...] = (),
+    adopted_k: float | None = None,
 ) -> dict:
     from .config import get_settings
     from .prop.rules import from_yaml
@@ -642,10 +918,15 @@ def run_sweep(
         block=block,
         fee_eur=fee_eur,
         split=split,
+        fee_refund_on_pass=fee_refund_on_pass,
         eurusd=rate.get("rate"),
         oracle=oracle,
+        bootstrap=bootstrap,
+        bootstrap_paths=bootstrap_paths,
     )
     meta = loaded.get("meta") or {}
+    verified = meta.get("verified") or {}
+    num_trades = meta.get("num_trades") or verified.get("num_trades")
     payload.update(
         {
             "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
@@ -655,16 +936,27 @@ def run_sweep(
             "run_id": meta.get("run_id"),
             "artifact": loaded["path"],
             "artifact_source": meta.get("source"),
-            "artifact_verified": meta.get("verified"),
+            "artifact_verified": verified,
+            "num_trades": num_trades,
             "sample_days": int(len(loaded["returns"])),
             "start": str(loaded["returns"].index[0].date()),
             "end": str(loaded["returns"].index[-1].date()),
             "rules": rules.describe(),
             "eurusd": rate,
+            "adopted_k": adopted_k,
         }
     )
+    comparisons = [
+        item
+        for item in (_load_comparison(other, out) for other in compare_with)
+        if item is not None
+    ]
+    payload["comparison"] = comparisons
     payload["recommendation"] = recommendation(payload)
-    payload["files"] = write_report(payload, out)
+    payload["comparison_conclusion"] = comparison_conclusion(payload, comparisons)
+    payload["files"] = write_report(
+        payload, out, name or _report_name(bot)
+    )
     return payload
 
 

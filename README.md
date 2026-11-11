@@ -642,8 +642,10 @@ diarios de FTMO solo usa 4.500.
 
 `prop exposure-sweep` escala por `k` los retornos diarios del artefacto de una
 variante ya validada (no recalcula el backtest), simula el challenge a 120 días y
-sin límite, y calcula P(pasar), P(breach), MaxDD y EV neto con la cuota, el split
-y el beneficio esperado del primer mes fondeado. No cambia la estrategia ni
+sin límite, y calcula P(pasar) con su IC 90 % (200 remuestreos), P(breach),
+MaxDD y EV neto con la cuota, el split, el reembolso de la cuota al pasar
+(FTMO 2-Step) y el beneficio esperado del primer mes fondeado. `--compare`
+añade la tabla lado a lado con otro artefacto. No cambia la estrategia ni
 activa nada.
 
 El sizing **no** usa porcentaje del nocional: usa

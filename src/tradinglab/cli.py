@@ -522,7 +522,14 @@ def doctor(network: bool = typer.Option(False, "--network", help="Probar descarg
                     f"{ctx:,} tokens: los agentes necesitan 16k o más. Recarga "
                     "el modelo con --context-length 32768.",
                 )
-            if models and settings.llm.model not in models:
+            # LM Studio lista "proveedor/modelo" pero acepta el nombre corto;
+            # el doctor compara por el último segmento para no dar un falso WARN.
+            configured = str(settings.llm.model)
+            short = configured.split("/")[-1]
+            matches = any(
+                item == configured or item.split("/")[-1] == short for item in models
+            )
+            if models and not matches:
                 table.add_row(
                     "Modelo configurado",
                     WARN,
@@ -6415,6 +6422,21 @@ def prop_exposure_sweep(
     block_size: int = typer.Option(5, "--block-size"),
     fee_eur: float = typer.Option(None, "--fee-eur", help="Cuota del challenge (EUR)"),
     split: float = typer.Option(None, "--split", help="Split del beneficio (0-1)"),
+    no_refund: bool = typer.Option(
+        False, "--no-refund", help="No devolver la cuota al pasar (EV antiguo)"
+    ),
+    bootstrap: int = typer.Option(
+        200, "--bootstrap", help="Remuestreos del IC 90 % de P(pasar); 0 = sin IC"
+    ),
+    name: str = typer.Option(
+        None, "--name", help="Nombre del informe (sin extensión)"
+    ),
+    compare: str = typer.Option(
+        None, "--compare", help="Bots separados por comas para comparar lado a lado"
+    ),
+    adopted_k: float = typer.Option(
+        None, "--adopted-k", help="k decidida por el operador (para la conclusión)"
+    ),
     no_oracle: bool = typer.Option(False, "--no-oracle"),
     out: str = typer.Option(None, "--out"),
 ) -> None:
@@ -6434,7 +6456,14 @@ def prop_exposure_sweep(
             block=block_size,
             fee_eur=fee_eur,
             split=split,
+            fee_refund_on_pass=not no_refund,
             oracle=not no_oracle,
+            bootstrap=max(0, int(bootstrap)),
+            name=name,
+            compare_with=tuple(
+                item.strip() for item in (compare or "").split(",") if item.strip()
+            ),
+            adopted_k=adopted_k,
         )
     except SweepError as exc:
         console.print(f"[red]{exc}[/red]")
@@ -6450,11 +6479,13 @@ def prop_exposure_sweep(
         Panel(
             f"Bot: {bot} · variante {variant_text}\n"
             f"Run: {payload.get('run_id')} · {payload['sample_days']} días "
-            f"({payload['start']} → {payload['end']})\n"
+            f"({payload['start']} → {payload['end']}) · "
+            f"{payload.get('num_trades')} operaciones\n"
             f"Reglas: {payload['rules']}\n"
             f"Cuota {payload['economics']['fee_eur']:.0f} EUR · split "
-            f"{payload['economics']['profit_split']:.0%} · EURUSD "
-            f"{rate.get('rate') if rate.get('rate') is not None else 'Sin datos'} "
+            f"{payload['economics']['profit_split']:.0%} · reembolso "
+            f"{'sí' if payload['economics']['fee_refund_on_pass'] else 'no'} · "
+            f"EURUSD {rate.get('rate') if rate.get('rate') is not None else 'Sin datos'} "
             f"({rate.get('as_of') or 'Sin datos'})",
             title="Barrido de exposición",
         )
@@ -6464,6 +6495,7 @@ def prop_exposure_sweep(
         "k",
         "Horizonte",
         "P(pasar)",
+        "IC 90 %",
         "P(breach)",
         "Sin resolver",
         "Días (mediana)",
@@ -6472,12 +6504,19 @@ def prop_exposure_sweep(
     ):
         table.add_column(column, overflow="fold")
     for row in payload["rows"]:
+        ci = row.get("ci90") or {}
+        ci_text = (
+            f"{ci['low']:.0%}–{ci['high']:.0%}"
+            if ci.get("low") is not None and ci.get("high") is not None
+            else "—"
+        )
         for label, key in (("120 d", "horizon_120"), ("sin límite", "sin_limite")):
             block = row[key]
             table.add_row(
                 f"{row['k']:g}",
                 label,
                 f"{block['pass_rate']:.1%}",
+                ci_text if key == "sin_limite" else "—",
                 f"{block['breach_rate']:.1%}",
                 f"{block['timeout_rate']:.1%}",
                 f"{block['median_days_to_pass']:.0f}"
@@ -6488,7 +6527,14 @@ def prop_exposure_sweep(
             )
     console.print(table)
     ev_table = Table(title="Valor esperado por intento")
-    for column in ("k", "P(pasar)", "Pago mes 1 (EUR)", "EV neto (EUR)", "EV oráculo (EUR)"):
+    for column in (
+        "k",
+        "P(pasar)",
+        "Pago mes 1 (EUR)",
+        "EV neto (EUR)",
+        "EV sin reembolso (EUR)",
+        "EV oráculo (EUR)",
+    ):
         ev_table.add_column(column, overflow="fold")
     for row in payload["rows"]:
         ev_table.add_row(
@@ -6496,6 +6542,9 @@ def prop_exposure_sweep(
             f"{row['sin_limite']['pass_rate']:.1%}",
             f"{row['payout_eur']:,.0f}" if row["payout_eur"] is not None else "Sin datos",
             f"{row['ev_eur']:+,.0f}" if row["ev_eur"] is not None else "Sin datos",
+            f"{row['ev_no_refund_eur']:+,.0f}"
+            if row.get("ev_no_refund_eur") is not None
+            else "Sin datos",
             f"{row['oracle_ev_eur']:+,.0f}"
             if row["oracle_ev_eur"] is not None
             else "Sin datos",

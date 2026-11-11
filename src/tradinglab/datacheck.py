@@ -151,12 +151,16 @@ def _check_ohlc(df: pd.DataFrame) -> Check:
 
     open_, high, low, close = (frame[column] for column in PRICE_COLUMNS)
     volume = frame["volume"]
+    # Ruido de coma flotante de los precios ajustados (close == high + 3e-15).
+    # Una inconsistencia real está en céntimos o dólares, no en 1e-15.
+    scale = frame[list(PRICE_COLUMNS)].abs().max(axis=1).clip(lower=1.0)
+    tol = scale * 1e-9
     bad = (
-        (high < low)
-        | (high < open_)
-        | (high < close)
-        | (low > open_)
-        | (low > close)
+        (high < low - tol)
+        | (high < open_ - tol)
+        | (high < close - tol)
+        | (low > open_ + tol)
+        | (low > close + tol)
         | (open_ <= 0)
         | (close <= 0)
         | (high <= 0)

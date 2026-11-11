@@ -155,14 +155,15 @@ def test_el_barrido_escribe_informe_y_lee_el_artefacto(tmp_path, monkeypatch):
         out_dir=tmp_path,
         paths=100,
         oracle=False,
+        bootstrap=0,
     )
     assert payload["bot"] == "bot-x"
     assert payload["variant"]["fast"] == 50
     assert payload["recommendation"]["positive"] in (True, False)
-    markdown = (tmp_path / "exposure_sweep.md").read_text(encoding="utf-8")
+    markdown = Path(payload["files"]["markdown"]).read_text(encoding="utf-8")
     assert "Barrido de exposición" in markdown
     assert "k óptima" in markdown or "no es EV positivo" in markdown
-    saved = json.loads((tmp_path / "exposure_sweep.json").read_text(encoding="utf-8"))
+    saved = json.loads(Path(payload["files"]["json"]).read_text(encoding="utf-8"))
     assert saved["artifact"] == str(artifact_file(tmp_path, "bot-x"))
 
 
@@ -186,9 +187,79 @@ def test_cli_muestra_la_tabla(tmp_path, monkeypatch):
             str(tmp_path),
             "--paths",
             "50",
+            "--bootstrap",
+            "0",
             "--no-oracle",
         ],
     )
     assert result.exit_code == 0, result.output
     assert "P(pasar)" in result.output
     assert "EV neto" in result.output
+
+
+def test_el_reembolso_cambia_el_ev():
+    returns = _returns(300, mean=0.002, vol=0.004)
+    rules = ftmo(100_000.0, "challenge")
+    with_refund = sweep(
+        returns,
+        rules,
+        k_values=(0.5, 1.0),
+        paths=500,
+        oracle=False,
+        eurusd=1.1,
+        fee_refund_on_pass=True,
+    )
+    without = sweep(
+        returns,
+        rules,
+        k_values=(0.5, 1.0),
+        paths=500,
+        oracle=False,
+        eurusd=1.1,
+        fee_refund_on_pass=False,
+    )
+    fee = with_refund["economics"]["fee_eur"]
+    for row, old in zip(with_refund["rows"], without["rows"]):
+        expected = row["sin_limite"]["pass_rate"] * fee
+        assert row["ev_eur"] - old["ev_eur"] == pytest.approx(expected, abs=1e-6)
+        assert row["ev_no_refund_eur"] == pytest.approx(old["ev_eur"], abs=1e-9)
+
+
+def _sparse_series(days: int, trades: int, seed: int = 11) -> pd.Series:
+    """Serie diaria con `trades` días de movimiento y el resto planos."""
+    rng = np.random.default_rng(seed)
+    values = np.zeros(days)
+    positions = rng.choice(days - 1, size=trades, replace=False)
+    values[positions] = rng.normal(0.02, 0.03, size=trades)
+    index = pd.bdate_range("2010-01-04", periods=days, tz="UTC")
+    return pd.Series(values, index=index)
+
+
+def test_el_ic_se_estrecha_con_mas_operaciones():
+    rules = ftmo(100_000.0, "challenge")
+    short = sweep(
+        _sparse_series(300, 6),
+        rules,
+        k_values=(1.0,),
+        paths=400,
+        oracle=False,
+        eurusd=1.1,
+        bootstrap=60,
+        bootstrap_paths=400,
+    )
+    long = sweep(
+        _sparse_series(3000, 60),
+        rules,
+        k_values=(1.0,),
+        paths=400,
+        oracle=False,
+        eurusd=1.1,
+        bootstrap=60,
+        bootstrap_paths=400,
+    )
+    short_ci = short["rows"][0]["ci90"]
+    long_ci = long["rows"][0]["ci90"]
+    assert short_ci["low"] is not None and long_ci["low"] is not None
+    width_short = short_ci["high"] - short_ci["low"]
+    width_long = long_ci["high"] - long_ci["low"]
+    assert width_long < width_short, (width_short, width_long)

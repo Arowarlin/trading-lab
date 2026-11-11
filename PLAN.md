@@ -1607,6 +1607,51 @@ etapa.
   inexistente). `PropGuard.evaluate` acepta `open_risk_usd` y `lab mt5 run`
   lo calcula por posici?n con el `$/lote` de cada instrumento; dos tests
   nuevos en `tests/test_prop.py`.
+### Etapa 3o - Exposición con muestra larga y reembolso de cuota (2026-11-11)
+
+- [x] **Reembolso de la cuota (FTMO 2-Step)**
+  - `fee_refund_on_pass` (por defecto `True`) con fuente: FTMO FAQ "Is the entry
+    fee refunded?" (2-Step: se devuelve con la primera retirada de Reward;
+    1-Step/Instant no) · consultada 2026-11-11.
+  - `EV = P(pasar)·(pago_mes_1 + cuota·refund) − cuota`; se mantiene la columna
+    **sin reembolso** con la fórmula anterior.
+  - US100: EV +6 / +224 / +418 / +579 / **+633** (antes −307 / −150 / +33 /
+    +233 / +338).
+- [x] **Artefacto `qqq-trend-cfd`** (misma regla, otro vehículo)
+  - QQQ diario 1999-03-10 → 2026-11-10 desde caché (6.962 barras), trend
+    50/200 + stop ATR 3, costes de US100.cash en FTMO (comisión 0, spread
+    0,58 bps, slippage 2 bps).
+  - 72 operaciones · Sharpe 0,589 · CAGR 8,00 % · MaxDD −26,40 %.
+  - `save_variant_artifact` (returns + equity) y `save_artifact` con
+    procedencia; **no** entra en `strategy_trials` ni suma al DSR: no es
+    research nuevo, es la misma hipótesis con otro vehículo.
+  - Datacheck: `aviso` (3,6 % huecos de calendario, ajuste no declarado). Se
+    corrigió un falso `falla` por ruido de coma flotante (close − high =
+    3,6e−15) con una tolerancia relativa 1e−9 y su test.
+- [x] **Barrido QQQ** (`--name exposure_sweep_qqq --compare us100-trend-d1
+  --adopted-k 0.75`)
+  - P(pasar) sin límite: 40,6 / 58,0 / 62,9 / 55,9 / 47,9 % (más baja que la
+    muestra de 10 operaciones).
+  - EV neto: −177 / +61 / +246 / +355 / **+397**; k óptima **1**.
+  - IC 90 % (200 remuestreos por k): 42,0 / 40,6 / 33,2 / 24,9 / 20,0 pp;
+    mediano **46,5 pp (US100, 10 trades) → 33,2 pp (QQQ, 72 trades)**,
+    factor 0,71.
+  - **Conclusión: la k óptima no cambia (1,0)**, pero la muestra larga baja la
+    P(pasar) y el EV (397 frente a 633): el edge es más débil de lo que
+    sugerían 10 operaciones. La decisión adoptada (k=0,75) es de riesgo, no de
+    EV: +355 EUR, breach 43,7 %, peor 5 % de MaxDD −26,0 %. **No se cambia la
+    exposición de ningún bot**: decide el operador.
+- [x] **Ops**: LM Studio arrancado y modelo recargado con 32.768 de contexto
+  (el deep de los agentes fallaba por 8.192); `lab doctor` LM Studio OK.
+- [x] **Demo manual (pedido por el operador)**: add-on de oro 0,03 lotes y
+  trailing manual con `scripts/trail_demo_positions.py` (breakeven a 0,5R,
+  trailing 1×ATR a 1R, nunca aleja el stop); solo demo, no abre órdenes.
+- [x] **Tests**: reembolso cambia el EV, IC se estrecha con más operaciones,
+  trailing (5 casos) y tolerancia OHLC. `pytest tests/test_exposure_sweep.py
+  tests/test_trail_demo.py tests/test_datacheck.py -q` -> 28 passed.
+- Evidencia: `ruff` limpio; suite completa pendiente; `lab doctor` OK; `lab
+  f13 config-check` OK (`7fe0f5a6.`). Sin push.
+
 ### Etapa 4 — Presupuesto de riesgo neto por activo
 
 - [x] **`config/risk_budget.yaml`**
@@ -1889,4 +1934,5 @@ etapa.
 | 2026-11-11 | F13 re-congelado | `lab f13 refreeze --reason "cambio ajeno al bot: bloque daytrader (carril AAPL)" --yes` -> 54b42036 -> 7fe0f5a6; solo `lab.yaml`; baseline `git:0a6f867`; `config-check` OK; historial en `f13_refreezes` y auditoria `f13_refreeze`; sin push |
 | 2026-11-11 | Tendencia diaria en CFDs | `mt5 fetch` H4 US100.cash 9.761 y XAUUSD 34.372 barras; D1 Sin datos (offset no confirmable); perfil `swing_cfd` y bots `enabled: false`; `lab research-swing` -> 0/10, PBO 80,3%, P(breach) 45-53%; se documenta y se para; DSR 395 pruebas |
 | 2026-11-11 | Barrido de exposicion | Artefacto US100 50/200/ATR3 reconstruido y verificado contra el run d2316a4be339; `prop exposure-sweep` -> EV -307/-150/+33/+233/+338 EUR (k 0,25-1,0), P(breach) 10-45%, peor 5% MaxDD -9,5/-34,1%; oraculo prop-ev 0.1.0 comparado; k=1 por EV, sin activar nada; 10 tests nuevos |
+| 2026-11-11 | Barrido con muestra larga | Reembolso de cuota (FTMO 2-Step, FAQ 2026-10-06): EV US100 +633 en k=1 (antes +338); artefacto `qqq-trend-cfd` (QQQ 1999-2026, 72 trades) -> 0/10 no aplica: EV -177..+397, k optima 1; IC 90% 46,5 -> 33,2 pp (factor 0,71); conclusion en `exposure_sweep_qqq.md`; decision k=0,75 sin tocar bots |
 |  |  |  |
