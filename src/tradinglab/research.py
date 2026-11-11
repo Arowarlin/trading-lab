@@ -39,6 +39,9 @@ GRIDS: dict[str, dict[str, list]] = {
         "vol_window": [10, 20],
         "vol_mult": [1.0, 1.25],
     },
+    "overnight_reversal": {
+        "long_only": [False, True],
+    },
 }
 
 DEFAULT_SYMBOLS = ["SPY", "QQQ", "GLD", "TLT", "IWM", "EURUSD=X"]

@@ -1,5 +1,6 @@
 from .base import StrategyResult, clamp_target
 from .meanrev import meanrev_signal
+from .overnight_reversal import overnight_reversal_signal
 from .sector_momentum import sector_momentum_signal
 from .trend import trend_ls_signal, trend_signal
 
@@ -16,6 +17,7 @@ __all__ = [
     "trend_signal",
     "trend_ls_signal",
     "meanrev_signal",
+    "overnight_reversal_signal",
     "sector_momentum_signal",
     "STRATEGIES",
 ]
