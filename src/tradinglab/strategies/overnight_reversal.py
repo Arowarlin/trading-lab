@@ -57,6 +57,8 @@ def simulate_daily(
     **No hay posición nocturna**: la exposición es intradía.
     """
     returns: dict[str, pd.Series] = {}
+    weights: dict[str, pd.Series] = {}
+    intradays: dict[str, pd.Series] = {}
     for symbol, frame in frames.items():
         if symbol not in selection.columns:
             continue
@@ -74,9 +76,20 @@ def simulate_daily(
             .fillna(0.0)
         )
         weight.index = intraday.index
-        returns[symbol] = weight * intraday
-    if not returns:
+        weights[symbol] = weight
+        intradays[symbol] = intraday
+    if not weights:
         return pd.Series(dtype=float), {"trades": 0, "turnover": 0.0}
+    # Pesos iguales con bruto <= 1: sin normalizar, doce activos a 1/3 son 4x.
+    weight_table = pd.DataFrame(weights).fillna(0.0)
+    bruto = weight_table.abs().sum(axis=1)
+    escala = bruto.where(bruto > 0, 1.0)
+    weight_table = weight_table.div(escala, axis=0)
+    returns = {
+        symbol: weight_table[symbol].reindex(intradays[symbol].index).fillna(0.0)
+        * intradays[symbol]
+        for symbol in weights
+    }
     table = pd.DataFrame(returns).fillna(0.0)
     gross = table.sum(axis=1)
     turnover = table.abs().sum(axis=1)
