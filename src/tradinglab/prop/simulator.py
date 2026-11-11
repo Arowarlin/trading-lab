@@ -118,6 +118,7 @@ def monte_carlo(
         "median_days_to_pass": float(np.median(days_to_pass)) if pass_count else None,
         "p90_days_to_pass": float(np.percentile(days_to_pass, 90)) if pass_count else None,
         "median_max_drawdown": float(np.median(max_dd)),
+        "p5_max_drawdown": float(np.percentile(max_dd, 5)),
         "worst_max_drawdown": float(np.min(max_dd)),
         "mean_daily_return": float(r.mean()),
         "daily_volatility": float(r.std(ddof=1)) if r.size > 1 else 0.0,

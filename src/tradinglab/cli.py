@@ -6375,6 +6375,129 @@ def prop_simulate(
     )
 
 
+@prop_app.command("exposure-sweep")
+def prop_exposure_sweep(
+    bot: str = typer.Option(..., "--bot", help="Bot con artefacto en swing_cfd/artifacts"),
+    artifact: Path = typer.Option(
+        None, "--artifact", help="Parquet de retornos diarios (por defecto artifacts/<bot>.parquet)"
+    ),
+    paths: int = typer.Option(2_000, "--paths"),
+    seed: int = typer.Option(42, "--seed"),
+    block_size: int = typer.Option(5, "--block-size"),
+    fee_eur: float = typer.Option(None, "--fee-eur", help="Cuota del challenge (EUR)"),
+    split: float = typer.Option(None, "--split", help="Split del beneficio (0-1)"),
+    no_oracle: bool = typer.Option(False, "--no-oracle"),
+    out: str = typer.Option(None, "--out"),
+) -> None:
+    """Escala los retornos por k y mide P(pasar)/EV del challenge FTMO 100k.
+
+    No recalcula el backtest: lee el artefacto del research. No activa nada.
+    """
+    from .exposure_sweep import SweepError, run_sweep
+
+    try:
+        payload = run_sweep(
+            bot,
+            out_dir=Path(out) if out else None,
+            artifact=artifact,
+            paths=paths,
+            seed=seed,
+            block=block_size,
+            fee_eur=fee_eur,
+            split=split,
+            oracle=not no_oracle,
+        )
+    except SweepError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(1) from exc
+    rate = payload.get("eurusd") or {}
+    variant = payload.get("variant") or {}
+    variant_text = (
+        f"{variant.get('fast')}/{variant.get('slow')} ATR {variant.get('stop_atr')}"
+        if variant
+        else "Sin datos"
+    )
+    console.print(
+        Panel(
+            f"Bot: {bot} · variante {variant_text}\n"
+            f"Run: {payload.get('run_id')} · {payload['sample_days']} días "
+            f"({payload['start']} → {payload['end']})\n"
+            f"Reglas: {payload['rules']}\n"
+            f"Cuota {payload['economics']['fee_eur']:.0f} EUR · split "
+            f"{payload['economics']['profit_split']:.0%} · EURUSD "
+            f"{rate.get('rate') if rate.get('rate') is not None else 'Sin datos'} "
+            f"({rate.get('as_of') or 'Sin datos'})",
+            title="Barrido de exposición",
+        )
+    )
+    table = Table(title="Challenge FTMO 100k por exposición")
+    for column in (
+        "k",
+        "Horizonte",
+        "P(pasar)",
+        "P(breach)",
+        "Sin resolver",
+        "Días (mediana)",
+        "MaxDD mediano",
+        "Peor 5 %",
+    ):
+        table.add_column(column, overflow="fold")
+    for row in payload["rows"]:
+        for label, key in (("120 d", "horizon_120"), ("sin límite", "sin_limite")):
+            block = row[key]
+            table.add_row(
+                f"{row['k']:g}",
+                label,
+                f"{block['pass_rate']:.1%}",
+                f"{block['breach_rate']:.1%}",
+                f"{block['timeout_rate']:.1%}",
+                f"{block['median_days_to_pass']:.0f}"
+                if block["median_days_to_pass"] is not None
+                else "—",
+                f"{block['median_max_drawdown'] * 100:.1f}%",
+                f"{block['p5_max_drawdown'] * 100:.1f}%",
+            )
+    console.print(table)
+    ev_table = Table(title="Valor esperado por intento")
+    for column in ("k", "P(pasar)", "Pago mes 1 (EUR)", "EV neto (EUR)", "EV oráculo (EUR)"):
+        ev_table.add_column(column, overflow="fold")
+    for row in payload["rows"]:
+        ev_table.add_row(
+            f"{row['k']:g}",
+            f"{row['sin_limite']['pass_rate']:.1%}",
+            f"{row['payout_eur']:,.0f}" if row["payout_eur"] is not None else "Sin datos",
+            f"{row['ev_eur']:+,.0f}" if row["ev_eur"] is not None else "Sin datos",
+            f"{row['oracle_ev_eur']:+,.0f}"
+            if row["oracle_ev_eur"] is not None
+            else "Sin datos",
+        )
+    console.print(ev_table)
+    oracle = payload.get("oracle")
+    if oracle:
+        console.print(
+            f"[dim]Oráculo prop-ev {oracle.get('version')}: "
+            + ", ".join(
+                f"k={k}: {value:.1%}" for k, value in (oracle.get("pass") or {}).items()
+            )
+            + "[/dim]"
+        )
+    else:
+        console.print("[dim]Sin oráculo.[/dim]")
+    rec = payload["recommendation"]
+    console.print(
+        Panel(
+            f"{rec['text']}"
+            + (
+                f" · EV {rec['ev_eur']:+,.0f} EUR por intento"
+                if rec.get("ev_eur") is not None
+                else ""
+            ),
+            title="Recomendación",
+        )
+    )
+    console.print(f"[dim]{payload['files']['markdown']}[/dim]")
+
+
 @app.command("regimes")
 def regimes_cmd(
     symbol: str = typer.Argument("SPY", help="Activo con caché local, p. ej. QQQ"),

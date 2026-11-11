@@ -1545,6 +1545,55 @@ etapa.
   con los WARN conocidos; `lab f13 config-check` OK (`7fe0f5a6.`, sin tocar).
   Sin push.
 
+### Etapa 3n - Barrido de exposición del challenge (2026-11-11)
+
+- [x] **Artefacto de la variante (run `d2316a4be339`)**
+  - El run no guardó los retornos diarios: `run_swing` no los persistía. Se
+    añadió `save_variant_artifact` (parquet con `returns` y `equity`) y se
+    reconstruyó la serie de US100 50/200/ATR 3 con el mismo código y datos.
+  - Verificación contra las métricas guardadas del run: Sharpe 0,801 ·
+    CAGR 11,61 % · MaxDD −26,37 % · 10 trades · P(pasar) 54,6 % · 2.145 días.
+    Coinciden (diferencias < 1e-6): la serie es la del run.
+  - Artefacto: `reports/research/swing_cfd/artifacts/us100-trend-d1.parquet`
+    con sidecar de procedencia y verificación.
+- [x] **`lab prop exposure-sweep --bot us100-trend-d1`**
+  - Lee el artefacto (no recalcula el backtest), escala los retornos por
+    `k ∈ {0,25; 0,35; 0,5; 0,75; 1,0}` y corre `prop/simulator.monte_carlo`
+    con FTMO 100k (10 % objetivo, 5 % diario, 10 % total static, 2.000 paths).
+  - Dos horizontes: 120 días (24 bloques de 5) y sin límite (150 bloques =
+    750 días). El motor cuenta bloques; la conversión se hace en el barrido y
+    se documenta, sin cambiar el simulador.
+  - Reporta P(pasar), P(breach), sin resolver, mediana de días, MaxDD mediano
+    y peor 5 % (`p5_max_drawdown`, columna nueva del simulador).
+- [x] **EV neto por k**
+  - Cuota 540 EUR y split 80 % (parámetros; `prop.yaml` no tiene `economics`
+    y se deja como está).
+  - Pago del mes 1: bootstrap de 21 días desde una cuenta fondeada; si el
+    path revienta el diario o el total, paga 0; si no, `split × beneficio`.
+  - EURUSD 1,11472 del cierre H1 de la caché MT5 (2026-11-08) para pasar el
+    pago a EUR.
+- [x] **Oráculo prop-ev 0.1.0** (`.venv-vbt`, 20.000 paths normales)
+  - P(pasar): k=0,25 58,7 % vs 58,0 % propio; k=0,5 82,8 % vs 71,2 %;
+    k=1 73,9 % vs 54,6 %. Divergen al subir k porque el bootstrap conserva
+    los retornos reales (lumpiness de 10 trades) y prop-ev usa normales iid.
+- [x] **Resultado medido (`reports/research/swing_cfd/exposure_sweep.md`)**
+  - 120 días: P(pasar) 0,2-42,2 %; sin límite: 54,6-71,2 %.
+  - P(breach) sin límite: 10,4 % (k=0,25) → 45,4 % (k=1); peor 5 % de MaxDD
+    −9,5 % → −34,1 %.
+  - EV neto: −307 (k=0,25), −150 (0,35), +33 (0,5), +233 (0,75), **+338 (k=1)**.
+  - **Recomendación: k=1 por EV**, con óptimo plano (k=0,5-1,0) y el aviso de
+    que subir k dispara el breach y el peor MaxDD. Es un estudio: no se cambia
+    la exposición de ningún bot ni se activa nada.
+  - EV oráculo (un objetivo completo): +3.378 a +4.570; se muestra como
+    contraste de convención, no como criterio.
+- [x] **Tests sintéticos** (`tests/test_exposure_sweep.py`, 10 passed):
+  k escala el MaxDD, el horizonte sin límite termina, conversión a bloques,
+  artefacto ida/vuelta, sin artefacto falla, mes fondeado paga 0 si revienta,
+  economía desde prop.yaml, recomendación negativa/positiva e informe/CLI.
+- Evidencia: `ruff` limpio; `pytest tests/test_exposure_sweep.py -q` -> 10
+  passed; suite completa **850 passed, 1 skipped**; `lab doctor` OK con los
+  WARN conocidos; `lab f13 config-check` OK (`7fe0f5a6.`). Sin push.
+
 ### Etapa 4 — Presupuesto de riesgo neto por activo
 
 - [x] **`config/risk_budget.yaml`**
@@ -1826,4 +1875,5 @@ etapa.
 | 2026-11-11 | Familias de sesion | `research-intraday` EURUSD 0/52 y USDJPY 0/52 con `session_hold` y `fix_flow` (stop ATR real); informe en `reports/research/intraday_session/`; suite 805 passed, 1 skipped; ruff limpio |
 | 2026-11-11 | F13 re-congelado | `lab f13 refreeze --reason "cambio ajeno al bot: bloque daytrader (carril AAPL)" --yes` -> 54b42036 -> 7fe0f5a6; solo `lab.yaml`; baseline `git:0a6f867`; `config-check` OK; historial en `f13_refreezes` y auditoria `f13_refreeze`; sin push |
 | 2026-11-11 | Tendencia diaria en CFDs | `mt5 fetch` H4 US100.cash 9.761 y XAUUSD 34.372 barras; D1 Sin datos (offset no confirmable); perfil `swing_cfd` y bots `enabled: false`; `lab research-swing` -> 0/10, PBO 80,3%, P(breach) 45-53%; se documenta y se para; DSR 395 pruebas |
+| 2026-11-11 | Barrido de exposicion | Artefacto US100 50/200/ATR3 reconstruido y verificado contra el run d2316a4be339; `prop exposure-sweep` -> EV -307/-150/+33/+233/+338 EUR (k 0,25-1,0), P(breach) 10-45%, peor 5% MaxDD -9,5/-34,1%; oraculo prop-ev 0.1.0 comparado; k=1 por EV, sin activar nada; 10 tests nuevos |
 |  |  |  |

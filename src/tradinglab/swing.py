@@ -186,6 +186,41 @@ def _mc(rules: PropRules, returns: pd.Series, *, paths: int, horizon: int, block
     }
 
 
+def artifact_name(symbol: str, params: dict) -> str:
+    """Nombre estable del artefacto de una variante."""
+    safe = "".join(
+        char if char.isalnum() or char in "-_." else "_"
+        for char in str(symbol).lower()
+    )
+    return f"{safe}_{params['fast']}_{params['slow']}_{params['stop_atr']:g}.parquet"
+
+
+def save_variant_artifact(
+    out_dir: Path,
+    symbol: str,
+    params: dict,
+    daily_ret: pd.Series,
+    daily_equity: pd.Series,
+) -> Path:
+    """Guarda los retornos diarios de una variante (y su equity diaria).
+
+    Es la entrada de `lab prop exposure-sweep`: el barrido no recalcula el
+    backtest, lee esta serie. El run d2316a4be339 no la guardó; se añadió aquí
+    y la serie de esa variante se reconstruyó y verificó contra sus métricas.
+    """
+    target = out_dir / "artifacts" / artifact_name(symbol, params)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    frame = pd.DataFrame(
+        {
+            "returns": daily_ret.astype(float),
+            "equity": daily_equity.reindex(daily_ret.index).astype(float),
+        }
+    )
+    frame.index.name = "date"
+    frame.to_parquet(target)
+    return target
+
+
 def _daily_metrics(bt, daily_ret: pd.Series) -> dict:
     """Métricas anualizadas sobre retornos diarios (no sobre barras H4).
 
@@ -204,6 +239,7 @@ def _daily_metrics(bt, daily_ret: pd.Series) -> dict:
             "total_return": 0.0,
             "max_drawdown": 0.0,
             "volatility": 0.0,
+            "equity": daily_equity,
         }
     total = float(daily_equity.iloc[-1] / daily_equity.iloc[0] - 1.0)
     years = max(
@@ -220,6 +256,7 @@ def _daily_metrics(bt, daily_ret: pd.Series) -> dict:
         "total_return": total,
         "max_drawdown": float(drawdown.min()),
         "volatility": float(std * np.sqrt(252.0)),
+        "equity": daily_equity,
     }
 
 
@@ -443,6 +480,20 @@ def run_swing(
                 )
                 continue
             daily_stats = _daily_metrics(bt, daily_ret)
+            try:
+                artifact = save_variant_artifact(
+                    out, symbol, params, daily_ret, daily_stats["equity"]
+                )
+                artifact_rel = str(artifact.relative_to(out))
+            except Exception as exc:
+                artifact_rel = None
+                errors.append(
+                    {
+                        "symbol": symbol,
+                        "params": params,
+                        "error": f"artefacto: {exc}"[:300],
+                    }
+                )
             split = max(1, int(len(daily_ret) * (1.0 - HOLDOUT_FRACTION)))
             oos = daily_ret.iloc[split:]
             mc = _mc(
@@ -495,6 +546,7 @@ def run_swing(
                     "reasons": daily_check["reasons"],
                 },
                 "year_returns": _year_returns(daily_ret),
+                "artifact": artifact_rel,
             }
             results.append(row)
             daily_by_variant[f"{symbol}|{params['fast']}|{params['slow']}|{params['stop_atr']:g}"] = daily_ret
@@ -805,9 +857,11 @@ __all__ = [
     "FAMILY",
     "GRID",
     "SYMBOLS",
+    "artifact_name",
     "data_status",
     "daily_returns",
     "run_swing",
+    "save_variant_artifact",
     "spread_bps",
     "write_report",
 ]

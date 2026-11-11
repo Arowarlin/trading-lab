@@ -637,7 +637,14 @@ diarios de FTMO solo usa 4.500.
 .\.venv\Scripts\lab.exe prop status --from-mt5
 .\.venv\Scripts\lab.exe prop size EURUSD --risk-pct 0.005 --stop-pips 20
 .\.venv\Scripts\lab.exe prop simulate SPY --strategy trend --phase challenge
+.\.venv\Scripts\lab.exe prop exposure-sweep --bot us100-trend-d1
 ```
+
+`prop exposure-sweep` escala por `k` los retornos diarios del artefacto de una
+variante ya validada (no recalcula el backtest), simula el challenge a 120 días y
+sin límite, y calcula P(pasar), P(breach), MaxDD y EV neto con la cuota, el split
+y el beneficio esperado del primer mes fondeado. No cambia la estrategia ni
+activa nada.
 
 El sizing **no** usa porcentaje del nocional: usa
 `lotes = riesgo_$ / (distancia_stop × valor_del_tick)`, redondeando siempre hacia
