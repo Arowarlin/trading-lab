@@ -78,5 +78,5 @@ bots:
     stop_atr: 3.0
     max_trades_per_day: 1
     magic: 20261153
-    enabled: false
+    enabled: true
     notes: "Swing demo US100 (k=0,75 sobre el volumen mínimo). Sin force_exit; cierra por señal contraria o stop. FTMO Swing permite overnight."

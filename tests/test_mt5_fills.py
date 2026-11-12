@@ -177,7 +177,7 @@ def test_forward_swing_carga_sin_force_exit_y_con_exposicion():
     assert swing.force_exit is None
     assert swing.exposure == pytest.approx(0.75)
     assert swing.timeframe == "H4"
-    assert swing.enabled is False
+    assert swing.enabled is True  # encendido el 2026-11-11 (sigue incubando)
     # Los dos forwards existentes siguen intactos.
     assert bots["eurusd-london-pullback-forward"].swing is False
     assert bots["usdjpy-tokyo-breakout-forward"].swing is False

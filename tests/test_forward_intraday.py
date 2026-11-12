@@ -443,7 +443,7 @@ def test_config_dos_candidatos_fijos() -> None:
     }
     assert all(bot.account == "ftmo_demo" for bot in bots)
     assert all(bot.enabled for bot in bots[:2])
-    assert bots[2].enabled is False
+    assert bots[2].enabled is True  # encendido 2026-11-11 (incubando)
     assert bots[2].swing is True
     assert bots[2].force_exit is None
     assert bots[2].timeframe == "H4"
