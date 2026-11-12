@@ -97,7 +97,7 @@ def test_build_config_ftmo_demo():
         datetime.now(ZoneInfo("Europe/Prague")).utcoffset().total_seconds() // 60
     )
     assert cfg["reset_utc_offset_minutes"] == expected
-    assert cfg["magics"] == [20261151, 20261152]
+    assert cfg["magics"] == [20261151, 20261152, 20261153]
     assert cfg["version"] == 1
     assert cfg["limits_source"].startswith("prop.yaml:ftmo/challenge")
 
@@ -219,7 +219,7 @@ def test_export_escribe_json_atomico(tmp_path):
     assert not target.with_suffix(".json.tmp").exists()
     payload = json.loads(target.read_text(encoding="utf-8"))
     assert payload["account"] == "ftmo_demo"
-    assert payload["magics"] == [20261151, 20261152]
+    assert payload["magics"] == [20261151, 20261152, 20261153]
 
 
 def test_export_usa_data_path_del_terminal(tmp_path):

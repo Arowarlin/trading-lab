@@ -428,6 +428,7 @@ def test_config_dos_candidatos_fijos() -> None:
     assert [bot.id for bot in bots] == [
         "eurusd-london-pullback-forward",
         "usdjpy-tokyo-breakout-forward",
+        "us100-trend-d1",
     ]
     assert bots[0].params == {
         "fast": 50,
@@ -441,9 +442,13 @@ def test_config_dos_candidatos_fijos() -> None:
         "max_hold": 4,
     }
     assert all(bot.account == "ftmo_demo" for bot in bots)
-    assert all(bot.enabled for bot in bots)
+    assert all(bot.enabled for bot in bots[:2])
+    assert bots[2].enabled is False
+    assert bots[2].swing is True
+    assert bots[2].force_exit is None
+    assert bots[2].timeframe == "H4"
     assert all(bot.defense_mode == "report" for bot in bots)
-    assert len({bot.magic for bot in bots}) == 2
+    assert len({bot.magic for bot in bots}) == 3
 
 
 def test_config_defense_invalido(tmp_path) -> None:
@@ -1000,4 +1005,5 @@ def test_cli_status_muestra_los_dos(monkeypatch) -> None:
     assert result.exit_code == 0
     assert "eurusd-london-pullback-forward" in result.output
     assert "usdjpy-tokyo-breakout-forward" in result.output
+    assert "us100-trend-d1" in result.output
     assert "Armado: sí" in result.output

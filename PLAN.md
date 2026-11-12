@@ -1703,7 +1703,26 @@ etapa.
   presupuesto **total** (`--deep-timeout`, 1.800 s) que comparten todos los
   reintentos; con el presupuesto agotado no se lanza ninguno. Tests: no
   reintenta sin presupuesto y reintenta uno a uno si el fallo es r?pido.
-### Etapa 4 — Presupuesto de riesgo neto por activo
+### Etapa 3q - Fills MT5 y forward swing US100 (2026-11-11)
+
+- `fills` guarda los deals de MT5 con `deal_id` único (idempotente), bot,
+  cuenta, símbolo, lado, volumen, precio, comisión, swap, magic, `ts_utc` y
+  `contract_size`. Los deals con magic ajeno se guardan como `manual`.
+- El Diario empareja FIFO en largo y en corto; `contract_size` corrige el PnL
+  de CFDs y el swap entra en el neto. `entry_order_id=0` significa "deal sin
+  orden del laboratorio".
+- `us100-trend-d1`: H4, `trend_daily_atr` 50/200, stop 3 ATR, magic 20261153,
+  `exposure: 0.75` (sobre el volumen mínimo; el mínimo manda), sin
+  `force_exit` (`swing: true`), `enabled: false`.
+- La tarea `TradingLab-IntradayForward` evalúa US100 solo en la primera barra
+  H4 del día UTC (04:00-04:04 UTC); los dos forwards existentes siguen en sus
+  ventanas.
+- `lab lifecycle incubate us100-trend-d1 --force`: incubando 60 días (mín. 8
+  trades, Sharpe forward > 0, slippage <= 3 bps, 0 breach), hash
+  `67f7695cf087e673`; no toca `enabled`.
+- Procedimiento de encendido y reversión en `docs/encendido.md`.
+
+### Etapa 4 - Presupuesto de riesgo neto por activo
 
 - [x] **`config/risk_budget.yaml`**
   - Riesgo abierto por activo **1,00 %**, rebanada inicial por bot **0,25 %**
@@ -1986,4 +2005,4 @@ etapa.
 | 2026-11-11 | Tendencia diaria en CFDs | `mt5 fetch` H4 US100.cash 9.761 y XAUUSD 34.372 barras; D1 Sin datos (offset no confirmable); perfil `swing_cfd` y bots `enabled: false`; `lab research-swing` -> 0/10, PBO 80,3%, P(breach) 45-53%; se documenta y se para; DSR 395 pruebas |
 | 2026-11-11 | Barrido de exposicion | Artefacto US100 50/200/ATR3 reconstruido y verificado contra el run d2316a4be339; `prop exposure-sweep` -> EV -307/-150/+33/+233/+338 EUR (k 0,25-1,0), P(breach) 10-45%, peor 5% MaxDD -9,5/-34,1%; oraculo prop-ev 0.1.0 comparado; k=1 por EV, sin activar nada; 10 tests nuevos |
 | 2026-11-11 | Barrido con muestra larga | Reembolso de cuota (FTMO 2-Step, FAQ 2026-10-06): EV US100 +633 en k=1 (antes +338); artefacto `qqq-trend-cfd` (QQQ 1999-2026, 72 trades) -> 0/10 no aplica: EV -177..+397, k optima 1; IC 90% 46,5 -> 33,2 pp (factor 0,71); conclusion en `exposure_sweep_qqq.md`; decision k=0,75 sin tocar bots |
-|  |  |  |
+| 2026-11-11 | Fills MT5 + swing US100 | `pytest tests/test_mt5_fills.py tests/test_journal.py -q` -> 21 passed; `fills` con `deal_id` idempotente, FIFO largo/corto y `contract_size`; `us100-trend-d1` H4 enabled:false; incubando 60 d, hash `67f7695cf087e673`; `docs/encendido.md`; sin push |

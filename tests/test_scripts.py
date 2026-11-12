@@ -240,7 +240,11 @@ def test_intraday_forward_scripts_signal_y_execute():
     execute = (ROOT / "scripts" / "intraday_forward_execute.ps1").read_text(
         encoding="utf-8"
     )
-    assert "intraday forward --bars 5000 --execute --confirm FORWARD-DEMO" in execute
+    assert '"intraday", "forward", "--bars", "5000"' in execute
+    assert '"--execute", "--confirm", "FORWARD-DEMO"' in execute
+    assert "eurusd-london-pullback-forward,usdjpy-tokyo-breakout-forward" in execute
+    assert "us100-trend-d1" in execute
+    assert "4 * 60" in execute
     assert "intraday_forward_failed" in execute
     assert "TradingLab-IntradayForward" in execute
     assert "[Console]::OutputEncoding" in execute

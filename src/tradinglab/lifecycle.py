@@ -130,6 +130,8 @@ def start_incubation(
     actor: str = "humano",
     reason: str = "",
     config: dict | None = None,
+    criteria_override: dict | None = None,
+    require_gate: bool = True,
 ) -> dict:
     cfg = config or load_config()
     init_db(db_path)
@@ -147,15 +149,22 @@ def start_incubation(
                 f"límite de incubación alcanzado ({cfg['max_concurrent']})"
             )
         evidence = json.loads(row["evidence"] or "{}")
-        gate = gate_eligible(evidence, cfg)
-        if not gate["eligible"]:
-            raise LifecycleError(
-                "no elegible para incubar: " + "; ".join(gate["reasons"])
-            )
+        if require_gate:
+            gate = gate_eligible(evidence, cfg)
+            if not gate["eligible"]:
+                raise LifecycleError(
+                    "no elegible para incubar: " + "; ".join(gate["reasons"])
+                )
         start = date.fromisoformat(start_date) if start_date else date.today()
-        end = start + timedelta(weeks=int(cfg["criteria"]["window_weeks"]))
+        merged = {**cfg["criteria"], **(criteria_override or {})}
+        window_days = int(merged.get("window_days", 0) or 0)
+        if window_days > 0:
+            merged.pop("window_weeks", None)
+            end = start + timedelta(days=window_days)
+        else:
+            end = start + timedelta(weeks=int(merged["window_weeks"]))
         criteria = {
-            **cfg["criteria"],
+            **merged,
             "start_date": start.isoformat(),
             "end_date": end.isoformat(),
         }

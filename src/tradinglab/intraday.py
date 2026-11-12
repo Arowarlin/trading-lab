@@ -27,6 +27,7 @@ from .prop.simulator import monte_carlo
 from .research import deflated_sharpe
 from .session import session_block
 from .strategies.base import StrategyResult
+from .strategies.swing import trend_daily_atr
 from .trials import record_trial
 from .validation import cscv_pbo, returns_matrix
 from .walkforward import regime_gate, regime_report, walk_forward
@@ -1230,6 +1231,7 @@ STRATEGIES = {
     "session_hold": session_hold,
     "fix_flow": fix_flow,
     "h1_orb": h1_orb_session,
+    "trend_daily_atr": trend_daily_atr,
 }
 
 

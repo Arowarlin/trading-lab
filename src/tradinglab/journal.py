@@ -1,8 +1,9 @@
 """Diario de operaciones cerradas reconstruido desde `lab.db` (solo lectura).
 
-No crea tablas ni escribe nada. Empareja `fills` con `orders` y consume lotes
-FIFO por `(bot, ticker)`. Los brokers que solo registran órdenes y no dejan
-fills se muestran como "sin datos": nunca se inventan precios de entrada/salida.
+No crea tablas ni escribe nada. Empareja `fills` con `orders` (paper) o lee
+los deals de MT5 y consume lotes FIFO por `(bot, ticker)`, en largo y en
+corto. Los brokers que solo registran órdenes y no dejan fills se muestran
+como "sin datos": nunca se inventan precios de entrada/salida.
 """
 from __future__ import annotations
 
@@ -62,6 +63,7 @@ class ClosedTrade:
     r_multiple: float | None = None
     magic: int | None = None
     manual: bool = False
+    side: str = "long"
 
 
 def _zone(name: str | None) -> ZoneInfo:
@@ -203,15 +205,41 @@ def _read_fills(db_path: str | Path) -> tuple[list[sqlite3.Row], dict]:
         stop_expr = "o.stop_price" if "stop_price" in order_columns else "NULL"
         magic_expr = "o.magic" if "magic" in order_columns else "NULL"
         total = connection.execute("SELECT COUNT(*) AS n FROM fills").fetchone()["n"]
-        rows = connection.execute(
+        fill_columns = {
+            row["name"]
+            for row in connection.execute("PRAGMA table_info(fills)").fetchall()
+        }
+        paper_sql = (
             "SELECT f.id AS fill_id, f.ts AS fill_ts, f.qty AS fill_qty, "
             "f.price AS fill_price, f.commission AS commission, "
             "o.id AS order_id, o.ts AS order_ts, o.ticker, o.side, o.bot, "
             f"{risk_expr} AS risk_usd, {stop_expr} AS stop_price, "
-            f"{magic_expr} AS magic "
-            "FROM fills f JOIN orders o ON o.id = f.order_id "
-            "ORDER BY f.ts, f.id"
-        ).fetchall()
+            f"{magic_expr} AS magic, NULL AS contract_size, NULL AS swap "
+            "FROM fills f JOIN orders o ON o.id = f.order_id"
+        )
+        if "deal_id" in fill_columns:
+            # Los deals de MT5 no tienen orden del laboratorio: se leen
+            # directamente del fill y el Diario los empareja por FIFO.
+            contract_expr = (
+                "f.contract_size" if "contract_size" in fill_columns else "NULL"
+            )
+            sql = (
+                "SELECT * FROM ("
+                + paper_sql
+                + " UNION ALL "
+                "SELECT f.id AS fill_id, COALESCE(f.ts_utc, f.ts) AS fill_ts, "
+                "COALESCE(f.volume, f.qty) AS fill_qty, f.price AS fill_price, "
+                "f.commission AS commission, NULL AS order_id, "
+                "COALESCE(f.ts_utc, f.ts) AS order_ts, f.symbol AS ticker, "
+                "f.side AS side, f.bot AS bot, NULL AS risk_usd, "
+                "NULL AS stop_price, f.magic AS magic, "
+                f"{contract_expr} AS contract_size, f.swap AS swap "
+                "FROM fills f WHERE f.deal_id IS NOT NULL"
+                ") ORDER BY fill_ts, fill_id"
+            )
+        else:
+            sql = paper_sql + " ORDER BY f.ts, f.id"
+        rows = connection.execute(sql).fetchall()
         diagnostics["fills_total"] = int(total)
         diagnostics["joined_fills"] = len(rows)
         try:
@@ -245,80 +273,89 @@ def load_closed_trades(
     lab_magics = _lab_magics()
     mt5_account = _mt5_account()
     mt5_symbols = {str(item).upper() for item in diagnostics.get("mt5_symbols") or []}
-    lots: dict[tuple[str, str], list[dict]] = {}
+    long_lots: dict[tuple[str, str], list[dict]] = {}
+    short_lots: dict[tuple[str, str], list[dict]] = {}
     trades: list[ClosedTrade] = []
 
-    for row in rows:
-        ticker = str(row["ticker"] or "").upper()
-        bot_id = str(row["bot"] or SIN_DATOS)
-        side = str(row["side"] or "").lower()
+    def _lot(row: sqlite3.Row) -> dict:
         qty = abs(float(row["fill_qty"] or 0.0))
-        price = float(row["fill_price"] or 0.0)
-        commission = float(row["commission"] or 0.0)
-        if not ticker or qty <= 0 or price <= 0:
-            continue
-        key = (bot_id, ticker)
-        if side == "buy":
-            lots.setdefault(key, []).append(
-                {
-                    "qty": qty,
-                    "remaining": qty,
-                    "price": price,
-                    "fee_per_unit": commission / qty,
-                    "ts": str(row["fill_ts"]),
-                    "order_id": int(row["order_id"]),
-                    "risk_usd": (
-                        float(row["risk_usd"])
-                        if row["risk_usd"] is not None
-                        else None
-                    ),
-                    "stop_price": (
-                        float(row["stop_price"])
-                        if row["stop_price"] is not None
-                        else None
-                    ),
-                }
-            )
-            continue
-        if side != "sell":
-            continue
+        return {
+            "qty": qty,
+            "remaining": qty,
+            "price": float(row["fill_price"] or 0.0),
+            "fee_per_unit": (float(row["commission"] or 0.0) / qty) if qty else 0.0,
+            "ts": str(row["fill_ts"]),
+            "order_id": int(row["order_id"]) if row["order_id"] is not None else None,
+            "risk_usd": (
+                float(row["risk_usd"]) if row["risk_usd"] is not None else None
+            ),
+            "stop_price": (
+                float(row["stop_price"]) if row["stop_price"] is not None else None
+            ),
+            "contract_size": float(row["contract_size"] or 1.0),
+        }
 
+    def _consume(queue: list[dict], qty: float) -> dict:
         remaining = qty
-        consumed_qty = 0.0
+        consumed = 0.0
         cost_basis = 0.0
-        buy_fees = 0.0
+        entry_fees = 0.0
         entry_risk = 0.0
         has_risk = False
         entry_ts: str | None = None
         entry_order_id: int | None = None
-        queue = lots.setdefault(key, [])
         while remaining > 1e-12 and queue:
             lot = queue[0]
             take = min(remaining, float(lot["remaining"]))
-            consumed_qty += take
+            consumed += take
             cost_basis += take * float(lot["price"])
-            buy_fees += take * float(lot["fee_per_unit"])
+            entry_fees += take * float(lot["fee_per_unit"])
             lot_qty = float(lot["qty"])
             if lot.get("risk_usd") is not None and lot_qty > 0:
                 entry_risk += float(lot["risk_usd"]) * (take / lot_qty)
                 has_risk = True
             if entry_ts is None or str(lot["ts"]) < entry_ts:
                 entry_ts = str(lot["ts"])
-                entry_order_id = int(lot["order_id"])
+                entry_order_id = lot["order_id"]
             lot["remaining"] = float(lot["remaining"]) - take
             remaining -= take
             if lot["remaining"] <= 1e-12:
                 queue.pop(0)
-        if consumed_qty <= 1e-12:
-            diagnostics["unmatched_sell_qty"] += qty
-            continue
+        return {
+            "consumed": consumed,
+            "cost_basis": cost_basis,
+            "entry_fees": entry_fees,
+            "entry_risk": entry_risk,
+            "has_risk": has_risk,
+            "entry_ts": entry_ts,
+            "entry_order_id": entry_order_id,
+        }
 
-        matched_ratio = consumed_qty / qty
-        sell_fee = commission * matched_ratio
-        entry_price = cost_basis / consumed_qty
-        pnl = consumed_qty * (price - entry_price) - sell_fee - buy_fees
+    def _append_trade(
+        row: sqlite3.Row,
+        close: dict,
+        exit_price: float,
+        exit_fee: float,
+        direction: str,
+    ) -> None:
+        consumed = float(close["consumed"])
+        if consumed <= 1e-12:
+            return
+        contract = float(row["contract_size"] or 1.0)
+        units = consumed * contract
+        ticker = str(row["ticker"] or "").upper()
+        bot_id = str(row["bot"] or SIN_DATOS)
+        entry_price = float(close["cost_basis"]) / consumed
+        if direction == "long":
+            gross = units * (exit_price - entry_price)
+        else:
+            gross = units * (entry_price - exit_price)
+        fill_qty = abs(float(row["fill_qty"] or 0.0)) or consumed
+        swap_cost = float(row["swap"] or 0.0) * (consumed / fill_qty)
+        pnl = gross - exit_fee - float(close["entry_fees"]) - swap_cost
         exit_stamp = _parse_ts(str(row["fill_ts"]))
-        entry_stamp = _parse_ts(entry_ts or str(row["fill_ts"]))
+        entry_ts = close["entry_ts"] or str(row["fill_ts"])
+        entry_stamp = _parse_ts(entry_ts)
         exit_local = exit_stamp.astimezone(zone)
         holding_hours = max(
             0.0, (exit_stamp - entry_stamp).total_seconds() / 3600.0
@@ -328,8 +365,6 @@ def load_closed_trades(
         magic = int(row["magic"]) if row["magic"] is not None else None
         if account is None and (magic is not None or ticker in mt5_symbols):
             account = mt5_account
-        # Manual: operación de la cuenta MT5 que no lleva un magic del
-        # laboratorio (o, antes de guardar el magic, un bot que no es del lab).
         manual = bool(
             account == mt5_account
             and (
@@ -347,39 +382,83 @@ def load_closed_trades(
                 account=account,
                 profile=mapping.get("profile"),
                 ticker=ticker,
-                qty=round(consumed_qty, 8),
+                qty=round(consumed, 8),
                 entry_price=round(entry_price, 8),
-                exit_price=round(price, 8),
+                exit_price=round(exit_price, 8),
                 entry_ts=entry_stamp.astimezone(zone).isoformat(),
                 exit_ts=exit_local.isoformat(),
                 pnl=round(pnl, 6),
-                fees=round(sell_fee + buy_fees, 6),
+                fees=round(exit_fee + float(close["entry_fees"]), 6),
                 return_pct=(
-                    round(pnl / (entry_price * consumed_qty), 8)
-                    if entry_price > 0 and consumed_qty > 0
+                    round(pnl / (entry_price * units), 8)
+                    if entry_price > 0 and units > 0
                     else 0.0
                 ),
                 holding_hours=round(holding_hours, 3),
                 day=exit_local.date().isoformat(),
                 hour=exit_local.hour,
-                entry_order_id=int(entry_order_id or row["order_id"]),
-                exit_order_id=int(row["order_id"]),
+                entry_order_id=int(close["entry_order_id"] or 0),
+                exit_order_id=int(row["order_id"] or 0),
                 exit_fill_id=int(row["fill_id"]),
-                risk_usd=round(entry_risk, 6) if has_risk else None,
+                risk_usd=(
+                    round(float(close["entry_risk"]), 6)
+                    if close["has_risk"]
+                    else None
+                ),
                 r_multiple=(
-                    round(pnl / entry_risk, 6)
-                    if has_risk and entry_risk > 0
+                    round(pnl / float(close["entry_risk"]), 6)
+                    if close["has_risk"] and float(close["entry_risk"]) > 0
                     else None
                 ),
                 magic=magic,
                 manual=manual,
+                side=direction,
             )
         )
+
+    for row in rows:
+        ticker = str(row["ticker"] or "").upper()
+        bot_id = str(row["bot"] or SIN_DATOS)
+        side = str(row["side"] or "").lower()
+        qty = abs(float(row["fill_qty"] or 0.0))
+        price = float(row["fill_price"] or 0.0)
+        commission = float(row["commission"] or 0.0)
+        if not ticker or qty <= 0 or price <= 0 or side not in {"buy", "sell"}:
+            continue
+        key = (bot_id, ticker)
+        if side == "buy":
+            close = _consume(short_lots.setdefault(key, []), qty)
+            if close["consumed"] > 0:
+                exit_fee = commission * (close["consumed"] / qty)
+                _append_trade(row, close, price, exit_fee, "short")
+            rest = qty - float(close["consumed"])
+            if rest > 1e-12:
+                lot = _lot(row)
+                lot["qty"] = rest
+                lot["remaining"] = rest
+                long_lots.setdefault(key, []).append(lot)
+        else:
+            close = _consume(long_lots.setdefault(key, []), qty)
+            if close["consumed"] > 0:
+                exit_fee = commission * (close["consumed"] / qty)
+                _append_trade(row, close, price, exit_fee, "long")
+            rest = qty - float(close["consumed"])
+            if rest > 1e-12:
+                lot = _lot(row)
+                lot["qty"] = rest
+                lot["remaining"] = rest
+                short_lots.setdefault(key, []).append(lot)
 
     diagnostics["closed_trades"] = len(trades)
     diagnostics["manual_trades"] = sum(1 for trade in trades if trade.manual)
     diagnostics["open_lots_qty"] = round(
-        sum(float(lot["remaining"]) for queue in lots.values() for lot in queue), 8
+        sum(
+            float(lot["remaining"])
+            for queues in (long_lots, short_lots)
+            for queue in queues.values()
+            for lot in queue
+        ),
+        8,
     )
     diagnostics["unmatched_sell_qty"] = round(
         diagnostics["unmatched_sell_qty"], 8

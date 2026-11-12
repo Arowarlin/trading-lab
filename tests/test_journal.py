@@ -139,8 +139,9 @@ def test_fifo_reconstruye_operaciones_y_no_escribe(tmp_path: Path) -> None:
 
     assert len(trades) == 3
     assert diagnostics["fills_total"] == 7
-    assert diagnostics["unmatched_sell_qty"] == pytest.approx(2.0)
-    assert diagnostics["open_lots_qty"] == pytest.approx(5.0)
+    # Un sell sin lote ya no es "venta sin lote": abre un corto (TSLA 2).
+    assert diagnostics["unmatched_sell_qty"] == pytest.approx(0.0)
+    assert diagnostics["open_lots_qty"] == pytest.approx(7.0)  # 5 SPY + 2 TSLA corto
 
     sp = [trade for trade in trades if trade.ticker == "SPY"]
     assert sp[0].qty == pytest.approx(10.0)

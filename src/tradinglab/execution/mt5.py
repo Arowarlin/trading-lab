@@ -340,6 +340,32 @@ class MT5Broker:
             "trade_mode": int(info.trade_mode),
         }
 
+    def symbols(self) -> list[dict]:
+        """Símbolos del terminal con su grupo (`path`) y su spec.
+
+        Solo lectura: no selecciona, no modifica y no envía nada. El grupo sale
+        del `path` del bróker ("Forex", "Metals CFD", "Cash II CFD"...) y es más
+        fiable que adivinar por el nombre.
+        """
+        mt5 = self._require()
+        rows = mt5.symbols_get() or []
+        found: list[dict] = []
+        for item in rows:
+            raw_path = getattr(item, "path", "") or ""
+            parts = [part for part in raw_path.split("\\") if part]
+            found.append(
+                {
+                    "symbol": item.name,
+                    "group": parts[0] if parts else "",
+                    "path": raw_path,
+                    "digits": int(item.digits),
+                    "tick_size": float(item.trade_tick_size or item.point),
+                    "contract_size": float(item.trade_contract_size),
+                    "volume_min": float(item.volume_min),
+                }
+            )
+        return found
+
     def instrument(self, symbol: str) -> Instrument:
         """Especificación del bróker combinada con el registro local."""
         spec = self.symbol_spec(symbol)
@@ -863,6 +889,42 @@ class MT5Broker:
         raise MT5Error(f"No se pudo cerrar {ticket}: {last_error}")
 
     # -------------------------------------------------------------- histórico
+
+    def history_deals(
+        self, start: datetime, end: datetime
+    ) -> list[dict]:
+        """Deals de compra/venta del terminal en UTC. Solo lectura.
+
+        Devuelve una fila por deal (entrada o salida), con `deal_id` único y
+        `ts_utc` convertido desde la hora del servidor. Los deals de balance
+        (tipo 2+) se descartan porque no son operaciones.
+        """
+        mt5 = self._require()
+        raw = mt5.history_deals_get(start, end) or []
+        out: list[dict] = []
+        for deal in raw:
+            kind = int(getattr(deal, "type", -1))
+            if kind not in (0, 1):
+                continue
+            out.append(
+                {
+                    "deal_id": int(deal.ticket),
+                    "order_id": int(getattr(deal, "order", 0) or 0),
+                    "position_id": int(getattr(deal, "position_id", 0) or 0),
+                    "symbol": str(getattr(deal, "symbol", "") or ""),
+                    "side": "buy" if kind == 0 else "sell",
+                    "volume": float(deal.volume),
+                    "price": float(deal.price),
+                    "commission": float(getattr(deal, "commission", 0.0) or 0.0),
+                    "swap": float(getattr(deal, "swap", 0.0) or 0.0),
+                    "profit": float(getattr(deal, "profit", 0.0) or 0.0),
+                    "magic": int(getattr(deal, "magic", 0) or 0),
+                    "entry": int(getattr(deal, "entry", 0) or 0),
+                    "ts_utc": self._to_utc(deal.time).isoformat(),
+                }
+            )
+        out.sort(key=lambda item: (item["ts_utc"], item["deal_id"]))
+        return out
 
     def balance_curve(self, days: int = 180) -> pd.Series:
         """Curva de balance realizada reconstruida desde los deals (no incluye flotante)."""

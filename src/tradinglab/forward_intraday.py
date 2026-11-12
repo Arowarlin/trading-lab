@@ -80,7 +80,7 @@ class ForwardBot:
     params: dict
     entry_start: dt_time
     entry_end: dt_time
-    force_exit: dt_time
+    force_exit: dt_time | None
     stop_atr: float
     max_trades_per_day: int
     magic: int
@@ -88,6 +88,10 @@ class ForwardBot:
     notes: str = ""
     # off | report | enforce. `report` calcula y publica en guards sin bloquear.
     defense_mode: str = "report"
+    # Swing: sin corte diario, puede dormir fuera del día; 1 entrada por señal.
+    swing: bool = False
+    # Fracción del volumen mínimo objetivo (0-1). El mínimo manda siempre.
+    exposure: float = 1.0
 
     @property
     def signal_bot(self) -> str:
@@ -169,11 +173,24 @@ def load_forward_bots(path: str | Path | None = None) -> list[ForwardBot]:
             raise ForwardError(f"{bot_id}: params vacíos")
         entry_start = _parse_hhmm(str(item.get("entry_start") or ""))
         entry_end = _parse_hhmm(str(item.get("entry_end") or ""))
-        force_exit = _parse_hhmm(str(item.get("force_exit") or ""))
+        raw_force_exit = item.get("force_exit")
+        force_exit = (
+            _parse_hhmm(str(raw_force_exit))
+            if raw_force_exit not in (None, "", "none")
+            else None
+        )
+        swing = bool(item.get("swing", force_exit is None))
+        if swing and force_exit is not None:
+            raise ForwardError(f"{bot_id}: swing no admite force_exit")
+        if not swing and force_exit is None:
+            raise ForwardError(f"{bot_id}: falta force_exit (o marca swing: true)")
         if not (entry_start < entry_end):
             raise ForwardError(f"{bot_id}: entry_start debe ser anterior a entry_end")
-        if force_exit < entry_end:
+        if force_exit is not None and force_exit < entry_end:
             raise ForwardError(f"{bot_id}: force_exit no puede ser anterior a entry_end")
+        exposure = float(item.get("exposure") or 1.0)
+        if not 0 < exposure <= 1:
+            raise ForwardError(f"{bot_id}: exposure debe estar en (0, 1]")
         stop_atr = float(item.get("stop_atr") or 0.0)
         if stop_atr <= 0:
             raise ForwardError(f"{bot_id}: stop_atr debe ser > 0")
@@ -204,6 +221,8 @@ def load_forward_bots(path: str | Path | None = None) -> list[ForwardBot]:
                 enabled=enabled,
                 notes=str(item.get("notes") or ""),
                 defense_mode=defense_mode,
+                swing=swing,
+                exposure=exposure,
             )
         )
         if not out[-1].canonical_symbol:
@@ -269,11 +288,19 @@ def _broker_symbol(db_path: str | Path, canonical: str) -> str:
             "WHERE canonical = ? AND profile = 'intraday_fx'",
             (canonical.upper(),),
         ).fetchone()
+        if row is None:
+            # El forward puede declarar el símbolo del bróker como canónico
+            # (p. ej. US100.CASH); el alias lo conoce por su forma real.
+            row = con.execute(
+                "SELECT broker_symbol FROM asset_aliases "
+                "WHERE UPPER(broker_symbol) = ? AND profile = 'intraday_fx'",
+                (canonical.upper(),),
+            ).fetchone()
     if row is None:
         raise ForwardError(
             f"{canonical}: falta alias del bróker; ejecuta `lab mt5 aliases`"
         )
-    symbol = str(row["broker_symbol"]).strip().upper()
+    symbol = str(row["broker_symbol"]).strip()
     allowed, reason = symbol_allowed(db_path, symbol)
     if not allowed:
         raise ForwardError(reason or f"{symbol}: símbolo no permitido")
@@ -443,6 +470,43 @@ def _record_signal(
         raise ForwardError(f"{bot.id}: no se pudo registrar la señal: {exc}") from exc
 
 
+def _last_signal(db_path: str | Path, bot_name: str) -> float | None:
+    """Última señal que el bot llegó a operar (o 0 si quedó plano)."""
+    init_db(db_path)
+    with connect(db_path) as con:
+        row = con.execute(
+            "SELECT last_signal FROM forward_state WHERE bot = ?",
+            (bot_name,),
+        ).fetchone()
+    return float(row["last_signal"]) if row is not None else None
+
+
+def _set_last_signal(db_path: str | Path, bot_name: str, signal: float) -> None:
+    init_db(db_path)
+    with connect(db_path) as con:
+        con.execute(
+            "INSERT INTO forward_state(bot, last_signal, updated_at) VALUES(?,?,?) "
+            "ON CONFLICT(bot) DO UPDATE SET "
+            "last_signal = excluded.last_signal, updated_at = excluded.updated_at",
+            (bot_name, float(signal), utcnow()),
+        )
+
+
+def _exposure_volume(spec: dict, exposure: float) -> float:
+    """Volumen objetivo = mínimo × exposición, redondeado al step.
+
+    Si el mínimo ya es el 100 % del tamaño disponible (0,75 × mínimo cae por
+    debajo del mínimo), se usa el mínimo y se documenta en la nota del bot.
+    """
+    minimum = _min_volume(spec)
+    step = float(spec.get("volume_step") or 0.0) or minimum
+    if not 0 < exposure <= 1:
+        raise ForwardError(f"exposición inválida: {exposure}")
+    steps = math.floor((minimum * exposure) / step + 1e-9)
+    volume = max(minimum, round(steps * step, 8))
+    return volume
+
+
 def _symbol_spec(broker, symbol: str) -> dict:
     try:
         spec = broker.symbol_spec(symbol)
@@ -521,13 +585,16 @@ def _round_price(value: float, digits: int) -> float:
     return round(float(value), int(digits))
 
 
-def _force_exit_at(bot: ForwardBot, position_time: datetime | None, now: datetime) -> datetime:
+def _force_exit_at(bot: ForwardBot, position_time: datetime | None, now: datetime) -> datetime | None:
+    if bot.force_exit is None:
+        return None
     base = _as_utc(position_time or now)
     return datetime.combine(base.date(), bot.force_exit, tzinfo=timezone.utc)
 
 
 def _past_force_exit(bot: ForwardBot, position: dict, now: datetime) -> bool:
-    return _as_utc(now) >= _force_exit_at(bot, position.get("time"), now)
+    target = _force_exit_at(bot, position.get("time"), now)
+    return target is not None and _as_utc(now) >= target
 
 
 def _bars_held(
@@ -806,15 +873,15 @@ def _manage_position(
     reason: str | None = None
     if float(position.get("sl") or 0.0) <= 0:
         reason = "stop ausente"
-    elif signal == 0:
-        reason = "señal plana"
     elif (side == "buy" and signal < 0) or (side == "sell" and signal > 0):
         reason = "señal contraria"
-    elif _past_force_exit(bot, position, now):
+    elif not bot.swing and signal == 0:
+        reason = "señal plana"
+    elif not bot.swing and _past_force_exit(bot, position, now):
         reason = "corte de sesión"
-    elif _held_too_long(bot, position, last_bar_open):
+    elif not bot.swing and _held_too_long(bot, position, last_bar_open):
         reason = "max_hold"
-    elif flatten_required(rules, now, asset_class="forex"):
+    elif not bot.swing and flatten_required(rules, now, asset_class="forex"):
         reason = "fin de semana"
 
     price = float(position.get("price_current") or 0.0) or None
@@ -986,6 +1053,8 @@ def run_forward_bot(
 
     price = float(tick["bid"])
     if signal == 0:
+        if bot.swing:
+            _set_last_signal(db_path, bot.signal_bot, 0.0)
         _record_signal(
             db_path, bot, symbol, signal, price, "flat sin posición"
         )
@@ -1000,6 +1069,27 @@ def run_forward_bot(
             dry_run=dry_run,
             guards=guards,
         )
+
+    if bot.swing:
+        previous = _last_signal(db_path, bot.signal_bot)
+        if previous is not None and abs(previous - signal) < 1e-9:
+            _record_signal(
+                db_path,
+                bot,
+                symbol,
+                signal,
+                price,
+                "blocked repeated_signal: ya se operó esta señal",
+            )
+            return _blocked(
+                bot,
+                symbol,
+                signal,
+                "señal ya operada; se espera un cambio de señal",
+                price=price,
+                atr_value=atr_value,
+                guards=guards,
+            )
 
     # Datos frescos y reloj sano: sin esto no se abre nada. El cierre de una
     # posición ya está gestionado antes (rama `position is not None`).
@@ -1250,6 +1340,8 @@ def run_forward_bot(
 
     spec = _symbol_spec(broker, symbol)
     volume = _min_volume(spec)
+    if bot.swing and bot.exposure < 1.0:
+        volume = _exposure_volume(spec, bot.exposure)
     stop_distance = _stop_distance(bot, spec, atr_value)
     sign = 1 if signal > 0 else -1
     entry = float(tick["ask"] if sign > 0 else tick["bid"])
@@ -1391,6 +1483,8 @@ def run_forward_bot(
         float(order.get("price") or entry),
         f"{action} executed: {reason}",
     )
+    if bot.swing:
+        _set_last_signal(db_path, bot.signal_bot, signal)
     return ForwardDecision(
         bot=bot.id,
         symbol=symbol,

@@ -51,3 +51,32 @@ bots:
     magic: 20261152
     enabled: true
     notes: "Forward experimental; backtest Sharpe -4.63, MaxDD -8.1%."
+
+  # Swing CFD demo. La señal es diaria (trend_daily_atr: 50/200 + régimen 200)
+  # y la ejecución es la primera barra H4 del día UTC (00:00-04:00), evaluada
+  # al cierre de esa barra (04:00 UTC). No hay force_exit: la posición puede
+  # dormir varios días. FTMO Swing permite mantener overnight y fin de semana;
+  # esta demo no impone restricción de overnight, así que solo la cierran la
+  # señal contraria o el stop. `exposure` se aplica sobre el volumen mínimo:
+  # si 0,75 × mínimo cae por debajo del mínimo del bróker, se usa el mínimo
+  # (el tamaño efectivo es el 100 % del mínimo, documentado aquí).
+  - id: us100-trend-d1
+    canonical_symbol: US100.cash
+    strategy: trend_daily_atr
+    timeframe: H4
+    account: ftmo_demo
+    params:
+      fast: 50
+      slow: 200
+      regime: 200
+      stop_atr: 3.0
+      atr_window: 14
+    exposure: 0.75
+    entry_start: "00:00"
+    entry_end: "04:00"
+    force_exit: null
+    stop_atr: 3.0
+    max_trades_per_day: 1
+    magic: 20261153
+    enabled: false
+    notes: "Swing demo US100 (k=0,75 sobre el volumen mínimo). Sin force_exit; cierra por señal contraria o stop. FTMO Swing permite overnight."

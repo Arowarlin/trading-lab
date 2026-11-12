@@ -5515,6 +5515,7 @@ def intraday_forward_status() -> None:
     except Exception as exc:
         console.print(Panel(str(exc), title="Forward no disponible", style="bold red"))
         raise typer.Exit(1) from exc
+    configured = list(bots)
 
     console.print("[bold]Forward intradía · configuración congelada[/bold]")
     for bot in bots:
@@ -5522,9 +5523,12 @@ def intraday_forward_status() -> None:
             f"\n[bold]{bot.id}[/bold] · {bot.canonical_symbol} · {bot.strategy}"
         )
         console.print(f"  Parámetros: {json.dumps(bot.params, sort_keys=True)}")
+        exit_text = (
+            f"{bot.force_exit:%H:%M}" if bot.force_exit is not None else "sin corte (swing)"
+        )
         console.print(
             f"  Entrada UTC: {bot.entry_start:%H:%M}-{bot.entry_end:%H:%M} · "
-            f"Corte UTC: {bot.force_exit:%H:%M} · Stop: {bot.stop_atr:g} ATR"
+            f"Corte UTC: {exit_text} · Stop: {bot.stop_atr:g} ATR"
         )
         console.print(
             f"  Trades/día: {bot.max_trades_per_day} · Magic: {bot.magic} · "
@@ -5568,9 +5572,11 @@ def intraday_forward_cmd(
         raise typer.Exit(1) from exc
 
     if bot:
-        bots = [item for item in bots if item.id == bot]
-        if not bots:
-            console.print(f"[red]Forward desconocido:[/red] {bot}")
+        wanted = {item.strip() for item in bot.split(",") if item.strip()}
+        bots = [item for item in bots if item.id in wanted]
+        missing = sorted(wanted - {item.id for item in bots})
+        if missing:
+            console.print(f"[red]Forward desconocido:[/red] {', '.join(missing)}")
             raise typer.Exit(2)
 
     if execute:
@@ -5605,6 +5611,24 @@ def intraday_forward_cmd(
             dry_run=not execute,
             bars=bars,
         )
+        try:
+            from .mt5_fills import sync_mt5_fills
+
+            fills_report = sync_mt5_fills(
+                broker,
+                DEFAULT_DB,
+                magics={item.magic: item.signal_bot for item in configured},
+                account=bots[0].account if bots else "ftmo_demo",
+            )
+            if fills_report["inserted"]:
+                console.print(
+                    f"[dim]Fills MT5: {fills_report['inserted']} nuevos "
+                    f"({fills_report['manual']} manuales)[/dim]"
+                )
+        except Exception as exc:
+            console.print(
+                f"[yellow]Fills MT5: no se pudo sincronizar:[/yellow] {exc}"
+            )
     except Exception as exc:
         console.print(
             Panel(str(exc)[-2000:], title="Forward detenido", style="bold red")
@@ -7566,6 +7590,72 @@ def lifecycle_status_cmd() -> None:
     ]
     for bot, reasons in failures:
         console.print(f"[yellow]{bot}:[/yellow] {'; '.join(reasons)}")
+
+
+@lifecycle_app.command("incubate")
+def lifecycle_incubate_cmd(
+    bot: str = typer.Argument(..., help="ID del forward (p. ej. us100-trend-d1)"),
+    window_days: int = typer.Option(60, "--window-days", min=1),
+    min_trades: int = typer.Option(8, "--min-trades", min=1),
+    min_sharpe: float = typer.Option(0.0, "--min-sharpe"),
+    max_slippage_bps: float = typer.Option(3.0, "--max-slippage-bps", min=0),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        help="Incuba aunque la puerta de evidencia no sea elegible (no toca enabled)",
+    ),
+) -> None:
+    """Pasa un forward a `incubando` con criterios congelados. No cambia enabled."""
+    from .forward_intraday import load_forward_bots
+    from .lifecycle import LifecycleError, register_candidate, start_incubation
+
+    forward = next((item for item in load_forward_bots() if item.id == bot), None)
+    if forward is None:
+        console.print(f"[red]Forward desconocido:[/red] {bot}")
+        raise typer.Exit(2)
+
+    register_candidate(
+        DEFAULT_DB,
+        bot=bot,
+        asset=forward.canonical_symbol,
+        note="forward demo; evidencia en reports/research/swing_cfd",
+    )
+    criteria = {
+        "window_days": int(window_days),
+        "min_trades": int(min_trades),
+        "min_forward_sharpe": float(min_sharpe),
+        "max_slippage_bps": float(max_slippage_bps),
+        "max_guard_breaches": 0,
+        "max_drift_status": "ok",
+    }
+    try:
+        row = start_incubation(
+            DEFAULT_DB,
+            bot=bot,
+            reason="incubacion forward demo",
+            criteria_override=criteria,
+            require_gate=not force,
+        )
+    except LifecycleError as exc:
+        console.print(f"[red]{exc}[/red]")
+        if not force:
+            console.print(
+                "[dim]La puerta de evidencia no es elegible. Si el operador "
+                "asume la incubacion, repite con --force; el bot sigue "
+                "enabled:false.[/dim]"
+            )
+        raise typer.Exit(2) from exc
+
+    table = Table(title=f"Incubadora · {bot}")
+    table.add_column("Campo", style="bold")
+    table.add_column("Valor", overflow="fold")
+    table.add_row("Activo", forward.canonical_symbol)
+    table.add_row("Estado", str(row.get("state")))
+    table.add_row("Ventana", f"{row.get('start_date')} → {row.get('end_date')}")
+    table.add_row("Criterios", str(row.get("criteria")))
+    table.add_row("Hash", str(row.get("criteria_hash")))
+    table.add_row("enabled", "sin cambios (false)")
+    console.print(table)
 
 
 @lifecycle_app.command("report")

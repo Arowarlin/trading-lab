@@ -695,6 +695,8 @@ def init_db(path: str | Path) -> None:
         _migrate_orders(con)
         _migrate_audit_chain(con)
         _migrate_f13(con)
+        _migrate_fills_mt5(con)
+        _migrate_forward_state(con)
 
 
 def _migrate_f13(con: sqlite3.Connection) -> None:
@@ -792,6 +794,70 @@ def _migrate_llm_calls(con: sqlite3.Connection) -> None:
         con.execute("ALTER TABLE llm_calls ADD COLUMN schema_ok INTEGER")
     if columns and "schema_error" not in columns:
         con.execute("ALTER TABLE llm_calls ADD COLUMN schema_error TEXT")
+
+
+def _migrate_fills_mt5(con: sqlite3.Connection) -> None:
+    """Amplía `fills` para los deals de MT5 sin perder los fills del paper.
+
+    `order_id` deja de ser NOT NULL (un deal no siempre tiene orden en el
+    laboratorio) y se añaden las columnas del deal. `deal_id` es único: la
+    sincronización es idempotente. Es una reconstrucción de tabla, pero solo
+    añade columnas y conserva todas las filas.
+    """
+    columns = [row["name"] for row in con.execute("PRAGMA table_info(fills)").fetchall()]
+    if not columns:
+        return
+    if "deal_id" not in columns:
+        con.executescript(
+            """
+            CREATE TABLE fills_mt5_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                order_id INTEGER,
+                ts TEXT NOT NULL,
+                qty REAL NOT NULL,
+                price REAL NOT NULL,
+                commission REAL NOT NULL DEFAULT 0,
+                bot TEXT,
+                account TEXT,
+                symbol TEXT,
+                side TEXT,
+                volume REAL,
+                swap REAL,
+                deal_id INTEGER,
+                magic INTEGER,
+                ts_utc TEXT
+            );
+            INSERT INTO fills_mt5_new (id, order_id, ts, qty, price, commission)
+                SELECT id, order_id, ts, qty, price, commission FROM fills;
+            DROP TABLE fills;
+            ALTER TABLE fills_mt5_new RENAME TO fills;
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_fills_deal_id
+                ON fills(deal_id) WHERE deal_id IS NOT NULL;
+            """
+        )
+        columns = [
+            row["name"] for row in con.execute("PRAGMA table_info(fills)").fetchall()
+        ]
+    if "contract_size" not in columns:
+        con.execute("ALTER TABLE fills ADD COLUMN contract_size REAL")
+
+
+def _migrate_forward_state(con: sqlite3.Connection) -> None:
+    """Estado mínimo del forward y cursor de deals de MT5. Solo aditivo."""
+    con.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS forward_state (
+            bot TEXT PRIMARY KEY,
+            last_signal REAL NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS mt5_fills_sync (
+            account TEXT PRIMARY KEY,
+            last_deal_time TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        """
+    )
 
 
 def log_event(path: str | Path, level: str, source: str, message: str, data: str | None = None) -> None:

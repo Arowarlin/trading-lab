@@ -31,7 +31,10 @@ $minuteOfDay = $utc.Hour * 60 + $utc.Minute
 # Londres 07:00-16:00 + margen de cierre hasta 16:30.
 $inTokyo = $minuteOfDay -ge 0 -and $minuteOfDay -le (4 * 60 + 30)
 $inLondon = $minuteOfDay -ge (7 * 60) -and $minuteOfDay -le (16 * 60 + 30)
-$inWindow = $isWeekday -and ($inTokyo -or $inLondon)
+# US100 swing: la primera barra H4 del dia UTC es 00:00-04:00; se evalua en
+# los primeros 5 minutos tras su cierre (04:00-04:04 UTC), una vez al dia.
+$inUs100 = $minuteOfDay -ge (4 * 60) -and $minuteOfDay -le (4 * 60 + 4)
+$inWindow = $isWeekday -and ($inTokyo -or $inLondon -or $inUs100)
 
 # Registro diario del guardián: una línea por día UTC con las sesiones en
 # ALERT, los disparos y si la puerta de CLOSE está cumplida. Es la evidencia
@@ -70,13 +73,61 @@ if (-not $mutex.WaitOne(0)) {
     exit 0
 }
 
+$existingBots = "eurusd-london-pullback-forward,usdjpy-tokyo-breakout-forward"
+
+function Get-ForwardEnabled([string]$BotId) {
+    $yaml = Get-Content (Join-Path $root "config\intraday_forward.yaml") -Raw -Encoding utf8
+    $pattern = "(?ms)^\s*-\s*id:\s*" + [regex]::Escape($BotId) + "\b.*?(?=^\s*-\s*id:|\z)"
+    $match = [regex]::Match($yaml, $pattern)
+    return ($match.Success -and ($match.Value -match "(?m)^\s*enabled:\s*true\s*$"))
+}
+
+function Invoke-Forward([string]$BotIds, [string]$Label) {
+    $forwardArgs = @("intraday", "forward", "--bars", "5000")
+    if ($BotIds) {
+        $forwardArgs += @("--bot", $BotIds)
+    }
+    $forwardArgs += @("--execute", "--confirm", "FORWARD-DEMO")
+    $out = & $lab @forwardArgs 2>&1
+    $code = $LASTEXITCODE
+    $out | ForEach-Object {
+        Add-Content -Path $log -Value ([string]$_) -Encoding utf8
+    }
+    Write-Log ("FIN {0} exit={1}" -f $Label, $code)
+    return $code
+}
+
+function Invoke-ForwardDryRun([string]$BotId) {
+    $out = & $lab intraday forward --bot $BotId --bars 2000 2>&1
+    $code = $LASTEXITCODE
+    $out | ForEach-Object {
+        Add-Content -Path $log -Value ([string]$_) -Encoding utf8
+    }
+    Write-Log ("FIN dry-run {0} exit={1}" -f $BotId, $code)
+    return $code
+}
+
 try {
     Set-Location $root
     Write-Log ("INICIO forward demo execute utc={0} force={1}" -f $utc.ToString("yyyy-MM-dd HH:mm:ss"), $Force)
-    $output = & $lab intraday forward --bars 5000 --execute --confirm FORWARD-DEMO 2>&1
-    $code = $LASTEXITCODE
-    $output | ForEach-Object {
-        Add-Content -Path $log -Value ([string]$_) -Encoding utf8
+    $code = 0
+    if ($inTokyo -or $inLondon -or $Force) {
+        $code = Invoke-Forward $existingBots "forward existentes"
+    }
+    if ($inUs100 -or $Force) {
+        if (Get-ForwardEnabled "us100-trend-d1") {
+            $us100 = Invoke-Forward "us100-trend-d1" "us100-trend-d1"
+        } else {
+            Write-Log "us100-trend-d1 enabled:false; solo dry-run (no se envia)"
+            $us100 = Invoke-ForwardDryRun "us100-trend-d1"
+            if ($us100 -ne 0) {
+                Write-Log "dry-run us100 devolvio $us100; se ignora para no bloquear la tarea"
+            }
+            $us100 = 0
+        }
+        if ($us100 -ne 0) {
+            $code = $us100
+        }
     }
     Write-Log "FIN forward demo execute exit=$code"
     if ($code -ne 0) {
