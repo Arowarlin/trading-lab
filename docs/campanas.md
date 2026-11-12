@@ -14,6 +14,17 @@ activa: las confirmadas solo pueden entrar en el ciclo de vida como candidatas.
 - **Corte común único.** Es el punto del 70 % de la serie **más corta**. La
   meseta entre activos solo usa datos anteriores a esa fecha; el 30 % final de
   cada serie queda sellado.
+- **Holdout mínimo de dos años.** Si el corte común deja menos de dos años de
+  holdout, no se acorta el holdout de todos: se saca del universo el activo
+  cuya serie limita la ventana (la más corta o la que antes acaba), se
+  recalcula el corte con las que quedan y se repite. Los excluidos se listan
+  con su motivo en `reports/research/campaign/universe.md`. Si el universo se
+  queda vacío o con menos de dos series, la respuesta es **Sin datos**.
+- **Fetch sin círculo.** `lab campaign fetch` descarga H1/H4 con el máximo
+  `CAMPAIGN_BARS` de **todos** los candidatos medidos, no solo de los ya
+  elegibles; después vuelve a medir spread, ATR, datacheck y `cost_atr` con
+  esas velas y solo entonces decide la elegibilidad. Solo descarga con mercado
+  abierto (tick fresco) y offset del servidor confirmado.
 - **Sello del holdout.** El yaml guarda el fin de cada serie sellada y
   `holdout_hash`. `run` recorta a ese fin y aborta si el hash cambió.
 - **Una pasada.** `register` rechaza un segundo registro; `run` rechaza una
@@ -25,13 +36,14 @@ activa: las confirmadas solo pueden entrar en el ciclo de vida como candidatas.
 - **Descubrimiento = celdas registradas.** `run_discovery` filtra por
   `eligible_by_timeframe`, `timeframes` y `applies_to`. Si corriera marcos que
   no entraron en `N_total` (p. ej. H1/H4 sin elegibles), el DSR quedaría
-  desalineado.
+  desalineado. La condición de meseta y los clústeres de correlación se
+  calculan **solo** con barras anteriores al corte.
 
 ## Comandos
 
 ```powershell
 lab campaign universe        # mide coste y escribe universe.md/.json
-lab campaign fetch           # H1/H4 máximos, corte común, celdas y sello
+lab campaign fetch           # H1/H4 máximos de todos, elegibilidad, corte ≥2 años, celdas y sello
 lab campaign n-total         # N_total y celdas excluidas
 lab campaign plan            # escribe el yaml, sin registrar
 lab campaign register --confirm
@@ -39,7 +51,24 @@ lab campaign run --confirm   # una vez; --resume solo tras un fallo de código
 lab campaign status
 ```
 
-## 2026-11-A (registrada y ejecutada, 0 candidatas)
+## 2026-11-A
+
+### Plan reconstruido (2026-11-12, sin registrar)
+
+- **Fetch sin círculo:** 51 candidatos con H1/H4 de 50.000 barras, mercado
+  abierto y offset +2 h detectado; la elegibilidad se vuelve a medir con esas
+  velas completas.
+- **Elegibles:** **H1 0, H4 0, D1 16** (10 índices cash + 5 metales + NZDUSD).
+  H1/H4 siguen fuera por coste (`cost_atr ≥ 0,05`), no por falta de datos.
+- **Corte común:** `2024-08-08 00:00:00+00:00`, holdout común de **2,26 años**.
+  `XCUUSD` queda fuera del universo por historia (507 barras D1, holdout de
+  0,58 años); 0 celdas excluidas por historia y 48 series selladas.
+- **`N_total = 232`** (H1 0 / H4 0 / D1 232), `config_hash = 0edeff2f…`,
+  `holdout_hash = 768204bd…`. El yaml se reescribió con `lab campaign plan
+  --force` y **no se registró**: la campaña sigue con el registro histórico de
+  la primera pasada.
+
+### Primera pasada registrada (histórica, 0 candidatas)
 
 - **Universo por coste:** 55 activos medidos, 49 con comisión verificada, 28
   convertibles a bps. Elegibles: **H1 0, H4 0, D1 16** (9 índices cash + 6

@@ -9,7 +9,9 @@ Cuatro piezas:
    hora de las últimas barras H1, comisión de FTMO desde `config/costs.yaml` y
    ATR mediano en H1/H4/D1 (D1 construido desde H4). Un activo es elegible en un
    timeframe si el datacheck no falla y `cost_atr < 0,05`. Sin comisión
-   verificada no hay `cost_atr`: queda fuera con "Sin datos".
+   verificada no hay `cost_atr`: queda fuera con "Sin datos". `fetch` re-mide
+   la elegibilidad con las velas completas de todos los candidatos, así que
+   H1/H4 no se deciden con una muestra corta.
 2. **Familias sin unidad de barra** (`family_target`): `tsmom`, `st_reversal`,
    `vol_breakout` y `calendar` se expresan en horas o días y se escalan al
    timeframe con la densidad observada de barras por día de sesión, para que un
@@ -17,7 +19,9 @@ Cuatro piezas:
 3. **Registro con una sola pasada** (`register_campaign`): `N_total` se escribe
    **antes** de correr nada y `count_tests` lo suma entero. El holdout se sella
    con un hash del trozo exacto de datos; el hash de la configuración impide
-   cambiar la rejilla después de ver resultados.
+   cambiar la rejilla después de ver resultados. El corte es una fecha común y
+   el holdout no baja de dos años: si la serie más corta no los deja, se sacan
+   del universo los activos que lo limitan (`trim_for_holdout`).
 4. **Descubrimiento, meseta y confirmación** (`run_discovery`, `apply_plateau`,
    `run_holdout`) más el informe con mapas de calor SVG propios.
 """
@@ -49,6 +53,14 @@ BAR_HOURS = {tf: minutes / 60.0 for tf, minutes in BAR_MINUTES.items()}
 COST_ATR_MAX = 0.05
 SLIPPAGE_BPS = 2.0
 DISCOVERY_PCT = 0.70
+
+#: El holdout común no puede ser más corto que esto. Si el 70 % de la serie
+#: más corta deja menos, se sacan del universo los activos que lo limitan en
+#: vez de acortar el holdout de todos.
+MIN_HOLDOUT_YEARS = 2.0
+#: Series mínimas para que la meseta entre activos (clúster) tenga sentido.
+MIN_SERIES = 2
+DAYS_PER_YEAR = 365.0
 
 MIN_TRADES = 30
 SHARPE_MIN = 0.5
@@ -677,64 +689,29 @@ def build_universe(
     return universe
 
 
-def _measure_symbol(
-    broker,
-    entry: dict,
-    *,
-    sizes: dict,
-    cache_dir: Path,
-    save: bool,
+def _apply_measurements(
+    row: dict,
+    frames: dict[str, pd.DataFrame],
+    paths: dict[str, Path],
+    point: float,
 ) -> dict:
-    name = entry["mt5_name"]
-    key = name.upper()
-    row: dict = {
-        "symbol": key,
-        "mt5_name": name,
-        "group": entry["group"],
-        "asset_class": entry["asset_class"],
-        "spec": {},
-        "commission": {"verified": False, "convertible": False, "commission_side_bps": None},
-        "spread_bps_median": None,
-        "spread_bps_by_hour": {},
-        "atr": {},
-        "cost_atr": {},
-        "datacheck": {},
-        "eligible": {},
-        "reason": {},
-    }
-    try:
-        spec = broker.symbol_spec(name)
-        row["spec"] = {
-            "tick_size": spec.get("tick_size"),
-            "contract_size": spec.get("contract_size"),
-            "volume_min": spec.get("volume_min"),
-            "digits": spec.get("digits"),
-        }
-        point = float(spec.get("tick_size") or spec.get("point") or 0.01)
-    except Exception as exc:
-        row["reason"]["spec"] = f"Sin datos: {exc}"
-        point = 0.01
+    """Mide spread, ATR, datacheck y coste sobre unos marcos ya descargados.
 
-    frames: dict[str, pd.DataFrame] = {}
-    paths: dict[str, Path] = {}
-    for tf in ("H1", "H4"):
-        path = cache_file(cache_dir, key, tf)
-        try:
-            frame = broker.rates(name, tf, int(sizes[tf]))
-            if save:
-                from .intraday import save_bars
-
-                path = save_bars(frame, cache_dir, key, tf)
-            frames[tf] = frame
-            paths[tf] = path
-        except Exception as exc:
-            row["reason"][tf] = f"Sin datos: {exc}"
-    if "H4" in frames:
-        try:
-            frames["D1"] = daily_bars(frames["H4"])
-            paths["D1"] = paths["H4"]
-        except Exception as exc:
-            row["reason"]["D1"] = f"Sin datos: {exc}"
+    La usan tanto la medición del universo (velas cortas) como la
+    re-medición del `fetch` (velas completas). Así la elegibilidad de H1/H4 no
+    depende de cuántas barras se pidieron en la primera pasada.
+    """
+    key = str(row["symbol"]).upper()
+    row["spread_bps_median"] = None
+    row["spread_bps_by_hour"] = {}
+    row.pop("spread_source", None)
+    row["atr"] = {}
+    row["cost_atr"] = {}
+    row["datacheck"] = {}
+    row["eligible"] = {}
+    for tf in TIMEFRAMES:
+        row["reason"].pop(tf, None)
+    row["reason"].pop("spread", None)
 
     for source in ("H1", "H4"):
         frame = frames.get(source)
@@ -810,6 +787,164 @@ def _measure_symbol(
     return row
 
 
+def _measure_symbol(
+    broker,
+    entry: dict,
+    *,
+    sizes: dict,
+    cache_dir: Path,
+    save: bool,
+) -> dict:
+    name = entry["mt5_name"]
+    key = name.upper()
+    row: dict = {
+        "symbol": key,
+        "mt5_name": name,
+        "group": entry["group"],
+        "asset_class": entry["asset_class"],
+        "spec": {},
+        "commission": {"verified": False, "convertible": False, "commission_side_bps": None},
+        "spread_bps_median": None,
+        "spread_bps_by_hour": {},
+        "atr": {},
+        "cost_atr": {},
+        "datacheck": {},
+        "eligible": {},
+        "reason": {},
+    }
+    try:
+        spec = broker.symbol_spec(name)
+        row["spec"] = {
+            "tick_size": spec.get("tick_size"),
+            "contract_size": spec.get("contract_size"),
+            "volume_min": spec.get("volume_min"),
+            "digits": spec.get("digits"),
+        }
+        point = float(spec.get("tick_size") or spec.get("point") or 0.01)
+    except Exception as exc:
+        row["reason"]["spec"] = f"Sin datos: {exc}"
+        point = 0.01
+
+    frames: dict[str, pd.DataFrame] = {}
+    paths: dict[str, Path] = {}
+    for tf in ("H1", "H4"):
+        path = cache_file(cache_dir, key, tf)
+        try:
+            frame = broker.rates(name, tf, int(sizes[tf]))
+            if frame is None or frame.empty:
+                row["reason"][tf] = "Sin datos: sin velas"
+                continue
+            if save:
+                from .intraday import save_bars
+
+                path = save_bars(frame, cache_dir, key, tf)
+            frames[tf] = frame
+            paths[tf] = path
+        except Exception as exc:
+            row["reason"][tf] = f"Sin datos: {exc}"
+    if "H4" in frames:
+        try:
+            frames["D1"] = daily_bars(frames["H4"])
+            paths["D1"] = paths["H4"]
+        except Exception as exc:
+            row["reason"]["D1"] = f"Sin datos: {exc}"
+    return _apply_measurements(row, frames, paths, point)
+
+
+# ------------------------------------------------- re-medición con velas completas
+
+
+def universe_symbols(universe: dict) -> list[str]:
+    """Todos los activos medidos del universo (candidatos), elegibles o no.
+
+    `lab campaign fetch` descarga H1/H4 de esta lista completa: la elegibilidad
+    de un timeframe no puede decidir qué datos se descargan para medirla. La
+    energía queda fuera por diseño (no tiene comisión FTMO verificada), igual
+    que en `GROUP_ASSET_CLASS`.
+    """
+    classes = set(GROUP_ASSET_CLASS.values())
+    return sorted(
+        {
+            str(row["symbol"]).upper()
+            for row in universe.get("symbols") or []
+            if row.get("symbol") and str(row.get("asset_class") or "") in classes
+        }
+    )
+
+
+def campaign_symbols(universe: dict) -> list[str]:
+    """Activos que finalmente entran en alguna celda de la campaña."""
+    return sorted(
+        {
+            str(name).upper()
+            for timeframe in TIMEFRAMES
+            for name in (universe.get("eligible_by_timeframe") or {}).get(timeframe) or []
+        }
+    )
+
+
+def refresh_universe_eligibility(universe: dict) -> dict:
+    """Reconstruye `eligible_by_timeframe` y los contadores desde las filas."""
+    eligible: dict[str, list[str]] = {tf: [] for tf in TIMEFRAMES}
+    for row in universe.get("symbols") or []:
+        for timeframe in TIMEFRAMES:
+            if (row.get("eligible") or {}).get(timeframe):
+                eligible[timeframe].append(str(row["symbol"]).upper())
+    universe["eligible_by_timeframe"] = eligible
+    counts = universe.setdefault("counts", {})
+    counts["eligible"] = {tf: len(eligible[tf]) for tf in TIMEFRAMES}
+    counts["verified_commission"] = sum(
+        1
+        for row in universe.get("symbols") or []
+        if (row.get("commission") or {}).get("verified")
+    )
+    counts["convertible_commission"] = sum(
+        1
+        for row in universe.get("symbols") or []
+        if (row.get("commission") or {}).get("convertible")
+    )
+    universe["campaign_symbols"] = campaign_symbols(universe)
+    return universe
+
+
+def reassess_universe(
+    universe: dict,
+    frames: dict[tuple[str, str], pd.DataFrame],
+    *,
+    cache_dir: str | Path | None = None,
+) -> dict:
+    """Vuelve a medir la elegibilidad con las velas completas del `fetch`.
+
+    Rompe el círculo del universo: `lab campaign universe` mide con pocas
+    barras y `lab campaign fetch` descarga el máximo de H1/H4 para todos los
+    candidatos; aquí se recalculan spread, ATR, datacheck y `cost_atr` con esas
+    velas antes de decidir qué es elegible.
+    """
+    target_dir = Path(cache_dir) if cache_dir else (ROOT / "data" / "cache")
+    rows: list[dict] = []
+    for row in universe.get("symbols") or []:
+        symbol = str(row["symbol"]).upper()
+        spec = row.get("spec") or {}
+        point = float(spec.get("tick_size") or 0.01)
+        symbol_frames = {
+            timeframe: frames[(symbol, timeframe)]
+            for timeframe in TIMEFRAMES
+            if (symbol, timeframe) in frames
+            and frames[(symbol, timeframe)] is not None
+            and not frames[(symbol, timeframe)].empty
+        }
+        paths = {
+            timeframe: cache_file(target_dir, symbol, timeframe)
+            for timeframe in symbol_frames
+        }
+        if "D1" in symbol_frames:
+            paths["D1"] = paths.get("H4", cache_file(target_dir, symbol, "H4"))
+        _apply_measurements(row, symbol_frames, paths, point)
+        rows.append(row)
+    universe["symbols"] = rows
+    return refresh_universe_eligibility(universe)
+
+
 def write_universe(universe: dict, out_dir: str | Path | None = None) -> dict:
     """Escribe `universe.md` y `universe.json`."""
     target = Path(out_dir) if out_dir else REPORT_DIR
@@ -865,18 +1000,48 @@ def render_universe(universe: dict) -> str:
     plan = universe.get("plan") or {}
     if plan:
         excluded = plan.get("excluded") or []
+        excluded_assets = plan.get("excluded_assets") or []
         lines += [
             "",
             "## Corte común y celdas",
             "",
             f"- Fecha de corte común: **{plan.get('cutoff_utc')}**",
+            f"- Holdout común: **{_fmt(plan.get('holdout_years'), 2)} años** "
+            f"(mínimo exigido: {_fmt(plan.get('min_holdout_years', 2.0), 1)} años)",
             f"- `N_total` con historia suficiente: **{plan.get('n_total')}** "
             f"({plan.get('per_timeframe')})",
             f"- Celdas excluidas por historia: **{len(excluded)}**",
             "",
+            "## Activos excluidos por holdout corto",
+            "",
         ]
+        if excluded_assets:
+            lines += [
+                "| Activo | Serie limitante | Barras | Inicio | Fin | Holdout antes | Motivo |",
+                "|---|---|---|---|---|---|---|",
+            ]
+            for item in excluded_assets:
+                lines.append(
+                    "| {symbol} | {tf} | {rows} | {start} | {end} | {years} años | {why} |".format(
+                        symbol=item.get("symbol"),
+                        tf=item.get("timeframe", "Sin datos"),
+                        rows=item.get("rows", "Sin datos"),
+                        start=str(item.get("start") or "Sin datos")[:10],
+                        end=str(item.get("end") or "Sin datos")[:10],
+                        years=_fmt(item.get("holdout_years_before"), 2),
+                        why=item.get("reason") or "Sin datos",
+                    )
+                )
+        else:
+            lines.append(
+                "Ninguno: todas las series elegibles dejan un holdout común de "
+                "al menos dos años."
+            )
+        lines += [""]
         if excluded:
             lines += [
+                "### Celdas excluidas por historia",
+                "",
                 "| Activo | TF | Familia | Variante | Descubrimiento | Necesita | Motivo |",
                 "|---|---|---|---|---|---|---|",
             ]
@@ -1078,6 +1243,86 @@ def compute_n_total(universe: dict) -> dict:
     }
 
 
+def campaign_config(universe: dict, campaign: str) -> dict:
+    """Configuración de la campaña a partir del universo final y su plan.
+
+    No registra nada: la misma función alimenta `lab campaign plan` (escribe el
+    yaml) y `lab campaign register` (sellaría), para que no puedan divergir.
+    """
+    plan = universe.get("plan") or {}
+    if not plan:
+        raise CampaignError(
+            "falta el plan con el corte común: corre antes `lab campaign fetch`."
+        )
+    symbols = campaign_symbols(universe)
+    if not symbols:
+        raise CampaignError("sin activos elegibles: no hay nada que planificar")
+    totals = compute_n_total(universe)
+    symbol_set = set(symbols)
+    broker_names = {
+        str(row["symbol"]).upper(): str(row.get("mt5_name") or row["symbol"])
+        for row in universe.get("symbols") or []
+        if str(row["symbol"]).upper() in symbol_set
+    }
+    # Elegibilidad y clase por timeframe: el descubrimiento corre **solo** las
+    # celdas que entraron en `N_total`. Sin esto correría H1/H4 aunque no
+    # tengan activos elegibles y el denominador del DSR quedaría desalineado.
+    eligible_by_timeframe = {
+        str(timeframe).upper(): [str(name).upper() for name in (names or [])]
+        for timeframe, names in (universe.get("eligible_by_timeframe") or {}).items()
+    }
+    asset_classes = {
+        str(row["symbol"]).upper(): str(row.get("asset_class") or "")
+        for row in universe.get("symbols") or []
+        if str(row["symbol"]).upper() in symbol_set
+    }
+    excluded_assets = [
+        str(item.get("symbol")).upper()
+        for item in (plan.get("excluded_assets") or universe.get("excluded_assets") or [])
+        if item.get("symbol")
+    ]
+    config = {
+        "id": campaign,
+        "universe": symbols,
+        "mt5_names": broker_names,
+        "timeframes": ["H1", "H4", "D1"],
+        "families": list(FAMILIES),
+        "variants_per_family": {
+            family: len(variants_for(family)) for family in FAMILIES
+        },
+        "eligible_by_timeframe": eligible_by_timeframe,
+        "asset_classes": asset_classes,
+        "discovery_pct": float(DISCOVERY_PCT),
+        "holdout_pct": float(round(1.0 - DISCOVERY_PCT, 2)),
+        "cutoff_utc": plan.get("cutoff_utc"),
+        "n_total": int(plan.get("n_total") or 0),
+        "n_total_detail": dict(plan.get("per_timeframe") or {}),
+        "n_total_theoretical": int(totals["n_total"]),
+        "holdout_years": round(float(plan.get("holdout_years") or 0.0), 4),
+        "min_holdout_years": float(
+            plan.get("min_holdout_years", MIN_HOLDOUT_YEARS)
+        ),
+        "excluded_assets": excluded_assets,
+        "holdout_hash": plan.get("holdout_hash"),
+        "holdout_series": list(plan.get("holdout_series") or []),
+        "excluded_cells": len(plan.get("excluded") or []),
+    }
+    if config["n_total"] <= 0:
+        raise CampaignError(
+            "N_total es 0 con el corte común: no hay celdas con historia suficiente"
+        )
+    per_timeframe_total = sum(
+        int(value) for value in (config["n_total_detail"] or {}).values()
+    )
+    if per_timeframe_total != config["n_total"]:
+        raise CampaignError(
+            "N_total no cuadra con el detalle por timeframe: "
+            f"{config['n_total']} != {per_timeframe_total}"
+        )
+    config["config_hash"] = campaign_hash(config)
+    return config
+
+
 def campaign_hash(config: dict) -> str:
     """Huella de la rejilla. Cambiar algo cambia el hash y rompe el sello."""
     payload = {
@@ -1250,6 +1495,121 @@ def common_cutoff(
     position = int(round(len(shortest) * float(discovery_pct)))
     position = max(1, min(len(shortest) - 1, position))
     return _stamp(shortest.index[position])
+
+
+def _limiting_series(
+    frames: dict[tuple[str, str], pd.DataFrame],
+    cutoff: pd.Timestamp | str | None,
+) -> dict | None:
+    """Serie con el holdout más corto desde el corte común.
+
+    Es la que limita la ventana sellada: si el corte deja menos de dos años
+    hasta su última barra, hay que sacar ese activo del universo.
+    """
+    if cutoff is None:
+        return None
+    stamp = _stamp(cutoff)
+    best: tuple[tuple, dict] | None = None
+    for (symbol, timeframe), frame in frames.items():
+        if frame is None or frame.empty:
+            continue
+        end = _stamp(frame.index[-1])
+        span = end - stamp
+        candidate = {
+            "symbol": str(symbol).upper(),
+            "timeframe": str(timeframe).upper(),
+            "rows": int(len(frame)),
+            "start": str(pd.Timestamp(frame.index[0])),
+            "end": str(pd.Timestamp(frame.index[-1])),
+            "seconds": float(span.total_seconds()),
+        }
+        key = (
+            candidate["seconds"],
+            candidate["rows"],
+            candidate["symbol"],
+            candidate["timeframe"],
+        )
+        if best is None or key < best[0]:
+            best = (key, candidate)
+    return best[1] if best is not None else None
+
+
+def holdout_years(
+    frames: dict[tuple[str, str], pd.DataFrame],
+    cutoff: pd.Timestamp | str | None,
+) -> float | None:
+    """Años del holdout común: del corte a la última barra que antes acaba."""
+    limit = _limiting_series(frames, cutoff)
+    if limit is None:
+        return None
+    return float(limit["seconds"]) / (DAYS_PER_YEAR * 86_400.0)
+
+
+def trim_for_holdout(
+    frames: dict[tuple[str, str], pd.DataFrame],
+    *,
+    discovery_pct: float = DISCOVERY_PCT,
+    min_years: float = MIN_HOLDOUT_YEARS,
+) -> dict | None:
+    """Quita activos por la cola hasta que el holdout común dure ≥ `min_years`.
+
+    No se acorta el holdout de todos: se saca del universo el activo cuya serie
+    limita la ventana (la que antes acaba o la más corta que fija el corte), se
+    recalcula el corte con las series restantes y se repite. Nunca se recorta
+    una serie para que quepa.
+
+    Devuelve `None` (Sin datos) si el universo se queda vacío o con menos de
+    `MIN_SERIES` series.
+    """
+    remaining = {
+        (str(symbol).upper(), str(timeframe).upper()): frame
+        for (symbol, timeframe), frame in frames.items()
+        if frame is not None and not frame.empty
+    }
+    excluded: list[dict] = []
+    while remaining:
+        cutoff = common_cutoff(remaining, discovery_pct)
+        if cutoff is None:
+            return None
+        limit = _limiting_series(remaining, cutoff)
+        if limit is None:
+            return None
+        years = float(limit["seconds"]) / (DAYS_PER_YEAR * 86_400.0)
+        assets = {symbol for symbol, _ in remaining}
+        if years >= float(min_years):
+            if len(assets) < MIN_SERIES:
+                return None
+            return {
+                "frames": remaining,
+                "cutoff": cutoff,
+                "excluded": excluded,
+                "holdout_years": years,
+                "assets": len(assets),
+                "series": len(remaining),
+            }
+        excluded.append(
+            {
+                "symbol": limit["symbol"],
+                "timeframe": limit["timeframe"],
+                "rows": limit["rows"],
+                "start": limit["start"],
+                "end": limit["end"],
+                "cutoff_before": str(_stamp(cutoff)),
+                "holdout_years_before": round(years, 4),
+                "reason": (
+                    f"holdout común de {years:.2f} años < {float(min_years):g}: "
+                    f"se excluye el activo con la serie que limita el holdout "
+                    f"({limit['rows']} barras {limit['timeframe']}, "
+                    f"{limit['start'][:10]} → {limit['end'][:10]})"
+                ),
+            }
+        )
+        remaining = {
+            key: frame
+            for key, frame in remaining.items()
+            if key[0] != limit["symbol"]
+        }
+    return None
 
 
 def _cutoff_for(
@@ -1440,6 +1800,89 @@ def series_summary(
     return rows
 
 
+def prepare_campaign(
+    universe: dict,
+    frames: dict[tuple[str, str], pd.DataFrame],
+    *,
+    discovery_pct: float = DISCOVERY_PCT,
+    min_holdout_years: float = MIN_HOLDOUT_YEARS,
+    cache_dir: str | Path | None = None,
+    reassess: bool = True,
+) -> dict:
+    """Universo final + plan con un holdout común de al menos dos años.
+
+    1. Re-mide la elegibilidad con las velas completas del `fetch` (rompe el
+       círculo de H1/H4).
+    2. Quita del universo los activos que dejan el holdout común por debajo de
+       `min_holdout_years`, recalculando el corte en cada vuelta.
+    3. Calcula las celdas con historia y sella el holdout con su fecha.
+
+    No registra nada: es solo el plan que después escribe el yaml.
+    """
+    import copy
+
+    work = copy.deepcopy(universe)
+    if reassess:
+        reassess_universe(work, frames, cache_dir=cache_dir)
+    candidates = set(campaign_symbols(work))
+    if not candidates:
+        raise CampaignError("Sin datos: ningún activo elegible tras medir coste")
+    candidate_frames = {
+        (str(symbol).upper(), str(timeframe).upper()): frame
+        for (symbol, timeframe), frame in frames.items()
+        if str(symbol).upper() in candidates
+        and frame is not None
+        and not frame.empty
+    }
+    trimmed = trim_for_holdout(
+        candidate_frames,
+        discovery_pct=discovery_pct,
+        min_years=min_holdout_years,
+    )
+    if trimmed is None:
+        raise CampaignError(
+            "Sin datos: no hay series suficientes con un holdout común de "
+            f"{float(min_holdout_years):g} años"
+        )
+    kept = trimmed["frames"]
+    excluded_symbols = {str(item["symbol"]).upper() for item in trimmed["excluded"]}
+    if excluded_symbols:
+        refresh_universe_eligibility(work)
+        work["eligible_by_timeframe"] = {
+            str(timeframe).upper(): [
+                str(name).upper()
+                for name in (names or [])
+                if str(name).upper() not in excluded_symbols
+            ]
+            for timeframe, names in (work.get("eligible_by_timeframe") or {}).items()
+        }
+        work["campaign_symbols"] = campaign_symbols(work)
+
+    cutoff = trimmed["cutoff"]
+    plan = plan_cells(work, kept, cutoff)
+    if int(plan["n_total"]) <= 0:
+        raise CampaignError(
+            "Sin datos: N_total es 0 con el corte común; ninguna celda tiene "
+            "historia suficiente"
+        )
+    sealed = holdout_rows(kept, cutoff)
+    plan["holdout_hash"] = holdout_hash(sealed, cutoff)
+    plan["holdout_series"] = sealed
+    plan["holdout_years"] = float(trimmed["holdout_years"])
+    plan["min_holdout_years"] = float(min_holdout_years)
+    plan["excluded_assets"] = list(trimmed["excluded"])
+    plan["assets"] = int(trimmed["assets"])
+    plan["series"] = int(trimmed["series"])
+    work["bars"] = {**CAMPAIGN_BARS, "D1": "desde H4"}
+    work["generated_at"] = _now()
+    work["cutoff_utc"] = plan["cutoff_utc"]
+    work["holdout_years"] = plan["holdout_years"]
+    work["excluded_assets"] = list(trimmed["excluded"])
+    work["series"] = series_summary(kept, cutoff)
+    work["plan"] = plan
+    return work
+
+
 # ----------------------------------------------------------- descubrimiento
 
 
@@ -1456,6 +1899,58 @@ def _hourly_spread(frame: pd.DataFrame, point: float) -> pd.Series:
 CAMPAIGN_BARS = {"H1": 50_000, "H4": 50_000}
 
 
+def require_live_data(
+    broker,
+    *,
+    references: tuple[str, ...] = ("EURUSD", "XAUUSD", "US500.cash"),
+    max_age_minutes: float = 15.0,
+    now: datetime | None = None,
+) -> dict:
+    """Exige mercado abierto y offset confirmado antes de descargar.
+
+    Un tick fresco del bróker prueba las dos cosas: que el mercado está abierto
+    y que la hora del servidor se puede situar en UTC. Si el offset es
+    desconocido o el último tick es viejo, no se descarga nada: se devuelve
+    **Sin datos**, no una serie con la hora mal.
+    """
+    health = broker.health() if hasattr(broker, "health") else {}
+    if not health.get("offset_known"):
+        raise CampaignError(
+            "Sin datos: offset del servidor sin confirmar; no se descarga nada"
+        )
+    moment = now or datetime.now(timezone.utc)
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)
+    moment = moment.astimezone(timezone.utc)
+    failures: list[str] = []
+    for name in references:
+        try:
+            tick = broker.tick(name)
+        except Exception as exc:
+            failures.append(f"{name}: {exc}")
+            continue
+        stamp = tick.get("time")
+        if stamp is None:
+            failures.append(f"{name}: sin hora de tick")
+            continue
+        stamp = _stamp(stamp)
+        age = (moment - stamp.to_pydatetime()).total_seconds() / 60.0
+        if age <= float(max_age_minutes):
+            return {
+                "symbol": name,
+                "tick_time": str(stamp),
+                "age_minutes": round(float(age), 2),
+                "offset_utc_hours": health.get("server_utc_offset_hours"),
+                "offset_source": health.get("offset_source"),
+            }
+        failures.append(f"{name}: último tick hace {age:.0f} min")
+    raise CampaignError(
+        "Sin datos: mercado cerrado o sin ticks frescos ("
+        + "; ".join(failures)
+        + ")"
+    )
+
+
 def load_campaign_frames(
     broker,
     symbols: list[str],
@@ -1463,12 +1958,16 @@ def load_campaign_frames(
     names: dict[str, str] | None = None,
     bars: dict | None = None,
     cache_dir: str | Path | None = None,
+    save: bool = True,
 ) -> tuple[dict[tuple[str, str], pd.DataFrame], dict[str, float]]:
-    """H1 y H4 (máximo disponible) de los elegibles y D1 construido desde H4.
+    """H1 y H4 (máximo disponible) de los candidatos y D1 construido desde H4.
 
     `symbols` son las claves en mayúsculas del universo; `names` traduce cada
     clave al nombre exacto del bróker (`US100.cash`, no `US100.CASH`), que es
     el que exige el terminal. Los marcos se indexan siempre por la clave.
+
+    Se piden **todos** los candidatos, no solo los ya elegibles: la
+    elegibilidad de H1/H4 se mide después con estas velas completas.
     """
     sizes = dict(CAMPAIGN_BARS)
     sizes.update(bars or {})
@@ -1490,9 +1989,11 @@ def load_campaign_frames(
                 frame = broker.rates(broker_name, timeframe, int(sizes[timeframe]))
                 if frame is None or frame.empty:
                     continue
-                from .intraday import save_bars
+                frame = frame[~frame.index.duplicated(keep="last")].sort_index()
+                if save:
+                    from .intraday import save_bars
 
-                save_bars(frame, target_dir, key, timeframe)
+                    save_bars(frame, target_dir, key, timeframe)
                 raw[timeframe] = frame
                 frames[(key, timeframe)] = frame
             except Exception:
@@ -1624,7 +2125,9 @@ def run_discovery(
         discovery, _ = split_frame(frame, cutoff)
         if len(discovery) < 80:
             continue
-        hourly = _hourly_spread(frame, tick.get(symbol, 0.01))
+        # El coste del descubrimiento se calibra solo con su trozo: ni el
+        # spread del holdout entra en la condición de meseta.
+        hourly = _hourly_spread(discovery, tick.get(symbol, 0.01))
         asset_class = asset_classes.get(str(symbol).upper(), "")
         for family in config.get("families") or FAMILIES:
             if asset_class and not applies_to(family, asset_class):
@@ -1871,7 +2374,7 @@ def run_holdout(
         if len(sealed) < 80:
             cell.update({"holdout_sharpe": None, "confirmed": False, "verdict": "Sin datos"})
             continue
-        hourly = _hourly_spread(frame, tick.get(symbol, 0.01))
+        hourly = _hourly_spread(sealed, tick.get(symbol, 0.01))
         outcome = backtest_variant(
             symbol,
             timeframe,
@@ -2121,6 +2624,8 @@ __all__ = [
     "FAMILY_VARIANTS",
     "INDICES_ONLY",
     "MAX_VARIANTS",
+    "MIN_HOLDOUT_YEARS",
+    "MIN_SERIES",
     "TIMEFRAMES",
     "CampaignError",
     "apply_plateau",
@@ -2131,7 +2636,9 @@ __all__ = [
     "bars_for_hours",
     "bars_per_day",
     "build_universe",
+    "campaign_config",
     "campaign_hash",
+    "campaign_symbols",
     "candidates",
     "classify_symbol",
     "clip_seal",
@@ -2143,14 +2650,19 @@ __all__ = [
     "finish_campaign",
     "holdout_hash",
     "holdout_rows",
+    "holdout_years",
     "init_campaigns",
     "load_campaign",
     "load_campaign_frames",
     "load_campaign_yaml",
     "observed_bars_per_day",
     "plan_cells",
+    "prepare_campaign",
+    "reassess_universe",
+    "refresh_universe_eligibility",
     "register_campaign",
     "render_universe",
+    "require_live_data",
     "required_history",
     "resolved_bars",
     "roundtrip_bps",
@@ -2161,6 +2673,8 @@ __all__ = [
     "spread_by_hour",
     "split_frame",
     "svg_heatmap",
+    "trim_for_holdout",
+    "universe_symbols",
     "variants_for",
     "write_report",
     "write_universe",

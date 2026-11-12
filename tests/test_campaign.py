@@ -1,26 +1,38 @@
 from __future__ import annotations
 
 import sqlite3
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import pytest
+import yaml
 
 from tradinglab.campaign import (
     CAMPAIGN_BARS,
     CampaignError,
+    campaign_config,
     campaign_hash,
     common_cutoff,
     compute_n_total,
+    correlation_clusters,
     finish_campaign,
     holdout_hash,
     holdout_rows,
+    holdout_years,
     init_campaigns,
+    load_campaign_frames,
+    load_campaign_yaml,
     plan_cells,
+    prepare_campaign,
     register_campaign,
+    require_live_data,
     required_history,
     run_discovery,
     split_frame,
+    trim_for_holdout,
+    universe_symbols,
 )
 from tradinglab.db import connect, init_db
 from tradinglab.learning import count_tests
@@ -28,6 +40,23 @@ from tradinglab.learning import count_tests
 
 def _frame(rows: int, start: str = "2015-01-01", freq: str = "D") -> pd.DataFrame:
     index = pd.date_range(start, periods=rows, freq=freq, tz="UTC")
+    close = pd.Series(range(100, 100 + rows), index=index, dtype=float)
+    return pd.DataFrame(
+        {
+            "open": close,
+            "high": close + 1.0,
+            "low": close - 1.0,
+            "close": close,
+            "tick_volume": 1_000,
+            "spread": 1,
+        },
+        index=index,
+    )
+
+
+def _frame_ending(rows: int, end: str = "2026-01-01") -> pd.DataFrame:
+    """Serie diaria que termina en la misma fecha que las demás."""
+    index = pd.date_range(end=end, periods=rows, freq="D", tz="UTC")
     close = pd.Series(range(100, 100 + rows), index=index, dtype=float)
     return pd.DataFrame(
         {
@@ -112,6 +141,83 @@ def test_common_cutoff_uses_shortest_series() -> None:
     # La serie corta conserva su 30 % final.
     _, short_sealed = split_frame(short, cutoff)
     assert len(short_sealed) == len(short) - 140
+
+
+def test_common_cutoff_holdout_at_least_two_years() -> None:
+    """El 70 % de la serie más corta deja dos años o más de holdout común."""
+    long = _frame_ending(3_653)  # 10 años
+    short = _frame_ending(2_922)  # 8 años
+    frames = {("AAA", "D1"): long, ("BBB", "D1"): short}
+
+    cutoff = common_cutoff(frames, discovery_pct=0.70)
+    years = holdout_years(frames, cutoff)
+    assert years is not None and years >= 2.0
+
+    trimmed = trim_for_holdout(frames)
+    assert trimmed is not None
+    assert trimmed["excluded"] == []
+    assert trimmed["holdout_years"] >= 2.0
+
+
+def test_trim_for_holdout_drops_short_series_iteratively() -> None:
+    """Se sacan uno a uno los activos que limitan el holdout, no se acorta."""
+    frames = {
+        ("SHORT1", "D1"): _frame_ending(1_096),  # 3 años
+        ("SHORT2", "D1"): _frame_ending(1_827),  # 5 años
+        ("LONG", "D1"): _frame_ending(3_653),  # 10 años
+        ("LONG2", "D1"): _frame_ending(4_383),  # 12 años
+    }
+
+    trimmed = trim_for_holdout(frames)
+    assert trimmed is not None
+    assert [item["symbol"] for item in trimmed["excluded"]] == ["SHORT1", "SHORT2"]
+    assert all("holdout común" in item["reason"] for item in trimmed["excluded"])
+    assert trimmed["holdout_years"] >= 2.0
+    assert {symbol for symbol, _ in trimmed["frames"]} == {"LONG", "LONG2"}
+    # El corte se recalculó con las series que quedan: al quitar las cortas,
+    # el 70 % cae antes y el holdout común se alarga.
+    assert trimmed["cutoff"] < common_cutoff(
+        {("SHORT1", "D1"): frames[("SHORT1", "D1")]}
+    )
+
+
+def test_trim_for_holdout_stops_with_sin_datos() -> None:
+    frames = {("ONLY", "D1"): _frame_ending(1_096)}
+    assert trim_for_holdout(frames) is None
+
+
+def test_correlation_clusters_only_use_pre_cutoff_data() -> None:
+    """La meseta entre activos no puede mirar el holdout."""
+    index = pd.date_range("2020-01-01", periods=400, freq="D", tz="UTC")
+    pattern = np.sin(np.arange(400) / 3.0) * 0.01
+    returns_a = pd.Series(pattern, index=index)
+    returns_b = pd.Series(np.where(np.arange(400) < 280, pattern, -pattern), index=index)
+    frames: dict[tuple[str, str], pd.DataFrame] = {}
+    for symbol, returns in (("AAA", returns_a), ("BBB", returns_b)):
+        close = 100.0 * (1.0 + returns).cumprod()
+        frames[(symbol, "D1")] = pd.DataFrame(
+            {
+                "open": close,
+                "high": close + 1.0,
+                "low": close - 1.0,
+                "close": close,
+                "volume": 1_000.0,
+                "spread": 1.0,
+            },
+            index=index,
+        )
+
+    cutoff = index[280]
+    clusters = correlation_clusters(frames, cutoff, threshold=0.6)
+    assert clusters["AAA|D1"]["BBB"] > 0.9
+    assert clusters["BBB|D1"]["AAA"] > 0.9
+
+    # Con toda la serie la correlación cae por debajo del umbral: si el corte
+    # no se respetara, el clúster desaparecería.
+    full = frames[("AAA", "D1")]["close"].pct_change().corr(
+        frames[("BBB", "D1")]["close"].pct_change()
+    )
+    assert full < 0.6
 
 
 def test_holdout_hash_is_deterministic_and_cutoff_sensitive() -> None:
@@ -292,6 +398,170 @@ def test_migration_does_not_overwrite_campaign_cells(tmp_path: Path) -> None:
 def test_campaign_sizes_are_positive() -> None:
     assert CAMPAIGN_BARS["H1"] > 0
     assert CAMPAIGN_BARS["H4"] > 0
+
+
+# ------------------------------------------------- fetch de todos los candidatos
+
+
+class _RatesBroker:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, str, int]] = []
+
+    def symbol_spec(self, name: str) -> dict:
+        return {"tick_size": 0.01}
+
+    def rates(self, name: str, timeframe: str, count: int) -> pd.DataFrame:
+        self.calls.append((name, timeframe, int(count)))
+        freq = "h" if timeframe == "H1" else "4h"
+        frame = _frame(400, start="2024-01-01", freq=freq)
+        return frame.rename(columns={"tick_volume": "volume"})
+
+
+def test_universe_symbols_includes_all_measured_candidates() -> None:
+    universe = {
+        "symbols": [
+            {"symbol": "AAA", "asset_class": "forex"},
+            {"symbol": "BBB", "asset_class": "metals"},
+            {"symbol": "CCC", "asset_class": "indices"},
+            {"symbol": "OIL", "asset_class": "energy"},
+        ]
+    }
+    # La energía queda fuera por diseño, como en el resto del universo.
+    assert universe_symbols(universe) == ["AAA", "BBB", "CCC"]
+
+
+def test_load_campaign_frames_downloads_h1_h4_for_all_candidates(
+    tmp_path: Path,
+) -> None:
+    universe = {
+        "symbols": [
+            {"symbol": "AAA", "asset_class": "forex"},
+            {"symbol": "BBB", "asset_class": "metals"},
+            {"symbol": "CCC", "asset_class": "indices"},
+        ]
+    }
+    symbols = universe_symbols(universe)
+    broker = _RatesBroker()
+    frames, _ = load_campaign_frames(
+        broker,
+        symbols,
+        names={"AAA": "aaa.cash"},
+        cache_dir=tmp_path,
+        save=False,
+    )
+
+    assert ("aaa.cash", "H1", CAMPAIGN_BARS["H1"]) in broker.calls
+    assert ("aaa.cash", "H4", CAMPAIGN_BARS["H4"]) in broker.calls
+    assert ("BBB", "H1", CAMPAIGN_BARS["H1"]) in broker.calls
+    assert ("CCC", "H4", CAMPAIGN_BARS["H4"]) in broker.calls
+    assert {symbol for symbol, _ in frames} == {"AAA", "BBB", "CCC"}
+    assert ("AAA", "D1") in frames
+
+
+class _TickBroker:
+    def __init__(self, age_minutes: float, *, offset_known: bool = True) -> None:
+        self.age = age_minutes
+        self.offset_known = offset_known
+
+    def health(self) -> dict:
+        return {
+            "offset_known": self.offset_known,
+            "server_utc_offset_hours": 2.0,
+            "offset_source": "detectado" if self.offset_known else "unknown",
+        }
+
+    def tick(self, name: str) -> dict:
+        return {"time": datetime.now(timezone.utc) - timedelta(minutes=self.age)}
+
+
+def test_require_live_data_needs_fresh_tick_and_known_offset() -> None:
+    access = require_live_data(_TickBroker(1.0))
+    assert access["symbol"] == "EURUSD"
+    assert access["age_minutes"] < 15.0
+
+    with pytest.raises(CampaignError, match="mercado cerrado"):
+        require_live_data(_TickBroker(120.0))
+    with pytest.raises(CampaignError, match="offset"):
+        require_live_data(_TickBroker(1.0, offset_known=False))
+
+
+# ------------------------------------------- plan final, N_total y yaml
+
+
+def test_prepare_campaign_n_total_and_yaml_match(tmp_path: Path) -> None:
+    names = ("AAA", "BBB", "CCC")
+    universe = {
+        "campaign": "TEST-A",
+        "symbols": [
+            {"symbol": name, "asset_class": "forex", "mt5_name": name}
+            for name in names
+        ],
+        "eligible_by_timeframe": {"H1": [], "H4": [], "D1": list(names)},
+        "counts": {},
+    }
+    frames = {
+        (name, "D1"): _frame(3_653, start="2016-01-01") for name in names
+    }
+
+    prepared = prepare_campaign(universe, frames, reassess=False)
+    plan = prepared["plan"]
+    assert prepared["holdout_years"] >= 2.0
+    assert plan["excluded"] == []
+    assert plan["n_total"] == 36
+
+    config = campaign_config(prepared, "TEST-A")
+    assert config["n_total"] == plan["n_total"] == 36
+    assert config["n_total_detail"] == {"H1": 0, "H4": 0, "D1": 36}
+    assert config["n_total_theoretical"] == compute_n_total(prepared)["n_total"]
+    assert config["cutoff_utc"] == plan["cutoff_utc"]
+    assert config["holdout_hash"] == plan["holdout_hash"]
+    assert config["config_hash"] == campaign_hash(config)
+
+    path = tmp_path / "TEST-A.yaml"
+    path.write_text(
+        yaml.safe_dump(config, sort_keys=False, allow_unicode=True),
+        encoding="utf-8",
+    )
+    stored = load_campaign_yaml(path)
+    assert stored["n_total"] == config["n_total"]
+    assert stored["n_total_detail"] == config["n_total_detail"]
+    assert stored["cutoff_utc"] == config["cutoff_utc"]
+    assert stored["holdout_hash"] == config["holdout_hash"]
+    assert campaign_hash(stored) == config["config_hash"]
+
+
+def test_run_discovery_only_passes_pre_cutoff_frames(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    db = tmp_path / "lab.db"
+    init_campaigns(db)
+    config = _config(4)
+    register_campaign(db, config)
+    frames = {("EURUSD", "D1"): _frame(800, start="2018-01-01")}
+    cutoff = pd.Timestamp(config["cutoff_utc"])
+    seen: list[pd.Timestamp] = []
+
+    def fake_backtest(symbol, timeframe, frame, family, params, **kwargs):
+        seen.append(pd.Timestamp(frame.index.max()))
+        index = frame.index
+        returns = pd.Series(0.0, index=index)
+        if len(index):
+            returns.iloc[-1] = 0.01
+        return {
+            "metrics": {
+                "sharpe": 1.0,
+                "num_trades": 40,
+                "max_drawdown": -0.01,
+                "total_return": 0.02,
+                "bars": len(frame),
+            },
+            "returns": returns,
+        }
+
+    monkeypatch.setattr("tradinglab.campaign.backtest_variant", fake_backtest)
+    result = run_discovery(db, config, frames, persist=False)
+    assert result["n_cells"] == 4
+    assert seen and all(stamp < cutoff for stamp in seen)
 
 
 def test_resume_only_after_a_partial_run(tmp_path: Path) -> None:

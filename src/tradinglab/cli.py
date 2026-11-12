@@ -8745,25 +8745,38 @@ def campaign_ntotal_cmd() -> None:
         return
     table = Table(title=f"N_total = {plan['n_total']} · corte {plan['cutoff_utc']}")
     table.add_column("Timeframe", style="bold")
+    table.add_column("Activos", justify="right")
     table.add_column("Celdas", justify="right")
     for timeframe in ("H1", "H4", "D1"):
-        table.add_row(timeframe, str(plan["per_timeframe"].get(timeframe, 0)))
+        table.add_row(
+            timeframe,
+            str(len(universe["eligible_by_timeframe"].get(timeframe) or [])),
+            str(plan["per_timeframe"].get(timeframe, 0)),
+        )
     console.print(table)
+    per_timeframe_total = sum(int(value) for value in plan["per_timeframe"].values())
+    if per_timeframe_total != int(plan["n_total"]):
+        console.print(
+            f"[red]N_total no cuadra: {plan['n_total']} != {per_timeframe_total}[/red]"
+        )
+        raise typer.Exit(2)
     excluded = plan.get("excluded") or []
+    excluded_assets = plan.get("excluded_assets") or []
+    holdout_text = (
+        "Sin datos"
+        if plan.get("holdout_years") is None
+        else f"{float(plan['holdout_years']):.2f} años"
+    )
+    console.print(
+        f"Holdout común = {holdout_text} "
+        f"(mínimo {float(plan.get('min_holdout_years', 2.0)):g}) · "
+        f"activos excluidos por holdout corto = {len(excluded_assets)}"
+    )
+    for item in excluded_assets:
+        console.print(f"  [yellow]· {item['symbol']}[/yellow]: {item['reason']}")
     console.print(
         f"Excluidas por historia: {len(excluded)} · "
         f"holdout_hash = {str(plan.get('holdout_hash') or 'Sin datos')[:16]}…"
-    )
-
-
-def _campaign_eligible_symbols(universe: dict) -> list[str]:
-    """Activos elegibles en cualquier timeframe, sin repetir."""
-    return sorted(
-        {
-            str(name).upper()
-            for timeframe in ("H1", "H4", "D1")
-            for name in (universe.get("eligible_by_timeframe", {}).get(timeframe) or [])
-        }
     )
 
 
@@ -8771,86 +8784,23 @@ def _campaign_config(universe: dict, campaign: str) -> dict:
     """Configuración de la campaña a partir del universo y su plan.
 
     No registra nada: es la misma función la que escribe el yaml y la que
-    sella, para que las dos no puedan divergir.
+    sellaría, para que las dos no puedan divergir.
     """
-    from .campaign import (
-        DISCOVERY_PCT,
-        FAMILIES,
-        CampaignError,
-        campaign_hash,
-        compute_n_total,
-        variants_for,
-    )
+    from .campaign import campaign_config
 
-    plan = universe.get("plan") or {}
-    if not plan:
-        raise CampaignError(
-            "falta el plan con el corte común: corre antes `lab campaign fetch`."
-        )
-    symbols = _campaign_eligible_symbols(universe)
-    if not symbols:
-        raise CampaignError("sin activos elegibles: no hay nada que planificar")
-    totals = compute_n_total(universe)
-    broker_names = {
-        str(row["symbol"]).upper(): str(row.get("mt5_name") or row["symbol"])
-        for row in universe.get("symbols") or []
-        if str(row["symbol"]).upper() in set(symbols)
-    }
-    # Elegibilidad y clase por timeframe: el descubrimiento corre **solo** las
-    # celdas que entraron en `N_total`. Sin esto correría H1/H4 aunque no
-    # tengan activos elegibles y el denominador del DSR quedaría desalineado.
-    eligible_by_timeframe = {
-        str(timeframe).upper(): [
-            str(name).upper() for name in (names or [])
-        ]
-        for timeframe, names in (universe.get("eligible_by_timeframe") or {}).items()
-    }
-    asset_classes = {
-        str(row["symbol"]).upper(): str(row.get("asset_class") or "")
-        for row in universe.get("symbols") or []
-        if str(row["symbol"]).upper() in set(symbols)
-    }
-    config = {
-        "id": campaign,
-        "universe": symbols,
-        "mt5_names": broker_names,
-        "timeframes": ["H1", "H4", "D1"],
-        "families": list(FAMILIES),
-        "variants_per_family": {
-            family: len(variants_for(family)) for family in FAMILIES
-        },
-        "eligible_by_timeframe": eligible_by_timeframe,
-        "asset_classes": asset_classes,
-        "discovery_pct": float(DISCOVERY_PCT),
-        "holdout_pct": float(round(1.0 - DISCOVERY_PCT, 2)),
-        "cutoff_utc": plan.get("cutoff_utc"),
-        "n_total": int(plan.get("n_total") or 0),
-        "n_total_detail": dict(plan.get("per_timeframe") or {}),
-        "n_total_theoretical": int(totals["n_total"]),
-        "holdout_hash": plan.get("holdout_hash"),
-        "holdout_series": list(plan.get("holdout_series") or []),
-        "excluded_cells": len(plan.get("excluded") or []),
-    }
-    if config["n_total"] <= 0:
-        raise CampaignError(
-            "N_total es 0 con el corte común: no hay celdas con historia suficiente"
-        )
-    config["config_hash"] = campaign_hash(config)
-    return config
+    return campaign_config(universe, campaign)
 
 
 @campaign_app.command("fetch")
 def campaign_fetch_cmd() -> None:
-    """Descarga H1/H4 de los elegibles, fija el corte común y lista las celdas."""
+    """Descarga H1/H4 de todos los candidatos, fija el corte ≥2 años y planifica."""
     from .campaign import (
         CAMPAIGN_BARS,
         CampaignError,
-        common_cutoff,
-        holdout_hash,
-        holdout_rows,
         load_campaign_frames,
-        plan_cells,
-        series_summary,
+        prepare_campaign,
+        require_live_data,
+        universe_symbols,
         write_universe,
     )
 
@@ -8859,9 +8809,9 @@ def campaign_fetch_cmd() -> None:
     except CampaignError as exc:
         console.print(f"[red]{exc}[/red]")
         raise typer.Exit(2) from exc
-    symbols = _campaign_eligible_symbols(universe)
+    symbols = universe_symbols(universe)
     if not symbols:
-        console.print("[red]Sin activos elegibles: no hay velas que descargar.[/red]")
+        console.print("[red]Sin candidatos en el universo: no hay velas que descargar.[/red]")
         raise typer.Exit(2)
 
     settings = get_settings()
@@ -8871,27 +8821,38 @@ def campaign_fetch_cmd() -> None:
         for row in universe.get("symbols") or []
     }
     try:
+        access = require_live_data(broker)
+        console.print(
+            f"Mercado abierto · tick {access['symbol']} de hace "
+            f"{access['age_minutes']:.1f} min · offset "
+            f"{access['offset_utc_hours']:+g} h ({access['offset_source']})"
+        )
+        console.print(
+            f"Descargando H1/H4 de {len(symbols)} candidatos "
+            f"(máximo {CAMPAIGN_BARS['H1']:,} barras)…"
+        )
         frames, _ = load_campaign_frames(
             broker, symbols, names=names, cache_dir=settings.data.cache_dir
         )
+    except CampaignError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2) from exc
     finally:
         broker.shutdown()
     if not frames:
         console.print("[red]Sin datos: el bróker no devolvió velas.[/red]")
         raise typer.Exit(2)
 
-    cutoff = common_cutoff(frames)
-    if cutoff is None:
-        console.print("[red]Sin datos: no se pudo fijar el corte común.[/red]")
-        raise typer.Exit(2)
-    plan = plan_cells(universe, frames, cutoff)
-    sealed = holdout_rows(frames, cutoff)
-    plan["holdout_hash"] = holdout_hash(sealed, cutoff)
-    plan["holdout_series"] = sealed
-    universe["bars"] = {**CAMPAIGN_BARS, "D1": "desde H4"}
-    universe["cutoff_utc"] = plan["cutoff_utc"]
-    universe["series"] = series_summary(frames, cutoff)
-    universe["plan"] = plan
+    try:
+        universe = prepare_campaign(
+            universe,
+            frames,
+            cache_dir=settings.data.cache_dir,
+        )
+    except CampaignError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2) from exc
+    plan = universe["plan"]
     paths = write_universe(universe)
 
     table = Table(title=f"Celdas con historia suficiente · corte {plan['cutoff_utc']}")
@@ -8905,10 +8866,18 @@ def campaign_fetch_cmd() -> None:
             str(len(universe["eligible_by_timeframe"].get(timeframe) or [])),
         )
     console.print(table)
+    excluded_assets = plan.get("excluded_assets") or []
     console.print(
-        f"[bold]N_total[/bold] = {plan['n_total']} · series selladas = {len(sealed)} · "
-        f"celdas excluidas por historia = {len(plan['excluded'])}"
+        f"[bold]N_total[/bold] = {plan['n_total']} · series selladas = "
+        f"{len(plan.get('holdout_series') or [])} · celdas excluidas por historia = "
+        f"{len(plan['excluded'])}"
     )
+    console.print(
+        f"Holdout común = {plan['holdout_years']:.2f} años · activos excluidos por "
+        f"holdout corto = {len(excluded_assets)}"
+    )
+    for item in excluded_assets:
+        console.print(f"  [yellow]· {item['symbol']}[/yellow]: {item['reason']}")
     console.print(
         f"holdout_hash = {plan['holdout_hash']}",
         markup=False,
@@ -8957,6 +8926,8 @@ def campaign_plan_cmd(
     table.add_row("Por timeframe", str(config["n_total_detail"]))
     table.add_row("N_total teórico", str(config["n_total_theoretical"]))
     table.add_row("Corte común", str(config["cutoff_utc"]))
+    table.add_row("Holdout común", f"{config['holdout_years']:.2f} años")
+    table.add_row("Activos excluidos", str(len(config["excluded_assets"])))
     table.add_row("Celdas excluidas", str(config["excluded_cells"]))
     table.add_row("config_hash", str(config["config_hash"]))
     table.add_row("holdout_hash", str(config["holdout_hash"]))
