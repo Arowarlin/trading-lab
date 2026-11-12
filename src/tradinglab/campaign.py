@@ -1168,6 +1168,32 @@ def register_campaign(
     return dict(row)
 
 
+def finish_campaign(db_path: str | Path, campaign_id: str) -> dict:
+    """Marca la campaña como terminada. Solo una vez, tras escribir el informe."""
+    init_campaigns(db_path)
+    with connect(db_path) as con:
+        row = con.execute(
+            "SELECT * FROM campaign_registry WHERE campaign_id = ?",
+            (str(campaign_id),),
+        ).fetchone()
+        if row is None:
+            raise CampaignError(f"la campaña {campaign_id} no está registrada")
+        if row["finished_at"]:
+            raise CampaignError(
+                f"la campaña {campaign_id} ya terminó el {row['finished_at']}"
+            )
+        con.execute(
+            "UPDATE campaign_registry SET finished_at = ? WHERE campaign_id = ?",
+            (_now(), str(campaign_id)),
+        )
+        con.commit()
+        row = con.execute(
+            "SELECT * FROM campaign_registry WHERE campaign_id = ?",
+            (str(campaign_id),),
+        ).fetchone()
+    return dict(row)
+
+
 def load_campaign(db_path: str | Path, campaign_id: str) -> dict:
     init_campaigns(db_path)
     with connect(db_path) as con:
@@ -1527,44 +1553,82 @@ def run_discovery(
     frames: dict[tuple[str, str], pd.DataFrame],
     *,
     points: dict[str, float] | None = None,
+    persist: bool = True,
+    resume: bool = False,
 ) -> dict:
     """Corre la rejilla sobre el 70 % y registra cada celda en `strategy_trials`.
 
     Las celdas se registran con `counted=False`: `N_total` ya entró entero al
     registrar la campaña, así que contarlas otra vez inflaría el denominador
     del DSR.
+
+    `resume=True` reanuda un run que se cortó por un fallo de código, no por
+    haber visto resultados: reutiliza el `run_id` y recalcula las celdas en
+    memoria (`persist=False`) sin volver a insertarlas. La rejilla y los
+    umbrales son los mismos, así que el resultado es idéntico.
     """
     record = load_campaign(db_path, str(config["id"]))
-    if record.get("started_at"):
+    started = record.get("started_at")
+    run_id = str(record.get("run_id") or hashlib.sha256(
+        f"{config['id']}|{record['config_hash']}".encode("utf-8")
+    ).hexdigest()[:12])
+    if started and not resume:
         raise CampaignError(
-            f"la campaña {config['id']} ya se ejecutó el {record['started_at']}"
+            f"la campaña {config['id']} ya se ejecutó el {started}"
         )
+    if resume:
+        if not started or not record.get("run_id"):
+            raise CampaignError(
+                f"la campaña {config['id']} no tiene un run a medias que reanudar"
+            )
+        if record.get("finished_at"):
+            raise CampaignError(
+                f"la campaña {config['id']} ya terminó el {record['finished_at']}"
+            )
+        persist = False
     if str(record.get("config_hash")) != campaign_hash(config):
         raise CampaignError(
             "la rejilla cambió respecto al registro: el hash no coincide"
         )
-    run_id = str(record.get("run_id") or hashlib.sha256(
-        f"{config['id']}|{record['config_hash']}".encode("utf-8")
-    ).hexdigest()[:12])
-    with connect(db_path) as con:
-        con.execute(
-            "UPDATE campaign_registry SET started_at = ?, run_id = ? "
-            "WHERE campaign_id = ?",
-            (_now(), run_id, str(config["id"])),
-        )
-        con.commit()
+    if not started:
+        with connect(db_path) as con:
+            con.execute(
+                "UPDATE campaign_registry SET started_at = ?, run_id = ? "
+                "WHERE campaign_id = ?",
+                (_now(), run_id, str(config["id"])),
+            )
+            con.commit()
 
     tick = dict(points or {})
     cutoff = _cutoff_for(config, frames)
+    eligible = {
+        str(timeframe).upper(): {str(name).upper() for name in (names or [])}
+        for timeframe, names in (config.get("eligible_by_timeframe") or {}).items()
+    }
+    asset_classes = {
+        str(key).upper(): str(value)
+        for key, value in (config.get("asset_classes") or {}).items()
+    }
+    timeframes = {
+        str(timeframe).upper() for timeframe in (config.get("timeframes") or TIMEFRAMES)
+    }
     cells: list[dict] = []
     skipped = 0
     returns_by_id: dict[str, pd.Series] = {}
     for (symbol, timeframe), frame in sorted(frames.items()):
+        if str(timeframe).upper() not in timeframes:
+            continue
+        allowed = eligible.get(str(timeframe).upper())
+        if allowed is not None and str(symbol).upper() not in allowed:
+            continue
         discovery, _ = split_frame(frame, cutoff)
         if len(discovery) < 80:
             continue
         hourly = _hourly_spread(frame, tick.get(symbol, 0.01))
+        asset_class = asset_classes.get(str(symbol).upper(), "")
         for family in config.get("families") or FAMILIES:
+            if asset_class and not applies_to(family, asset_class):
+                continue
             for params in variants_for(family):
                 if len(discovery) <= required_history(frame, timeframe, family, params):
                     skipped += 1
@@ -1612,27 +1676,28 @@ def run_discovery(
                             "reason": str(exc)[:300],
                         }
                     )
-                record_trial(
-                    db_path,
-                    family=family,
-                    hypothesis=FAMILY_HYPOTHESIS.get(family, family),
-                    symbol=symbol,
-                    params={**cell["params"], "timeframe": timeframe},
-                    window_start=str(discovery.index[0]),
-                    window_end=str(discovery.index[-1]),
-                    result={
-                        "sharpe": cell["sharpe"],
-                        "trades": cell["trades"],
-                        "max_drawdown": cell["max_drawdown"],
-                        "total_return": cell["total_return"],
-                        "bars": cell["bars"],
-                    },
-                    outcome=cell["outcome"],
-                    reason=cell["reason"],
-                    source="campaign",
-                    run_id=run_id,
-                    counted=False,
-                )
+                if persist:
+                    record_trial(
+                        db_path,
+                        family=family,
+                        hypothesis=FAMILY_HYPOTHESIS.get(family, family),
+                        symbol=symbol,
+                        params={**cell["params"], "timeframe": timeframe},
+                        window_start=str(discovery.index[0]),
+                        window_end=str(discovery.index[-1]),
+                        result={
+                            "sharpe": cell["sharpe"],
+                            "trades": cell["trades"],
+                            "max_drawdown": cell["max_drawdown"],
+                            "total_return": cell["total_return"],
+                            "bars": cell["bars"],
+                        },
+                        outcome=cell["outcome"],
+                        reason=cell["reason"],
+                        source="campaign",
+                        run_id=run_id,
+                        counted=False,
+                    )
                 cells.append(cell)
     return {
         "campaign": config["id"],
@@ -1783,7 +1848,7 @@ def run_holdout(
     from .prop.rules import from_yaml
     from .prop.simulator import monte_carlo
     from .research import deflated_sharpe
-    from .strategies.swing import daily_returns
+    from .swing import daily_returns
     from .validation import cscv_pbo, returns_matrix
 
     record = load_campaign(db_path, str(config["id"]))
@@ -2075,6 +2140,7 @@ __all__ = [
     "correlation_clusters",
     "cost_atr",
     "family_target",
+    "finish_campaign",
     "holdout_hash",
     "holdout_rows",
     "init_campaigns",

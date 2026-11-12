@@ -12,12 +12,14 @@ from tradinglab.campaign import (
     campaign_hash,
     common_cutoff,
     compute_n_total,
+    finish_campaign,
     holdout_hash,
     holdout_rows,
     init_campaigns,
     plan_cells,
     register_campaign,
     required_history,
+    run_discovery,
     split_frame,
 )
 from tradinglab.db import connect, init_db
@@ -290,3 +292,26 @@ def test_migration_does_not_overwrite_campaign_cells(tmp_path: Path) -> None:
 def test_campaign_sizes_are_positive() -> None:
     assert CAMPAIGN_BARS["H1"] > 0
     assert CAMPAIGN_BARS["H4"] > 0
+
+
+def test_resume_only_after_a_partial_run(tmp_path: Path) -> None:
+    """Reanudar exige un run empezado y sin terminar: nunca reejecuta."""
+    db = tmp_path / "lab.db"
+    init_campaigns(db)
+    register_campaign(db, _config(5))
+    with pytest.raises(CampaignError):
+        run_discovery(db, _config(5), {}, resume=True)
+
+    finish_campaign(db, "TEST-A")
+    with pytest.raises(CampaignError):
+        run_discovery(db, _config(5), {}, resume=True)
+
+
+def test_finish_campaign_runs_once(tmp_path: Path) -> None:
+    db = tmp_path / "lab.db"
+    init_campaigns(db)
+    register_campaign(db, _config(5))
+    record = finish_campaign(db, "TEST-A")
+    assert record["finished_at"]
+    with pytest.raises(CampaignError):
+        finish_campaign(db, "TEST-A")

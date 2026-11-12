@@ -8777,6 +8777,20 @@ def _campaign_config(universe: dict, campaign: str) -> dict:
         for row in universe.get("symbols") or []
         if str(row["symbol"]).upper() in set(symbols)
     }
+    # Elegibilidad y clase por timeframe: el descubrimiento corre **solo** las
+    # celdas que entraron en `N_total`. Sin esto correría H1/H4 aunque no
+    # tengan activos elegibles y el denominador del DSR quedaría desalineado.
+    eligible_by_timeframe = {
+        str(timeframe).upper(): [
+            str(name).upper() for name in (names or [])
+        ]
+        for timeframe, names in (universe.get("eligible_by_timeframe") or {}).items()
+    }
+    asset_classes = {
+        str(row["symbol"]).upper(): str(row.get("asset_class") or "")
+        for row in universe.get("symbols") or []
+        if str(row["symbol"]).upper() in set(symbols)
+    }
     config = {
         "id": campaign,
         "universe": symbols,
@@ -8786,6 +8800,8 @@ def _campaign_config(universe: dict, campaign: str) -> dict:
         "variants_per_family": {
             family: len(variants_for(family)) for family in FAMILIES
         },
+        "eligible_by_timeframe": eligible_by_timeframe,
+        "asset_classes": asset_classes,
         "discovery_pct": float(DISCOVERY_PCT),
         "holdout_pct": float(round(1.0 - DISCOVERY_PCT, 2)),
         "cutoff_utc": plan.get("cutoff_utc"),
@@ -9051,6 +9067,11 @@ def campaign_status_cmd() -> None:
 def campaign_run_cmd(
     campaign: str = typer.Option("2026-11-A", "--campaign", help="Identificador"),
     confirm: bool = typer.Option(False, "--confirm", help="Consume la única pasada"),
+    resume: bool = typer.Option(
+        False,
+        "--resume",
+        help="Reanuda un run cortado por un fallo de código (mismo run_id)",
+    ),
     paths: int = typer.Option(5_000, "--paths", help="Caminos del Monte Carlo FTMO"),
 ) -> None:
     """Corre la campaña una sola vez: descubrimiento, meseta y holdout."""
@@ -9060,6 +9081,7 @@ def campaign_run_cmd(
         candidates,
         clip_seal,
         correlation_clusters,
+        finish_campaign,
         holdout_hash,
         holdout_rows,
         load_campaign,
@@ -9124,13 +9146,16 @@ def campaign_run_cmd(
 
     prior = max(0, int(count_tests(DEFAULT_DB)) - int(record["n_total"]))
     try:
-        discovery = run_discovery(DEFAULT_DB, config, frames, points=points)
+        discovery = run_discovery(
+            DEFAULT_DB, config, frames, points=points, resume=bool(resume)
+        )
     except CampaignError as exc:
         console.print(f"[red]{exc}[/red]")
         raise typer.Exit(2) from exc
     console.print(
         f"[green]Descubrimiento[/green] · {discovery['n_cells']} celdas · "
         f"run_id={discovery['run_id']}"
+        + (" · reanudado" if resume else "")
     )
 
     clusters = correlation_clusters(frames, cutoff)
@@ -9154,6 +9179,11 @@ def campaign_run_cmd(
         confirmed,
         n_total=int(record["n_total"]),
     )
+    try:
+        finish_campaign(DEFAULT_DB, campaign)
+    except CampaignError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2) from exc
     console.print(
         f"[bold]{len(confirmed)} confirmadas[/bold] · informe: {paths_out['md']}"
     )

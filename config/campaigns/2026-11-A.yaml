@@ -47,6 +47,43 @@ variants_per_family:
   st_reversal: 4
   vol_breakout: 4
   calendar: 4
+eligible_by_timeframe:
+  H1: []
+  H4: []
+  D1:
+  - FRA40.CASH
+  - GER40.CASH
+  - HK50.CASH
+  - JP225.CASH
+  - UK100.CASH
+  - US100.CASH
+  - US2000.CASH
+  - US30.CASH
+  - US500.CASH
+  - XAGAUD
+  - XAGEUR
+  - XAGUSD
+  - XAUAUD
+  - XAUEUR
+  - XAUUSD
+  - XCUUSD
+asset_classes:
+  FRA40.CASH: indices
+  GER40.CASH: indices
+  HK50.CASH: indices
+  JP225.CASH: indices
+  UK100.CASH: indices
+  US100.CASH: indices
+  US2000.CASH: indices
+  US30.CASH: indices
+  US500.CASH: indices
+  XAGAUD: metals
+  XAGEUR: metals
+  XAGUSD: metals
+  XAUAUD: metals
+  XAUEUR: metals
+  XAUUSD: metals
+  XCUUSD: metals
 discovery_pct: 0.7
 holdout_pct: 0.3
 cutoff_utc: '2026-04-14 00:00:00+00:00'
