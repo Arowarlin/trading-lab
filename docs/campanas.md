@@ -117,6 +117,18 @@ una razón independiente, se pre-registra `2026-11-B` con una regla de (c)
 escrita **antes** de correr (p. ej. "no aplica si el timeframe adyacente no
 tiene elegibles") y su propio `N_total`, y se corre una sola vez.
 
+## 2026-11-B (regla (c) decidida, sin registrar)
+
+- **Regla (c) decidida el 2026-11-12, antes de registrar:** si el timeframe
+  adyacente no tiene **ninguna** celda elegible, la condición (c) no se aplica
+  y la celda no se descarta por ese motivo. Se registra el `N_total` de las
+  celdas que sí existen y se corre una sola vez. Es la excepción escrita que
+  evita que D1 quede en 0/232 cuando H4 no tiene elegibles.
+- Requiere implementar la exención en `campaign.py` y escribir el yaml con
+  `lab campaign plan --campaign 2026-11-B --force` antes de registrar.
+- **No se ha registrado ni ejecutado.** `2026-11-A` sigue siendo el registro
+  histórico y no se toca.
+
 ## Lecciones de 2026-11-A
 
 - El descubrimiento debe correr **exactamente** las celdas de `N_total`; si no,

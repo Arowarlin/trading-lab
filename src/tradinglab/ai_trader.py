@@ -3068,7 +3068,7 @@ def panel(db_path: str | Path = DEFAULT_DB, *,
 def session_activity(db_path: str | Path = DEFAULT_DB, *,
                      settings: Settings | None = None,
                      now: datetime | None = None) -> dict:
-    """Filas de ai_decisions por sesión; avisa si una sesión cerrada no dejó ninguna."""
+    """Filas de ai_decisions por sesión y estado de las tareas programadas."""
     moment = _as_utc(now)
     settings = settings or get_settings()
     session_date = _reset_date(settings)
@@ -3092,24 +3092,119 @@ def session_activity(db_path: str | Path = DEFAULT_DB, *,
         ny = count("Nueva York") > 0
         daily = count(style="swing") > 0
 
-    warnings: list[str] = []
+    decision_warnings: list[str] = []
+    task_warnings: list[str] = []
     if moment.weekday() < 5:
         if moment.hour >= 13 and not london:
-            warnings.append("Londres sin filas en ai_decisions")
+            decision_warnings.append("Londres sin filas en ai_decisions")
         if moment.hour >= 21 and not ny:
-            warnings.append("Nueva York sin filas en ai_decisions")
+            decision_warnings.append("Nueva York sin filas en ai_decisions")
         if moment.hour >= 21 and not daily:
-            warnings.append("swing/daily sin filas en ai_decisions")
+            decision_warnings.append("swing/daily sin filas en ai_decisions")
+
+    status_dir = ROOT / "logs" / "ai_trader" / "status"
+    santo = moment.astimezone(ZoneInfo("America/Santo_Domingo"))
+    date_key = santo.date().isoformat()
+
+    def statuses(session: str) -> list[dict]:
+        if not status_dir.exists():
+            return []
+        out: list[dict] = []
+        for path in status_dir.glob(f"{date_key}_{session}_*.json"):
+            try:
+                out.append(json.loads(path.read_text(encoding="utf-8-sig")))
+            except Exception:
+                continue
+        return out
+
+    def latest(items: list[dict]) -> dict | None:
+        valid = [item for item in items if item.get("ts")]
+        if not valid:
+            return None
+        return max(valid, key=lambda item: str(item.get("ts")))
+
+    tasks: dict[str, dict] = {}
+    london_local = moment.astimezone(LONDON)
+    ny_local = moment.astimezone(NEW_YORK)
+    if london_local.weekday() < 5 and london_local.time() >= dtime(10, 0):
+        items = statuses("london")
+        ok = any(item.get("status") == "ok" for item in items)
+        tasks["london"] = {"ok": ok, "runs": len(items)}
+        if not ok:
+            task_warnings.append("London no corrió o falló")
+    if ny_local.weekday() < 5 and ny_local.time() >= dtime(10, 0):
+        items = statuses("ny")
+        ok = any(item.get("status") == "ok" for item in items)
+        tasks["ny"] = {"ok": ok, "runs": len(items)}
+        if not ok:
+            task_warnings.append("NY no corrió o falló")
+    if ny_local.weekday() < 5 and ny_local.time() >= dtime(23, 0):
+        items = statuses("daily")
+        ok = any(item.get("status") == "ok" for item in items)
+        tasks["daily"] = {"ok": ok, "runs": len(items)}
+        if not ok:
+            task_warnings.append("Daily no corrió o falló")
+
+    from .ai_session import session_window
+
+    scalp_open, _ = session_window("scalp", moment)
+    scalp_items = statuses("scalp")
+    scalp_latest = latest(scalp_items)
+    if scalp_open:
+        fresh = False
+        if scalp_latest:
+            try:
+                fresh = (
+                    moment - pd.Timestamp(str(scalp_latest.get("ts"))).to_pydatetime()
+                ).total_seconds() <= 300
+            except Exception:
+                fresh = False
+        tasks["scalp"] = {
+            "ok": bool(scalp_latest and scalp_latest.get("status") == "ok" and fresh),
+            "runs": len(scalp_items),
+        }
+        if not tasks["scalp"]["ok"]:
+            task_warnings.append("Scalp sin ejecución reciente")
+    elif ny_local.weekday() < 5 and ny_local.time() >= dtime(12, 5):
+        ok = any(item.get("status") == "ok" for item in scalp_items)
+        tasks["scalp"] = {"ok": ok, "runs": len(scalp_items)}
+        if not ok:
+            task_warnings.append("Scalp no corrió hoy")
+
+    manage_open, _ = session_window("manage", moment)
+    manage_items = statuses("manage")
+    manage_latest = latest(manage_items)
+    if manage_open:
+        fresh = False
+        if manage_latest:
+            try:
+                fresh = (
+                    moment - pd.Timestamp(str(manage_latest.get("ts"))).to_pydatetime()
+                ).total_seconds() <= 1800
+            except Exception:
+                fresh = False
+        tasks["manage"] = {
+            "ok": bool(manage_latest and manage_latest.get("status") == "ok" and fresh),
+            "runs": len(manage_items),
+        }
+        if not tasks["manage"]["ok"]:
+            task_warnings.append("Manage sin ejecución reciente")
+
     detail = (
         f"Londres={'ok' if london else 'sin filas'} · "
         f"NY={'ok' if ny else 'sin filas'} · "
-        f"daily={'ok' if daily else 'sin filas'}"
+        f"daily={'ok' if daily else 'sin filas'} · "
+        f"tareas={len(tasks)}"
     )
+    warnings = decision_warnings + task_warnings
     return {
         "session_date": session_date,
         "london": london,
         "ny": ny,
         "daily": daily,
+        "tasks": tasks,
+        "decision_warnings": decision_warnings,
+        "task_warnings": task_warnings,
         "warnings": warnings,
         "detail": detail,
     }

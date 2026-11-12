@@ -9,7 +9,7 @@ Solo `ftmo_demo` (`require_demo`). Nunca live. El LLM elige **estilo, estrategia
 
 ## Antes de decidir (siempre)
 
-1. Lee las lecciones aprobadas: `lab lessons list` (status `approved`).
+1. Lee las lecciones aprobadas en el panel de aprendizaje o en la documentación que te pase el operador. El agente no interactivo **no** puede ejecutar `lab lessons`; solo los comandos `lab ai-trader` permitidos.
 2. Lee el marcador: `lab ai-trader scoreboard`. **No insistas en celdas `pausadas` ni `perdedoras`**; el operador las reactiva con `lab ai-trader resume` y decide.
 3. Lee el estado del carril: `lab ai-trader status` (riesgo, trades, posiciones, stop restante) y, si aplica, el plan de scalping activo en el panel web o en `ai_plans`.
 4. Snapshot de la sesion con `--style`. El JSON trae indicadores, setups validos calculados por codigo, coste/R, eventos 24 h, posiciones y presupuesto.
@@ -67,9 +67,6 @@ lab ai-trader manage
 
 # Marcador por estilo x estrategia x simbolo x timeframe, sombras e IC 90%
 lab ai-trader scoreboard
-
-# Informe semanal y lecciones propuestas (no cambia el playbook)
-lab ai-trader review
 ```
 
 `propose` rechaza con `estrategia desconocida`, `fuera de ventana`, `celda pausada`, `stop diario`, `coste/R`, `volumen < minimo` o `PropGuard`. Un rechazo queda en `ai_decisions`; no se reintenta a ciegas.

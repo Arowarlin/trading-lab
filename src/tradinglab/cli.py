@@ -661,12 +661,27 @@ def doctor(network: bool = typer.Option(False, "--network", help="Probar descarg
         from .ai_trader import session_activity
 
         activity = session_activity()
-        if activity["warnings"]:
-            table.add_row("IA sesiones", WARN, "; ".join(activity["warnings"])[:160])
-        else:
-            table.add_row("IA sesiones", OK, activity["detail"][:160])
+        decision_warnings = activity.get("decision_warnings") or []
+        task_warnings = activity.get("task_warnings") or []
+        table.add_row(
+            "IA sesiones",
+            WARN if decision_warnings else OK,
+            (
+                "; ".join(decision_warnings)[:160]
+                if decision_warnings else activity["detail"][:160]
+            ),
+        )
+        table.add_row(
+            "IA tareas",
+            WARN if task_warnings else OK,
+            (
+                "; ".join(task_warnings)[:160]
+                if task_warnings else "tareas al día"
+            ),
+        )
     except Exception as exc:
         table.add_row("IA sesiones", WARN, str(exc)[:160])
+        table.add_row("IA tareas", WARN, str(exc)[:160])
 
     # Datos
     if network:
@@ -9381,7 +9396,11 @@ def ai_trader_execute_cmd(
 
 
 @ai_trader_app.command("status")
-def ai_trader_status_cmd() -> None:
+def ai_trader_status_cmd(
+    json_output: bool = typer.Option(
+        False, "--json", help="Salida JSON para scripts y resúmenes"
+    ),
+) -> None:
     """Estado por estilo (riesgo, trades, posiciones, PnL y stop) y global."""
     from .ai_trader import AiTraderError
     from .ai_trader import status as lane_status
@@ -9394,6 +9413,9 @@ def ai_trader_status_cmd() -> None:
         _ai_trader_error(exc)
     finally:
         broker.shutdown()
+    if json_output:
+        typer.echo(json.dumps(data, ensure_ascii=False, separators=(",", ":")))
+        return
     table = Table(title="IA discrecional · estado por estilo")
     for column in ("Estilo", "Magic", "Riesgo", "Trades", "Abiertas",
                    "PnL día", "Stop restante", "Ventana"):
