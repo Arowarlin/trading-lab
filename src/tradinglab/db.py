@@ -936,13 +936,41 @@ def _migrate_ai_trades(con: sqlite3.Connection) -> None:
             updated_at TEXT NOT NULL,
             PRIMARY KEY (strategy, symbol, timeframe)
         );
+        CREATE TABLE IF NOT EXISTS ai_decisions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ts TEXT NOT NULL,
+            decision_date TEXT,
+            session TEXT,
+            style TEXT NOT NULL,
+            symbol TEXT NOT NULL,
+            timeframe TEXT,
+            strategy TEXT NOT NULL,
+            setup_valid INTEGER NOT NULL DEFAULT 0,
+            decision TEXT NOT NULL,
+            reason TEXT,
+            confidence INTEGER,
+            snapshot TEXT,
+            playbook_version INTEGER,
+            source TEXT NOT NULL DEFAULT 'forward',
+            plan_id TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_ai_decisions_ts ON ai_decisions(ts);
+        CREATE INDEX IF NOT EXISTS idx_ai_decisions_style ON ai_decisions(style, decision);
         """
     )
     columns = [row["name"] for row in con.execute("PRAGMA table_info(ai_trades)").fetchall()]
-    if "timeframe" not in columns:
-        con.execute("ALTER TABLE ai_trades ADD COLUMN timeframe TEXT")
-    if "cost_ratio" not in columns:
-        con.execute("ALTER TABLE ai_trades ADD COLUMN cost_ratio REAL")
+    for column, kind in (("timeframe", "TEXT"), ("cost_ratio", "REAL"),
+                         ("style", "TEXT"), ("result_r", "REAL")):
+        if column not in columns:
+            con.execute(f"ALTER TABLE ai_trades ADD COLUMN {column} {kind}")
+    decision_columns = [
+        row["name"] for row in con.execute("PRAGMA table_info(ai_decisions)").fetchall()
+    ]
+    for column, kind in (("decision_date", "TEXT"), ("session", "TEXT"),
+                         ("snapshot", "TEXT"), ("source", "TEXT DEFAULT 'forward'"),
+                         ("plan_id", "TEXT")):
+        if column not in decision_columns:
+            con.execute(f"ALTER TABLE ai_decisions ADD COLUMN {column} {kind}")
 
 
 def _migrate_chain_orders(con: sqlite3.Connection) -> None:

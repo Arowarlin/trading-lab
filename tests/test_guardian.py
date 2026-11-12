@@ -97,7 +97,11 @@ def test_build_config_ftmo_demo():
         datetime.now(ZoneInfo("Europe/Prague")).utcoffset().total_seconds() // 60
     )
     assert cfg["reset_utc_offset_minutes"] == expected
-    assert cfg["magics"] == [20261151, 20261152, 20261153]
+    assert cfg["magics"] == [20261151, 20261152, 20261153,
+                             20261191, 20261192, 20261193]
+    assert cfg["ai_magics"] == [20261191, 20261192, 20261193]
+    assert cfg["daily_stop_global"] == pytest.approx(0.03)
+    assert set(cfg["ai_styles"]) == {"scalping", "intraday", "swing"}
     assert cfg["version"] == 1
     assert cfg["limits_source"].startswith("prop.yaml:ftmo/challenge")
 
@@ -106,7 +110,7 @@ def test_build_config_usa_magics_del_forward(tmp_path):
     accounts = _accounts_file(tmp_path, {"ftmo_demo": _ftmo_account()})
     forward = _forward_file(tmp_path, magics=(111, 222))
     cfg = build_config("ftmo_demo", accounts_path=accounts, forward_path=forward)
-    assert cfg["magics"] == [111, 222]
+    assert cfg["magics"] == [111, 222, 20261191, 20261192, 20261193]
     assert cfg["bots"] == ["forward-0", "forward-1"]
 
 
@@ -219,7 +223,9 @@ def test_export_escribe_json_atomico(tmp_path):
     assert not target.with_suffix(".json.tmp").exists()
     payload = json.loads(target.read_text(encoding="utf-8"))
     assert payload["account"] == "ftmo_demo"
-    assert payload["magics"] == [20261151, 20261152, 20261153]
+    assert payload["magics"] == [20261151, 20261152, 20261153,
+                                 20261191, 20261192, 20261193]
+    assert payload["daily_stop_global"] == pytest.approx(0.03)
 
 
 def test_export_usa_data_path_del_terminal(tmp_path):

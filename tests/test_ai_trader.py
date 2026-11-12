@@ -148,17 +148,19 @@ def test_stop_diario_y_pausa_de_celda(tmp_path):
     now = datetime.now(timezone.utc).isoformat()
     with connect(db) as con:
         con.execute(
-            "INSERT INTO ai_trades(proposal_id, ts, symbol, setup, side, status, magic, risk_usd, pnl, exit_ts) "
-            "VALUES(?,?,?,?,?,?,?,?,?,?)",
-            ("p1", now, "XAUUSD", "liquidity_sweep", "sell", "closed", 20261190, 500, -2001, now),
+            "INSERT INTO ai_trades(proposal_id, ts, style, symbol, setup, side, status, magic, risk_usd, pnl, exit_ts) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+            ("p1", now, "scalping", "XAUUSD", "liquidity_sweep", "sell", "closed",
+             20261191, 500, -2001, now),
         )
     cfg = load_config()
-    assert cfg["daily_stop"] == pytest.approx(0.02)
-    assert cfg["risk_per_trade"] == pytest.approx(0.005)
-    assert cfg["max_trades_per_day"] == 6
-    assert cfg["max_open_total"] == 3
-    assert _lane_pnl_today(db, 20261190) == pytest.approx(-2001)
-    assert _lane_pnl_today(db, 20261190) <= -100_000 * cfg["daily_stop"]
+    assert cfg["daily_stop"] == pytest.approx(0.03)
+    assert cfg["styles"]["scalping"]["risk_per_trade"] == pytest.approx(0.0025)
+    assert cfg["styles"]["scalping"]["max_trades_per_day"] == 15
+    assert cfg["styles"]["intraday"]["max_trades_per_day"] == 3
+    assert cfg["global"]["max_open_total"] == 5
+    assert _lane_pnl_today(db, 20261191) == pytest.approx(-2001)
+    assert _lane_pnl_today(db, 20261191) <= -100_000 * cfg["styles"]["scalping"]["daily_stop"]
 
     _pause_cells([{"strategy": "x", "symbol": "y", "timeframe": "H1", "n": 30,
                    "expectancy_r": 0.1, "shadow_expectancy_r": 0.2}], db)

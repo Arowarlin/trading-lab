@@ -159,7 +159,7 @@ app.add_typer(risk_budget_app, name="risk-budget")
 app.add_typer(lifecycle_app, name="lifecycle")
 ai_trader_app = typer.Typer(
     no_args_is_help=True,
-    help="Carril IA discrecional (solo demo): snapshot, propose, execute, manage, scoreboard, review.",
+    help="Carril IA discrecional (solo demo): snapshot, propose, skip, execute, status, manage, scoreboard, review.",
 )
 app.add_typer(ai_trader_app, name="ai-trader")
 app.add_typer(llm_app, name="llm")
@@ -640,6 +640,21 @@ def doctor(network: bool = typer.Option(False, "--network", help="Probar descarg
                 )
         except Exception as exc:
             table.add_row("Fondeo", FAIL, str(exc)[:160])
+
+    # IA discrecional: coherencia de stops por estilo frente al global.
+    try:
+        from .ai_trader import daily_stop_check
+        from .ai_trader import load_config as load_ai_config
+
+        ai_cfg = load_ai_config()
+        stops = daily_stop_check(ai_cfg)
+        table.add_row(
+            "IA discrecional",
+            WARN if stops["warn"] else OK,
+            stops["detail"],
+        )
+    except Exception as exc:
+        table.add_row("IA discrecional", WARN, str(exc)[:160])
 
     # Datos
     if network:
@@ -5613,7 +5628,6 @@ def intraday_forward_cmd(
     except Exception as exc:
         console.print(Panel(str(exc), title="Forward no disponible", style="bold red"))
         raise typer.Exit(1) from exc
-    configured = list(bots)
 
     if bot:
         wanted = {item.strip() for item in bot.split(",") if item.strip()}
@@ -5656,12 +5670,12 @@ def intraday_forward_cmd(
             bars=bars,
         )
         try:
-            from .mt5_fills import sync_mt5_fills
+            from .mt5_fills import lab_magic_map, sync_mt5_fills
 
             fills_report = sync_mt5_fills(
                 broker,
                 DEFAULT_DB,
-                magics={item.magic: item.signal_bot for item in configured},
+                magics=lab_magic_map(),
                 account=bots[0].account if bots else "ftmo_demo",
             )
             if fills_report["inserted"]:
@@ -9260,6 +9274,28 @@ def ai_trader_propose_cmd(
     )
 
 
+@ai_trader_app.command("skip")
+def ai_trader_skip_cmd(
+    decision: str = typer.Option(..., "--json", help="JSON de la decisión de no operar"),
+) -> None:
+    """Registra una decisión de NO operar con su motivo y snapshot."""
+    from .ai_trader import AiTraderError, skip
+
+    try:
+        payload = json.loads(decision)
+    except json.JSONDecodeError as exc:
+        console.print(f"[red]JSON inválido:[/red] {exc}")
+        raise typer.Exit(2) from exc
+    try:
+        result = skip(payload, db_path=DEFAULT_DB)
+    except AiTraderError as exc:
+        _ai_trader_error(exc)
+    console.print(
+        f"[green]Decisión registrada[/green] #{result['id']} · skip · "
+        f"{result['reason'][:160]}"
+    )
+
+
 @ai_trader_app.command("execute")
 def ai_trader_execute_cmd(
     proposal_id: str = typer.Option(..., "--id", help="ID de la propuesta"),
@@ -9278,8 +9314,72 @@ def ai_trader_execute_cmd(
     console.print(
         f"[green]Ejecutada[/green] {proposal_id[:8]} · "
         f"{result['order'].get('symbol')} {result['order'].get('side')} "
-        f"{result['order'].get('volume')} · ticket {result['order'].get('order_id')}"
+        f"{result['order'].get('volume')} · ticket {result['order'].get('order_id')} "
+        f"· estilo {result.get('style')}"
     )
+    fills = result.get("fills") or {}
+    if fills.get("inserted"):
+        console.print(
+            f"[dim]Fills MT5: {fills['inserted']} nuevos "
+            f"({fills.get('manual', 0)} manuales)[/dim]"
+        )
+    if result.get("fills_error"):
+        console.print(
+            f"[yellow]Fills MT5: no se pudo sincronizar:[/yellow] "
+            f"{result['fills_error']}"
+        )
+
+
+@ai_trader_app.command("status")
+def ai_trader_status_cmd() -> None:
+    """Estado por estilo (riesgo, trades, posiciones, PnL y stop) y global."""
+    from .ai_trader import AiTraderError
+    from .ai_trader import status as lane_status
+
+    settings = get_settings()
+    broker = _mt5(settings, dry_run=True)
+    try:
+        data = lane_status(broker=broker, settings=settings, db_path=DEFAULT_DB)
+    except AiTraderError as exc:
+        _ai_trader_error(exc)
+    finally:
+        broker.shutdown()
+    table = Table(title="IA discrecional · estado por estilo")
+    for column in ("Estilo", "Magic", "Riesgo", "Trades", "Abiertas",
+                   "PnL día", "Stop restante", "Ventana"):
+        table.add_column(column)
+    for name, item in data["styles"].items():
+        trades = str(item["trades_today"])
+        if item["max_trades_per_day"] is not None:
+            trades += f"/{item['max_trades_per_day']}"
+        risk = f"{item['risk_used_pct']:.2%}" if item["risk_used_pct"] is not None else "-"
+        window = "abierta" if item["session_open"] else ("cerrada" if item["session_open"] is False else "24h")
+        table.add_row(
+            name, str(item["magic"]), risk, trades, str(item["open_count"]),
+            f"{item['pnl_today']:+.2f}",
+            f"{item['stop_remaining_usd']:.2f}"
+            + (" (tocado)" if item["stop_hit"] else ""),
+            window,
+        )
+    console.print(table)
+    global_data = data["global"]
+    console.print(
+        f"Global: {global_data['open_count']}/{global_data['max_open_total']} abiertas · "
+        f"PnL {global_data['pnl_today']:+.2f} · stop restante "
+        f"{global_data['stop_remaining_usd']:.2f} USD"
+        + (" · TOCADO" if global_data["stop_hit"] else "")
+    )
+    if global_data["positions"]:
+        pos_table = Table(title="Posiciones del carril")
+        for column in ("Ticket", "Símbolo", "Lado", "Volumen", "PnL", "Magic"):
+            pos_table.add_column(column)
+        for position in global_data["positions"]:
+            pos_table.add_row(
+                str(position["ticket"]), str(position["symbol"]),
+                str(position["side"]), f"{position['volume']:g}",
+                f"{position['profit']:+.2f}", str(position["magic"]),
+            )
+        console.print(pos_table)
 
 
 @ai_trader_app.command("manage")
@@ -9299,11 +9399,12 @@ def ai_trader_manage_cmd() -> None:
         console.print("Sin posiciones del carril.")
         return
     table = Table(title="IA discrecional · manage")
-    for column in ("Ticket", "Símbolo", "Lado", "R", "SL", "Nuevo SL"):
+    for column in ("Ticket", "Estilo", "Símbolo", "Lado", "R", "SL", "Nuevo SL"):
         table.add_column(column)
     for row in rows:
         table.add_row(
             str(row["ticket"]),
+            str(row.get("style") or "-"),
             str(row["symbol"]),
             str(row["side"]),
             f"{row['profit_r']:+.2f}",
@@ -9328,10 +9429,11 @@ def ai_trader_scoreboard_cmd() -> None:
         broker.shutdown()
     cells = data["cells"]
     table = Table(title="IA discrecional · scoreboard")
-    for column in ("Estrategia", "Símbolo", "TF", "N", "Hit", "R medio", "R sombra", "Coste/R", "Estado"):
+    for column in ("Estilo", "Estrategia", "Símbolo", "TF", "N", "Hit", "R medio", "R sombra", "Coste/R", "Estado"):
         table.add_column(column)
     for cell in cells:
         table.add_row(
+            str(cell.get("style") or "-"),
             str(cell["strategy"]),
             str(cell["symbol"]),
             str(cell["timeframe"]),

@@ -1,38 +1,101 @@
 # Carril IA discrecional (solo demo).
 #
-# El LLM elige estrategia, símbolo, timeframe y dirección. Los niveles y el
-# lote los calcula el código. Nunca live: account debe ser ftmo_demo.
-version: 1
+# Tres estilos con riesgo, magic y ventana propios. El LLM elige estilo,
+# estrategia, símbolo, timeframe y dirección; los niveles y el lote los calcula
+# el código. Nunca live: la cuenta debe ser ftmo_demo.
+#
+# El reset diario es el de FTMO en config/prop.yaml (Europe/Prague). Al tocar
+# el stop de un estilo, ese estilo no abre más ese día; al tocar el global,
+# ninguno de los tres abre.
+version: 2
 account: ftmo_demo
-magic: 20261190
-universe: [US100.cash, XAUUSD, EURUSD, GBPUSD, USDJPY]
-risk_per_trade: 0.005       # 0,5% del equity por operación
-max_trades_per_day: 6
-max_open_per_symbol: 1
-max_open_total: 3
-daily_stop: 0.02            # 2%: no se abre hasta el reset diario de FTMO
-timeframes: [M15, H1, D1]
-playbook_version: 1
 enabled: true
-allowed:
-  US100.CASH:
-    orb_ny: M15
-    vwap_reversion: M15
-    bollinger_squeeze: H1
-    rsi2_connors: D1
-    donchian_turtle: D1
-  XAUUSD:
-    liquidity_sweep: H1
-    donchian_turtle: D1
-    inside_bar: D1
-  EURUSD:
-    london_breakout: H1
-    ema_pullback: H1
-    inside_bar: D1
-  GBPUSD:
-    london_breakout: H1
-    ema_pullback: H1
-    inside_bar: D1
-  USDJPY:
-    ema_pullback: H1
-    donchian_turtle: D1
+
+global:
+  account: ftmo_demo
+  daily_stop: 0.03            # 3% del equity: stop global del carril
+  max_open_total: 5
+  max_open_per_symbol_per_style: 1
+  universe: [US100.cash, XAUUSD, EURUSD, GBPUSD, USDJPY]
+  playbook_version: 1
+
+styles:
+  scalping:
+    enabled: true
+    magic: 20261191
+    timeframes: [M1, M5]
+    risk_per_trade: 0.0025    # 0,25% del equity por operación
+    daily_stop: 0.01          # 1%
+    max_trades_per_day: 15
+    max_cost_r: 0.15
+    slippage_points: 1        # 1 punto del símbolo por lado
+    universe: [US100.cash, XAUUSD]
+    session:
+      start: "09:30"
+      end: "12:00"
+      tz: America/New_York
+    allowed:
+      US100.CASH:
+        orb_ny: [M1, M5]
+        vwap_reversion: [M1, M5]
+        bollinger_squeeze: M5
+      XAUUSD:
+        orb_ny: M5
+        vwap_reversion: [M1, M5]
+        bollinger_squeeze: M5
+
+  intraday:
+    enabled: true
+    magic: 20261192
+    timeframes: [M15, H1]
+    risk_per_trade: 0.005     # 0,5% del equity por operación
+    daily_stop: 0.01          # 1%
+    max_trades_per_day: 3
+    max_cost_r: 0.10
+    slippage_points: 1
+    # Sin `universe` propio: usa el global.
+    allowed:
+      US100.CASH:
+        orb_ny: M15
+        vwap_reversion: M15
+        bollinger_squeeze: H1
+      XAUUSD:
+        liquidity_sweep: H1
+        bollinger_squeeze: H1
+      EURUSD:
+        london_breakout: H1
+        ema_pullback: H1
+      GBPUSD:
+        london_breakout: H1
+        ema_pullback: H1
+      USDJPY:
+        ema_pullback: H1
+
+  swing:
+    enabled: true
+    magic: 20261193
+    timeframes: [H4, D1]
+    risk_per_trade: 0.01      # 1% del equity por operación
+    daily_stop: 0.01          # 1%
+    max_open_risk: 0.02       # 2% de riesgo abierto acumulado del estilo
+    # Sin `max_trades_per_day` ni `max_cost_r`: swing no los limita.
+    # Sin `universe` propio: usa el global.
+    allowed:
+      US100.CASH:
+        donchian_turtle: D1
+        rsi2_connors: D1
+        bollinger_squeeze: H4
+        ema_pullback: H4
+      XAUUSD:
+        donchian_turtle: D1
+        inside_bar: D1
+        liquidity_sweep: H4
+      EURUSD:
+        inside_bar: D1
+        ema_pullback: H4
+      GBPUSD:
+        inside_bar: D1
+        ema_pullback: H4
+      USDJPY:
+        donchian_turtle: D1
+        ema_pullback: H4

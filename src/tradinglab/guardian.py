@@ -118,11 +118,49 @@ def resolve_target(
     return data_path / "MQL5" / "Files" / GUARDIAN_FILENAME, False, None
 
 
+def _load_ai_lane(path: Path | None = None) -> dict:
+    """Magics y stops de los tres estilos IA. No rellena valores a ojo."""
+    target = Path(path) if path else CONFIG_DIR / "ai_trader.yaml"
+    data = _read_yaml(target)
+    account = str(data.get("account") or "").strip()
+    if account != "ftmo_demo":
+        raise GuardianError(f"{target}: el carril IA solo permite ftmo_demo")
+    global_raw = data.get("global") or {}
+    if not isinstance(global_raw, dict):
+        raise GuardianError(f"{target}: 'global' no es un objeto")
+    daily_global = global_raw.get("daily_stop")
+    if daily_global is None:
+        raise GuardianError(f"{target}: falta global.daily_stop")
+    styles_raw = data.get("styles") or {}
+    if not isinstance(styles_raw, dict) or not styles_raw:
+        raise GuardianError(f"{target}: no hay estilos IA")
+    styles: dict[str, dict] = {}
+    for name, raw in styles_raw.items():
+        if not isinstance(raw, dict):
+            raise GuardianError(f"{target}: estilo {name} inválido")
+        magic = raw.get("magic")
+        daily = raw.get("daily_stop")
+        if magic is None or daily is None:
+            raise GuardianError(f"{target}: {name} sin magic o daily_stop")
+        styles[str(name)] = {
+            "magic": int(magic),
+            "daily_stop": float(daily),
+            "timeframes": [str(item) for item in (raw.get("timeframes") or [])],
+            "session": raw.get("session"),
+        }
+    return {
+        "daily_stop_global": float(daily_global),
+        "styles": styles,
+        "magics": sorted({int(item["magic"]) for item in styles.values()}),
+    }
+
+
 def build_config(
     account_id: str = "ftmo_demo",
     *,
     accounts_path: Path | None = None,
     forward_path: Path | None = None,
+    ai_path: Path | None = None,
 ) -> dict:
     """Construye y valida el JSON; no escribe nada."""
     raw_account = _raw_account(account_id, accounts_path)
@@ -192,6 +230,12 @@ def build_config(
     magics = sorted({int(bot.magic) for bot in bots})
     if not magics:
         raise GuardianError("intraday_forward.yaml no tiene magics que proteger")
+    try:
+        ai_lane = _load_ai_lane(ai_path)
+    except GuardianError:
+        raise
+    except Exception as exc:
+        raise GuardianError(f"no se pudo cargar el carril IA: {exc}") from exc
 
     return {
         "version": GUARDIAN_VERSION,
@@ -203,8 +247,12 @@ def build_config(
         "reset_tz": reset_tz,
         "reset_time": reset_time,
         "reset_utc_offset_minutes": offset_minutes,
-        "magics": magics,
+        "magics": sorted(set(magics) | set(ai_lane["magics"])),
         "bots": [bot.id for bot in bots],
+        "ai_styles": ai_lane["styles"],
+        "ai_magics": ai_lane["magics"],
+        "ai_daily_stop": ai_lane["daily_stop_global"],
+        "daily_stop_global": ai_lane["daily_stop_global"],
         "limits_source": limits_source,
     }
 
@@ -222,13 +270,15 @@ def export_config(
     *,
     accounts_path: Path | None = None,
     forward_path: Path | None = None,
+    ai_path: Path | None = None,
     lab_path: Path | None = None,
     target_path: Path | None = None,
     fallback_dir: Path | None = None,
 ) -> dict:
     """Valida y escribe el JSON del guardián. Devuelve ruta y aviso."""
     payload = build_config(
-        account_id, accounts_path=accounts_path, forward_path=forward_path
+        account_id, accounts_path=accounts_path, forward_path=forward_path,
+        ai_path=ai_path,
     )
     target, fallback, warning = resolve_target(
         lab_path=lab_path, target_path=target_path, fallback_dir=fallback_dir

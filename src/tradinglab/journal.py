@@ -151,18 +151,32 @@ def _distribution(values: list[float]) -> dict:
 
 
 def _lab_magics() -> set[int]:
-    """Magics de los bots del laboratorio (los del forward demo)."""
-    path = Path(__file__).resolve().parents[2] / "config" / "intraday_forward.yaml"
-    try:
-        raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    except Exception:
-        return set()
-    out = set()
-    for bot in raw.get("bots") or []:
+    """Magics de los bots del laboratorio: forward demo + carril IA."""
+    base = Path(__file__).resolve().parents[2] / "config"
+    out: set[int] = set()
+    for name in ("intraday_forward.yaml", "ai_trader.yaml"):
+        path = base / name
         try:
-            out.add(int(bot.get("magic")))
-        except (TypeError, ValueError):
+            raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        except Exception:
             continue
+        if name == "intraday_forward.yaml":
+            for bot in raw.get("bots") or []:
+                try:
+                    out.add(int(bot.get("magic")))
+                except (TypeError, ValueError):
+                    continue
+        else:
+            for style in (raw.get("styles") or {}).values():
+                try:
+                    out.add(int(style.get("magic")))
+                except (TypeError, ValueError, AttributeError):
+                    continue
+            try:
+                if raw.get("magic"):
+                    out.add(int(raw["magic"]))
+            except (TypeError, ValueError):
+                pass
     return out
 
 
@@ -271,6 +285,7 @@ def load_closed_trades(
     bot_map = bots or {}
     lab_bots = {spec.id for spec in load_bots()}
     lab_magics = _lab_magics()
+    lane_bots: dict[int, str] | None = None
     mt5_account = _mt5_account()
     mt5_symbols = {str(item).upper() for item in diagnostics.get("mt5_symbols") or []}
     long_lots: dict[tuple[str, str], list[dict]] = {}
@@ -363,6 +378,15 @@ def load_closed_trades(
         mapping = bot_map.get(bot_id) or {}
         account = mapping.get("account")
         magic = int(row["magic"]) if row["magic"] is not None else None
+        if bot_id == "manual" and magic is not None and magic in lab_magics:
+            if lane_bots is None:
+                try:
+                    from .mt5_fills import lab_magic_map
+
+                    lane_bots = lab_magic_map()
+                except Exception:
+                    lane_bots = {}
+            bot_id = lane_bots.get(magic, bot_id)
         if account is None and (magic is not None or ticker in mt5_symbols):
             account = mt5_account
         manual = bool(

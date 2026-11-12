@@ -257,6 +257,66 @@ def build_drift(
             }
         )
     rows.sort(key=lambda row: row["bot"])
+    # El carril IA discrecional no tiene backtest comparable, pero se muestra
+    # aparte para que sus fills no se confundan con operaciones manuales.
+    try:
+        from .ai_trader import load_config as load_ai_config
+
+        ai_cfg = load_ai_config()
+        known = {row["bot"] for row in rows}
+        for name, item in ai_cfg["styles"].items():
+            bot = f"ai:{name}"
+            if bot in known:
+                continue
+            group = by_bot.get(bot, [])
+            live = summarize(group, accounts) if group else None
+            start_date = group[0].day if group else "1970-01-01"
+            slippage = execution_metrics(db_path, bot=bot, start_date=start_date)
+            slip_status, slip_reasons = classify_slippage(
+                int(slippage.get("fills") or 0),
+                slippage.get("slippage_p50_bps"),
+                slippage.get("slippage_p95_bps"),
+                backtest_bps=backtest_bps,
+                max_p50_bps=max_p50,
+                max_p95_bps=max_p95,
+                min_fills=min_slippage_fills,
+            )
+            rows.append({
+                "bot": bot,
+                "account": "ftmo_demo",
+                "profile": "ia_discrecional",
+                "enabled": bool(item["enabled"]),
+                "backtest": {"status": "Sin datos", "sharpe": None,
+                             "expectancy": None, "num_trades": None,
+                             "win_rate": None},
+                "live": {
+                    "n": len(group),
+                    "days": len({trade.day for trade in group}),
+                    "sharpe": live.get("sharpe") if live else None,
+                    "sharpe_ci95": [None, None],
+                    "expectancy": live.get("expectancy") if live else None,
+                    "expectancy_ci95": [None, None],
+                    "win_rate": live.get("win_rate") if live else None,
+                    "net_pnl": live.get("net_pnl") if live else None,
+                },
+                "slippage": {
+                    "fills": int(slippage.get("fills") or 0),
+                    "p50_bps": slippage.get("slippage_p50_bps"),
+                    "p95_bps": slippage.get("slippage_p95_bps"),
+                    "backtest_bps": backtest_bps,
+                },
+                "edge_status": "sin datos",
+                "slippage_status": slip_status,
+                "status": "sin datos",
+                "reasons": [
+                    f"carril IA {name}: sin backtest comparable",
+                    *slip_reasons,
+                ],
+                "sample_ok": len(group) >= min_trades,
+            })
+        rows.sort(key=lambda row: row["bot"])
+    except Exception:
+        pass
     try:
         from .tca import attach_to_drift
 

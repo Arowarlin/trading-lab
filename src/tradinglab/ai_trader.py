@@ -1,7 +1,9 @@
 """Carril IA discrecional (solo demo): snapshot, propuesta, ejecución y medición.
 
-El LLM elige estrategia, símbolo, timeframe y dirección; los niveles y el lote
-los calcula el código. Cada operación real tiene una gemela sombra aleatoria.
+Tres estilos (scalping, intraday y swing) con magic, riesgo, stop diario y
+universo propios. El LLM elige estilo, estrategia, símbolo, timeframe y
+dirección; los niveles y el lote los calcula el código. Cada orden lleva el
+magic del estilo y el carril se mide contra una gemela sombra aleatoria.
 """
 from __future__ import annotations
 
@@ -11,18 +13,19 @@ import math
 import random
 import uuid
 from datetime import datetime, timedelta, timezone
+from datetime import time as dtime
 from pathlib import Path
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import pandas as pd
 import yaml
 
 from .ai_setups import (
-    ALLOWED,
     STRATEGY_TIMEFRAME,
     TIMEFRAMES,
     SetupError,
     plan,
+    supports,
     validate,
 )
 from .audit import append_hashed
@@ -38,10 +41,87 @@ CONFIG_PATH = ROOT / "config" / "ai_trader.yaml"
 PRAGUE = ZoneInfo("Europe/Prague")
 NEW_YORK = ZoneInfo("America/New_York")
 LONDON = ZoneInfo("Europe/London")
+REQUIRED_STYLES = ("scalping", "intraday", "swing")
+TF_MINUTES = {"M1": 1, "M5": 5, "M15": 15, "H1": 60, "H4": 240, "D1": 1440}
+TF_SECTION = {"M1": "m1", "M5": "m5", "M15": "m15",
+              "H1": "h1", "H4": "h4", "D1": "d1"}
+DECISIONS = ("take", "skip", "no_setup")
+SOURCES = ("forward", "replay")
 
 
 class AiTraderError(ValueError):
     pass
+
+
+class _Reject(AiTraderError):
+    """Rechazo con la decisión que debe quedar registrada."""
+
+    def __init__(self, message: str, *, decision: str = "skip",
+                 setup_valid: int = 1, snapshot: dict | None = None) -> None:
+        super().__init__(message)
+        self.decision = decision
+        self.setup_valid = int(setup_valid)
+        self.snapshot = snapshot
+
+
+# ------------------------------------------------------------------- config
+
+
+def _float_or_none(value) -> float | None:
+    if value is None or value == "":
+        return None
+    return float(value)
+
+
+def _parse_allowed(raw: dict | None) -> dict[str, dict[str, list[str]]]:
+    out: dict[str, dict[str, list[str]]] = {}
+    for symbol, strategies in (raw or {}).items():
+        if not isinstance(strategies, dict):
+            raise AiTraderError(f"allowed.{symbol} debe ser un objeto")
+        entry: dict[str, list[str]] = {}
+        for strategy, value in strategies.items():
+            if isinstance(value, (list, tuple)):
+                frames = [str(item).upper() for item in value]
+            else:
+                frames = [str(value).upper()]
+            entry[str(strategy)] = frames
+        out[str(symbol).upper()] = entry
+    return out
+
+
+def _parse_session(raw) -> dict | None:
+    if not raw:
+        return None
+    if not isinstance(raw, dict):
+        raise AiTraderError("session debe ser un objeto start/end/tz")
+    start = str(raw.get("start") or "").strip()
+    end = str(raw.get("end") or "").strip()
+    zone = str(raw.get("tz") or "America/New_York").strip()
+    try:
+        dtime.fromisoformat(start)
+        dtime.fromisoformat(end)
+        ZoneInfo(zone)
+    except (ValueError, ZoneInfoNotFoundError) as exc:
+        raise AiTraderError(f"session inválida ({start}-{end} {zone}): {exc}") from exc
+    return {"start": start, "end": end, "tz": zone}
+
+
+def _legacy_style(data: dict) -> dict:
+    """Config antigua de un solo carril: se envuelve como un estilo."""
+    return {
+        "enabled": bool(data.get("enabled", False)),
+        "magic": int(data.get("magic") or 0),
+        "timeframes": [str(item).upper() for item in (data.get("timeframes") or ["M15", "H1", "D1"])],
+        "risk_per_trade": float(data.get("risk_per_trade") or 0.0),
+        "daily_stop": float(data.get("daily_stop") or 0.0),
+        "max_trades_per_day": int(data.get("max_trades_per_day") or 0),
+        "max_cost_r": 0.10,
+        "slippage_points": 1.0,
+        "universe": [str(item) for item in (data.get("universe") or [])],
+        "session": None,
+        "max_open_risk": None,
+        "allowed": _parse_allowed(data.get("allowed") or {}),
+    }
 
 
 def load_config(path: str | Path | None = None) -> dict:
@@ -51,39 +131,180 @@ def load_config(path: str | Path | None = None) -> dict:
     data = yaml.safe_load(target.read_text(encoding="utf-8")) or {}
     if not isinstance(data, dict):
         raise AiTraderError("configuración ai_trader inválida")
+
+    global_raw = data.get("global") or {}
+    if not isinstance(global_raw, dict):
+        raise AiTraderError("global debe ser un objeto")
+    account = str(data.get("account") or global_raw.get("account") or "").strip()
+    if account != "ftmo_demo":
+        raise AiTraderError("el carril solo permite account=ftmo_demo")
+    universe = [str(item) for item in (global_raw.get("universe") or data.get("universe") or [])]
+    if not universe:
+        raise AiTraderError("universo global vacío")
+    canonical = {item.lower(): item for item in universe}
+
+    raw_styles = data.get("styles")
+    legacy = False
+    if not isinstance(raw_styles, dict) or not raw_styles:
+        raw_styles = {"legacy": _legacy_style(data)}
+        legacy = True
+    required = set() if legacy else set(REQUIRED_STYLES)
+    if not required.issubset(raw_styles):
+        missing = ", ".join(sorted(required - set(raw_styles)))
+        raise AiTraderError(f"faltan estilos en la configuración: {missing}")
+
+    styles: dict[str, dict] = {}
+    for name, raw in raw_styles.items():
+        if not isinstance(raw, dict):
+            raise AiTraderError(f"estilo {name} inválido")
+        magic = int(raw.get("magic") or 0)
+        if magic <= 0:
+            raise AiTraderError(f"{name}: magic inválido")
+        frames = [str(item).upper() for item in (raw.get("timeframes") or [])]
+        if not frames:
+            raise AiTraderError(f"{name}: timeframes vacío")
+        for tf in frames:
+            if tf not in TIMEFRAMES:
+                raise AiTraderError(f"{name}: timeframe no permitido: {tf}")
+        risk = float(raw.get("risk_per_trade") or 0.0)
+        if not 0 < risk <= 0.02:
+            raise AiTraderError(f"{name}: risk_per_trade debe estar en (0, 2%]")
+        daily = float(raw.get("daily_stop") or 0.0)
+        if not 0 < daily <= 0.05:
+            raise AiTraderError(f"{name}: daily_stop debe estar en (0, 5%]")
+        trades = raw.get("max_trades_per_day")
+        max_trades = None if trades in (None, "") else int(trades)
+        if max_trades is not None and not 1 <= max_trades <= 100:
+            raise AiTraderError(f"{name}: max_trades_per_day fuera de rango")
+        max_cost = _float_or_none(raw.get("max_cost_r"))
+        if max_cost is not None and not 0 < max_cost <= 1:
+            raise AiTraderError(f"{name}: max_cost_r fuera de rango")
+        max_open_risk = _float_or_none(raw.get("max_open_risk"))
+        if max_open_risk is not None and not 0 < max_open_risk <= 0.10:
+            raise AiTraderError(f"{name}: max_open_risk fuera de rango")
+        style_universe = [str(item) for item in (raw.get("universe") or universe)]
+        for symbol in style_universe:
+            if symbol.lower() not in canonical:
+                raise AiTraderError(f"{name}: símbolo fuera del universo global: {symbol}")
+        allowed = _parse_allowed(raw.get("allowed") or {})
+        for symbol, strategies in allowed.items():
+            if symbol.lower() not in canonical:
+                raise AiTraderError(f"{name}: allowed con símbolo desconocido: {symbol}")
+            if symbol not in {item.upper() for item in style_universe}:
+                raise AiTraderError(f"{name}: allowed fuera de su universo: {symbol}")
+            for strategy, assigned in strategies.items():
+                if strategy not in STRATEGY_TIMEFRAME:
+                    raise AiTraderError(f"{name}: estrategia desconocida en allowed: {strategy}")
+                for tf in assigned:
+                    if tf not in frames:
+                        raise AiTraderError(f"{name}: {strategy} usa {tf}, fuera de {frames}")
+                    if not supports(strategy, tf):
+                        raise AiTraderError(f"{name}: {strategy} no soporta {tf}")
+        styles[str(name)] = {
+            "name": str(name),
+            "enabled": bool(raw.get("enabled", True)),
+            "magic": magic,
+            "timeframes": frames,
+            "risk_per_trade": risk,
+            "daily_stop": daily,
+            "max_trades_per_day": max_trades,
+            "max_cost_r": max_cost,
+            "slippage_points": float(raw.get("slippage_points", 1.0)),
+            "universe": style_universe,
+            "session": _parse_session(raw.get("session")),
+            "max_open_risk": max_open_risk,
+            "allowed": allowed,
+        }
+
+    magics = [int(item["magic"]) for item in styles.values()]
+    if len(set(magics)) != len(magics):
+        raise AiTraderError("cada estilo debe tener un magic distinto")
+
+    daily_stop = float(global_raw.get("daily_stop") or data.get("daily_stop") or 0.0)
+    if not 0 < daily_stop <= 0.10:
+        raise AiTraderError("daily_stop global debe estar en (0, 10%]")
+    max_open_total = int(global_raw.get("max_open_total") or data.get("max_open_total") or 0)
+    if max_open_total < 1:
+        raise AiTraderError("max_open_total debe ser >= 1")
+    per_symbol = int(
+        global_raw.get("max_open_per_symbol_per_style")
+        or data.get("max_open_per_symbol")
+        or 1
+    )
+    if per_symbol < 1:
+        raise AiTraderError("max_open_per_symbol_per_style debe ser >= 1")
+    playbook = int(
+        global_raw.get("playbook_version")
+        or data.get("playbook_version")
+        or 1
+    )
+    if playbook < 1:
+        raise AiTraderError("playbook_version debe ser >= 1")
+
     out = {
-        "account": str(data.get("account") or ""),
-        "magic": int(data.get("magic") or 0),
-        "universe": [str(item) for item in (data.get("universe") or [])],
-        "risk_per_trade": float(data.get("risk_per_trade") or 0.0),
-        "max_trades_per_day": int(data.get("max_trades_per_day") or 0),
-        "max_open_per_symbol": int(data.get("max_open_per_symbol") or 1),
-        "max_open_total": int(data.get("max_open_total") or 1),
-        "daily_stop": float(data.get("daily_stop") or 0.0),
-        "playbook_version": int(data.get("playbook_version") or 1),
+        "version": int(data.get("version") or 2),
+        "account": account,
         "enabled": bool(data.get("enabled", False)),
-        "allowed": data.get("allowed") or ALLOWED,
-        "timeframes": [str(item) for item in (data.get("timeframes") or TIMEFRAMES)],
+        "global": {
+            "account": account,
+            "daily_stop": daily_stop,
+            "max_open_total": max_open_total,
+            "max_open_per_symbol_per_style": per_symbol,
+            "universe": universe,
+            "playbook_version": playbook,
+        },
+        "styles": styles,
+        "magics": sorted(magics),
+        "magic": styles["scalping"]["magic"] if "scalping" in styles else magics[0],
+        "universe": universe,
+        "daily_stop": daily_stop,
+        "max_open_total": max_open_total,
+        "max_open_per_symbol": per_symbol,
+        "playbook_version": playbook,
+        "timeframes": sorted({tf for item in styles.values() for tf in item["timeframes"]}),
+        "allowed": {
+            symbol: {strategy: frames[0] for strategy, frames in strategies.items()}
+            for style in styles.values()
+            for symbol, strategies in style["allowed"].items()
+        },
         "source": str(target),
     }
-    if out["account"] != "ftmo_demo":
-        raise AiTraderError("el carril solo permite account=ftmo_demo")
-    if not out["universe"]:
-        raise AiTraderError("universo vacío")
-    if out["magic"] <= 0:
-        raise AiTraderError("magic inválido")
-    if not 0 < out["risk_per_trade"] <= 0.01:
-        raise AiTraderError("risk_per_trade debe estar en (0, 1%]")
-    if not 1 <= out["max_trades_per_day"] <= 10:
-        raise AiTraderError("max_trades_per_day fuera de rango")
-    if out["max_open_total"] < 1:
-        raise AiTraderError("max_open_total debe ser >= 1")
-    if not 0 < out["daily_stop"] <= 0.05:
-        raise AiTraderError("daily_stop debe estar en (0, 5%]")
-    for tf in out["timeframes"]:
-        if tf not in TIMEFRAMES:
-            raise AiTraderError(f"timeframe no permitido: {tf}")
     return out
+
+
+def style_config(config: dict, style: str) -> dict:
+    item = config["styles"].get(str(style))
+    if item is None:
+        raise AiTraderError(f"estilo desconocido: {style}")
+    return item
+
+
+def lane_magic_map(config: dict | None = None) -> dict[int, str]:
+    cfg = config or load_config()
+    return {int(item["magic"]): f"ai:{name}" for name, item in cfg["styles"].items()}
+
+
+def style_for_magic(config: dict, magic: int) -> str | None:
+    for name, item in config["styles"].items():
+        if int(item["magic"]) == int(magic):
+            return name
+    return None
+
+
+def daily_stop_check(config: dict) -> dict:
+    total = sum(float(item["daily_stop"]) for item in config["styles"].values())
+    limit = float(config["global"]["daily_stop"])
+    warn = total > limit + 1e-12
+    detail = (
+        f"suma de estilos {total:.2%} vs global {limit:.2%} "
+        f"({len(config['styles'])} estilos)"
+    )
+    if warn:
+        detail += " · un estilo puede consumir el stop global"
+    return {"sum": total, "global": limit, "warn": warn, "detail": detail}
+
+
+# --------------------------------------------------------------- utilidades
 
 
 def _as_utc(value: datetime | None) -> datetime:
@@ -128,6 +349,47 @@ def _session(now: datetime) -> str:
     return "Fuera de sesión"
 
 
+def _prop_rules(settings: Settings | None = None):
+    settings = settings or get_settings()
+    return from_yaml(
+        settings.prop.firm or "ftmo",
+        settings.prop.phase,
+        account_size=float(settings.prop.account_size),
+    )
+
+
+def _reset_start(settings: Settings | None = None) -> datetime:
+    """Inicio del día según el reset de FTMO (``prop/rules.py``)."""
+    try:
+        rules = _prop_rules(settings)
+        zone_name = rules.reset_tz or "Europe/Prague"
+        raw_time = rules.reset_time or "00:00"
+    except Exception:
+        zone_name = (settings.prop.reset_tz if settings else None) or "Europe/Prague"
+        raw_time = "00:00"
+    try:
+        zone = ZoneInfo(zone_name)
+    except ZoneInfoNotFoundError:
+        zone = PRAGUE
+    try:
+        hour, minute = (int(part) for part in raw_time.split(":", 1))
+    except ValueError:
+        hour, minute = 0, 0
+    now = datetime.now(zone)
+    local = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    if local > now:
+        local -= timedelta(days=1)
+    return local.astimezone(timezone.utc)
+
+
+def _day_start(settings: Settings | None = None) -> datetime:
+    return _reset_start(settings)
+
+
+def _reset_date(settings: Settings | None = None) -> str:
+    return _reset_start(settings).date().isoformat()
+
+
 def _quote_rate(broker, instrument) -> float:
     quote = str(getattr(instrument, "quote_ccy", "USD") or "USD").upper()
     if quote == "USD":
@@ -147,32 +409,61 @@ def _lane_positions(broker, magic: int) -> list[dict]:
     return [dict(p) for p in (broker.positions() or []) if int(p.get("magic") or 0) == int(magic)]
 
 
-def _day_start() -> datetime:
-    now = datetime.now(PRAGUE)
-    local = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    return local.astimezone(timezone.utc)
+def _floating_today(positions: list[dict], magic: int,
+                    settings: Settings | None = None) -> float:
+    """Flotante de posiciones abiertas hoy; las antiguas ya contaron su día."""
+    start = _day_start(settings)
+    total = 0.0
+    for position in positions:
+        if int(position.get("magic") or 0) != int(magic):
+            continue
+        stamp = position.get("time")
+        if isinstance(stamp, datetime) and _as_utc(stamp) < start:
+            continue
+        total += float(position.get("profit") or 0.0)
+    return total
 
 
-def _lane_pnl_today(db_path: str | Path, magic: int) -> float:
+def _all_lane_positions(broker, config: dict) -> list[dict]:
+    wanted = {int(item) for item in config["magics"]}
+    return [dict(p) for p in (broker.positions() or []) if int(p.get("magic") or 0) in wanted]
+
+
+def _lane_pnl_today(
+    db_path: str | Path, magic: int, settings: Settings | None = None
+) -> float:
     init_db(db_path)
     with connect(db_path) as con:
         row = con.execute(
             "SELECT COALESCE(SUM(pnl), 0) AS pnl FROM ai_trades "
             "WHERE magic = ? AND status='closed' AND exit_ts >= ?",
-            (magic, _day_start().isoformat()),
+            (magic, _day_start(settings).isoformat()),
         ).fetchone()
     return float(row["pnl"] or 0.0)
 
 
-def _trades_today(db_path: str | Path, magic: int) -> int:
+def _trades_today(
+    db_path: str | Path, magic: int, settings: Settings | None = None
+) -> int:
     init_db(db_path)
     with connect(db_path) as con:
         row = con.execute(
             "SELECT COUNT(*) AS n FROM ai_trades WHERE magic=? AND ts>=? "
             "AND status IN ('open','closed')",
-            (magic, _day_start().isoformat()),
+            (magic, _day_start(settings).isoformat()),
         ).fetchone()
     return int(row["n"])
+
+
+def _open_risk(db_path: str | Path, magic: int) -> float:
+    init_db(db_path)
+    with connect(db_path) as con:
+        row = con.execute(
+            "SELECT COALESCE(SUM(risk_usd), 0) AS risk FROM ai_trades "
+            "WHERE magic=? AND status='open'",
+            (magic,),
+        ).fetchone()
+    return float(row["risk"] or 0.0)
 
 
 def _cell_status(db_path: str | Path, strategy: str, symbol: str, timeframe: str) -> str:
@@ -193,11 +484,30 @@ def _commission_bps(symbol: str, price: float) -> float | None:
         return None
 
 
-def _cost_ratio(symbol: str, price: float, spread: float, stop_distance: float) -> float | None:
+def _cost_ratio(
+    symbol: str,
+    price: float,
+    spread: float,
+    stop_distance: float,
+    *,
+    slippage_points: float = 0.0,
+    point: float | None = None,
+    slippage_bps: float | None = None,
+) -> float | None:
+    """Coste/R en precio: spread + comisión FTMO + slippage del estilo.
+
+    Con ``point`` se usa el slippage en puntos del símbolo (el carril nuevo).
+    Sin ``point`` se conserva el supuesto antiguo de 1 bp por lado.
+    """
     commission = _commission_bps(symbol, price)
     if commission is None or stop_distance <= 0:
         return None
-    cost_price = spread + price * (commission + 1.0) / 10_000.0
+    if point is not None:
+        slippage_price = max(0.0, float(slippage_points)) * float(point)
+    else:
+        basis = 1.0 if slippage_bps is None else float(slippage_bps)
+        slippage_price = price * basis / 10_000.0
+    cost_price = spread + price * commission / 10_000.0 + slippage_price
     return cost_price / stop_distance
 
 
@@ -217,152 +527,362 @@ def _vwap(bars: pd.DataFrame) -> tuple[float, float]:
     return vwap, math.sqrt(max(var, 0.0))
 
 
-def snapshot_symbol(broker, symbol: str, config: dict, db_path: str | Path = DEFAULT_DB) -> dict:
-    key = str(symbol).upper()
-    h4 = broker.rates(symbol, "H4", 3000)
-    h1 = broker.rates(symbol, "H1", 800)
-    m15 = broker.rates(symbol, "M15", 800)
-    for frame in (h4, h1, m15):
-        frame.drop(frame.index[frame.index.duplicated()], inplace=True)
-        frame.sort_index(inplace=True)
-    if len(h4) < 300 or len(h1) < 60 or len(m15) < 60:
-        raise AiTraderError(f"{symbol}: Sin datos suficientes")
-    d1 = _daily(h4)
-    today = pd.Timestamp.now(tz="UTC").normalize()
-    d1 = d1[d1.index < today]
-    if len(d1) < 55:
-        raise AiTraderError(f"{symbol}: Sin datos D1")
-    tick = broker.tick(symbol)
-    price = (float(tick["bid"]) + float(tick["ask"])) / 2.0
-    spread = float(tick["ask"]) - float(tick["bid"])
+def _round_or_none(value: float | None, digits: int = 8):
+    if value is None:
+        return "Sin datos"
+    if not math.isfinite(float(value)):
+        return "Sin datos"
+    return round(float(value), digits)
 
-    m15_atr = float(atr(m15).iloc[-1])
-    h1_atr = float(atr(h1).iloc[-1])
-    d1_atr = float(atr(d1).iloc[-1])
-    vwap, sigma = _vwap(m15[m15.index >= pd.Timestamp.now(tz="UTC").normalize()])
-    et_now = datetime.now(NEW_YORK)
-    et_open = et_now.replace(hour=9, minute=30, second=0, microsecond=0)
-    orb = m15[(m15.index >= et_open.astimezone(timezone.utc)) & (m15.index < (et_open + timedelta(hours=1)).astimezone(timezone.utc))]
-    orb_valid = len(orb) >= 4
-    orb_high = float(orb["high"].max()) if orb_valid else float("nan")
-    orb_low = float(orb["low"].min()) if orb_valid else float("nan")
 
-    mid = _sma(h1["close"], 20)
-    sd = float(h1["close"].rolling(20).std(ddof=0).iloc[-1])
+def _block_from_bars(bars: pd.DataFrame, timeframe: str, d1: pd.DataFrame,
+                     price: float, now: datetime) -> dict:
+    """Indicadores comunes de un timeframe. No inventa: si falta, Sin datos."""
+    if bars is None or len(bars) < 55:
+        raise AiTraderError(f"Sin datos {timeframe}")
+    minutes = TF_MINUTES.get(timeframe, 15)
+    atr_value = float(atr(bars).iloc[-1])
+    mid = _sma(bars["close"], 20)
+    sd = float(bars["close"].rolling(20).std(ddof=0).iloc[-1])
     bb_upper, bb_lower = mid + 2 * sd, mid - 2 * sd
     width = (bb_upper - bb_lower) / mid if mid else float("nan")
-    mean20 = h1["close"].rolling(20).mean()
-    sd20 = h1["close"].rolling(20).std(ddof=0)
+    mean20 = bars["close"].rolling(20).mean()
+    sd20 = bars["close"].rolling(20).std(ddof=0)
     width_series = 4 * sd20 / mean20
     squeeze = bool(pd.notna(width) and width <= float(width_series.tail(120).min()))
 
-    london_start = datetime.now(LONDON).replace(hour=0, minute=0, second=0, microsecond=0)
-    asian = h1[(h1.index >= london_start.astimezone(timezone.utc)) & (h1.index < (london_start + timedelta(hours=7)).astimezone(timezone.utc))]
-    asian_valid = len(asian) >= 4
+    day_start = _as_utc(now).replace(hour=0, minute=0, second=0, microsecond=0)
+    session_bars = bars[bars.index >= day_start]
+    if len(session_bars) == 0:
+        session_bars = bars.tail(1)
+    vwap, sigma = _vwap(session_bars)
+
+    et_now = now.astimezone(NEW_YORK)
+    et_open = et_now.replace(hour=9, minute=30, second=0, microsecond=0)
+    expected_orb = max(1, 60 // minutes)
+    orb = bars[(bars.index >= et_open.astimezone(timezone.utc))
+               & (bars.index < (et_open + timedelta(hours=1)).astimezone(timezone.utc))]
+    orb_valid = len(orb) >= expected_orb
+    orb_high = float(orb["high"].max()) if orb_valid else float("nan")
+    orb_low = float(orb["low"].min()) if orb_valid else float("nan")
+
+    london_start = now.astimezone(LONDON).replace(hour=0, minute=0, second=0, microsecond=0)
+    expected_asian = max(1, 420 // minutes)
+    asian = bars[(bars.index >= london_start.astimezone(timezone.utc))
+                 & (bars.index < (london_start + timedelta(hours=7)).astimezone(timezone.utc))]
+    asian_valid = len(asian) >= expected_asian
     asian_high = float(asian["high"].max()) if asian_valid else float("nan")
     asian_low = float(asian["low"].min()) if asian_valid else float("nan")
 
     prev = d1.iloc[-1]
     prev_high, prev_low = float(prev["high"]), float(prev["low"])
     prev_mid = (prev_high + prev_low) / 2
-    last_h1 = h1.iloc[-1]
-    sweep_high = bool(float(last_h1["high"]) > prev_high and float(last_h1["close"]) < prev_high)
-    sweep_low = bool(float(last_h1["low"]) < prev_low and float(last_h1["close"]) > prev_low)
+    last = bars.iloc[-1]
+    sweep_high = bool(float(last["high"]) > prev_high and float(last["close"]) < prev_high)
+    sweep_low = bool(float(last["low"]) < prev_low and float(last["close"]) > prev_low)
 
-    dc20_high = float(d1["high"].rolling(20).max().iloc[-1])
-    dc20_low = float(d1["low"].rolling(20).min().iloc[-1])
-    dc55_high = float(d1["high"].rolling(55).max().iloc[-1])
-    dc55_low = float(d1["low"].rolling(55).min().iloc[-1])
+    block = {
+        "atr": _round_or_none(atr_value),
+        "ema9": _round_or_none(float(ema(bars["close"], 9).iloc[-1])),
+        "ema21": _round_or_none(float(ema(bars["close"], 21).iloc[-1])),
+        "ema50": _round_or_none(float(ema(bars["close"], 50).iloc[-1])),
+        "bb_upper": _round_or_none(bb_upper),
+        "bb_mid": _round_or_none(mid),
+        "bb_lower": _round_or_none(bb_lower),
+        "bb_width": _round_or_none(width, 6),
+        "bb_squeeze": squeeze,
+        "vwap": _round_or_none(vwap),
+        "vwap_sigma": _round_or_none(sigma),
+        "orb_high": _round_or_none(orb_high if orb_valid else None),
+        "orb_low": _round_or_none(orb_low if orb_valid else None),
+        "orb_valid": orb_valid,
+        "asian_high": _round_or_none(asian_high if asian_valid else None),
+        "asian_low": _round_or_none(asian_low if asian_valid else None),
+        "asian_valid": asian_valid,
+        "prev_high": round(prev_high, 8),
+        "prev_low": round(prev_low, 8),
+        "prev_mid": round(prev_mid, 8),
+        "sweep_high": sweep_high,
+        "sweep_low": sweep_low,
+        "open": round(float(last["open"]), 8),
+        "high": round(float(last["high"]), 8),
+        "low": round(float(last["low"]), 8),
+        "close": round(float(last["close"]), 8),
+    }
+    if timeframe in {"H4", "D1"} and len(bars) >= 3:
+        prev_bar, mother = bars.iloc[-2], bars.iloc[-3]
+        block.update({
+            "mother_high": round(float(mother["high"]), 8),
+            "mother_low": round(float(mother["low"]), 8),
+            "inside_bar": bool(
+                float(prev_bar["high"]) <= float(mother["high"])
+                and float(prev_bar["low"]) >= float(mother["low"])
+            ),
+        })
+    if timeframe == "D1":
+        block.update({
+            "sma5": _round_or_none(_sma(d1["close"], 5)),
+            "sma20": _round_or_none(_sma(d1["close"], 20)),
+            "sma200": _round_or_none(_sma(d1["close"], 200)),
+            "rsi2": round(_rsi(d1["close"], 2), 2),
+            "dc20_high": round(float(d1["high"].rolling(20).max().iloc[-1]), 8),
+            "dc20_low": round(float(d1["low"].rolling(20).min().iloc[-1]), 8),
+            "dc55_high": round(float(d1["high"].rolling(55).max().iloc[-1]), 8),
+            "dc55_low": round(float(d1["low"].rolling(55).min().iloc[-1]), 8),
+            "prev_close": round(float(prev["close"]), 8),
+        })
+    return block
+
+
+def _daily_block(d1: pd.DataFrame) -> dict:
+    prev = d1.iloc[-1]
     mother = d1.iloc[-2]
-    inside = bool(float(prev["high"]) <= float(mother["high"]) and float(prev["low"]) >= float(mother["low"]))
+    price = float(prev["close"])
+    return {
+        "atr": _round_or_none(float(atr(d1).iloc[-1])),
+        "sma5": _round_or_none(_sma(d1["close"], 5)),
+        "sma20": _round_or_none(_sma(d1["close"], 20)),
+        "sma200": _round_or_none(_sma(d1["close"], 200)),
+        "rsi2": round(_rsi(d1["close"], 2), 2),
+        "dc20_high": round(float(d1["high"].rolling(20).max().iloc[-1]), 8),
+        "dc20_low": round(float(d1["low"].rolling(20).min().iloc[-1]), 8),
+        "dc55_high": round(float(d1["high"].rolling(55).max().iloc[-1]), 8),
+        "dc55_low": round(float(d1["low"].rolling(55).min().iloc[-1]), 8),
+        "prev_high": round(float(prev["high"]), 8),
+        "prev_low": round(float(prev["low"]), 8),
+        "prev_close": round(float(prev["close"]), 8),
+        "mother_high": round(float(mother["high"]), 8),
+        "mother_low": round(float(mother["low"]), 8),
+        "inside_bar": bool(
+            float(prev["high"]) <= float(mother["high"])
+            and float(prev["low"]) >= float(mother["low"])
+        ),
+        "open": round(float(prev["open"]), 8),
+        "high": round(float(prev["high"]), 8),
+        "low": round(float(prev["low"]), 8),
+        "close": round(price, 8),
+        "vwap": round(price, 8),
+        "vwap_sigma": 0.0,
+        "ema9": _round_or_none(float(ema(d1["close"], 9).iloc[-1])),
+        "ema21": _round_or_none(float(ema(d1["close"], 21).iloc[-1])),
+        "ema50": _round_or_none(float(ema(d1["close"], 50).iloc[-1])),
+        "bb_upper": "Sin datos",
+        "bb_mid": "Sin datos",
+        "bb_lower": "Sin datos",
+        "bb_width": "Sin datos",
+        "bb_squeeze": False,
+        "orb_high": "Sin datos",
+        "orb_low": "Sin datos",
+        "orb_valid": False,
+        "asian_high": "Sin datos",
+        "asian_low": "Sin datos",
+        "asian_valid": False,
+        "prev_mid": round((float(prev["high"]) + float(prev["low"])) / 2, 8),
+        "sweep_high": False,
+        "sweep_low": False,
+    }
 
+
+def _clean(frame: pd.DataFrame) -> pd.DataFrame:
+    frame = frame.drop(frame.index[frame.index.duplicated()])
+    frame.sort_index(inplace=True)
+    return frame
+
+
+def _safe_rates(broker, symbol: str, timeframe: str, count: int) -> pd.DataFrame | None:
+    """Velas del bróker; si el offset no se puede confirmar, Sin datos."""
+    try:
+        frame = broker.rates(symbol, timeframe, count)
+    except Exception:
+        return None
+    if frame is None or len(frame) == 0:
+        return None
+    return _clean(frame)
+
+
+def _empty_block(reason: str) -> dict:
+    return {
+        "error": reason,
+        "atr": "Sin datos", "ema9": "Sin datos", "ema21": "Sin datos",
+        "ema50": "Sin datos", "bb_upper": "Sin datos", "bb_mid": "Sin datos",
+        "bb_lower": "Sin datos", "bb_width": "Sin datos", "bb_squeeze": False,
+        "vwap": "Sin datos", "vwap_sigma": "Sin datos",
+        "orb_high": "Sin datos", "orb_low": "Sin datos", "orb_valid": False,
+        "asian_high": "Sin datos", "asian_low": "Sin datos", "asian_valid": False,
+        "prev_high": "Sin datos", "prev_low": "Sin datos", "prev_mid": "Sin datos",
+        "sweep_high": False, "sweep_low": False,
+        "open": "Sin datos", "high": "Sin datos", "low": "Sin datos",
+        "close": "Sin datos",
+    }
+
+
+def session_open(style: dict, now: datetime | None = None) -> bool | None:
+    """True/False si el estilo tiene ventana; None si opera 24 h."""
+    window = style.get("session")
+    if not window:
+        return None
+    zone = ZoneInfo(window["tz"])
+    local = _as_utc(now).astimezone(zone)
+    start = dtime.fromisoformat(window["start"])
+    end = dtime.fromisoformat(window["end"])
+    current = local.time()
+    if start <= end:
+        return start <= current <= end
+    return current >= start or current <= end
+
+
+def snapshot_symbol(broker, symbol: str, config: dict,
+                    db_path: str | Path = DEFAULT_DB,
+                    style: str | None = None) -> dict:
+    key = str(symbol).upper()
+    counts = {"M1": 20_000, "M5": 6_000, "M15": 2_000, "H1": 1_000, "H4": 3_000}
+    frames = {
+        tf: _safe_rates(broker, symbol, tf, count)
+        for tf, count in counts.items()
+    }
+    tick = broker.tick(symbol)
+    price = (float(tick["bid"]) + float(tick["ask"])) / 2.0
+    spread = float(tick["ask"]) - float(tick["bid"])
+    now = datetime.now(timezone.utc)
+
+    d1 = None
+    if frames["H4"] is not None and len(frames["H4"]) >= 300:
+        raw_daily = _daily(frames["H4"])
+        today = pd.Timestamp.now(tz="UTC").normalize()
+        raw_daily = raw_daily[raw_daily.index < today]
+        if len(raw_daily) >= 55:
+            d1 = raw_daily
+
+    blocks = {}
+    for tf, bars in frames.items():
+        if bars is None or len(bars) < 55:
+            blocks[tf] = _empty_block(f"{symbol} {tf}")
+            continue
+        if d1 is None:
+            blocks[tf] = _empty_block(f"{symbol} D1")
+            continue
+        blocks[tf] = _block_from_bars(bars, tf, d1, price, now)
+    blocks["D1"] = _daily_block(d1) if d1 is not None else _empty_block(f"{symbol} D1")
+
+    spec = broker.symbol_spec(symbol)
+    point = float(spec.get("point") or 0.0)
     costs = {}
-    for tf, atr_value in (("M15", m15_atr), ("H1", h1_atr), ("D1", d1_atr)):
-        ratio = _cost_ratio(symbol, price, spread, atr_value)
+    for tf in TIMEFRAMES:
+        raw_atr = blocks[tf].get("atr")
+        try:
+            atr_value = float(raw_atr)
+        except (TypeError, ValueError):
+            atr_value = 0.0
+        ratio = _cost_ratio(
+            symbol, price, spread, atr_value,
+            slippage_points=1.0, point=point,
+        ) if point and atr_value > 0 else None
         costs[tf] = round(ratio, 4) if ratio is not None else "Sin datos"
 
-    lane = _lane_positions(broker, config["magic"])
+    positions = _all_lane_positions(broker, config)
     equity = float(broker.health().get("equity") or 0.0)
-    pnl = _lane_pnl_today(db_path, config["magic"])
-    return {
+    style_payload = {}
+    total_today = 0
+    for name, item in config["styles"].items():
+        lane = [p for p in positions if int(p.get("magic") or 0) == int(item["magic"])]
+        same = [p for p in lane if str(p.get("symbol", "")).upper() == key]
+        pnl = _lane_pnl_today(db_path, item["magic"])
+        pnl += _floating_today(lane, item["magic"])
+        today_trades = _trades_today(db_path, item["magic"])
+        total_today += today_trades
+        limit = equity * item["daily_stop"]
+        style_payload[name] = {
+            "magic": item["magic"],
+            "risk_per_trade": item["risk_per_trade"],
+            "daily_stop": item["daily_stop"],
+            "max_trades_per_day": item["max_trades_per_day"],
+            "max_cost_r": item["max_cost_r"],
+            "timeframes": item["timeframes"],
+            "session_open": session_open(item),
+            "lane_open": len(lane),
+            "lane_open_symbol": len(same),
+            "trades_today": today_trades,
+            "pnl_today": round(pnl, 2),
+            "daily_stop_remaining": round(limit - max(0.0, -pnl), 2),
+            "daily_stop_hit": bool(pnl <= -limit + 1e-9),
+            "cost_r": {tf: costs.get(tf) for tf in item["timeframes"]},
+        }
+
+    style_pnl = sum(float(item["pnl_today"]) for item in style_payload.values())
+    global_limit = equity * config["global"]["daily_stop"]
+    payload = {
         "symbol": symbol,
         "is_index": "US100" in key,
         "price": round(price, 8),
         "spread": round(spread, 8),
-        "session": _session(datetime.now(timezone.utc)),
+        "point": point,
+        "session": _session(now),
         "cost_r": costs,
-        "m15": {
-            "atr": round(m15_atr, 8),
-            "ema9": round(float(ema(m15["close"], 9).iloc[-1]), 8),
-            "ema21": round(float(ema(m15["close"], 21).iloc[-1]), 8),
-            "ema50": round(float(ema(m15["close"], 50).iloc[-1]), 8),
-            "vwap": round(vwap, 8),
-            "vwap_sigma": round(sigma, 8),
-            "orb_high": round(orb_high, 8) if orb_valid else "Sin datos",
-            "orb_low": round(orb_low, 8) if orb_valid else "Sin datos",
-            "orb_valid": orb_valid,
-            "close": round(float(m15["close"].iloc[-1]), 8),
-        },
-        "h1": {
-            "atr": round(h1_atr, 8),
-            "ema9": round(float(ema(h1["close"], 9).iloc[-1]), 8),
-            "ema21": round(float(ema(h1["close"], 21).iloc[-1]), 8),
-            "ema50": round(float(ema(h1["close"], 50).iloc[-1]), 8),
-            "bb_upper": round(bb_upper, 8),
-            "bb_mid": round(mid, 8),
-            "bb_lower": round(bb_lower, 8),
-            "bb_width": round(width, 6),
-            "bb_squeeze": squeeze,
-            "asian_high": round(asian_high, 8) if asian_valid else "Sin datos",
-            "asian_low": round(asian_low, 8) if asian_valid else "Sin datos",
-            "asian_valid": asian_valid,
-            "prev_high": round(prev_high, 8),
-            "prev_low": round(prev_low, 8),
-            "prev_mid": round(prev_mid, 8),
-            "sweep_high": sweep_high,
-            "sweep_low": sweep_low,
-            "open": round(float(last_h1["open"]), 8),
-            "high": round(float(last_h1["high"]), 8),
-            "low": round(float(last_h1["low"]), 8),
-            "close": round(float(last_h1["close"]), 8),
-        },
-        "d1": {
-            "atr": round(d1_atr, 8),
-            "sma5": round(_sma(d1["close"], 5), 8),
-            "sma20": round(_sma(d1["close"], 20), 8),
-            "sma200": round(_sma(d1["close"], 200), 8),
-            "rsi2": round(_rsi(d1["close"], 2), 2),
-            "dc20_high": round(dc20_high, 8),
-            "dc20_low": round(dc20_low, 8),
-            "dc55_high": round(dc55_high, 8),
-            "dc55_low": round(dc55_low, 8),
-            "prev_high": round(prev_high, 8),
-            "prev_low": round(prev_low, 8),
-            "prev_close": round(float(prev["close"]), 8),
-            "mother_high": round(float(mother["high"]), 8),
-            "mother_low": round(float(mother["low"]), 8),
-            "inside_bar": inside,
-        },
-        "lane_open": len(lane),
-        "lane_open_symbol": sum(1 for p in lane if str(p.get("symbol", "")).upper() == key),
-        "trades_today": _trades_today(db_path, config["magic"]),
-        "daily_stop_remaining": round(equity * config["daily_stop"] - max(0.0, -pnl), 2),
+        "styles": style_payload,
+        "active_style": style,
+        "lane_open": len(positions),
+        "lane_open_symbol": sum(1 for p in positions if str(p.get("symbol", "")).upper() == key),
+        "trades_today": total_today,
+        "daily_stop_remaining": round(global_limit - max(0.0, -style_pnl), 2),
+        "daily_stop_hit": bool(style_pnl <= -global_limit + 1e-9),
         "equity": round(equity, 2),
-        "magic": config["magic"],
+        "magic": config.get("magic"),
+        "magics": config["magics"],
         "playbook_version": config["playbook_version"],
     }
+    for tf, block in blocks.items():
+        payload[TF_SECTION[tf]] = block
+    return payload
 
 
-def snapshot(broker, symbols: list[str] | None = None, config: dict | None = None, db_path: str | Path = DEFAULT_DB) -> dict:
+def snapshot(broker, symbols: list[str] | None = None,
+             config: dict | None = None,
+             db_path: str | Path = DEFAULT_DB) -> dict:
     cfg = config or load_config()
     wanted = [str(item) for item in (symbols or cfg["universe"])]
     payload = {sym: snapshot_symbol(broker, sym, cfg, db_path) for sym in wanted}
-    return {"generated_at": utcnow(), "playbook_version": cfg["playbook_version"], "symbols": payload}
+    return {
+        "generated_at": utcnow(),
+        "account": cfg["account"],
+        "playbook_version": cfg["playbook_version"],
+        "magics": cfg["magics"],
+        "global": cfg["global"],
+        "styles": {
+            name: {
+                "magic": item["magic"],
+                "risk_per_trade": item["risk_per_trade"],
+                "daily_stop": item["daily_stop"],
+                "max_trades_per_day": item["max_trades_per_day"],
+                "max_cost_r": item["max_cost_r"],
+                "universe": item["universe"],
+                "timeframes": item["timeframes"],
+                "session": item["session"],
+                "session_open": session_open(item),
+            }
+            for name, item in cfg["styles"].items()
+        },
+        "symbols": payload,
+    }
 
 
 def _snapshot_hash(payload: dict) -> str:
     raw = json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+# ------------------------------------------------------------ validación
+
+
+def _infer_style(config: dict, symbol: str, strategy: str, timeframe: str) -> str:
+    matches = [
+        name for name, item in config["styles"].items()
+        if timeframe in item["allowed"].get(symbol.upper(), {}).get(strategy, [])
+    ]
+    if len(matches) == 1:
+        return matches[0]
+    if not matches:
+        raise AiTraderError(f"{strategy} no asignada a {symbol} para {timeframe}")
+    raise AiTraderError("style obligatorio: la combinación está en varios estilos")
 
 
 def _validate_payload(payload: dict, config: dict) -> dict:
@@ -372,14 +892,31 @@ def _validate_payload(payload: dict, config: dict) -> dict:
     universe = {str(item).lower(): str(item) for item in config["universe"]}
     if symbol.lower() not in universe:
         raise AiTraderError(f"símbolo fuera del universo: {symbol}")
+    canonical = universe[symbol.lower()]
     strategy = str(payload.get("strategy") or payload.get("setup") or "").strip()
     if strategy not in STRATEGY_TIMEFRAME:
         raise AiTraderError(f"estrategia desconocida: {strategy}")
-    timeframe = str(payload.get("timeframe") or STRATEGY_TIMEFRAME[strategy]).strip().upper()
-    if timeframe not in config["timeframes"]:
-        raise AiTraderError(f"timeframe no permitido: {timeframe}")
-    if STRATEGY_TIMEFRAME[strategy] != timeframe:
-        raise AiTraderError(f"{strategy} usa {STRATEGY_TIMEFRAME[strategy]}, no {timeframe}")
+    timeframe = str(
+        payload.get("timeframe") or STRATEGY_TIMEFRAME[strategy]
+    ).strip().upper()
+    if not supports(strategy, timeframe):
+        raise AiTraderError(f"{strategy} no soporta {timeframe}")
+    raw_style = str(payload.get("style") or "").strip()
+    style = raw_style or _infer_style(config, canonical, strategy, timeframe)
+    item = style_config(config, style)
+    if not item["enabled"]:
+        raise AiTraderError(f"estilo {style} deshabilitado")
+    if canonical.upper() not in {s.upper() for s in item["universe"]}:
+        raise AiTraderError(f"{canonical} fuera del universo de {style}")
+    allowed = item["allowed"].get(canonical.upper(), {}).get(strategy, [])
+    if not allowed:
+        raise AiTraderError(f"{strategy} no asignada a {canonical} en {style}")
+    if timeframe not in item["timeframes"]:
+        raise AiTraderError(f"timeframe no permitido para {style}: {timeframe}")
+    if timeframe not in allowed:
+        raise AiTraderError(
+            f"{strategy} no asignada a {canonical} en {style} para {timeframe}"
+        )
     side = str(payload.get("side") or "").strip().lower()
     if side not in {"buy", "sell"}:
         raise AiTraderError("side debe ser buy o sell")
@@ -393,7 +930,8 @@ def _validate_payload(payload: dict, config: dict) -> dict:
     if not 1 <= confidence <= 5:
         raise AiTraderError("confidence debe estar entre 1 y 5")
     return {
-        "symbol": universe[symbol.lower()],
+        "style": style,
+        "symbol": canonical,
         "strategy": strategy,
         "timeframe": timeframe,
         "side": side,
@@ -402,7 +940,8 @@ def _validate_payload(payload: dict, config: dict) -> dict:
     }
 
 
-def _volume_for_risk(broker, symbol: str, stop_distance: float, risk_usd: float) -> tuple[float, float, float]:
+def _volume_for_risk(broker, symbol: str, stop_distance: float,
+                     risk_usd: float) -> tuple[float, float, float]:
     instrument = broker.instrument(symbol)
     spec = broker.symbol_spec(symbol)
     rate = _quote_rate(broker, instrument)
@@ -414,9 +953,14 @@ def _volume_for_risk(broker, symbol: str, stop_distance: float, risk_usd: float)
     maximum = float(spec.get("volume_max") or 0.0)
     lots = math.floor((risk_usd / risk_per_lot) / step + 1e-9) * step
     lots = round(lots, 8)
-    if maximum and lots > maximum:
-        lots = maximum
-    if lots <= 0 or lots < minimum:
+    if maximum > 0 and lots > maximum:
+        lots = math.floor((maximum / step) + 1e-9) * step
+        lots = round(lots, 8)
+    if maximum > 0 and maximum < minimum - 1e-12:
+        raise AiTraderError(
+            f"volume_max {maximum:g} < volume_min {minimum:g}: símbolo no operable"
+        )
+    if lots <= 0 or lots < minimum - 1e-12:
         raise AiTraderError(
             f"volumen {lots:.4f} < mínimo {minimum}: stop demasiado ancho "
             f"(riesgo mínimo {minimum * risk_per_lot:.2f} > {risk_usd:.2f})"
@@ -424,70 +968,272 @@ def _volume_for_risk(broker, symbol: str, stop_distance: float, risk_usd: float)
     return lots, lots * risk_per_lot, risk_per_lot
 
 
-def propose(payload: dict, *, broker, config: dict | None = None, settings: Settings | None = None, db_path: str | Path = DEFAULT_DB) -> dict:
-    cfg = config or load_config()
-    settings = settings or get_settings()
-    if not cfg["enabled"]:
-        raise AiTraderError("carril ai_trader deshabilitado")
+# --------------------------------------------------------------- decisiones
+
+
+def _json_snapshot(value) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError as exc:
+            raise AiTraderError(f"snapshot no es JSON válido: {exc}") from exc
+        value = parsed
+    try:
+        return json.dumps(value, ensure_ascii=False, separators=(",", ":"), default=str)
+    except (TypeError, ValueError) as exc:
+        raise AiTraderError(f"snapshot no serializable: {exc}") from exc
+
+
+def _record_decision(
+    *,
+    db_path: str | Path,
+    config: dict,
+    style: str,
+    symbol: str,
+    timeframe: str | None,
+    strategy: str,
+    setup_valid: bool,
+    decision: str,
+    reason: str,
+    confidence: int | None = None,
+    snapshot_payload=None,
+    source: str = "forward",
+    plan_id: str | None = None,
+    settings: Settings | None = None,
+) -> dict:
+    if decision not in DECISIONS:
+        raise AiTraderError(f"decisión inválida: {decision}")
+    if source not in SOURCES:
+        raise AiTraderError(f"source inválido: {source}")
+    text = str(reason or "").strip()
+    if not text:
+        raise AiTraderError("motivo obligatorio y <= 200 caracteres")
+    text = text[:200]
+    init_db(db_path)
+    with connect(db_path) as con:
+        cursor = con.execute(
+            "INSERT INTO ai_decisions"
+            "(ts, decision_date, session, style, symbol, timeframe, strategy, "
+            " setup_valid, decision, reason, confidence, snapshot, "
+            " playbook_version, source, plan_id) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (
+                utcnow(),
+                _reset_date(settings),
+                _session(datetime.now(timezone.utc)),
+                style,
+                symbol,
+                timeframe,
+                strategy,
+                1 if setup_valid else 0,
+                decision,
+                text,
+                confidence,
+                _json_snapshot(snapshot_payload),
+                config["playbook_version"],
+                source,
+                plan_id,
+            ),
+        )
+        decision_id = int(cursor.lastrowid)
+    return {"id": decision_id, "decision": decision, "reason": text}
+
+
+def _audit(db_path: str | Path, action: str, params: dict, result: str,
+           detail: str = "", ok: int = 1) -> None:
+    init_db(db_path)
+    with connect(db_path) as con:
+        append_hashed(con, "console_actions", {
+            "ts": utcnow(),
+            "action": action,
+            "params": json.dumps(params, ensure_ascii=False, sort_keys=True, default=str),
+            "result": result,
+            "ok": ok,
+            "actor": "opencode",
+            "detail": str(detail)[:400],
+        })
+
+
+def _assert_demo(broker) -> dict:
     health = broker.health()
     if str(health.get("mode")) != "demo":
         raise AiTraderError("solo demo: la cuenta no es demo")
-    item = _validate_payload(payload, cfg)
-    assigned = (cfg["allowed"].get(item["symbol"].upper()) or {}).get(item["strategy"])
-    if assigned != item["timeframe"]:
-        raise AiTraderError(f"{item['strategy']} no asignada a {item['symbol']} ({assigned})")
-    if _cell_status(db_path, item["strategy"], item["symbol"], item["timeframe"]) == "paused":
-        raise AiTraderError("celda pausada por el scoreboard; requiere reactivación del operador")
-    lane = _lane_positions(broker, cfg["magic"])
-    if len(lane) >= cfg["max_open_total"]:
-        raise AiTraderError(f"máximo de posiciones del carril alcanzado ({cfg['max_open_total']})")
-    same = [p for p in lane if str(p.get("symbol", "")).upper() == item["symbol"].upper()]
-    if len(same) >= cfg["max_open_per_symbol"]:
-        raise AiTraderError(f"{item['symbol']}: ya hay una posición del carril abierta")
-    if _trades_today(db_path, cfg["magic"]) >= cfg["max_trades_per_day"]:
-        raise AiTraderError("máximo de operaciones del carril alcanzado hoy")
-    equity = float(health.get("equity") or 0.0)
-    pnl_today = _lane_pnl_today(db_path, cfg["magic"])
-    if pnl_today <= -equity * cfg["daily_stop"]:
-        raise AiTraderError("stop diario del carril tocado: no se abre hasta el reset de FTMO")
+    return health
 
-    snap = snapshot_symbol(broker, item["symbol"], cfg, db_path)
-    ok, reason = validate(item["strategy"], item["side"], snap)
+
+def _daily_state(db_path: str | Path, config: dict, equity: float,
+                 broker=None, settings: Settings | None = None) -> dict:
+    """PnL del día por estilo y global (cerrado + flotante del carril)."""
+    positions = []
+    if broker is not None:
+        positions = _all_lane_positions(broker, config)
+    styles_out = {}
+    for name, item in config["styles"].items():
+        magic = int(item["magic"])
+        pnl = _lane_pnl_today(db_path, magic, settings)
+        pnl += _floating_today(positions, magic, settings)
+        limit = float(equity) * float(item["daily_stop"])
+        styles_out[name] = {
+            "pnl": round(pnl, 4),
+            "limit_usd": round(limit, 2),
+            "remaining_usd": round(limit - max(0.0, -pnl), 2),
+            "hit": bool(limit > 0 and pnl <= -limit + 1e-9),
+        }
+    total = sum(float(item["pnl"]) for item in styles_out.values())
+    global_limit = float(equity) * float(config["global"]["daily_stop"])
+    out = {
+        "styles": styles_out,
+        "global": {
+            "pnl": round(total, 4),
+            "limit_usd": round(global_limit, 2),
+            "remaining_usd": round(global_limit - max(0.0, -total), 2),
+            "hit": bool(global_limit > 0 and total <= -global_limit + 1e-9),
+        },
+        "equity": round(float(equity), 2),
+    }
+    return out
+
+
+def daily_stop_state(db_path: str | Path = DEFAULT_DB, config: dict | None = None,
+                     *, equity: float, broker=None,
+                     settings: Settings | None = None) -> dict:
+    cfg = config or load_config()
+    return _daily_state(db_path, cfg, equity, broker=broker, settings=settings)
+
+
+# ------------------------------------------------------------------ propose
+
+
+def _propose(item: dict, *, broker, cfg: dict, settings: Settings,
+             db_path: str | Path) -> dict:
+    style_name = item["style"]
+    style = cfg["styles"][style_name]
+    if not cfg["enabled"]:
+        raise AiTraderError("carril ai_trader deshabilitado")
+    health = _assert_demo(broker)
+    if not style["enabled"]:
+        raise AiTraderError(f"estilo {style_name} deshabilitado")
+    is_open = session_open(style)
+    if is_open is False:
+        window = style["session"]
+        raise _Reject(
+            f"{style_name}: fuera de ventana {window['start']}-{window['end']} "
+            f"{window['tz']}",
+            decision="skip", setup_valid=0,
+        )
+    if _cell_status(db_path, item["strategy"], item["symbol"], item["timeframe"]) == "paused":
+        raise _Reject(
+            "celda pausada por el scoreboard; requiere reactivación del operador",
+            decision="skip", setup_valid=1,
+        )
+    all_positions = _all_lane_positions(broker, cfg)
+    if len(all_positions) >= cfg["global"]["max_open_total"]:
+        raise _Reject(
+            f"máximo global de posiciones alcanzado ({cfg['global']['max_open_total']})",
+            decision="skip", setup_valid=1,
+        )
+    lane = [p for p in all_positions if int(p.get("magic") or 0) == int(style["magic"])]
+    same = [p for p in lane if str(p.get("symbol", "")).upper() == item["symbol"].upper()]
+    if len(same) >= cfg["global"]["max_open_per_symbol_per_style"]:
+        raise _Reject(
+            f"{item['symbol']}: {style_name} ya tiene una posición abierta",
+            decision="skip", setup_valid=1,
+        )
+    max_trades = style["max_trades_per_day"]
+    if max_trades is not None and _trades_today(db_path, style["magic"], settings) >= max_trades:
+        raise _Reject(
+            f"{style_name}: máximo de operaciones diarias alcanzado ({max_trades})",
+            decision="skip", setup_valid=1,
+        )
+    equity = float(health.get("equity") or 0.0)
+    daily = _daily_state(db_path, cfg, equity, broker=broker, settings=settings)
+    if daily["global"]["hit"]:
+        raise _Reject(
+            "stop diario global tocado: no se abre hasta el reset de FTMO",
+            decision="skip", setup_valid=1,
+        )
+    if daily["styles"][style_name]["hit"]:
+        raise _Reject(
+            f"stop diario del estilo {style_name} tocado: no se abre hasta el reset de FTMO",
+            decision="skip", setup_valid=1,
+        )
+
+    snap = snapshot_symbol(broker, item["symbol"], cfg, db_path, style=style_name)
+    ok, reason = validate(item["strategy"], item["side"], snap, item["timeframe"])
     if not ok:
-        raise AiTraderError(f"setup no válido: {reason}")
+        raise _Reject(f"setup no válido: {reason}", decision="no_setup",
+                      setup_valid=0, snapshot=snap)
     try:
-        level = plan(item["strategy"], item["side"], snap)
+        level = plan(item["strategy"], item["side"], snap, item["timeframe"])
     except SetupError as exc:
-        raise AiTraderError(f"setup no válido: {exc}") from exc
+        raise _Reject(f"setup no válido: {exc}", decision="no_setup",
+                      setup_valid=0, snapshot=snap) from exc
     tick = broker.tick(item["symbol"])
     entry = float(tick["ask"] if item["side"] == "buy" else tick["bid"])
     dist = abs(entry - level.sl)
     sl = level.sl
     tp = level.tp
     if dist <= 0:
-        raise AiTraderError("distancia de stop no positiva")
+        raise _Reject("distancia de stop no positiva", decision="skip",
+                      setup_valid=1, snapshot=snap)
     price = float(snap["price"])
     spec = broker.symbol_spec(item["symbol"])
-    min_sl = max(3 * float(snap["spread"]), float(spec.get("stops_level") or 0) * float(spec.get("point") or 0))
+    point = float(spec.get("point") or 0.0)
+    min_sl = max(
+        3 * float(snap["spread"]),
+        float(spec.get("stops_level") or 0) * point,
+    )
     if dist < min_sl - 1e-12:
-        raise AiTraderError(f"SL {dist:.5f} < mínimo {min_sl:.5f} (3×spread o stops_level)")
-    cost_ratio = _cost_ratio(item["symbol"], price, float(snap["spread"]), dist)
+        raise _Reject(
+            f"SL {dist:.5f} < mínimo {min_sl:.5f} (3×spread o stops_level)",
+            decision="skip", setup_valid=1, snapshot=snap,
+        )
+    cost_ratio = _cost_ratio(
+        item["symbol"], price, float(snap["spread"]), dist,
+        slippage_points=style["slippage_points"], point=point,
+    )
     if cost_ratio is None:
-        raise AiTraderError("coste/R Sin datos: comisión no verificada")
-    if cost_ratio > 0.10:
-        raise AiTraderError(f"coste/R {cost_ratio:.3f} > 0.10")
-    risk_usd = equity * cfg["risk_per_trade"]
-    lots, real_risk, risk_per_lot = _volume_for_risk(broker, item["symbol"], dist, risk_usd)
+        raise _Reject("coste/R Sin datos: comisión no verificada",
+                      decision="skip", setup_valid=1, snapshot=snap)
+    max_cost = style["max_cost_r"]
+    if max_cost is not None and cost_ratio > float(max_cost) + 1e-12:
+        raise _Reject(
+            f"coste/R {cost_ratio:.3f} > {float(max_cost):.2f}",
+            decision="skip", setup_valid=1, snapshot=snap,
+        )
+    risk_usd = equity * float(style["risk_per_trade"])
+    lots, real_risk, risk_per_lot = _volume_for_risk(
+        broker, item["symbol"], dist, risk_usd
+    )
+    if style["max_open_risk"] is not None:
+        open_risk = _open_risk(db_path, style["magic"])
+        cap = equity * float(style["max_open_risk"])
+        if open_risk + real_risk > cap + 1e-9:
+            raise _Reject(
+                f"riesgo abierto de {style_name} {open_risk + real_risk:.2f} > "
+                f"{cap:.2f} ({style['max_open_risk']:.1%})",
+                decision="skip", setup_valid=1, snapshot=snap,
+            )
 
-    rules = from_yaml("ftmo", settings.prop.phase, account_size=float(settings.prop.account_size))
+    rules = _prop_rules(settings)
     guard = PropGuard(rules)
     try:
-        state = PropGuard.state_from_equity(rules, broker.equity_series(), initial_balance=rules.account_size, open_positions=len(broker.positions()))
-        report = guard.evaluate(state, proposed_lots=lots, risk_per_lot=risk_per_lot, open_risk_usd=0.0, new_position=True)
+        state = PropGuard.state_from_equity(
+            rules, broker.equity_series(), initial_balance=rules.account_size,
+            open_positions=len(broker.positions()),
+        )
+        report = guard.evaluate(
+            state, proposed_lots=lots, risk_per_lot=risk_per_lot,
+            open_risk_usd=_open_risk(db_path, style["magic"]), new_position=True,
+        )
     except Exception as exc:
-        raise AiTraderError(f"PropGuard no disponible: {exc}") from exc
+        raise _Reject(f"PropGuard no disponible: {exc}", decision="skip",
+                      setup_valid=1, snapshot=snap) from exc
     if not report.allowed:
-        raise AiTraderError(f"PropGuard: {report.reason}")
+        raise _Reject(f"PropGuard: {report.reason}", decision="skip",
+                      setup_valid=1, snapshot=snap)
 
     pid = uuid.uuid4().hex
     now = utcnow()
@@ -495,24 +1241,34 @@ def propose(payload: dict, *, broker, config: dict | None = None, settings: Sett
     with connect(db_path) as con:
         con.execute(
             "INSERT INTO ai_trades"
-            "(proposal_id, ts, symbol, setup, side, timeframe, thesis, confidence, "
-            " snapshot_hash, playbook_version, entry, sl, tp, volume, risk_usd, "
-            " cost_ratio, magic, status, created_at, updated_at) "
-            "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "(proposal_id, ts, style, symbol, setup, side, timeframe, thesis, "
+            " confidence, snapshot_hash, playbook_version, entry, sl, tp, "
+            " volume, risk_usd, cost_ratio, magic, status, created_at, updated_at) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
-                pid, now, item["symbol"], item["strategy"], item["side"], item["timeframe"],
-                item["thesis"], item["confidence"], _snapshot_hash(snap),
-                cfg["playbook_version"], round(entry, 8), round(sl, 8),
-                round(tp, 8) if tp is not None else None, lots, round(real_risk, 2),
-                round(cost_ratio, 4), cfg["magic"], "proposed", now, now,
+                pid, now, style_name, item["symbol"], item["strategy"], item["side"],
+                item["timeframe"], item["thesis"], item["confidence"],
+                _snapshot_hash(snap), cfg["playbook_version"], round(entry, 8),
+                round(sl, 8), round(tp, 8) if tp is not None else None, lots,
+                round(real_risk, 2), round(cost_ratio, 4), style["magic"],
+                "proposed", now, now,
             ),
         )
+    decision = _record_decision(
+        db_path=db_path, config=cfg, style=style_name, symbol=item["symbol"],
+        timeframe=item["timeframe"], strategy=item["strategy"], setup_valid=True,
+        decision="take", reason="propuesta aceptada", confidence=item["confidence"],
+        snapshot_payload=snap, source="forward", plan_id=pid, settings=settings,
+    )
     return {
         "id": pid,
         "status": "proposed",
+        "style": style_name,
         "strategy": item["strategy"],
+        "decision_id": decision["id"],
         "snapshot": snap,
         "order": {
+            "style": style_name,
             "symbol": item["symbol"],
             "strategy": item["strategy"],
             "timeframe": item["timeframe"],
@@ -522,18 +1278,120 @@ def propose(payload: dict, *, broker, config: dict | None = None, settings: Sett
             "sl": round(sl, 8),
             "tp": round(tp, 8) if tp is not None else None,
             "risk_usd": round(real_risk, 2),
-            "risk_pct": round(real_risk / equity * 100, 3),
+            "risk_pct": round(real_risk / equity * 100, 3) if equity else None,
             "rr": level.rr,
             "cost_ratio": round(cost_ratio, 4),
-            "magic": cfg["magic"],
+            "magic": style["magic"],
         },
     }
 
 
-def execute(proposal_id: str, *, broker, config: dict | None = None, db_path: str | Path = DEFAULT_DB) -> dict:
+def propose(payload: dict, *, broker, config: dict | None = None,
+            settings: Settings | None = None,
+            db_path: str | Path = DEFAULT_DB) -> dict:
+    cfg = config or load_config()
+    settings = settings or get_settings()
+    if not cfg["enabled"]:
+        raise AiTraderError("carril ai_trader deshabilitado")
+    item = _validate_payload(payload, cfg)
+    try:
+        result = _propose(item, broker=broker, cfg=cfg, settings=settings,
+                          db_path=db_path)
+    except _Reject as exc:
+        params = {
+            "style": item.get("style"), "symbol": item.get("symbol"),
+            "strategy": item.get("strategy"), "timeframe": item.get("timeframe"),
+            "decision": exc.decision,
+        }
+        try:
+            _record_decision(
+                db_path=db_path, config=cfg, style=item["style"],
+                symbol=item["symbol"], timeframe=item["timeframe"],
+                strategy=item["strategy"], setup_valid=bool(exc.setup_valid),
+                decision=exc.decision, reason=str(exc),
+                confidence=item.get("confidence"),
+                snapshot_payload=exc.snapshot, source="forward", settings=settings,
+            )
+        except Exception:
+            pass
+        _audit(db_path, "ai_trader_reject", params, "rejected",
+               detail=str(exc), ok=0)
+        raise
+    _audit(
+        db_path, "ai_trader_propose",
+        {"proposal_id": result["id"], "style": item["style"],
+         "symbol": item["symbol"], "strategy": item["strategy"],
+         "timeframe": item["timeframe"], "side": item["side"],
+         "volume": result["order"]["volume"], "magic": result["order"]["magic"]},
+        "proposed", detail=item["thesis"],
+    )
+    return result
+
+
+def skip(payload: dict, *, config: dict | None = None,
+         settings: Settings | None = None,
+         db_path: str | Path = DEFAULT_DB) -> dict:
+    """Registra una decisión de NO operar (también es una decisión)."""
+    cfg = config or load_config()
+    settings = settings or get_settings()
+    if not isinstance(payload, dict):
+        raise AiTraderError("decisión inválida")
+    style_name = str(payload.get("style") or "").strip()
+    style = style_config(cfg, style_name)
+    symbol = str(payload.get("symbol") or "").strip().upper()
+    universe = {item.lower(): item for item in cfg["universe"]}
+    if symbol.lower() not in universe:
+        raise AiTraderError(f"símbolo fuera del universo: {symbol}")
+    symbol = universe[symbol.lower()]
+    if symbol not in {item.upper() for item in style["universe"]}:
+        raise AiTraderError(f"{symbol} fuera del universo de {style_name}")
+    strategy = str(payload.get("strategy") or "").strip()
+    if strategy not in STRATEGY_TIMEFRAME:
+        raise AiTraderError(f"estrategia desconocida: {strategy}")
+    timeframe = str(
+        payload.get("timeframe") or STRATEGY_TIMEFRAME[strategy]
+    ).strip().upper()
+    allowed = style["allowed"].get(symbol.upper(), {}).get(strategy, [])
+    if not allowed or timeframe not in allowed:
+        raise AiTraderError(
+            f"{strategy} no asignada a {symbol} en {style_name} para {timeframe}"
+        )
+    try:
+        confidence = int(payload.get("confidence"))
+    except (TypeError, ValueError) as exc:
+        raise AiTraderError("confidence debe ser entero 1-5") from exc
+    if not 1 <= confidence <= 5:
+        raise AiTraderError("confidence debe estar entre 1 y 5")
+    reason = str(payload.get("reason") or "").strip()
+    if not reason or len(reason) > 200:
+        raise AiTraderError("motivo obligatorio y <= 200 caracteres")
+    source = str(payload.get("source") or "forward").strip().lower()
+    result = _record_decision(
+        db_path=db_path, config=cfg, style=style_name, symbol=symbol,
+        timeframe=timeframe, strategy=strategy,
+        setup_valid=bool(payload.get("setup_valid", False)), decision="skip",
+        reason=reason, confidence=confidence,
+        snapshot_payload=payload.get("snapshot"), source=source,
+        plan_id=payload.get("plan_id"), settings=settings,
+    )
+    _audit(
+        db_path, "ai_trader_skip",
+        {"decision_id": result["id"], "style": style_name, "symbol": symbol,
+         "strategy": strategy, "timeframe": timeframe, "confidence": confidence},
+        "skip", detail=reason,
+    )
+    return result
+
+
+# ------------------------------------------------------------------ execute
+
+
+def execute(proposal_id: str, *, broker, config: dict | None = None,
+            db_path: str | Path = DEFAULT_DB) -> dict:
     cfg = config or load_config()
     if not cfg["enabled"]:
         raise AiTraderError("carril ai_trader deshabilitado")
+    _assert_demo(broker)
     init_db(db_path)
     with connect(db_path) as con:
         row = con.execute("SELECT * FROM ai_trades WHERE proposal_id=?", (proposal_id,)).fetchone()
@@ -541,6 +1399,10 @@ def execute(proposal_id: str, *, broker, config: dict | None = None, db_path: st
         raise AiTraderError(f"propuesta no encontrada: {proposal_id}")
     if row["status"] != "proposed":
         raise AiTraderError(f"propuesta en estado {row['status']}, no proposed")
+    style_name = row["style"] or style_for_magic(cfg, int(row["magic"] or 0))
+    if not style_name or style_name not in cfg["styles"]:
+        raise AiTraderError(f"propuesta con estilo desconocido: {row['style']!r}")
+    style = cfg["styles"][style_name]
     side = str(row["side"])
     tick = broker.tick(row["symbol"])
     current = float(tick["ask"] if side == "buy" else tick["bid"])
@@ -551,8 +1413,8 @@ def execute(proposal_id: str, *, broker, config: dict | None = None, db_path: st
     order = broker.submit_market(
         row["symbol"], signed, sl=float(row["sl"]),
         tp=float(row["tp"]) if row["tp"] is not None else None,
-        bot="ai:discrecional", reason=str(row["thesis"])[:400],
-        magic=cfg["magic"], dry_run=False,
+        bot=f"ai:{style_name}", reason=str(row["thesis"])[:400],
+        magic=style["magic"], dry_run=False,
     )
     now = utcnow()
     seed = int(hashlib.sha256(proposal_id.encode()).hexdigest()[:8], 16)
@@ -571,16 +1433,30 @@ def execute(proposal_id: str, *, broker, config: dict | None = None, db_path: st
             (int(order.get("order_id") or 0), round(entry, 8), shadow_side, round(entry, 8),
              round(shadow_sl, 8), round(shadow_tp, 8), seed, now, proposal_id),
         )
-        append_hashed(con, "console_actions", {
-            "ts": now, "action": "ai_trader_execute",
-            "params": json.dumps({"proposal_id": proposal_id, "symbol": row["symbol"],
-                                  "strategy": row["strategy"], "timeframe": row["timeframe"],
-                                  "side": side, "volume": float(row["volume"])},
-                                 ensure_ascii=False, sort_keys=True),
-            "result": "executed", "ok": 1, "actor": "opencode",
-            "detail": str(row["thesis"])[:400],
-        })
-    return {"id": proposal_id, "status": "open", "order": order}
+    fills = None
+    fills_error = None
+    try:
+        from .mt5_fills import lab_magic_map, sync_mt5_fills
+
+        fills = sync_mt5_fills(
+            broker, db_path, magics=lab_magic_map(cfg), account=cfg["account"]
+        )
+    except Exception as exc:
+        fills_error = str(exc)
+    _audit(
+        db_path, "ai_trader_execute",
+        {"proposal_id": proposal_id, "style": style_name, "symbol": row["symbol"],
+         "strategy": row["strategy"], "timeframe": row["timeframe"], "side": side,
+         "volume": float(row["volume"]), "magic": style["magic"]},
+        "executed", detail=str(row["thesis"]),
+    )
+    return {
+        "id": proposal_id, "status": "open", "style": style_name,
+        "order": order, "fills": fills, "fills_error": fills_error,
+    }
+
+
+# -------------------------------------------------------- manage / cierres
 
 
 def _shadow_sim(row: dict, bars: pd.DataFrame) -> dict:
@@ -621,18 +1497,20 @@ def _shadow_sim(row: dict, bars: pd.DataFrame) -> dict:
     return {"status": "open", "r": round(r, 4)}
 
 
-def manage(*, broker, config: dict | None = None, db_path: str | Path = DEFAULT_DB) -> list[dict]:
+def manage(*, broker, config: dict | None = None,
+           db_path: str | Path = DEFAULT_DB) -> list[dict]:
     cfg = config or load_config()
-    magic = cfg["magic"]
     now = datetime.now(timezone.utc)
     init_db(db_path)
     with connect(db_path) as con:
         rows = {int(r["ticket"]): dict(r) for r in con.execute(
             "SELECT * FROM ai_trades WHERE status='open' AND ticket IS NOT NULL").fetchall()}
     out = []
-    for position in _lane_positions(broker, magic):
+    for position in _all_lane_positions(broker, cfg):
         ticket = int(position["ticket"])
         row = rows.get(ticket) or {}
+        style_name = row.get("style") or style_for_magic(
+            cfg, int(position.get("magic") or 0))
         setup = str(row.get("setup") or "")
         timeframe = str(row.get("timeframe") or "H1")
         bars = broker.rates(position["symbol"], timeframe, 500)
@@ -678,13 +1556,15 @@ def manage(*, broker, config: dict | None = None, db_path: str | Path = DEFAULT_
             except Exception:
                 moved = None
         out.append({"ticket": ticket, "symbol": position["symbol"], "side": position["side"],
-                    "setup": setup, "timeframe": timeframe, "profit_r": round(profit_r, 4),
-                    "sl": sl, "new_sl": moved})
-    sync_closed(broker, magic=magic, db_path=db_path, now=now)
+                    "style": style_name, "setup": setup, "timeframe": timeframe,
+                    "profit_r": round(profit_r, 4), "sl": sl, "new_sl": moved})
+    for name, item in cfg["styles"].items():
+        sync_closed(broker, magic=int(item["magic"]), db_path=db_path, now=now)
     return out
 
 
-def sync_closed(broker, *, magic: int, db_path: str | Path = DEFAULT_DB, now: datetime | None = None) -> int:
+def sync_closed(broker, *, magic: int, db_path: str | Path = DEFAULT_DB,
+                now: datetime | None = None) -> int:
     moment = _as_utc(now)
     open_tickets = {int(p["ticket"]) for p in (broker.positions() or [])}
     init_db(db_path)
@@ -697,22 +1577,32 @@ def sync_closed(broker, *, magic: int, db_path: str | Path = DEFAULT_DB, now: da
         if ticket in open_tickets:
             continue
         try:
-            deals = broker.history_deals(datetime.fromisoformat(str(row["ts"])) - timedelta(hours=2), moment + timedelta(hours=1))
+            deals = broker.history_deals(
+                datetime.fromisoformat(str(row["ts"])) - timedelta(hours=2),
+                moment + timedelta(hours=1),
+            )
         except Exception:
             continue
-        rel = [d for d in deals if int(d.get("position_id") or 0) == ticket and int(d.get("magic") or 0) == magic]
+        rel = [d for d in deals if int(d.get("position_id") or 0) == ticket
+               and int(d.get("magic") or 0) == magic]
         if not rel:
             continue
-        pnl = sum(float(d.get("profit") or 0) + float(d.get("swap") or 0) + float(d.get("commission") or 0) for d in rel)
+        pnl = sum(float(d.get("profit") or 0) + float(d.get("swap") or 0)
+                  + float(d.get("commission") or 0) for d in rel)
         risk = float(row.get("risk_usd") or 0)
+        result_r = round(pnl / risk, 4) if risk else None
         with connect(db_path) as con:
             con.execute(
-                "UPDATE ai_trades SET status='closed', exit_price=?, exit_ts=?, pnl=?, r_multiple=?, updated_at=? WHERE proposal_id=?",
+                "UPDATE ai_trades SET status='closed', exit_price=?, exit_ts=?, pnl=?, "
+                "r_multiple=?, result_r=?, updated_at=? WHERE proposal_id=?",
                 (float(rel[-1].get("price") or 0), str(rel[-1].get("ts_utc") or moment.isoformat()),
-                 round(pnl, 2), round(pnl / risk, 4) if risk else None, utcnow(), row["proposal_id"]),
+                 round(pnl, 2), result_r, result_r, utcnow(), row["proposal_id"]),
             )
         closed += 1
     return closed
+
+
+# ------------------------------------------------------------- scoreboard
 
 
 def _pause_cells(cells: list[dict], db_path: str | Path) -> None:
@@ -732,7 +1622,8 @@ def _pause_cells(cells: list[dict], db_path: str | Path) -> None:
                 )
 
 
-def resume_cell(strategy: str, symbol: str, timeframe: str, db_path: str | Path = DEFAULT_DB) -> dict:
+def resume_cell(strategy: str, symbol: str, timeframe: str,
+                db_path: str | Path = DEFAULT_DB) -> dict:
     init_db(db_path)
     with connect(db_path) as con:
         con.execute(
@@ -741,10 +1632,12 @@ def resume_cell(strategy: str, symbol: str, timeframe: str, db_path: str | Path 
             "status='active', reason=excluded.reason, updated_at=excluded.updated_at",
             (strategy, symbol, timeframe, "reactivada por el operador", utcnow()),
         )
-    return {"strategy": strategy, "symbol": symbol, "timeframe": timeframe, "status": "active"}
+    return {"strategy": strategy, "symbol": symbol, "timeframe": timeframe,
+            "status": "active"}
 
 
-def scoreboard(*, broker, config: dict | None = None, db_path: str | Path = DEFAULT_DB) -> dict:
+def scoreboard(*, broker, config: dict | None = None,
+               db_path: str | Path = DEFAULT_DB) -> dict:
     init_db(db_path)
     with connect(db_path) as con:
         rows = [dict(r) for r in con.execute("SELECT * FROM ai_trades ORDER BY ts").fetchall()]
@@ -752,8 +1645,10 @@ def scoreboard(*, broker, config: dict | None = None, db_path: str | Path = DEFA
     out = []
     for row in rows:
         real_r = None
-        if row["status"] == "closed" and row.get("r_multiple") is not None:
-            real_r = float(row["r_multiple"])
+        if row["status"] == "closed":
+            value = row.get("result_r") if row.get("result_r") is not None else row.get("r_multiple")
+            if value is not None:
+                real_r = float(value)
         elif row.get("ticket") and int(row["ticket"]) in positions:
             pos = positions[int(row["ticket"])]
             entry = float(row["entry"])
@@ -770,7 +1665,8 @@ def scoreboard(*, broker, config: dict | None = None, db_path: str | Path = DEFA
         except Exception:
             pass
         out.append({"id": row["proposal_id"], "ts": row["ts"], "symbol": row["symbol"],
-                    "strategy": row["setup"], "timeframe": row.get("timeframe") or "Sin datos",
+                    "style": row.get("style"), "strategy": row["setup"],
+                    "timeframe": row.get("timeframe") or "Sin datos",
                     "side": row["side"], "status": row["status"],
                     "r": round(real_r, 4) if real_r is not None else None,
                     "shadow_r": shadow["r"], "cost_ratio": row.get("cost_ratio")})
@@ -782,8 +1678,10 @@ def scoreboard(*, broker, config: dict | None = None, db_path: str | Path = DEFA
         rs = [float(i["r"]) for i in items if i["r"] is not None]
         sr = [float(i["shadow_r"]) for i in items if i["shadow_r"] is not None]
         costs = [float(i["cost_ratio"]) for i in items if i["cost_ratio"] is not None]
+        styles = sorted({str(i["style"]) for i in items if i["style"]})
         cells.append({
             "strategy": strategy, "symbol": symbol, "timeframe": timeframe,
+            "style": styles[0] if len(styles) == 1 else (",".join(styles) or None),
             "n": len(items),
             "hit": round(sum(1 for r in rs if r > 0) / len(rs), 3) if rs else None,
             "avg_r": round(sum(rs) / len(rs), 4) if rs else None,
@@ -799,17 +1697,84 @@ def scoreboard(*, broker, config: dict | None = None, db_path: str | Path = DEFA
     return {"trades": out, "cells": cells, "n": len(out)}
 
 
-def log_no_trade(reason: str, *, symbols: list[str] | None = None, db_path: str | Path = DEFAULT_DB) -> dict:
+# ------------------------------------------------------------------ status
+
+
+def status(*, broker, config: dict | None = None, settings: Settings | None = None,
+           db_path: str | Path = DEFAULT_DB) -> dict:
+    cfg = config or load_config()
+    settings = settings or get_settings()
+    health = _assert_demo(broker)
+    equity = float(health.get("equity") or 0.0)
+    positions = _all_lane_positions(broker, cfg)
+    daily = _daily_state(db_path, cfg, equity, broker=broker, settings=settings)
+    styles = {}
+    for name, item in cfg["styles"].items():
+        magic = int(item["magic"])
+        lane = [p for p in positions if int(p.get("magic") or 0) == magic]
+        state = daily["styles"][name]
+        risk_used = _open_risk(db_path, magic)
+        styles[name] = {
+            "style": name,
+            "magic": magic,
+            "enabled": item["enabled"],
+            "equity": round(equity, 2),
+            "risk_per_trade": item["risk_per_trade"],
+            "max_cost_r": item["max_cost_r"],
+            "max_open_risk": item["max_open_risk"],
+            "max_trades_per_day": item["max_trades_per_day"],
+            "trades_today": _trades_today(db_path, magic, settings),
+            "risk_used_usd": round(risk_used, 2),
+            "risk_used_pct": round(risk_used / equity, 4) if equity else None,
+            "pnl_today": state["pnl"],
+            "daily_stop_usd": state["limit_usd"],
+            "stop_remaining_usd": max(0.0, state["remaining_usd"]),
+            "stop_hit": state["hit"],
+            "open_count": len(lane),
+            "session_open": session_open(item),
+            "positions": [
+                {"ticket": int(p["ticket"]), "symbol": p["symbol"], "side": p["side"],
+                 "volume": float(p["volume"]), "profit": float(p.get("profit") or 0.0),
+                 "magic": int(p.get("magic") or 0)}
+                for p in lane
+            ],
+        }
+    global_state = daily["global"]
+    return {
+        "generated_at": utcnow(),
+        "account": cfg["account"],
+        "playbook_version": cfg["playbook_version"],
+        "equity": round(equity, 2),
+        "styles": styles,
+        "global": {
+            "daily_stop": cfg["global"]["daily_stop"],
+            "daily_stop_usd": global_state["limit_usd"],
+            "pnl_today": global_state["pnl"],
+            "stop_remaining_usd": max(0.0, global_state["remaining_usd"]),
+            "stop_hit": global_state["hit"],
+            "max_open_total": cfg["global"]["max_open_total"],
+            "open_count": len(positions),
+            "magics": cfg["magics"],
+            "positions": [
+                {"ticket": int(p["ticket"]), "symbol": p["symbol"], "side": p["side"],
+                 "volume": float(p["volume"]), "profit": float(p.get("profit") or 0.0),
+                 "magic": int(p.get("magic") or 0)}
+                for p in positions
+            ],
+        },
+    }
+
+
+# ------------------------------------------------------------ panel / review
+
+
+def log_no_trade(reason: str, *, symbols: list[str] | None = None,
+                 db_path: str | Path = DEFAULT_DB) -> dict:
     text = str(reason or "").strip()
     if not text or len(text) > 500:
         raise AiTraderError("motivo obligatorio y <= 500 caracteres")
-    init_db(db_path)
-    with connect(db_path) as con:
-        append_hashed(con, "console_actions", {
-            "ts": utcnow(), "action": "ai_trader_no_trade",
-            "params": json.dumps({"symbols": symbols or []}, ensure_ascii=False),
-            "result": "no_trade", "ok": 1, "actor": "opencode", "detail": text,
-        })
+    _audit(db_path, "ai_trader_no_trade", {"symbols": symbols or []},
+           "no_trade", detail=text)
     return {"ok": True, "reason": text}
 
 
@@ -817,9 +1782,13 @@ def panel(db_path: str | Path = DEFAULT_DB) -> dict:
     init_db(db_path)
     with connect(db_path) as con:
         rows = [dict(r) for r in con.execute(
-            "SELECT proposal_id, ts, symbol, setup, side, timeframe, thesis, confidence, "
-            "entry, sl, tp, volume, risk_usd, status, pnl, r_multiple, shadow_side, "
-            "shadow_r, cost_ratio FROM ai_trades ORDER BY ts DESC LIMIT 100").fetchall()]
+            "SELECT proposal_id, ts, style, symbol, setup, side, timeframe, thesis, "
+            "confidence, entry, sl, tp, volume, risk_usd, status, pnl, r_multiple, "
+            "result_r, shadow_side, shadow_r, cost_ratio FROM ai_trades "
+            "ORDER BY ts DESC LIMIT 100").fetchall()]
+        decisions = [dict(r) for r in con.execute(
+            "SELECT id, ts, style, symbol, strategy, timeframe, decision, reason, "
+            "confidence FROM ai_decisions ORDER BY id DESC LIMIT 50").fetchall()]
         lessons = [dict(r) for r in con.execute(
             "SELECT id, hypothesis, status FROM lessons WHERE status='proposed' "
             "AND kind='lesson' ORDER BY id DESC LIMIT 10").fetchall()]
@@ -828,12 +1797,13 @@ def panel(db_path: str | Path = DEFAULT_DB) -> dict:
             "WHERE status='paused' ORDER BY updated_at DESC").fetchall()]
     opened = [r for r in rows if r["status"] == "open"]
     closed = [r for r in rows if r["status"] == "closed"]
-    real = [float(r["r_multiple"]) for r in closed if r["r_multiple"] is not None]
+    real = [float(r["result_r"] if r["result_r"] is not None else r["r_multiple"])
+            for r in closed if r["result_r"] is not None or r["r_multiple"] is not None]
     shadow = [float(r["shadow_r"]) for r in closed if r["shadow_r"] is not None]
     return {"open": opened, "closed": {"n": len(closed),
             "avg_r": round(sum(real) / len(real), 4) if real else None,
             "shadow_avg_r": round(sum(shadow) / len(shadow), 4) if shadow else None},
-            "lessons": lessons, "paused": cells, "n": len(rows)}
+            "decisions": decisions, "lessons": lessons, "paused": cells, "n": len(rows)}
 
 
 def review(*, config: dict | None = None, settings: Settings | None = None,
@@ -849,17 +1819,21 @@ def review(*, config: dict | None = None, settings: Settings | None = None,
     report_dir = ROOT / "reports" / "ai_trader"
     report_dir.mkdir(parents=True, exist_ok=True)
     path = report_dir / f"review_{datetime.now(timezone.utc).strftime('%Y%m%d')}.md"
-    rs = [float(r["r_multiple"]) for r in rows if r["r_multiple"] is not None]
+    rs = [float(r["result_r"] if r.get("result_r") is not None else r["r_multiple"])
+          for r in rows if r.get("result_r") is not None or r.get("r_multiple") is not None]
     lines = ["# IA discrecional · revisión semanal",
              f"- Ventana: últimos {days} días · cerradas: {len(rows)}",
              f"- Playbook: v{cfg['playbook_version']}",
              f"- R medio: {sum(rs)/len(rs):+.3f}" if rs else "- R medio: Sin datos",
              f"- PnL: {sum(float(r.get('pnl') or 0) for r in rows):+.2f} USD", "",
-             "| id | símbolo | estrategia | tf | lado | R | PnL |", "|---|---|---|---|---|---:|---:|"]
+             "| id | estilo | símbolo | estrategia | tf | lado | R | PnL |",
+             "|---|---|---|---|---|---|---:|---:|"]
     for row in rows:
-        lines.append(f"| {row['proposal_id'][:8]} | {row['symbol']} | {row['setup']} | "
-                     f"{row.get('timeframe') or '-'} | {row['side']} | "
-                     f"{float(row.get('r_multiple') or 0):+.2f} | {float(row.get('pnl') or 0):+.2f} |")
+        value = row.get("result_r") if row.get("result_r") is not None else row.get("r_multiple")
+        lines.append(f"| {row['proposal_id'][:8]} | {row.get('style') or '-'} | "
+                     f"{row['symbol']} | {row['setup']} | {row.get('timeframe') or '-'} | "
+                     f"{row['side']} | {float(value or 0):+.2f} | "
+                     f"{float(row.get('pnl') or 0):+.2f} |")
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     lessons = []
     if len(rs) >= 5:
@@ -869,8 +1843,20 @@ def review(*, config: dict | None = None, settings: Settings | None = None,
 
         conditions = []
         for strategy in sorted({str(r["setup"]) for r in rows}):
-            with_ = [float(r["r_multiple"]) for r in rows if r["setup"] == strategy and r["r_multiple"] is not None]
-            without = [float(r["r_multiple"]) for r in rows if r["setup"] != strategy and r["r_multiple"] is not None]
+            with_ = []
+            for r in rows:
+                if r["setup"] != strategy:
+                    continue
+                value = r.get("result_r") if r.get("result_r") is not None else r.get("r_multiple")
+                if value is not None:
+                    with_.append(float(value))
+            without = []
+            for r in rows:
+                if r["setup"] == strategy:
+                    continue
+                value = r.get("result_r") if r.get("result_r") is not None else r.get("r_multiple")
+                if value is not None:
+                    without.append(float(value))
             if len(with_) >= 5:
                 conditions.append((f"estrategia={strategy}", with_, without))
         for name, with_, without in conditions[:3]:
@@ -888,12 +1874,21 @@ def review(*, config: dict | None = None, settings: Settings | None = None,
 
 
 def approve_lesson(lesson_id: int, *, config_path: str | Path = CONFIG_PATH,
-                   db_path: str | Path = DEFAULT_DB, settings: Settings | None = None) -> dict:
+                   db_path: str | Path = DEFAULT_DB,
+                   settings: Settings | None = None) -> dict:
     from .learning import approve
 
     lesson = approve(db_path, lesson_id, by="operador", settings=settings)
     path = Path(config_path)
     data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    data["playbook_version"] = int(data.get("playbook_version") or 1) + 1
+    global_block = data.get("global")
+    if isinstance(global_block, dict):
+        current = int(global_block.get("playbook_version") or data.get("playbook_version") or 1)
+        global_block["playbook_version"] = current + 1
+        data["global"] = global_block
+        version = global_block["playbook_version"]
+    else:
+        version = int(data.get("playbook_version") or 1) + 1
+        data["playbook_version"] = version
     path.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True), encoding="utf-8")
-    return {"lesson": lesson, "playbook_version": data["playbook_version"]}
+    return {"lesson": lesson, "playbook_version": version}

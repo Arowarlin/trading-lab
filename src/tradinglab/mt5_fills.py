@@ -45,7 +45,11 @@ def sync_mt5_fills(
     """
     moment = _as_utc(now)
     init_db(db_path)
-    mapping = {int(key): str(value) for key, value in (magics or {}).items()}
+    mapping = (
+        {int(key): str(value) for key, value in magics.items()}
+        if magics is not None
+        else lab_magic_map()
+    )
 
     with connect(db_path) as con:
         row = con.execute(
@@ -140,4 +144,30 @@ def sync_mt5_fills(
     }
 
 
-__all__ = ["sync_mt5_fills"]
+def lab_magic_map(
+    ai_config: dict | None = None, forward_path: str | Path | None = None
+) -> dict[int, str]:
+    """Magic → bot de todo el laboratorio: IA discrecional + forward demo.
+
+    Se importa en diferido para no crear un ciclo con ``ai_trader`` (que
+    sincroniza fills al ejecutar). Si una configuración falta, se devuelve el
+    mapa de la otra; un magic ausente sigue siendo ``manual``.
+    """
+    out: dict[int, str] = {}
+    try:
+        from .ai_trader import lane_magic_map
+
+        out.update(lane_magic_map(ai_config))
+    except Exception:
+        pass
+    try:
+        from .forward_intraday import load_forward_bots
+
+        for bot in load_forward_bots(forward_path):
+            out[int(bot.magic)] = f"{FORWARD_BOT_PREFIX}{bot.id}"
+    except Exception:
+        pass
+    return out
+
+
+__all__ = ["lab_magic_map", "sync_mt5_fills"]

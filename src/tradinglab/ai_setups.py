@@ -1,15 +1,18 @@
 """Biblioteca de estrategias del carril IA discrecional.
 
-El LLM elige estrategia, símbolo, timeframe y dirección. Los niveles (SL, TP,
-distancias) los calcula este módulo; una propuesta con niveles propios no
-existe. Cada estrategia tiene un timeframe fijo y una asignación por activo.
+El LLM elige estilo, estrategia, símbolo, timeframe y dirección. Los niveles
+(SL, TP, distancias) los calcula este módulo; una propuesta con niveles propios
+no existe. Cada estrategia declara los timeframes en los que el código sabe
+calcularla; la asignación final símbolo/estrategia/timeframe vive en
+``config/ai_trader.yaml`` (por estilo).
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
 
-TIMEFRAMES = ("M15", "H1", "D1")
+TIMEFRAMES = ("M1", "M5", "M15", "H1", "H4", "D1")
 
+# Timeframe nativo (compatibilidad con el carril original de un solo estilo).
 STRATEGY_TIMEFRAME = {
     "orb_ny": "M15",
     "vwap_reversion": "M15",
@@ -21,6 +24,22 @@ STRATEGY_TIMEFRAME = {
     "donchian_turtle": "D1",
     "inside_bar": "D1",
 }
+
+# Timeframes en los que cada estrategia tiene una implementación honesta.
+STRATEGY_TIMEFRAMES = {
+    "orb_ny": ("M1", "M5", "M15"),
+    "vwap_reversion": ("M1", "M5", "M15"),
+    "bollinger_squeeze": ("M5", "M15", "H1", "H4"),
+    "liquidity_sweep": ("M15", "H1", "H4", "D1"),
+    "london_breakout": ("M5", "M15", "H1"),
+    "ema_pullback": ("M5", "M15", "H1", "H4"),
+    "rsi2_connors": ("D1",),
+    "donchian_turtle": ("H4", "D1"),
+    "inside_bar": ("H4", "D1"),
+}
+
+SECTION = {"M1": "m1", "M5": "m5", "M15": "m15",
+           "H1": "h1", "H4": "h4", "D1": "d1"}
 
 ALLOWED = {
     "US100.CASH": {
@@ -72,6 +91,20 @@ def allowed_timeframe(symbol: str, strategy: str) -> str | None:
     return ALLOWED.get(str(symbol).upper(), {}).get(strategy)
 
 
+def supports(strategy: str, timeframe: str) -> bool:
+    return str(timeframe).upper() in STRATEGY_TIMEFRAMES.get(strategy, ())
+
+
+def _block(snap: dict, timeframe: str) -> dict:
+    section = SECTION.get(str(timeframe).upper())
+    if section is None:
+        raise SetupError(f"timeframe no soportado: {timeframe}")
+    block = snap.get(section)
+    if not isinstance(block, dict):
+        raise SetupError(f"Sin datos: {section}")
+    return block
+
+
 def _f(snap: dict, section: str, key: str) -> float:
     block = snap.get(section) or {}
     value = block.get(key)
@@ -80,58 +113,74 @@ def _f(snap: dict, section: str, key: str) -> float:
     return float(value)
 
 
+def _b(block: dict, key: str) -> float:
+    value = block.get(key)
+    if value in (None, "", "Sin datos"):
+        raise SetupError(f"Sin datos: {key}")
+    return float(value)
+
+
 def _ok(condition: bool, reason: str) -> tuple[bool, str]:
     return (True, "") if condition else (False, reason)
 
 
-def validate(strategy: str, side: str, snap: dict) -> tuple[bool, str]:
+def validate(
+    strategy: str, side: str, snap: dict, timeframe: str | None = None
+) -> tuple[bool, str]:
     if strategy not in STRATEGY_TIMEFRAME:
         return False, f"estrategia desconocida: {strategy}"
-    tf = STRATEGY_TIMEFRAME[strategy]
-    if allowed_timeframe(str(snap.get("symbol") or ""), strategy) != tf:
-        return False, f"{strategy} no asignada a {snap.get('symbol')} ({tf})"
+    tf = str(timeframe or STRATEGY_TIMEFRAME[strategy]).upper()
+    if not supports(strategy, tf):
+        return False, f"{strategy} no soporta {tf}"
+    if timeframe is None and allowed_timeframe(
+        str(snap.get("symbol") or ""), strategy
+    ) not in (None, tf):
+        return False, f"{strategy} no asignada a {snap.get('symbol')}"
     if side not in {"buy", "sell"}:
         return False, f"side inválido: {side}"
     try:
         price = float(snap["price"])
+        block = _block(snap, tf)
+        if block.get("error"):
+            return False, f"Sin datos: {block['error']}"
         if strategy == "orb_ny":
-            if not bool(snap["m15"].get("orb_valid")):
+            if not bool(block.get("orb_valid")):
                 return False, "rango de apertura NY incompleto"
-            high, low = _f(snap, "m15", "orb_high"), _f(snap, "m15", "orb_low")
+            high, low = _b(block, "orb_high"), _b(block, "orb_low")
             return _ok((side == "buy" and price > high) or (side == "sell" and price < low),
                        "precio dentro del rango de apertura")
         if strategy == "vwap_reversion":
-            vwap, sigma = _f(snap, "m15", "vwap"), _f(snap, "m15", "vwap_sigma")
+            vwap, sigma = _b(block, "vwap"), _b(block, "vwap_sigma")
             return _ok(
                 (side == "buy" and price < vwap - 2 * sigma)
                 or (side == "sell" and price > vwap + 2 * sigma),
                 "precio a menos de 2 desviaciones del VWAP",
             )
         if strategy == "bollinger_squeeze":
-            if not bool(snap["h1"].get("bb_squeeze")):
+            if not bool(block.get("bb_squeeze")):
                 return False, "Bollinger fuera del mínimo de 120 barras"
-            close = _f(snap, "h1", "close")
+            close = _b(block, "close")
             return _ok(
-                (side == "buy" and close > _f(snap, "h1", "bb_upper"))
-                or (side == "sell" and close < _f(snap, "h1", "bb_lower")),
+                (side == "buy" and close > _b(block, "bb_upper"))
+                or (side == "sell" and close < _b(block, "bb_lower")),
                 "cierre dentro de las bandas",
             )
         if strategy == "liquidity_sweep":
             return _ok(
-                (side == "sell" and bool(snap["h1"].get("sweep_high")))
-                or (side == "buy" and bool(snap["h1"].get("sweep_low"))),
+                (side == "sell" and bool(block.get("sweep_high")))
+                or (side == "buy" and bool(block.get("sweep_low"))),
                 "no hay barrido del día anterior",
             )
         if strategy == "london_breakout":
-            if not bool(snap["h1"].get("asian_valid")):
+            if not bool(block.get("asian_valid")):
                 return False, "rango asiático incompleto"
-            high, low = _f(snap, "h1", "asian_high"), _f(snap, "h1", "asian_low")
+            high, low = _b(block, "asian_high"), _b(block, "asian_low")
             return _ok((side == "buy" and price > high) or (side == "sell" and price < low),
                        "precio dentro del rango asiático")
         if strategy == "ema_pullback":
-            e9, e21, e50 = (_f(snap, "h1", k) for k in ("ema9", "ema21", "ema50"))
-            high, low = _f(snap, "h1", "high"), _f(snap, "h1", "low")
-            close, open_ = _f(snap, "h1", "close"), _f(snap, "h1", "open")
+            e9, e21, e50 = (_b(block, k) for k in ("ema9", "ema21", "ema50"))
+            high, low = _b(block, "high"), _b(block, "low")
+            close, open_ = _b(block, "close"), _b(block, "open")
             if side == "buy":
                 return _ok(e9 > e21 > e50 and low <= e21 and close > e21 and close > open_,
                            "sin retroceso a EMA21 con reanudación")
@@ -154,9 +203,9 @@ def validate(strategy: str, side: str, snap: dict) -> tuple[bool, str]:
             return _ok(price < _f(snap, "d1", "dc20_low") and price < _f(snap, "d1", "dc55_low"),
                        "sin ruptura de 20 días con filtro de 55")
         if strategy == "inside_bar":
-            if not bool(snap["d1"].get("inside_bar")):
+            if not bool(block.get("inside_bar")):
                 return False, "la última vela no es inside bar"
-            high, low = _f(snap, "d1", "mother_high"), _f(snap, "d1", "mother_low")
+            high, low = _b(block, "mother_high"), _b(block, "mother_low")
             return _ok((side == "buy" and price > high) or (side == "sell" and price < low),
                        "precio dentro de la vela madre")
     except (KeyError, TypeError) as exc:
@@ -166,39 +215,43 @@ def validate(strategy: str, side: str, snap: dict) -> tuple[bool, str]:
     return False, f"estrategia sin validación: {strategy}"
 
 
-def plan(strategy: str, side: str, snap: dict) -> LevelPlan:
-    ok, reason = validate(strategy, side, snap)
+def plan(
+    strategy: str, side: str, snap: dict, timeframe: str | None = None
+) -> LevelPlan:
+    tf = str(timeframe or STRATEGY_TIMEFRAME.get(strategy, "")).upper()
+    ok, reason = validate(strategy, side, snap, tf)
     if not ok:
         raise SetupError(reason)
     price = float(snap["price"])
+    block = _block(snap, tf)
     stop = 1.0 if side == "buy" else -1.0
     tp: float | None
     if strategy == "orb_ny":
-        sl = _f(snap, "m15", "orb_low") if side == "buy" else _f(snap, "m15", "orb_high")
+        sl = _b(block, "orb_low") if side == "buy" else _b(block, "orb_high")
         dist = abs(price - sl)
         tp = price + stop * 2 * dist
     elif strategy == "vwap_reversion":
-        dist = _f(snap, "m15", "atr")
+        dist = _b(block, "atr")
         sl = price - stop * dist
-        tp = _f(snap, "m15", "vwap")
+        tp = _b(block, "vwap")
     elif strategy == "bollinger_squeeze":
-        sl = _f(snap, "h1", "bb_mid")
+        sl = _b(block, "bb_mid")
         dist = abs(price - sl)
         tp = price + stop * 2 * dist
     elif strategy == "liquidity_sweep":
-        sl = _f(snap, "h1", "high") if side == "sell" else _f(snap, "h1", "low")
+        sl = _b(block, "high") if side == "sell" else _b(block, "low")
         dist = abs(price - sl)
-        mid = _f(snap, "h1", "prev_mid")
+        mid = _b(block, "prev_mid")
         two_r = price + stop * 2 * dist
         tp = max(mid, two_r) if side == "sell" else min(mid, two_r)
     elif strategy == "london_breakout":
-        high, low = _f(snap, "h1", "asian_high"), _f(snap, "h1", "asian_low")
+        high, low = _b(block, "asian_high"), _b(block, "asian_low")
         sl = (high + low) / 2
         dist = abs(price - sl)
         tp = price + stop * 1.5 * (high - low)
     elif strategy == "ema_pullback":
-        dist_atr = _f(snap, "h1", "atr")
-        e50 = _f(snap, "h1", "ema50")
+        dist_atr = _b(block, "atr")
+        e50 = _b(block, "ema50")
         sl = e50 - dist_atr if side == "buy" else e50 + dist_atr
         dist = abs(price - sl)
         tp = price + stop * 2 * dist
@@ -211,7 +264,7 @@ def plan(strategy: str, side: str, snap: dict) -> LevelPlan:
         dist = abs(price - sl)
         tp = None
     elif strategy == "inside_bar":
-        sl = _f(snap, "d1", "mother_low") if side == "buy" else _f(snap, "d1", "mother_high")
+        sl = _b(block, "mother_low") if side == "buy" else _b(block, "mother_high")
         dist = abs(price - sl)
         tp = price + stop * 2 * dist
     else:
@@ -225,7 +278,7 @@ def plan(strategy: str, side: str, snap: dict) -> LevelPlan:
     return LevelPlan(
         strategy=strategy,
         side=side,
-        timeframe=STRATEGY_TIMEFRAME[strategy],
+        timeframe=tf,
         entry=round(price, 8),
         sl=round(sl, 8),
         tp=round(tp, 8) if tp is not None else None,
@@ -236,13 +289,13 @@ def plan(strategy: str, side: str, snap: dict) -> LevelPlan:
 
 def describe() -> dict:
     return {
-        "orb_ny": "M15: rango de los primeros 4 bloques M15 de NY; ruptura; SL al otro lado; TP 2R; cierre de sesión",
-        "vwap_reversion": "M15: precio >2σ del VWAP de sesión; vuelta al VWAP; SL 1 ATR M15",
-        "bollinger_squeeze": "H1: BB(20,2) en mínimo de 120 barras y cierre fuera; SL banda media; TP 2R",
-        "liquidity_sweep": "H1: barrido del máximo/mínimo de ayer y cierre dentro; SL tras la mecha; TP centro de ayer o 2R",
-        "london_breakout": "H1: rango asiático 00:00-07:00; ruptura 07:00-10:00; SL centro; TP 1,5×rango",
-        "ema_pullback": "H1: EMA9>21>50 (o inverso); toque EMA21 y reanudación; SL 1 ATR tras EMA50; TP 2R",
+        "orb_ny": "M1/M5/M15: rango de los primeros 60 minutos de NY; ruptura; SL al otro lado; TP 2R",
+        "vwap_reversion": "M1/M5/M15: precio >2σ del VWAP de sesión; vuelta al VWAP; SL 1 ATR",
+        "bollinger_squeeze": "M5/H1/H4: BB(20,2) en mínimo de 120 barras y cierre fuera; SL banda media; TP 2R",
+        "liquidity_sweep": "M15/H1/H4/D1: barrido del máximo/mínimo de ayer y cierre dentro; SL tras la mecha; TP centro de ayer o 2R",
+        "london_breakout": "M5/M15/H1: rango asiático 00:00-07:00; ruptura; SL centro; TP 1,5×rango",
+        "ema_pullback": "M5/H1/H4: EMA9>21>50 (o inverso); toque EMA21 y reanudación; SL 1 ATR tras EMA50; TP 2R",
         "rsi2_connors": "D1: índices sobre SMA200, RSI2<10; salida en SMA5; SL 2 ATR D1",
-        "donchian_turtle": "D1: ruptura 20 días con filtro 55; SL 2 ATR D1; trailing 10 días",
-        "inside_bar": "D1: inside bar; ruptura de la madre; SL al otro lado; TP 2R",
+        "donchian_turtle": "H4/D1: ruptura 20 días con filtro 55; SL 2 ATR D1; trailing 10 días",
+        "inside_bar": "H4/D1: inside bar; ruptura de la madre; SL al otro lado; TP 2R",
     }
