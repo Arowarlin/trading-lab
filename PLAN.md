@@ -1722,6 +1722,24 @@ etapa.
   `67f7695cf087e673`; no toca `enabled`.
 - Procedimiento de encendido y reversión en `docs/encendido.md`.
 
+### Etapa 3r - Carril IA discrecional (2026-11-12)
+
+- `config/ai_trader.yaml`: `ftmo_demo`, magic `20261190`, 9 estrategias, riesgo
+  0,5 %/operación, stop diario 2 %, 6 operaciones/día, 1 por símbolo, 3 abiertas.
+- `src/tradinglab/ai_setups.py`: biblioteca cerrada (orb_ny, vwap_reversion,
+  bollinger_squeeze, liquidity_sweep, london_breakout, ema_pullback,
+  rsi2_connors, donchian_turtle, inside_bar) con asignación por activo. El LLM
+  elige estrategia/símbolo/timeframe/lado; los niveles los calcula el código.
+- `src/tradinglab/ai_trader.py`: snapshot (≤3.000 tokens), propose/execute con
+  lote por riesgo (rechaza < volume_min), SL ≥ 3×spread y stops_level,
+  coste/R ≤ 0,10, PropGuard y límites del carril; manage con trailing por
+  timeframe y Donchian de 10 días; scoreboard real vs sombra por celda con
+  pausa automática; review con lecciones `proposed`; `ai_trades` y
+  `ai_cell_state`.
+- CLI `lab ai-trader` (snapshot, propose, execute, manage, scoreboard, resume,
+  review, approve-lesson, no-trade). Skill `trading-lab-operador` versionada
+  en `docs/ai_trader_skill.md`. Panel de solo lectura en la consola.
+
 ### Etapa 4 - Presupuesto de riesgo neto por activo
 
 - [x] **`config/risk_budget.yaml`**

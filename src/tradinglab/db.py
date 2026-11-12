@@ -699,6 +699,7 @@ def init_db(path: str | Path) -> None:
         _migrate_fills_mt5(con)
         _migrate_forward_state(con)
         _migrate_chain_orders(con)
+        _migrate_ai_trades(con)
 
 
 def _migrate_strategy_trials(con: sqlite3.Connection) -> None:
@@ -881,6 +882,67 @@ def _migrate_forward_state(con: sqlite3.Connection) -> None:
         );
         """
     )
+
+
+def _migrate_ai_trades(con: sqlite3.Connection) -> None:
+    """Tabla del carril IA discrecional. Solo aditivo."""
+    con.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS ai_trades (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            proposal_id TEXT UNIQUE,
+            ts TEXT NOT NULL,
+            symbol TEXT NOT NULL,
+            setup TEXT NOT NULL,
+            side TEXT NOT NULL,
+            thesis TEXT,
+            confidence INTEGER,
+            snapshot_hash TEXT,
+            playbook_version INTEGER,
+            timeframe TEXT,
+            cost_ratio REAL,
+            entry REAL,
+            sl REAL,
+            tp REAL,
+            volume REAL,
+            risk_usd REAL,
+            magic INTEGER,
+            ticket INTEGER,
+            status TEXT NOT NULL DEFAULT 'proposed',
+            exit_price REAL,
+            exit_ts TEXT,
+            pnl REAL,
+            r_multiple REAL,
+            shadow_side TEXT,
+            shadow_entry REAL,
+            shadow_sl REAL,
+            shadow_tp REAL,
+            shadow_status TEXT,
+            shadow_exit REAL,
+            shadow_pnl REAL,
+            shadow_r REAL,
+            shadow_seed INTEGER,
+            created_at TEXT,
+            updated_at TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_ai_trades_status ON ai_trades(status);
+        CREATE INDEX IF NOT EXISTS idx_ai_trades_ts ON ai_trades(ts);
+        CREATE TABLE IF NOT EXISTS ai_cell_state (
+            strategy TEXT NOT NULL,
+            symbol TEXT NOT NULL,
+            timeframe TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'active',
+            reason TEXT,
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY (strategy, symbol, timeframe)
+        );
+        """
+    )
+    columns = [row["name"] for row in con.execute("PRAGMA table_info(ai_trades)").fetchall()]
+    if "timeframe" not in columns:
+        con.execute("ALTER TABLE ai_trades ADD COLUMN timeframe TEXT")
+    if "cost_ratio" not in columns:
+        con.execute("ALTER TABLE ai_trades ADD COLUMN cost_ratio REAL")
 
 
 def _migrate_chain_orders(con: sqlite3.Connection) -> None:

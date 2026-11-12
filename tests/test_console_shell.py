@@ -38,6 +38,7 @@ def test_barra_lateral_con_secciones_y_todas_las_vistas() -> None:
         "asset",
         "bots",
         "incubation",
+        "ai-trader",
         "research",
         "agents",
         "accounts",
@@ -51,6 +52,8 @@ def test_barra_lateral_con_secciones_y_todas_las_vistas() -> None:
         "repos",
         "logs",
     }
+    assert 'id="view-ai-trader"' in text
+    assert "function renderAiTrader()" in text
 
 
 def test_dashboard_tiene_kpis_balance_performers_y_calendario() -> None:

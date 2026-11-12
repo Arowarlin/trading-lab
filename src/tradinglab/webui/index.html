@@ -1116,6 +1116,7 @@
       <button class="nav-btn" data-view="incubation" title="Incubadora"><span class="ico">⚗</span> Incubadora</button>
       <button class="nav-btn" data-view="research" title="Research"><span class="ico">⌁</span> Research</button>
       <button class="nav-btn" data-view="agents" title="Agentes"><span class="ico">✦</span> Agentes</button>
+      <button class="nav-btn" data-view="ai-trader" title="IA discrecional"><span class="ico">*</span> IA discrecional</button>
       <div class="nav-label">Portafolios</div>
       <button class="nav-btn" data-view="accounts" title="Cuentas"><span class="ico">▤</span> Cuentas</button>
       <button class="nav-btn" data-view="fund" title="Fondo"><span class="ico">◉</span> Fondo</button>
@@ -1739,6 +1740,16 @@
       </div>
     </section>
 
+    <!-- =========================================================== IA DISCRECIONAL -->
+    <section class="view" id="view-ai-trader">
+      <div class="note" style="margin:0 0 14px">
+        <strong>IA discrecional (solo demo).</strong> Operaciones del carril con magic
+        20261190. El LLM elige setup, simbolo y lado; los niveles los calcula el codigo.
+        Cada operacion tiene una gemela sombra con direccion aleatoria. Solo lectura.
+      </div>
+      <div id="ai-trader-body"></div>
+    </section>
+
     <!-- =========================================================== DECISIONES -->
     <section class="view" id="view-decisions">
       <div class="note" style="margin:0 0 14px">
@@ -1993,6 +2004,7 @@ const TITLES = {
   asset: ["Activo", "Ficha por activo: precio, bots, decisiones y ciclo de vida"],
   bots: ["Bots", "Catálogo, estado y últimas señales"],
   incubation: ["Incubadora", "Ciclo de vida, criterios congelados y propuesta forward"],
+  "ai-trader": ["IA discrecional", "Operaciones del carril, sombra y lecciones"],
   research: ["Research", "PBO, walk-forward, regímenes y propuestas"],
   agents: ["Agentes", "TradingAgents lite/deep y sus decisiones"],
   accounts: ["Cuentas", "Paper, Alpaca, MT5 y futuros"],
@@ -2276,6 +2288,7 @@ function switchView(view, updateHash = true) {
   if (view === "market") renderMarketCatalog();
   if (view === "asset") renderAsset();
   if (view === "incubation") renderIncubation();
+  if (view === "ai-trader") renderAiTrader();
   if (view === "agents") renderMarketAgents();
   if (view === "fund") renderFund();
   if (view === "journal") loadJournal();
@@ -5637,6 +5650,47 @@ function renderAsset() {
     }),
     { empty: "Sin datos: este activo no está en la incubadora." }
   );
+}
+
+async function renderAiTrader() {
+  const body = $("#ai-trader-body");
+  if (!body) return;
+  body.innerHTML = `<div class="empty">Cargando...</div>`;
+  try {
+    const data = await getJSON("/api/ai-trader");
+    const open = data.open || [];
+    const closed = data.closed || {};
+    const lessons = data.lessons || [];
+    const openRows = open.map((t) => [
+      `<b>${esc(t.symbol)}</b> <span class="muted tiny">${esc(t.setup)}</span>`,
+      t.side === "buy" ? "compra" : "venta",
+      num(t.volume, 2),
+      num(t.entry, 5),
+      num(t.sl, 5),
+      num(t.tp, 5),
+      `${num(t.risk_usd, 2)} USD`,
+      `<span class="muted tiny">${esc(t.thesis || "")}</span>`,
+    ]);
+    const lessonRows = lessons.map((l) => [`#${l.id}`, esc(l.hypothesis)]);
+    body.innerHTML = `
+      <div class="stats">
+        <div class="stat"><div class="label">Abiertas</div><div class="value">${open.length}</div></div>
+        <div class="stat"><div class="label">Cerradas</div><div class="value">${closed.n || 0}</div></div>
+        <div class="stat"><div class="label">R medio</div><div class="value">${closed.avg_r == null ? "Sin datos" : num(closed.avg_r, 2)}</div></div>
+        <div class="stat"><div class="label">R sombra</div><div class="value">${closed.shadow_avg_r == null ? "Sin datos" : num(closed.shadow_avg_r, 2)}</div></div>
+        <div class="stat"><div class="label">Lecciones</div><div class="value">${lessons.length}</div></div>
+      </div>
+      <div class="panel" style="margin-bottom:14px">
+        <div class="panel-head"><h2>Operaciones abiertas</h2><span class="muted tiny">magic 20261190</span></div>
+        ${grid([{ label: "Activo" }, { label: "Lado" }, { label: "Lotes", num: true }, { label: "Entrada", num: true }, { label: "SL", num: true }, { label: "TP", num: true }, { label: "Riesgo", num: true }, { label: "Tesis", wrap: true }], openRows, { empty: "Sin posiciones abiertas del carril." })}
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h2>Lecciones propuestas</h2><span class="muted tiny">requieren aprobacion humana</span></div>
+        ${grid([{ label: "ID" }, { label: "Hipotesis", wrap: true }], lessonRows, { empty: "Sin lecciones pendientes." })}
+      </div>`;
+  } catch (err) {
+    body.innerHTML = `<div class="empty">Sin datos: ${esc(err.message || err)}</div>`;
+  }
 }
 
 function renderIncubation() {

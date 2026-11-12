@@ -2605,6 +2605,10 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 self._json({"ok": True, "version": __version__, "build": BUILD_ID, "time": _now()})
             elif path == "/api/overview":
                 self._json(self.server.data.overview())
+            elif path == "/api/ai-trader":
+                from .ai_trader import panel
+
+                self._json(panel(self.server.data.db_path))
             elif path == "/api/risk":
                 self._json(self.server.data.risk())
             elif path == "/api/market":

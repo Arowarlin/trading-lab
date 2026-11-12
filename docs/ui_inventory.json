@@ -4,6 +4,7 @@
   "views": [
     "accounts",
     "agents",
+    "ai-trader",
     "asset",
     "bots",
     "decisions",
@@ -23,6 +24,7 @@
   "view_ids": [
     "view-accounts",
     "view-agents",
+    "view-ai-trader",
     "view-asset",
     "view-bots",
     "view-decisions",
@@ -77,6 +79,10 @@
       "label": "✦ Agentes"
     },
     {
+      "view": "ai-trader",
+      "label": "* IA discrecional"
+    },
+    {
       "view": "accounts",
       "label": "▤ Cuentas"
     },
@@ -128,6 +134,7 @@
     "agent-ticker",
     "agents-count",
     "agents-table",
+    "ai-trader-body",
     "asset-agents",
     "asset-bots",
     "asset-chart",
@@ -386,6 +393,7 @@
     "toast",
     "view-accounts",
     "view-agents",
+    "view-ai-trader",
     "view-asset",
     "view-bots",
     "view-decisions",
@@ -407,6 +415,7 @@
     "/api/action",
     "/api/actions/${kind}",
     "/api/agent-report?file=",
+    "/api/ai-trader",
     "/api/bots/archive",
     "/api/bots/evaluate",
     "/api/bots/propose",

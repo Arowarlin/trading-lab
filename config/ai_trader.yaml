@@ -1,0 +1,38 @@
+# Carril IA discrecional (solo demo).
+#
+# El LLM elige estrategia, símbolo, timeframe y dirección. Los niveles y el
+# lote los calcula el código. Nunca live: account debe ser ftmo_demo.
+version: 1
+account: ftmo_demo
+magic: 20261190
+universe: [US100.cash, XAUUSD, EURUSD, GBPUSD, USDJPY]
+risk_per_trade: 0.005       # 0,5% del equity por operación
+max_trades_per_day: 6
+max_open_per_symbol: 1
+max_open_total: 3
+daily_stop: 0.02            # 2%: no se abre hasta el reset diario de FTMO
+timeframes: [M15, H1, D1]
+playbook_version: 1
+enabled: true
+allowed:
+  US100.CASH:
+    orb_ny: M15
+    vwap_reversion: M15
+    bollinger_squeeze: H1
+    rsi2_connors: D1
+    donchian_turtle: D1
+  XAUUSD:
+    liquidity_sweep: H1
+    donchian_turtle: D1
+    inside_bar: D1
+  EURUSD:
+    london_breakout: H1
+    ema_pullback: H1
+    inside_bar: D1
+  GBPUSD:
+    london_breakout: H1
+    ema_pullback: H1
+    inside_bar: D1
+  USDJPY:
+    ema_pullback: H1
+    donchian_turtle: D1

@@ -157,6 +157,11 @@ app.add_typer(operator_app, name="operator")
 app.add_typer(campaign_app, name="campaign")
 app.add_typer(risk_budget_app, name="risk-budget")
 app.add_typer(lifecycle_app, name="lifecycle")
+ai_trader_app = typer.Typer(
+    no_args_is_help=True,
+    help="Carril IA discrecional (solo demo): snapshot, propose, execute, manage, scoreboard, review.",
+)
+app.add_typer(ai_trader_app, name="ai-trader")
 app.add_typer(llm_app, name="llm")
 app.add_typer(ticks_app, name="ticks")
 app.add_typer(slippage_app, name="slippage")
@@ -9198,6 +9203,220 @@ def _campaign_now() -> str:
     from datetime import datetime, timezone
 
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def _ai_trader_error(exc: Exception) -> None:
+    console.print(f"[red]{exc}[/red]")
+    raise typer.Exit(2) from exc
+
+
+@ai_trader_app.command("snapshot")
+def ai_trader_snapshot_cmd(
+    symbols: str = typer.Option(
+        None, "--symbols", help="Lista separada por comas; por defecto, el universo"
+    ),
+) -> None:
+    """Snapshot compacto por símbolo para decidir la sesión."""
+    from .ai_trader import AiTraderError, snapshot
+
+    settings = get_settings()
+    broker = _mt5(settings, dry_run=True)
+    try:
+        wanted = [s.strip() for s in symbols.split(",") if s.strip()] if symbols else None
+        payload = snapshot(broker, wanted)
+    except AiTraderError as exc:
+        _ai_trader_error(exc)
+    finally:
+        broker.shutdown()
+    typer.echo(json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
+
+
+@ai_trader_app.command("propose")
+def ai_trader_propose_cmd(
+    proposal: str = typer.Option(..., "--json", help="JSON de la propuesta"),
+) -> None:
+    """Valida la propuesta, calcula niveles/volumen y devuelve la orden."""
+    from .ai_trader import AiTraderError, propose
+
+    try:
+        payload = json.loads(proposal)
+    except json.JSONDecodeError as exc:
+        console.print(f"[red]JSON inválido:[/red] {exc}")
+        raise typer.Exit(2) from exc
+    settings = get_settings()
+    broker = _mt5(settings, dry_run=True)
+    try:
+        result = propose(payload, broker=broker, settings=settings, db_path=DEFAULT_DB)
+    except AiTraderError as exc:
+        _ai_trader_error(exc)
+    finally:
+        broker.shutdown()
+    typer.echo(
+        json.dumps(
+            {"id": result["id"], **result["order"]},
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+    )
+
+
+@ai_trader_app.command("execute")
+def ai_trader_execute_cmd(
+    proposal_id: str = typer.Option(..., "--id", help="ID de la propuesta"),
+) -> None:
+    """Envía a MT5 demo la propuesta validada, con su magic y SL/TP."""
+    from .ai_trader import AiTraderError, execute
+
+    settings = get_settings()
+    broker = _mt5(settings, dry_run=False)
+    try:
+        result = execute(proposal_id, broker=broker, db_path=DEFAULT_DB)
+    except AiTraderError as exc:
+        _ai_trader_error(exc)
+    finally:
+        broker.shutdown()
+    console.print(
+        f"[green]Ejecutada[/green] {proposal_id[:8]} · "
+        f"{result['order'].get('symbol')} {result['order'].get('side')} "
+        f"{result['order'].get('volume')} · ticket {result['order'].get('order_id')}"
+    )
+
+
+@ai_trader_app.command("manage")
+def ai_trader_manage_cmd() -> None:
+    """Trailing de las posiciones del carril y sincronización de cierres."""
+    from .ai_trader import AiTraderError, manage
+
+    settings = get_settings()
+    broker = _mt5(settings, dry_run=False)
+    try:
+        rows = manage(broker=broker, db_path=DEFAULT_DB)
+    except AiTraderError as exc:
+        _ai_trader_error(exc)
+    finally:
+        broker.shutdown()
+    if not rows:
+        console.print("Sin posiciones del carril.")
+        return
+    table = Table(title="IA discrecional · manage")
+    for column in ("Ticket", "Símbolo", "Lado", "R", "SL", "Nuevo SL"):
+        table.add_column(column)
+    for row in rows:
+        table.add_row(
+            str(row["ticket"]),
+            str(row["symbol"]),
+            str(row["side"]),
+            f"{row['profit_r']:+.2f}",
+            f"{row['sl']:.5f}",
+            f"{row['new_sl']:.5f}" if row["new_sl"] is not None else "-",
+        )
+    console.print(table)
+
+
+@ai_trader_app.command("scoreboard")
+def ai_trader_scoreboard_cmd() -> None:
+    """Real vs sombra por estrategia × símbolo × timeframe."""
+    from .ai_trader import AiTraderError, scoreboard
+
+    settings = get_settings()
+    broker = _mt5(settings, dry_run=True)
+    try:
+        data = scoreboard(broker=broker, db_path=DEFAULT_DB)
+    except AiTraderError as exc:
+        _ai_trader_error(exc)
+    finally:
+        broker.shutdown()
+    cells = data["cells"]
+    table = Table(title="IA discrecional · scoreboard")
+    for column in ("Estrategia", "Símbolo", "TF", "N", "Hit", "R medio", "R sombra", "Coste/R", "Estado"):
+        table.add_column(column)
+    for cell in cells:
+        table.add_row(
+            str(cell["strategy"]),
+            str(cell["symbol"]),
+            str(cell["timeframe"]),
+            str(cell["n"]),
+            f"{cell['hit']:.0%}" if cell["hit"] is not None else "-",
+            f"{cell['avg_r']:+.3f}" if cell["avg_r"] is not None else "-",
+            f"{cell['shadow_expectancy_r']:+.3f}" if cell["shadow_expectancy_r"] is not None else "-",
+            f"{cell['cost_ratio_avg']:.3f}" if cell["cost_ratio_avg"] is not None else "-",
+            "pausada" if cell["cell_status"] == "paused" else ("insuficiente" if cell["insufficient"] else "activa"),
+        )
+    console.print(table)
+    if any(cell["insufficient"] for cell in cells):
+        console.print("[yellow]muestra insuficiente: n<30 en alguna celda[/yellow]")
+
+
+@ai_trader_app.command("resume")
+def ai_trader_resume_cmd(
+    strategy: str = typer.Option(..., "--strategy"),
+    symbol: str = typer.Option(..., "--symbol"),
+    timeframe: str = typer.Option(..., "--timeframe"),
+) -> None:
+    """Reactiva una celda pausada por el scoreboard (decisión del operador)."""
+    from .ai_trader import AiTraderError, resume_cell
+
+    try:
+        resume_cell(strategy, symbol, timeframe, db_path=DEFAULT_DB)
+    except AiTraderError as exc:
+        _ai_trader_error(exc)
+    console.print(f"[green]Celda reactivada[/green] {strategy} · {symbol} · {timeframe}")
+
+
+@ai_trader_app.command("review")
+def ai_trader_review_cmd(
+    days: int = typer.Option(7, "--days", min=1),
+) -> None:
+    """Informe semanal y lecciones propuestas (no cambia el playbook)."""
+    from .ai_trader import AiTraderError, review
+
+    try:
+        result = review(db_path=DEFAULT_DB, days=days)
+    except AiTraderError as exc:
+        _ai_trader_error(exc)
+    console.print(f"Informe: {result['path']}")
+    console.print(f"Operaciones cerradas: {result['n']}")
+    for lesson in result["lessons"]:
+        console.print(
+            f"[yellow]Lección propuesta[/yellow] #{lesson['id']}: "
+            f"{lesson['hypothesis'][:160]}"
+        )
+
+
+@ai_trader_app.command("approve-lesson")
+def ai_trader_approve_lesson_cmd(
+    lesson_id: int = typer.Argument(..., help="ID de la lección"),
+) -> None:
+    """Aprueba una lección y sube playbook_version (decisión del operador)."""
+    from .ai_trader import AiTraderError, approve_lesson
+
+    try:
+        result = approve_lesson(lesson_id, db_path=DEFAULT_DB)
+    except Exception as exc:
+        _ai_trader_error(AiTraderError(str(exc)))
+    console.print(
+        f"[green]Lección {lesson_id} aprobada[/green] · "
+        f"playbook v{result['playbook_version']}"
+    )
+
+
+@ai_trader_app.command("no-trade")
+def ai_trader_no_trade_cmd(
+    reason: str = typer.Option(..., "--reason", help="Motivo de no operar"),
+    symbols: str = typer.Option(None, "--symbols", help="Símbolos afectados, separados por comas"),
+) -> None:
+    """Registra una decisión de no operar (también es una decisión)."""
+    from .ai_trader import AiTraderError, log_no_trade
+
+    try:
+        log_no_trade(
+            reason,
+            symbols=[s.strip() for s in symbols.split(",") if s.strip()] if symbols else None,
+            db_path=DEFAULT_DB,
+        )
+    except AiTraderError as exc:
+        _ai_trader_error(exc)
+    console.print(f"[green]Decisión registrada[/green] · no operar: {reason[:120]}")
 
 
 def main() -> None:
