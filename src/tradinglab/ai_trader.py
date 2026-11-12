@@ -1102,13 +1102,12 @@ def snapshot_style(broker, style: str, symbols: list[str] | None = None,
         ],
         "events_24h": _events_24h(db_path, now),
     }
-    if assigned:
-        payload["allowed"] = {
-            canonical.get(symbol.lower(), symbol): {
-                strategy: list(frames) for strategy, frames in strategies.items()
-            }
-            for symbol, strategies in assigned.items()
+    payload["allowed"] = {
+        canonical.get(symbol.lower(), symbol): {
+            strategy: list(frames) for strategy, frames in strategies.items()
         }
+        for symbol, strategies in assigned.items()
+    }
 
     for symbol in wanted:
         key = symbol.upper()
