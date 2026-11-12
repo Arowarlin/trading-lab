@@ -698,6 +698,7 @@ def init_db(path: str | Path) -> None:
         _migrate_strategy_trials(con)
         _migrate_fills_mt5(con)
         _migrate_forward_state(con)
+        _migrate_chain_orders(con)
 
 
 def _migrate_strategy_trials(con: sqlite3.Connection) -> None:
@@ -879,6 +880,42 @@ def _migrate_forward_state(con: sqlite3.Connection) -> None:
             updated_at TEXT NOT NULL
         );
         """
+    )
+
+
+def _migrate_chain_orders(con: sqlite3.Connection) -> None:
+    """Rehashea una sola vez la cadena de `orders` con la fila almacenada.
+
+    `append_hashed` hasheaba el dict de entrada; una columna con DEFAULT
+    (p. ej. `order_type`) quedaba con un hash que no coincidía al leerla.
+    La migración es única (tabla `schema_migrations`) y solo toca orders.
+    """
+    con.execute(
+        "CREATE TABLE IF NOT EXISTS schema_migrations("
+        "name TEXT PRIMARY KEY, applied_at TEXT NOT NULL)"
+    )
+    done = con.execute(
+        "SELECT 1 FROM schema_migrations WHERE name = 'orders_chain_stored_hash'"
+    ).fetchone()
+    if done:
+        return
+    from .audit import row_hash
+
+    rows = con.execute(
+        "SELECT * FROM orders WHERE row_hash IS NOT NULL ORDER BY id"
+    ).fetchall()
+    prev: str | None = None
+    for row in rows:
+        data = dict(row)
+        digest = row_hash(con, "orders", data, prev)
+        con.execute(
+            "UPDATE orders SET prev_hash = ?, row_hash = ? WHERE id = ?",
+            (prev, digest, row["id"]),
+        )
+        prev = digest
+    con.execute(
+        "INSERT INTO schema_migrations(name, applied_at) VALUES(?, ?)",
+        ("orders_chain_stored_hash", utcnow()),
     )
 
 

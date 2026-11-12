@@ -63,6 +63,29 @@ def test_cadena_valida(tmp_path: Path) -> None:
     assert result["legacy"] == 0
 
 
+def test_append_hashed_usa_los_defaults_de_la_tabla(tmp_path: Path) -> None:
+    """Una columna con DEFAULT no debe romper el hash al leer la fila."""
+    db = tmp_path / "lab.db"
+    init_db(db)
+    with connect(db) as con:
+        append_hashed(
+            con,
+            "orders",
+            {
+                "ts": "2026-01-01",
+                "ticker": "SPY",
+                "side": "buy",
+                "qty": 1.0,
+                "status": "filled",
+                "bot": "test",
+                "reason": "sin order_type: usa el DEFAULT",
+            },
+        )
+    result = verify_chain("orders", db)
+    assert result["ok"] is True
+    assert result["first_break_id"] is None
+
+
 def test_fila_alterada_se_detecta(tmp_path: Path) -> None:
     db = tmp_path / "lab.db"
     init_db(db)

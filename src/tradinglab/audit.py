@@ -101,9 +101,11 @@ def append_hashed(
         tuple(row.values()),
     )
     row_id = int(cursor.lastrowid)
-    full = dict(row)
-    full["id"] = row_id
-    digest = row_hash(con, table, full, prev)
+    # Se hashea la fila tal y como quedó en la tabla, con sus defaults. Si se
+    # hashea el dict de entrada, una columna con DEFAULT (p. ej. order_type)
+    # produce un hash que ya no coincide al leerla.
+    stored = con.execute(f"SELECT * FROM {table} WHERE id = ?", (row_id,)).fetchone()
+    digest = row_hash(con, table, dict(stored), prev)
     con.execute(
         f"UPDATE {table} SET prev_hash = ?, row_hash = ? WHERE id = ?",
         (prev, digest, row_id),
