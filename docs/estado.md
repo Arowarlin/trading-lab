@@ -39,13 +39,26 @@ Notas de lectura:
     igual que deshabilitarla).
 - El **forward** no es una validación: los dos candidatos tienen Sharpe negativo
   en backtest y se usan como excepción forward documentada. El tercero
-  (`us100-trend-d1`) está **incubando** y sigue `enabled:false`.
+  (`us100-trend-d1`) está **incubando**; se encendió el 2026-11-11 y sigue en
+  demo, sin live.
 - El **guardián** no depende de Python: si el proceso se cae, el EA sigue.
 - El **Diario** reconstruye operaciones cerradas desde `fills`: ahora incluye
   los deals de MT5 (magic del laboratorio → bot `forward:<id>`; magic ajeno →
   `manual`) y empareja FIFO en largo y en corto. Usa `contract_size` para el
   PnL de CFDs y suma el swap; los fills del paper siguen funcionando igual.
   `entry_order_id=0` en los deals de MT5 significa "sin orden del laboratorio".
+- **IA discrecional (3 estilos)**: biblioteca de 10 estrategias con reglas
+  exactas en `ai_setups.py`; el LLM solo elige estilo, símbolo, estrategia,
+  timeframe y dirección. La asignación del playbook v1 está en
+  `config/ai_trader.yaml` (`intraday`: M15/H1; `swing`: H4/D1). **`scalping`
+  queda sin asignaciones M1/M5**: el estilo está configurado, pero `propose`
+  rechaza cualquier combinación hasta que se añada una asignación explícita.
+  `snapshot --style --symbols` devuelve el JSON compacto (≤3.000 tokens) con
+  indicadores, setups válidos, coste/R, eventos 24 h, posiciones y presupuesto.
+  `manage` aplica breakeven a 0,5R, trailing de 1 ATR desde 1R, el canal de 10
+  días de `donchian_turtle`, la salida D1 sobre SMA5 de `rsi2_connors` y los
+  cierres de sesión de `orb_ny` (16:00 NY) y `london_breakout` (16:00 Londres),
+  sin alejar nunca el stop y solo sobre los magics 20261191/92/93.
 
 ## No construir hasta
 

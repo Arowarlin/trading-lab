@@ -9200,15 +9200,18 @@ def ai_trader_snapshot_cmd(
     symbols: str = typer.Option(
         None, "--symbols", help="Lista separada por comas; por defecto, el universo"
     ),
+    style: str = typer.Option(
+        None, "--style", help="Snapshot compacto de un estilo (scalping/intraday/swing)"
+    ),
 ) -> None:
     """Snapshot compacto por símbolo para decidir la sesión."""
-    from .ai_trader import AiTraderError, snapshot
+    from .ai_trader import AiTraderError, snapshot, snapshot_style
 
     settings = get_settings()
     broker = _mt5(settings, dry_run=True)
     try:
         wanted = [s.strip() for s in symbols.split(",") if s.strip()] if symbols else None
-        payload = snapshot(broker, wanted)
+        payload = snapshot_style(broker, style, wanted) if style else snapshot(broker, wanted)
     except AiTraderError as exc:
         _ai_trader_error(exc)
     finally:
@@ -9370,7 +9373,7 @@ def ai_trader_manage_cmd() -> None:
         console.print("Sin posiciones del carril.")
         return
     table = Table(title="IA discrecional · manage")
-    for column in ("Ticket", "Estilo", "Símbolo", "Lado", "R", "SL", "Nuevo SL"):
+    for column in ("Ticket", "Estilo", "Símbolo", "Lado", "R", "SL", "Nuevo SL", "Cierre"):
         table.add_column(column)
     for row in rows:
         table.add_row(
@@ -9378,9 +9381,10 @@ def ai_trader_manage_cmd() -> None:
             str(row.get("style") or "-"),
             str(row["symbol"]),
             str(row["side"]),
-            f"{row['profit_r']:+.2f}",
+            f"{row['profit_r']:+.2f}" if row.get("profit_r") is not None else "-",
             f"{row['sl']:.5f}",
             f"{row['new_sl']:.5f}" if row["new_sl"] is not None else "-",
+            str(row.get("closed") or row.get("close_error") or "-"),
         )
     console.print(table)
 

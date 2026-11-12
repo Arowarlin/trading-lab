@@ -9,8 +9,13 @@ calcularla; la asignación final símbolo/estrategia/timeframe vive en
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, time, timezone
+from zoneinfo import ZoneInfo
 
 TIMEFRAMES = ("M1", "M5", "M15", "H1", "H4", "D1")
+
+NEW_YORK = ZoneInfo("America/New_York")
+LONDON = ZoneInfo("Europe/London")
 
 # Timeframe nativo (compatibilidad con el carril original de un solo estilo).
 STRATEGY_TIMEFRAME = {
@@ -23,6 +28,7 @@ STRATEGY_TIMEFRAME = {
     "rsi2_connors": "D1",
     "donchian_turtle": "D1",
     "inside_bar": "D1",
+    "trend_pullback": "H4",
 }
 
 # Timeframes en los que cada estrategia tiene una implementación honesta.
@@ -36,6 +42,7 @@ STRATEGY_TIMEFRAMES = {
     "rsi2_connors": ("D1",),
     "donchian_turtle": ("H4", "D1"),
     "inside_bar": ("H4", "D1"),
+    "trend_pullback": ("H4",),
 }
 
 SECTION = {"M1": "m1", "M5": "m5", "M15": "m15",
@@ -48,25 +55,30 @@ ALLOWED = {
         "bollinger_squeeze": "H1",
         "rsi2_connors": "D1",
         "donchian_turtle": "D1",
+        "trend_pullback": "H4",
     },
     "XAUUSD": {
         "liquidity_sweep": "H1",
         "donchian_turtle": "D1",
         "inside_bar": "D1",
+        "trend_pullback": "H4",
     },
     "EURUSD": {
         "london_breakout": "H1",
         "ema_pullback": "H1",
         "inside_bar": "D1",
+        "trend_pullback": "H4",
     },
     "GBPUSD": {
         "london_breakout": "H1",
         "ema_pullback": "H1",
         "inside_bar": "D1",
+        "trend_pullback": "H4",
     },
     "USDJPY": {
         "ema_pullback": "H1",
         "donchian_turtle": "D1",
+        "trend_pullback": "H4",
     },
 }
 
@@ -124,6 +136,20 @@ def _ok(condition: bool, reason: str) -> tuple[bool, str]:
     return (True, "") if condition else (False, reason)
 
 
+def _snap_now(snap: dict) -> datetime:
+    """Hora del snapshot (UTC) para validar ventanas; ahora si no viene."""
+    raw = snap.get("now")
+    if raw in (None, "", "Sin datos"):
+        return datetime.now(timezone.utc)
+    try:
+        value = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+    except ValueError:
+        return datetime.now(timezone.utc)
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
 def validate(
     strategy: str, side: str, snap: dict, timeframe: str | None = None
 ) -> tuple[bool, str]:
@@ -144,6 +170,9 @@ def validate(
         if block.get("error"):
             return False, f"Sin datos: {block['error']}"
         if strategy == "orb_ny":
+            local = _snap_now(snap).astimezone(NEW_YORK)
+            if not (time(9, 30) <= local.time() < time(16, 0)):
+                return False, "fuera de la sesión NY (09:30-16:00)"
             if not bool(block.get("orb_valid")):
                 return False, "rango de apertura NY incompleto"
             high, low = _b(block, "orb_high"), _b(block, "orb_low")
@@ -172,6 +201,9 @@ def validate(
                 "no hay barrido del día anterior",
             )
         if strategy == "london_breakout":
+            local = _snap_now(snap).astimezone(LONDON)
+            if not (time(7, 0) <= local.time() < time(10, 0)):
+                return False, "fuera de la ventana de ruptura 07:00-10:00 Londres"
             if not bool(block.get("asian_valid")):
                 return False, "rango asiático incompleto"
             high, low = _b(block, "asian_high"), _b(block, "asian_low")
@@ -189,12 +221,13 @@ def validate(
         if strategy == "rsi2_connors":
             if side != "buy":
                 return False, "rsi2_connors solo opera largos"
+            # Entrada: índice sobre SMA200 y RSI(2) < 10. La salida (cierre
+            # sobre SMA5) la ejecuta `manage`, no se convierte en TP intradía.
             return _ok(
                 bool(snap.get("is_index"))
                 and price > _f(snap, "d1", "sma200")
-                and _f(snap, "d1", "rsi2") < 10
-                and _f(snap, "d1", "sma5") > price,
-                "índice bajo SMA200, RSI2 >= 10 o SMA5 por debajo",
+                and _f(snap, "d1", "rsi2") < 10,
+                "índice bajo SMA200 o RSI2 >= 10",
             )
         if strategy == "donchian_turtle":
             if side == "buy":
@@ -208,6 +241,26 @@ def validate(
             high, low = _b(block, "mother_high"), _b(block, "mother_low")
             return _ok((side == "buy" and price > high) or (side == "sell" and price < low),
                        "precio dentro de la vela madre")
+        if strategy == "trend_pullback":
+            close_d1 = _f(snap, "d1", "close")
+            sma200 = _f(snap, "d1", "sma200")
+            atr = _b(block, "atr")
+            sma20 = _b(block, "sma20")
+            low, high, close = (_b(block, key) for key in ("low", "high", "close"))
+            zone_low, zone_high = sma20 - 0.5 * atr, sma20 + 0.5 * atr
+            if side == "buy":
+                return _ok(
+                    close_d1 > sma200
+                    and zone_low <= low <= zone_high
+                    and close >= sma20,
+                    "sin tendencia D1 alcista o sin retroceso a SMA20 H4",
+                )
+            return _ok(
+                close_d1 < sma200
+                and zone_low <= high <= zone_high
+                and close <= sma20,
+                "sin tendencia D1 bajista o sin retroceso a SMA20 H4",
+            )
     except (KeyError, TypeError) as exc:
         return False, f"snapshot incompleto: {exc}"
     except SetupError as exc:
@@ -257,7 +310,8 @@ def plan(
         tp = price + stop * 2 * dist
     elif strategy == "rsi2_connors":
         sl = price - 2 * _f(snap, "d1", "atr")
-        tp = _f(snap, "d1", "sma5")
+        # Sin TP: la salida es el cierre D1 sobre la SMA5 (la ejecuta manage).
+        tp = None
         dist = abs(price - sl)
     elif strategy == "donchian_turtle":
         sl = price - 2 * _f(snap, "d1", "atr") if side == "buy" else price + 2 * _f(snap, "d1", "atr")
@@ -267,6 +321,11 @@ def plan(
         sl = _b(block, "mother_low") if side == "buy" else _b(block, "mother_high")
         dist = abs(price - sl)
         tp = price + stop * 2 * dist
+    elif strategy == "trend_pullback":
+        dist_atr = _b(block, "atr")
+        dist = 1.5 * dist_atr
+        sl = price - stop * dist
+        tp = price + stop * 3.0 * dist_atr
     else:
         raise SetupError(f"estrategia sin niveles: {strategy}")
     if dist <= 0:
@@ -298,4 +357,5 @@ def describe() -> dict:
         "rsi2_connors": "D1: índices sobre SMA200, RSI2<10; salida en SMA5; SL 2 ATR D1",
         "donchian_turtle": "H4/D1: ruptura 20 días con filtro 55; SL 2 ATR D1; trailing 10 días",
         "inside_bar": "H4/D1: inside bar; ruptura de la madre; SL al otro lado; TP 2R",
+        "trend_pullback": "H4: tendencia D1 (close vs SMA200); retroceso a SMA20 H4 ±0,5 ATR; SL 1,5 ATR; TP 3 ATR",
     }

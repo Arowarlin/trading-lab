@@ -241,6 +241,13 @@ def load_config(path: str | Path | None = None) -> dict:
     if playbook < 1:
         raise AiTraderError("playbook_version debe ser >= 1")
 
+    allowed_flat: dict[str, dict[str, str]] = {}
+    for style in styles.values():
+        for symbol, strategies in style["allowed"].items():
+            target = allowed_flat.setdefault(symbol, {})
+            for strategy, frames in strategies.items():
+                target.setdefault(strategy, frames[0])
+
     out = {
         "version": int(data.get("version") or 2),
         "account": account,
@@ -262,11 +269,7 @@ def load_config(path: str | Path | None = None) -> dict:
         "max_open_per_symbol": per_symbol,
         "playbook_version": playbook,
         "timeframes": sorted({tf for item in styles.values() for tf in item["timeframes"]}),
-        "allowed": {
-            symbol: {strategy: frames[0] for strategy, frames in strategies.items()}
-            for style in styles.values()
-            for symbol, strategies in style["allowed"].items()
-        },
+        "allowed": allowed_flat,
         "source": str(target),
     }
     return out
@@ -513,11 +516,12 @@ def _cost_ratio(
 
 def _vwap(bars: pd.DataFrame) -> tuple[float, float]:
     typical = (bars["high"] + bars["low"] + bars["close"]) / 3.0
-    if "tick_volume" in bars.columns:
-        volume = bars["tick_volume"].clip(lower=0)
-    elif "real_volume" in bars.columns:
-        volume = bars["real_volume"].clip(lower=0)
-    else:
+    volume = None
+    for column in ("tick_volume", "volume", "real_volume"):
+        if column in bars.columns:
+            volume = bars[column].clip(lower=0)
+            break
+    if volume is None:
         volume = pd.Series(1.0, index=bars.index)
     total = float(volume.sum())
     if total <= 0:
@@ -537,9 +541,22 @@ def _round_or_none(value: float | None, digits: int = 8):
 
 def _block_from_bars(bars: pd.DataFrame, timeframe: str, d1: pd.DataFrame,
                      price: float, now: datetime) -> dict:
-    """Indicadores comunes de un timeframe. No inventa: si falta, Sin datos."""
+    """Indicadores comunes de un timeframe. No inventa: si falta, Sin datos.
+
+    Solo usa barras cerradas hasta ``now``: truncar el histórico a esa hora
+    produce exactamente el mismo bloque (sin lookahead).
+    """
     if bars is None or len(bars) < 55:
         raise AiTraderError(f"Sin datos {timeframe}")
+    moment = _as_utc(now)
+    bars = bars[bars.index <= moment]
+    if len(bars) < 55:
+        raise AiTraderError(f"Sin datos {timeframe}")
+    if d1 is not None:
+        # Solo días completos: el día en curso aún no ha cerrado.
+        d1 = d1[d1.index < pd.Timestamp(moment).normalize()]
+    if d1 is None or len(d1) < 1:
+        raise AiTraderError(f"Sin datos {timeframe} D1")
     minutes = TF_MINUTES.get(timeframe, 15)
     atr_value = float(atr(bars).iloc[-1])
     mid = _sma(bars["close"], 20)
@@ -551,26 +568,29 @@ def _block_from_bars(bars: pd.DataFrame, timeframe: str, d1: pd.DataFrame,
     width_series = 4 * sd20 / mean20
     squeeze = bool(pd.notna(width) and width <= float(width_series.tail(120).min()))
 
-    day_start = _as_utc(now).replace(hour=0, minute=0, second=0, microsecond=0)
-    session_bars = bars[bars.index >= day_start]
+    # VWAP de la sesión de Nueva York (día de trading completo).
+    ny_day = moment.astimezone(NEW_YORK).replace(hour=0, minute=0, second=0, microsecond=0)
+    session_bars = bars[bars.index >= ny_day.astimezone(timezone.utc)]
     if len(session_bars) == 0:
         session_bars = bars.tail(1)
     vwap, sigma = _vwap(session_bars)
 
-    et_now = now.astimezone(NEW_YORK)
+    et_now = moment.astimezone(NEW_YORK)
     et_open = et_now.replace(hour=9, minute=30, second=0, microsecond=0)
     expected_orb = max(1, 60 // minutes)
     orb = bars[(bars.index >= et_open.astimezone(timezone.utc))
                & (bars.index < (et_open + timedelta(hours=1)).astimezone(timezone.utc))]
-    orb_valid = len(orb) >= expected_orb
+    orb_complete = moment >= (et_open + timedelta(hours=1)).astimezone(timezone.utc)
+    orb_valid = orb_complete and len(orb) >= expected_orb
     orb_high = float(orb["high"].max()) if orb_valid else float("nan")
     orb_low = float(orb["low"].min()) if orb_valid else float("nan")
 
-    london_start = now.astimezone(LONDON).replace(hour=0, minute=0, second=0, microsecond=0)
+    london_start = moment.astimezone(LONDON).replace(hour=0, minute=0, second=0, microsecond=0)
     expected_asian = max(1, 420 // minutes)
     asian = bars[(bars.index >= london_start.astimezone(timezone.utc))
                  & (bars.index < (london_start + timedelta(hours=7)).astimezone(timezone.utc))]
-    asian_valid = len(asian) >= expected_asian
+    asian_complete = moment >= (london_start + timedelta(hours=7)).astimezone(timezone.utc)
+    asian_valid = asian_complete and len(asian) >= expected_asian
     asian_high = float(asian["high"].max()) if asian_valid else float("nan")
     asian_low = float(asian["low"].min()) if asian_valid else float("nan")
 
@@ -583,6 +603,7 @@ def _block_from_bars(bars: pd.DataFrame, timeframe: str, d1: pd.DataFrame,
 
     block = {
         "atr": _round_or_none(atr_value),
+        "sma20": _round_or_none(mid),
         "ema9": _round_or_none(float(ema(bars["close"], 9).iloc[-1])),
         "ema21": _round_or_none(float(ema(bars["close"], 21).iloc[-1])),
         "ema50": _round_or_none(float(ema(bars["close"], 50).iloc[-1])),
@@ -685,8 +706,7 @@ def _daily_block(d1: pd.DataFrame) -> dict:
 
 def _clean(frame: pd.DataFrame) -> pd.DataFrame:
     frame = frame.drop(frame.index[frame.index.duplicated()])
-    frame.sort_index(inplace=True)
-    return frame
+    return frame.sort_index()
 
 
 def _safe_rates(broker, symbol: str, timeframe: str, count: int) -> pd.DataFrame | None:
@@ -703,7 +723,8 @@ def _safe_rates(broker, symbol: str, timeframe: str, count: int) -> pd.DataFrame
 def _empty_block(reason: str) -> dict:
     return {
         "error": reason,
-        "atr": "Sin datos", "ema9": "Sin datos", "ema21": "Sin datos",
+        "atr": "Sin datos", "sma20": "Sin datos",
+        "ema9": "Sin datos", "ema21": "Sin datos",
         "ema50": "Sin datos", "bb_upper": "Sin datos", "bb_mid": "Sin datos",
         "bb_lower": "Sin datos", "bb_width": "Sin datos", "bb_squeeze": False,
         "vwap": "Sin datos", "vwap_sigma": "Sin datos",
@@ -766,6 +787,9 @@ def snapshot_symbol(broker, symbol: str, config: dict,
 
     spec = broker.symbol_spec(symbol)
     point = float(spec.get("point") or 0.0)
+    slip = 1.0
+    if style and style in config["styles"]:
+        slip = float(config["styles"][style]["slippage_points"])
     costs = {}
     for tf in TIMEFRAMES:
         raw_atr = blocks[tf].get("atr")
@@ -775,7 +799,7 @@ def snapshot_symbol(broker, symbol: str, config: dict,
             atr_value = 0.0
         ratio = _cost_ratio(
             symbol, price, spread, atr_value,
-            slippage_points=1.0, point=point,
+            slippage_points=slip, point=point,
         ) if point and atr_value > 0 else None
         costs[tf] = round(ratio, 4) if ratio is not None else "Sin datos"
 
@@ -816,6 +840,7 @@ def snapshot_symbol(broker, symbol: str, config: dict,
         "price": round(price, 8),
         "spread": round(spread, 8),
         "point": point,
+        "now": now.isoformat(),
         "session": _session(now),
         "cost_r": costs,
         "styles": style_payload,
@@ -863,6 +888,261 @@ def snapshot(broker, symbols: list[str] | None = None,
         },
         "symbols": payload,
     }
+
+
+# --------------------------------------------------------- snapshot por estilo
+
+# Campos que necesita cada estrategia en su timeframe. El snapshot compacto
+# solo manda lo que la estrategia asignada usa; el resto se queda fuera.
+STRATEGY_FIELDS = {
+    "orb_ny": ("atr", "orb_high", "orb_low", "orb_valid"),
+    "vwap_reversion": ("atr", "vwap", "vwap_sigma"),
+    "bollinger_squeeze": (
+        "atr", "bb_upper", "bb_mid", "bb_lower", "bb_width", "bb_squeeze", "close",
+    ),
+    "liquidity_sweep": (
+        "atr", "prev_high", "prev_low", "prev_mid", "sweep_high", "sweep_low",
+        "high", "low", "close",
+    ),
+    "london_breakout": ("atr", "asian_high", "asian_low", "asian_valid"),
+    "ema_pullback": (
+        "atr", "ema9", "ema21", "ema50", "high", "low", "open", "close",
+    ),
+    "rsi2_connors": ("atr", "sma5", "sma200", "rsi2", "close"),
+    "donchian_turtle": (
+        "atr", "dc20_high", "dc20_low", "dc55_high", "dc55_low", "close",
+    ),
+    "inside_bar": ("atr", "mother_high", "mother_low", "inside_bar", "close"),
+    "trend_pullback": ("atr", "sma20", "high", "low", "close"),
+}
+
+# Secciones adicionales que una estrategia mira fuera de su timeframe.
+STRATEGY_EXTRA = {
+    "trend_pullback": {"d1": ("close", "sma200")},
+}
+
+
+def _compact(value, digits: int = 5):
+    if value in (None, "", "Sin datos"):
+        return "Sin datos"
+    if isinstance(value, bool):
+        return value
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return value
+    if not math.isfinite(number):
+        return "Sin datos"
+    return round(number, digits)
+
+
+def _block_value(block: dict, key: str):
+    value = (block or {}).get(key)
+    if value in (None, "", "Sin datos"):
+        return "Sin datos"
+    return _compact(value)
+
+
+def _trend_label(block: dict, *, d1: bool = False) -> str:
+    try:
+        if d1:
+            close = float(block["close"])
+            sma200 = float(block["sma200"])
+        else:
+            e9, e21, e50 = (float(block[key]) for key in ("ema9", "ema21", "ema50"))
+    except (KeyError, TypeError, ValueError):
+        return "Sin datos"
+    if d1:
+        return "up" if close > sma200 else ("down" if close < sma200 else "flat")
+    if e9 > e21 > e50:
+        return "up"
+    if e9 < e21 < e50:
+        return "down"
+    return "flat"
+
+
+def _style_data(snap: dict, strategies: dict[str, list[str]]) -> dict:
+    """Datos mínimos por símbolo para las estrategias asignadas al estilo."""
+    data: dict = {}
+    for strategy, frames in strategies.items():
+        for tf in frames:
+            section = TF_SECTION.get(tf)
+            if section is None:
+                continue
+            block = snap.get(section) or {}
+            bucket = data.setdefault(section, {})
+            for field in STRATEGY_FIELDS.get(strategy, ()):  # type: ignore[arg-type]
+                bucket[field] = _block_value(block, field)
+            for extra_section, fields in STRATEGY_EXTRA.get(strategy, {}).items():
+                extra_block = snap.get(extra_section) or {}
+                extra_bucket = data.setdefault(extra_section, {})
+                for field in fields:
+                    extra_bucket[field] = _block_value(extra_block, field)
+    data["trend_d1"] = _trend_label(snap.get("d1") or {}, d1=True)
+    data["trend_h4"] = _trend_label(snap.get("h4") or {})
+    if "d1" in data:
+        data["d1"].setdefault("sma200", _block_value(snap.get("d1") or {}, "sma200"))
+    return data
+
+
+def _style_setups(snap: dict, strategies: dict[str, list[str]]) -> list[dict]:
+    """Setups válidos ahora, calculados por el código (nunca por el LLM)."""
+    out: list[dict] = []
+    for strategy, frames in strategies.items():
+        for tf in frames:
+            for side in ("buy", "sell"):
+                try:
+                    ok, _reason = validate(strategy, side, snap, tf)
+                    if not ok:
+                        continue
+                    level = plan(strategy, side, snap, tf)
+                except (SetupError, KeyError, TypeError, ValueError):
+                    continue
+                out.append(
+                    {
+                        "strategy": strategy,
+                        "timeframe": tf,
+                        "side": side,
+                        "entry": _compact(level.entry),
+                        "sl": _compact(level.sl),
+                        "tp": _compact(level.tp) if level.tp is not None else None,
+                        "rr": _compact(level.rr, 3) if level.rr is not None else None,
+                    }
+                )
+    return out
+
+
+def _events_24h(db_path: str | Path, now: datetime) -> list[dict] | str:
+    start = _as_utc(now)
+    end = start + timedelta(hours=24)
+    try:
+        init_db(db_path)
+        with connect(db_path) as con:
+            rows = con.execute(
+                "SELECT event, ts_utc, importance FROM macro_events "
+                "WHERE ts_utc >= ? AND ts_utc <= ? ORDER BY ts_utc LIMIT 12",
+                (start.isoformat(), end.isoformat()),
+            ).fetchall()
+    except Exception:
+        return "Sin datos"
+    return [
+        {
+            "event": str(row["event"]),
+            "ts_utc": str(row["ts_utc"]),
+            "importance": str(row["importance"] or "medium"),
+        }
+        for row in rows
+    ]
+
+
+def snapshot_style(broker, style: str, symbols: list[str] | None = None,
+                   config: dict | None = None,
+                   db_path: str | Path = DEFAULT_DB) -> dict:
+    """Snapshot compacto (<= 3.000 tokens) de un estilo."""
+    cfg = config or load_config()
+    item = style_config(cfg, style)
+    init_db(db_path)
+    assigned = item["allowed"]
+    if symbols:
+        wanted = [str(symbol) for symbol in symbols]
+    elif assigned:
+        wanted = sorted(assigned)
+    else:
+        wanted = list(item["universe"])
+    canonical = {str(symbol).lower(): str(symbol) for symbol in cfg["universe"]}
+
+    now = datetime.now(timezone.utc)
+    positions = _all_lane_positions(broker, cfg)
+    lane = [
+        position for position in positions
+        if int(position.get("magic") or 0) == int(item["magic"])
+    ]
+    pnl = _lane_pnl_today(db_path, item["magic"]) + _floating_today(lane, item["magic"])
+    equity = float(broker.health().get("equity") or 0.0)
+    limit = equity * float(item["daily_stop"])
+    open_risk = _open_risk(db_path, item["magic"])
+    max_open_risk = item["max_open_risk"]
+    trades_today = _trades_today(db_path, item["magic"])
+
+    payload: dict = {
+        "generated_at": utcnow(),
+        "style": style,
+        "magic": item["magic"],
+        "playbook_version": cfg["playbook_version"],
+        "session_open": session_open(item),
+        "budget": {
+            "equity": round(equity, 2),
+            "risk_per_trade": item["risk_per_trade"],
+            "risk_usd": round(equity * float(item["risk_per_trade"]), 2),
+            "daily_stop": item["daily_stop"],
+            "pnl_today": round(pnl, 2),
+            "stop_remaining_usd": round(limit - max(0.0, -pnl), 2),
+            "stop_hit": bool(limit > 0 and pnl <= -limit + 1e-9),
+            "trades_today": trades_today,
+            "max_trades_per_day": item["max_trades_per_day"],
+            "open_risk_usd": round(open_risk, 2),
+            "max_open_risk": max_open_risk,
+            "max_open_risk_remaining": (
+                round(max(0.0, equity * float(max_open_risk) - open_risk), 2)
+                if max_open_risk is not None else None
+            ),
+        },
+        "symbols": {},
+        "positions": [
+            {
+                "ticket": position.get("ticket"),
+                "symbol": position.get("symbol"),
+                "side": position.get("side"),
+                "volume": position.get("volume"),
+                "profit": _compact(position.get("profit"), 2),
+            }
+            for position in lane
+        ],
+        "events_24h": _events_24h(db_path, now),
+    }
+    if assigned:
+        payload["allowed"] = {
+            canonical.get(symbol.lower(), symbol): {
+                strategy: list(frames) for strategy, frames in strategies.items()
+            }
+            for symbol, strategies in assigned.items()
+        }
+
+    for symbol in wanted:
+        key = symbol.upper()
+        if key.lower() not in canonical:
+            raise AiTraderError(f"símbolo fuera del universo: {symbol}")
+        canonical_symbol = canonical[key.lower()]
+        if canonical_symbol.upper() not in {s.upper() for s in item["universe"]}:
+            raise AiTraderError(f"{canonical_symbol} fuera del universo de {style}")
+        snap = snapshot_symbol(broker, canonical_symbol, cfg, db_path, style=style)
+        strategies = assigned.get(key, {})
+        used = sorted({tf for frames in strategies.values() for tf in frames})
+        payload["symbols"][canonical_symbol] = {
+            "price": _compact(snap.get("price")),
+            "spread": _compact(snap.get("spread")),
+            "cost_r": {
+                tf: (snap.get("cost_r") or {}).get(tf, "Sin datos")
+                for tf in (used or item["timeframes"])
+            },
+            "data": _style_data(snap, strategies),
+            "setups": _style_setups(snap, strategies),
+        }
+
+    text = json.dumps(payload, ensure_ascii=False, separators=(",", ":"), default=str)
+    estimate = max(1, math.ceil(len(text) / 4))
+    if estimate > 3000 and isinstance(payload["events_24h"], list):
+        # Recorte conservador: primero los eventos, nunca los niveles.
+        payload["events_24h"] = payload["events_24h"][:5]
+        payload["truncated"] = True
+        text = json.dumps(payload, ensure_ascii=False, separators=(",", ":"), default=str)
+        estimate = max(1, math.ceil(len(text) / 4))
+    payload["token_estimate"] = estimate
+    if estimate > 3000:
+        raise AiTraderError(
+            f"snapshot de {style} supera 3000 tokens ({estimate}); reduce --symbols"
+        )
+    return payload
 
 
 def _snapshot_hash(payload: dict) -> str:
@@ -1497,6 +1777,68 @@ def _shadow_sim(row: dict, bars: pd.DataFrame) -> dict:
     return {"status": "open", "r": round(r, 4)}
 
 
+def _forced_close_reason(setup: str, opened: datetime, now: datetime) -> str | None:
+    """Cierre obligatorio de las estrategias intradía con hora de salida."""
+    if setup == "orb_ny":
+        zone, close_at = NEW_YORK, dtime(16, 0)
+    elif setup == "london_breakout":
+        zone, close_at = LONDON, dtime(16, 0)
+    else:
+        return None
+    opened_local = _as_utc(opened).astimezone(zone)
+    now_local = _as_utc(now).astimezone(zone)
+    if opened_local.date() < now_local.date() or now_local.time() >= close_at:
+        return f"cierre de sesión {setup} ({close_at.strftime('%H:%M')} {zone.key})"
+    return None
+
+
+def _rsi2_exit(broker, symbol: str, entry_time: datetime,
+               now: datetime) -> str | None:
+    """Salida de rsi2_connors: cierre D1 completado por encima de la SMA5."""
+    try:
+        h4 = broker.rates(symbol, "H4", 800)
+    except Exception:
+        return None
+    d1 = _daily(h4)
+    d1 = d1[d1.index < pd.Timestamp(now).normalize()]
+    if len(d1) < 5:
+        return None
+    if d1.index[-1].date() <= pd.Timestamp(entry_time).date():
+        return None
+    sma5 = float(d1["close"].rolling(5).mean().iloc[-1])
+    if float(d1["close"].iloc[-1]) > sma5:
+        return "cierre D1 sobre SMA5"
+    return None
+
+
+def _donchian_stop(broker, symbol: str, side: str, entry: float,
+                   current_sl: float, profit_r: float, now: datetime,
+                   digits: int) -> float | None:
+    """Trailing de 10 días de donchian_turtle; nunca aleja el stop."""
+    try:
+        h4 = broker.rates(symbol, "H4", 800)
+    except Exception:
+        return None
+    d1 = _daily(h4)
+    d1 = d1[d1.index < pd.Timestamp(now).normalize()]
+    if len(d1) < 10:
+        return None
+    short = str(side).lower() == "sell"
+    channel = (
+        float(d1["high"].tail(10).max()) if short
+        else float(d1["low"].tail(10).min())
+    )
+    if profit_r >= 0.5:
+        channel = min(channel, entry) if short else max(channel, entry)
+    if short:
+        if current_sl and channel >= current_sl - 1e-9:
+            return None
+        return round(channel, digits)
+    if current_sl and channel <= current_sl + 1e-9:
+        return None
+    return round(channel, digits)
+
+
 def manage(*, broker, config: dict | None = None,
            db_path: str | Path = DEFAULT_DB) -> list[dict]:
     cfg = config or load_config()
@@ -1513,16 +1855,53 @@ def manage(*, broker, config: dict | None = None,
             cfg, int(position.get("magic") or 0))
         setup = str(row.get("setup") or "")
         timeframe = str(row.get("timeframe") or "H1")
-        bars = broker.rates(position["symbol"], timeframe, 500)
         opened = pd.Timestamp(position["time"])
         if opened.tzinfo is None:
             opened = opened.tz_localize("UTC")
-        since = bars[bars.index >= opened]
         short = str(position["side"]).lower() == "sell"
         entry = float(position["price_open"])
         sl = float(position["sl"] or 0)
         if sl <= 0:
             continue
+
+        forced = _forced_close_reason(setup, opened.to_pydatetime(), now)
+        if forced is None and setup == "rsi2_connors":
+            forced = _rsi2_exit(
+                broker, position["symbol"], opened.to_pydatetime(), now
+            )
+        if forced is not None:
+            try:
+                broker.close_position(ticket)
+                out.append({
+                    "ticket": ticket, "symbol": position["symbol"],
+                    "side": position["side"], "style": style_name,
+                    "setup": setup, "timeframe": timeframe,
+                    "profit_r": None, "sl": sl, "new_sl": None,
+                    "closed": forced,
+                })
+            except Exception as exc:
+                out.append({
+                    "ticket": ticket, "symbol": position["symbol"],
+                    "side": position["side"], "style": style_name,
+                    "setup": setup, "timeframe": timeframe,
+                    "profit_r": None, "sl": sl, "new_sl": None,
+                    "closed": None, "close_error": str(exc)[:120],
+                })
+            continue
+
+        bars = None
+        try:
+            bars = broker.rates(position["symbol"], timeframe, 500)
+        except Exception as exc:
+            out.append({
+                "ticket": ticket, "symbol": position["symbol"],
+                "side": position["side"], "style": style_name,
+                "setup": setup, "timeframe": timeframe,
+                "profit_r": None, "sl": sl, "new_sl": None,
+                "closed": None, "error": str(exc)[:120],
+            })
+            continue
+        since = bars[bars.index >= opened]
         best = float(since["low"].min()) if short and len(since) else (
             float(since["high"].max()) if len(since) else entry)
         tick = broker.tick(position["symbol"])
@@ -1533,31 +1912,31 @@ def manage(*, broker, config: dict | None = None,
             continue
         profit_r = (entry - price) / risk if short else (price - entry) / risk
         spec = broker.symbol_spec(position["symbol"])
+        digits = int(spec.get("digits") or 2)
         if setup == "donchian_turtle":
-            d1 = _daily(broker.rates(position["symbol"], "H4", 800))
-            d1 = d1[d1.index < pd.Timestamp.now(tz="UTC").normalize()]
-            channel = float(d1["low"].tail(10).min()) if short is False else float(d1["high"].tail(10).max())
-            candidate = channel if not short else channel
-            if profit_r >= 0.5:
-                candidate = max(candidate, entry) if not short else min(candidate, entry)
+            candidate = _donchian_stop(
+                broker, position["symbol"], position["side"], entry, sl,
+                profit_r, now, digits,
+            )
         else:
             candidate = next_stop(
                 side=position["side"], entry=entry, best=best,
                 atr_value=float(atr(bars).iloc[-1]),
                 current_sl=sl, profit_r=profit_r,
-                digits=int(spec.get("digits") or 2),
+                digits=digits,
                 min_distance=float(spec.get("stops_level") or 0) * float(spec.get("point") or 0),
             )
         moved = None
         if candidate is not None and ((short and candidate < sl) or (not short and candidate > sl)):
             try:
-                broker.modify_position(ticket, sl=round(candidate, int(spec.get("digits") or 2)))
-                moved = round(candidate, int(spec.get("digits") or 2))
+                broker.modify_position(ticket, sl=round(candidate, digits))
+                moved = round(candidate, digits)
             except Exception:
                 moved = None
         out.append({"ticket": ticket, "symbol": position["symbol"], "side": position["side"],
                     "style": style_name, "setup": setup, "timeframe": timeframe,
-                    "profit_r": round(profit_r, 4), "sl": sl, "new_sl": moved})
+                    "profit_r": round(profit_r, 4), "sl": sl, "new_sl": moved,
+                    "closed": None})
     for name, item in cfg["styles"].items():
         sync_closed(broker, magic=int(item["magic"]), db_path=db_path, now=now)
     return out

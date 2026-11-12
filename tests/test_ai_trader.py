@@ -23,6 +23,7 @@ def snap(symbol: str = "XAUUSD", **over) -> dict:
         "symbol": symbol,
         "price": 100.0,
         "spread": 0.05,
+        "now": "2026-11-12T15:00:00+00:00",  # 10:00 en Nueva York
         "is_index": symbol.upper().startswith("US100"),
         "m15": {"atr": 1.0, "ema9": 100, "ema21": 100, "ema50": 100, "vwap": 100,
                 "vwap_sigma": 1.0, "orb_high": 101, "orb_low": 99, "orb_valid": True, "close": 100},
@@ -31,8 +32,12 @@ def snap(symbol: str = "XAUUSD", **over) -> dict:
                "asian_high": 101, "asian_low": 99, "asian_valid": True,
                "prev_high": 102, "prev_low": 98, "prev_mid": 97, "sweep_high": True,
                "sweep_low": False, "open": 99, "high": 101, "low": 98, "close": 100},
+        "h4": {"atr": 1.0, "sma20": 100.0, "high": 101.0, "low": 99.6,
+               "close": 100.5, "open": 100.0, "ema9": 101, "ema21": 100,
+               "ema50": 99, "bb_mid": 100.0},
         "d1": {"atr": 2.0, "sma5": 97, "sma20": 100, "sma200": 90, "rsi2": 5,
-               "dc20_high": 101, "dc20_low": 99, "dc55_high": 101, "dc55_low": 99,
+               "close": 100.0, "dc20_high": 101, "dc20_low": 99,
+               "dc55_high": 101, "dc55_low": 99,
                "prev_high": 102, "prev_low": 98, "prev_close": 100,
                "mother_high": 101, "mother_low": 99, "inside_bar": True},
     }
@@ -69,7 +74,7 @@ def test_cada_estrategia_genera_niveles_validos():
     lv = plan("liquidity_sweep", "sell", s)
     assert lv.sl == pytest.approx(101.0) and lv.tp == pytest.approx(98.0)
     # london_breakout
-    s = snap("EURUSD", price=102.0)
+    s = snap("EURUSD", price=102.0, now="2026-11-12T08:00:00+00:00")
     lv = plan("london_breakout", "buy", s)
     assert lv.sl == pytest.approx(100.0) and lv.tp == pytest.approx(105.0)
     # ema_pullback
@@ -79,7 +84,7 @@ def test_cada_estrategia_genera_niveles_validos():
     # rsi2_connors
     s = snap("US100.CASH", price=95.0)
     lv = plan("rsi2_connors", "buy", s)
-    assert lv.sl == pytest.approx(91.0) and lv.tp == pytest.approx(97.0)
+    assert lv.sl == pytest.approx(91.0) and lv.tp is None
     # donchian_turtle
     s = snap("XAUUSD", price=103.0)
     lv = plan("donchian_turtle", "buy", s)
@@ -88,6 +93,11 @@ def test_cada_estrategia_genera_niveles_validos():
     s = snap("XAUUSD", price=102.0)
     lv = plan("inside_bar", "buy", s)
     assert lv.sl == pytest.approx(99.0) and lv.tp == pytest.approx(108.0)
+    # trend_pullback
+    s = snap("XAUUSD", price=100.5)
+    lv = plan("trend_pullback", "buy", s)
+    assert lv.sl == pytest.approx(99.0) and lv.tp == pytest.approx(103.5)
+    assert lv.rr == pytest.approx(2.0)
 
 
 def test_validaciones_rechazan_fuera_de_regla():

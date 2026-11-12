@@ -82,6 +82,9 @@ def test_config_tres_estilos_y_global():
     assert cfg["styles"]["swing"]["max_open_risk"] == pytest.approx(0.02)
     assert cfg["styles"]["swing"]["max_cost_r"] is None
     assert cfg["styles"]["swing"]["max_trades_per_day"] is None
+    # El mapa plano no puede perder las estrategias intradía al fusionar estilos.
+    assert cfg["allowed"]["US100.CASH"]["orb_ny"] == "M15"
+    assert cfg["allowed"]["US100.CASH"]["trend_pullback"] == "H4"
 
 
 def test_magics_separados_por_estilo_y_journal():
@@ -204,11 +207,16 @@ def test_coste_r_spread_comision_y_slippage():
 def test_payload_valida_estilo_timeframe_y_estrategia():
     cfg = load_config()
     item = _validate_payload({
-        "style": "scalping", "symbol": "US100.cash", "strategy": "orb_ny",
-        "timeframe": "M5", "side": "buy", "thesis": "ruptura", "confidence": 4,
+        "style": "intraday", "symbol": "US100.cash", "strategy": "orb_ny",
+        "timeframe": "M15", "side": "buy", "thesis": "ruptura", "confidence": 4,
     }, cfg)
     assert item["symbol"] == "US100.cash"
-    assert item["style"] == "scalping"
+    assert item["style"] == "intraday"
+    with pytest.raises(AiTraderError, match="no asignada a US100.cash en scalping"):
+        _validate_payload({
+            "style": "scalping", "symbol": "US100.cash", "strategy": "orb_ny",
+            "timeframe": "M5", "side": "buy", "thesis": "ruptura", "confidence": 4,
+        }, cfg)
     with pytest.raises(AiTraderError, match="estrategia desconocida"):
         _validate_payload({
             "style": "scalping", "symbol": "US100.cash", "strategy": "no_existe",
@@ -216,8 +224,8 @@ def test_payload_valida_estilo_timeframe_y_estrategia():
         }, cfg)
     with pytest.raises(AiTraderError, match="timeframe no permitido"):
         _validate_payload({
-            "style": "scalping", "symbol": "US100.cash", "strategy": "bollinger_squeeze",
-            "timeframe": "H1", "side": "buy", "thesis": "x", "confidence": 3,
+            "style": "intraday", "symbol": "US100.cash", "strategy": "bollinger_squeeze",
+            "timeframe": "H4", "side": "buy", "thesis": "x", "confidence": 3,
         }, cfg)
     with pytest.raises(AiTraderError, match="universo de scalping"):
         _validate_payload({

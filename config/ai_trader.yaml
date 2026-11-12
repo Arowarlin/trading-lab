@@ -34,15 +34,10 @@ styles:
       start: "09:30"
       end: "12:00"
       tz: America/New_York
-    allowed:
-      US100.CASH:
-        orb_ny: [M1, M5]
-        vwap_reversion: [M1, M5]
-        bollinger_squeeze: M5
-      XAUUSD:
-        orb_ny: M5
-        vwap_reversion: [M1, M5]
-        bollinger_squeeze: M5
+    # Playbook v1: no hay estrategias asignadas a M1/M5. El estilo queda
+    # configurado, pero propose rechaza cualquier combinación hasta que se
+    # añada una asignación explícita.
+    allowed: {}
 
   intraday:
     enabled: true
@@ -61,7 +56,6 @@ styles:
         bollinger_squeeze: H1
       XAUUSD:
         liquidity_sweep: H1
-        bollinger_squeeze: H1
       EURUSD:
         london_breakout: H1
         ema_pullback: H1
@@ -82,20 +76,19 @@ styles:
     # Sin `universe` propio: usa el global.
     allowed:
       US100.CASH:
-        donchian_turtle: D1
         rsi2_connors: D1
-        bollinger_squeeze: H4
-        ema_pullback: H4
+        donchian_turtle: D1
+        trend_pullback: H4
       XAUUSD:
         donchian_turtle: D1
         inside_bar: D1
-        liquidity_sweep: H4
+        trend_pullback: H4
       EURUSD:
         inside_bar: D1
-        ema_pullback: H4
+        trend_pullback: H4
       GBPUSD:
         inside_bar: D1
-        ema_pullback: H4
+        trend_pullback: H4
       USDJPY:
         donchian_turtle: D1
-        ema_pullback: H4
+        trend_pullback: H4
