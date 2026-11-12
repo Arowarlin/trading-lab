@@ -53,6 +53,9 @@ def next_stop(
     candidate: float | None = None
     if profit_r >= trail_r:
         candidate = best + atr_mult * atr_value if short else best - atr_mult * atr_value
+        # Nunca peor que breakeven: si el ATR es más ancho que el beneficio,
+        # el trail quedaría en pérdida. En corto manda el SL más bajo.
+        candidate = min(candidate, entry) if short else max(candidate, entry)
     elif profit_r >= be_r:
         candidate = entry
     if candidate is None:
@@ -88,6 +91,11 @@ def main() -> int:
     parser.add_argument("--be-r", type=float, default=0.5)
     parser.add_argument("--trail-r", type=float, default=1.0)
     parser.add_argument("--atr-mult", type=float, default=1.0)
+    parser.add_argument(
+        "--atr-timeframe",
+        default="H4",
+        help="Timeframe del ATR para el trail (H1 para intradía, H4 por defecto)",
+    )
     parser.add_argument("--interval", type=int, default=60)
     parser.add_argument("--hours", type=float, default=4.0)
     parser.add_argument("--once", action="store_true")
@@ -144,7 +152,7 @@ def main() -> int:
                     if short
                     else (price - data["entry"]) / risk
                 )
-                h4 = broker.rates(position["symbol"], "H4", 120)
+                h4 = broker.rates(position["symbol"], args.atr_timeframe, 500)
                 atr_value = float(atr(h4).iloc[-1])
                 min_distance = float(spec.get("stops_level") or 0) * float(
                     spec.get("point") or 0

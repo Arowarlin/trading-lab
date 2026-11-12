@@ -92,6 +92,34 @@ def test_nunca_aleja_el_stop():
     )
 
 
+def test_el_trailing_nunca_queda_peor_que_breakeven():
+    """Con ATR más ancho que el beneficio, el SL no puede quedar en pérdida."""
+    assert (
+        next_stop(
+            side="short",
+            entry=100.0,
+            best=98.0,
+            atr_value=3.0,
+            current_sl=102.0,
+            profit_r=1.5,
+            trail_r=1.0,
+        )
+        == 100.0
+    )
+    assert (
+        next_stop(
+            side="long",
+            entry=100.0,
+            best=102.0,
+            atr_value=3.0,
+            current_sl=98.0,
+            profit_r=1.5,
+            trail_r=1.0,
+        )
+        == 100.0
+    )
+
+
 def test_antes_de_media_r_no_hace_nada():
     assert (
         next_stop(
