@@ -48,11 +48,15 @@ if (-not $deepKey -or -not $deepBase) {
 }
 try {
     $headers = @{ Authorization = "Bearer $deepKey" }
+    $probeUrl = $deepBase.TrimEnd("/") + "/models"
     if ($deepBase -match 'opencode\.ai') {
         $headers["x-opencode-session"] = "lab-deep-nightly"
         $headers["User-Agent"] = "trading-lab/1.0"
+        # El base de chat es /inference/go/openai/v1; el listado de modelos
+        # vive en /inference/v1/models (el chat no expone /models).
+        $probeUrl = "https://opencode.ai/inference/v1/models"
     }
-    Invoke-WebRequest -Uri ($deepBase.TrimEnd("/") + "/models") -Headers $headers -TimeoutSec 10 -UseBasicParsing | Out-Null
+    Invoke-WebRequest -Uri $probeUrl -Headers $headers -TimeoutSec 10 -UseBasicParsing | Out-Null
 } catch {
     $status = $_.Exception.Response.StatusCode.value__
     Write-Log ("Deep en pausa: proveedor no disponible (HTTP {0}). Saldo agotado (402) o clave invalida (401); el deep se corre bajo demanda." -f $status)
@@ -70,6 +74,9 @@ $watchlist = @("SPY", "QQQ", "NVDA")
 $index = [int](Get-Date).DayOfWeek % $watchlist.Count
 $ticker = $watchlist[$index]
 Write-Log "Ticker nocturno: $ticker"
+
+# El lado lite necesita el modelo local; tras dormir LM Studio lo descarga.
+& (Join-Path $root "scripts\lmstudio_start.ps1") -Quick *>> $log
 
 & $lab agent-compare $ticker --analysts "market,news,fundamentals,social" *>> $log
 $code = $LASTEXITCODE

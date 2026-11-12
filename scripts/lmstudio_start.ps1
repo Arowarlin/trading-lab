@@ -1,5 +1,9 @@
 # Arranque de LM Studio al iniciar sesión.
 # No descarga modelos: solo arranca el servidor y carga el modelo ya instalado.
+param(
+    [switch]$Quick
+)
+
 $ErrorActionPreference = "Continue"
 $env:PYTHONUTF8 = "1"
 
@@ -14,7 +18,9 @@ function Write-Log([string]$Message) {
 }
 
 Write-Log "Inicio de tarea LM Studio"
-Start-Sleep -Seconds 20
+if (-not $Quick) {
+    Start-Sleep -Seconds 20
+}
 
 if (-not (Test-Path $lms)) {
     Write-Log "ERROR: no existe $lms"

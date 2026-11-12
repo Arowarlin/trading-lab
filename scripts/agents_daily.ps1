@@ -10,6 +10,10 @@ $logDir = Join-Path $root "logs\agents"
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 $log = Join-Path $logDir ("agents_" + (Get-Date -Format "yyyyMMdd_HHmmss") + ".log")
 
+# Tras dormir o reiniciar, LM Studio puede haber descargado el modelo: sin
+# esto los tres tickers fallan con "modelo no cargado".
+& (Join-Path $root "scripts\lmstudio_start.ps1") -Quick *>> $log
+
 $tickers = @("SPY", "QQQ", "NVDA")
 $failed = @()
 foreach ($ticker in $tickers) {
