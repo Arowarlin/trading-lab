@@ -92,8 +92,17 @@ Fuera de esta asignacion, `propose` rechaza. Los estilos tienen riesgo propio: s
 
 - Cada operacion real tiene una **sombra aleatoria** con semilla fija por id y los mismos niveles/trailing; nunca se envia al broker.
 - En scalping hay ademas una **sombra sin plan**: el lado contrario al real, con los mismos niveles, como contrafactual de lo que el bias/horas prohibidas habrian excluido.
-- El marcador usa solo filas `source=forward`: n, hit rate, R medio, expectativa, coste/R, slippage, diferencia vs cada sombra con IC bootstrap del 90 % y estado `explorando` (n<30), `ganadora`, `perdedora` o `neutral`.
-- Una celda perdedora (n>=30 e IC90 superior < 0) queda `pausada` automaticamente; no insistir. La reactivacion es manual.
+- El marcador usa solo filas `source=forward` y separa por `playbook_version`: cada cambio de playbook reinicia la muestra de la celda. Muestra n, hit rate, R medio, expectativa, coste/R, slippage, diferencia vs cada sombra con IC bootstrap del 90 % y estado `explorando` (n<30), `ganadora`, `perdedora` o `neutral`.
+- Una celda perdedora (n>=30 e IC90 superior < 0) la pausa `lab ai-trader learn` al final del daily; no insistir. La reactivacion es manual o queda como leccion `proposed`.
+
+## Aprendizaje diario
+
+`lab ai-trader learn` corre al final de la sesion daily, sin LLM. Solo aplica
+cambios que reducen riesgo (pausa, exclusion de hora/dia/condicion del snapshot
+y mitad de riesgo por simbolo), maximo 2 por semana, sube `playbook_version` y
+actualiza el YAML y este skill. Reactivar una celda, subir riesgo o ampliar
+estrategias/activos/estilos queda como leccion `proposed` para el operador. El
+LLM no ejecuta `learn`; solo lee el marcador y las lecciones aprobadas.
 
 ## Reglas que no se negocian
 

@@ -216,11 +216,89 @@ def load_config(path: str | Path | None = None) -> dict:
             "session": _parse_session(raw.get("session")),
             "max_open_risk": max_open_risk,
             "allowed": allowed,
+            "risk_overrides": {},
         }
 
     magics = [int(item["magic"]) for item in styles.values()]
     if len(set(magics)) != len(magics):
         raise AiTraderError("cada estilo debe tener un magic distinto")
+
+    learned_raw = data.get("learned") or {}
+    if not isinstance(learned_raw, dict):
+        raise AiTraderError("learned debe ser un objeto")
+    exclusions: list[dict] = []
+    for entry in learned_raw.get("exclusions") or []:
+        if not isinstance(entry, dict):
+            raise AiTraderError("learned.exclusions debe ser una lista de objetos")
+        style_name = str(entry.get("style") or "").strip()
+        if style_name not in styles:
+            raise AiTraderError(f"learned: estilo desconocido en exclusión: {style_name}")
+        raw_symbol = str(entry.get("symbol") or "").strip()
+        if raw_symbol.lower() not in canonical:
+            raise AiTraderError(f"learned: símbolo desconocido en exclusión: {raw_symbol}")
+        symbol = canonical[raw_symbol.lower()]
+        strategy = str(entry.get("strategy") or "").strip()
+        timeframe = str(entry.get("timeframe") or "").strip().upper()
+        allowed = styles[style_name]["allowed"].get(symbol.upper(), {})
+        if strategy not in allowed or timeframe not in allowed[strategy]:
+            raise AiTraderError(
+                f"learned: exclusión fuera de asignación: "
+                f"{style_name}/{symbol}/{strategy}/{timeframe}"
+            )
+        kind = str(entry.get("kind") or "").strip().lower()
+        if kind not in {"hour", "weekday", "snapshot"}:
+            raise AiTraderError(f"learned: kind de exclusión inválido: {kind}")
+        value = entry.get("value")
+        field = entry.get("field")
+        if kind == "hour":
+            try:
+                value = int(value)
+            except (TypeError, ValueError) as exc:
+                raise AiTraderError("learned: hour debe ser entero") from exc
+            if not 0 <= value <= 23:
+                raise AiTraderError("learned: hour fuera de 0-23")
+        elif kind == "weekday":
+            try:
+                value = int(value)
+            except (TypeError, ValueError) as exc:
+                raise AiTraderError("learned: weekday debe ser entero") from exc
+            if not 0 <= value <= 6:
+                raise AiTraderError("learned: weekday fuera de 0-6")
+        else:
+            field = str(field or "").strip()
+            if field not in {
+                "session", "is_index", "trend_d1", "trend_h4", "bb_squeeze",
+                "sweep_high", "sweep_low", "inside_bar", "rsi2_lt10",
+            }:
+                raise AiTraderError(f"learned: campo de snapshot inválido: {field}")
+        exclusions.append({
+            "style": style_name, "symbol": symbol, "strategy": strategy,
+            "timeframe": timeframe, "kind": kind, "field": field,
+            "value": value, "reason": str(entry.get("reason") or "")[:200],
+        })
+    risk_map = learned_raw.get("risk_overrides") or {}
+    if not isinstance(risk_map, dict):
+        raise AiTraderError("learned.risk_overrides debe ser un objeto")
+    for style_name, mapping in risk_map.items():
+        if style_name not in styles:
+            raise AiTraderError(f"learned: estilo desconocido en risk_overrides: {style_name}")
+        if not isinstance(mapping, dict):
+            raise AiTraderError("learned.risk_overrides.<estilo> debe ser un objeto")
+        for raw_symbol, risk in mapping.items():
+            raw_symbol = str(raw_symbol).strip()
+            if raw_symbol.lower() not in canonical:
+                raise AiTraderError(f"learned: símbolo desconocido en riesgo: {raw_symbol}")
+            symbol = canonical[raw_symbol.lower()]
+            if symbol.upper() not in {
+                item.upper() for item in styles[style_name]["universe"]
+            }:
+                raise AiTraderError(
+                    f"learned: {symbol} fuera del universo de {style_name}"
+                )
+            risk = float(risk)
+            if not 0 < risk <= 0.02:
+                raise AiTraderError("learned: risk_overrides fuera de (0, 2%]")
+            styles[style_name]["risk_overrides"][symbol.upper()] = risk
 
     daily_stop = float(global_raw.get("daily_stop") or data.get("daily_stop") or 0.0)
     if not 0 < daily_stop <= 0.10:
@@ -272,6 +350,7 @@ def load_config(path: str | Path | None = None) -> dict:
         "playbook_version": playbook,
         "timeframes": sorted({tf for item in styles.values() for tf in item["timeframes"]}),
         "allowed": allowed_flat,
+        "exclusions": exclusions,
         "source": str(target),
     }
     return out
@@ -352,6 +431,86 @@ def _session(now: datetime) -> str:
     if 13 <= hour < 21:
         return "Nueva York"
     return "Fuera de sesión"
+
+
+def _snapshot_condition(snap: dict, field: str, timeframe: str):
+    """Valor actual de una condición aprendida del snapshot."""
+    if field == "session":
+        return snap.get("session")
+    if field == "is_index":
+        return bool(snap.get("is_index"))
+    d1 = snap.get("d1") or {}
+    if field == "trend_d1":
+        return (
+            "up" if float(d1["close"]) > float(d1["sma200"]) else "down"
+        )
+    if field == "trend_h4":
+        h4 = snap.get("h4") or {}
+        e9, e21, e50 = (float(h4[key]) for key in ("ema9", "ema21", "ema50"))
+        if e9 > e21 > e50:
+            return "up"
+        if e9 < e21 < e50:
+            return "down"
+        return "flat"
+    block = snap.get(TF_SECTION.get(str(timeframe).upper(), "")) or {}
+    if field == "bb_squeeze":
+        return bool(block.get("bb_squeeze"))
+    if field == "sweep_high":
+        return bool(block.get("sweep_high"))
+    if field == "sweep_low":
+        return bool(block.get("sweep_low"))
+    if field == "inside_bar":
+        return bool(d1.get("inside_bar"))
+    if field == "rsi2_lt10":
+        return float(d1["rsi2"]) < 10
+    return None
+
+
+def _exclusion_reason(cfg: dict, item: dict, snap: dict,
+                      now: datetime | None = None) -> str | None:
+    """Motivo de una exclusión aprendida que aplique a esta propuesta."""
+    local = _as_utc(now).astimezone(NEW_YORK)
+    for exclusion in cfg.get("exclusions") or []:
+        if (
+            exclusion.get("style") != item.get("style")
+            or str(exclusion.get("symbol", "")).upper()
+            != str(item.get("symbol", "")).upper()
+            or exclusion.get("strategy") != item.get("strategy")
+            or str(exclusion.get("timeframe", "")).upper()
+            != str(item.get("timeframe", "")).upper()
+        ):
+            continue
+        kind = exclusion.get("kind")
+        if kind == "hour" and local.hour == int(exclusion["value"]):
+            return f"exclusión aprendida: hora {local.hour} NY"
+        if kind == "weekday" and local.weekday() == int(exclusion["value"]):
+            return f"exclusión aprendida: día {local.strftime('%A')}"
+        if kind == "snapshot":
+            try:
+                actual = _snapshot_condition(
+                    snap, str(exclusion.get("field") or ""),
+                    str(item.get("timeframe") or ""),
+                )
+            except Exception:
+                actual = None
+            if actual is None:
+                continue
+            expected = exclusion.get("value")
+            if isinstance(actual, bool):
+                match = bool(actual) == bool(expected)
+            elif isinstance(actual, (int, float)):
+                try:
+                    match = float(actual) == float(expected)
+                except (TypeError, ValueError):
+                    match = False
+            else:
+                match = str(actual).lower() == str(expected).lower()
+            if match:
+                return (
+                    f"exclusión aprendida: {exclusion.get('field')}="
+                    f"{actual}"
+                )
+    return None
 
 
 def _prop_rules(settings: Settings | None = None):
@@ -860,6 +1019,7 @@ def snapshot_symbol(broker, symbol: str, config: dict,
         style_payload[name] = {
             "magic": item["magic"],
             "risk_per_trade": item["risk_per_trade"],
+            "risk_overrides": item.get("risk_overrides") or {},
             "daily_stop": item["daily_stop"],
             "max_trades_per_day": item["max_trades_per_day"],
             "max_cost_r": item["max_cost_r"],
@@ -918,6 +1078,7 @@ def snapshot(broker, symbols: list[str] | None = None,
             name: {
                 "magic": item["magic"],
                 "risk_per_trade": item["risk_per_trade"],
+            "risk_overrides": item.get("risk_overrides") or {},
                 "daily_stop": item["daily_stop"],
                 "max_trades_per_day": item["max_trades_per_day"],
                 "max_cost_r": item["max_cost_r"],
@@ -1123,6 +1284,7 @@ def snapshot_style(broker, style: str, symbols: list[str] | None = None,
         "budget": {
             "equity": round(equity, 2),
             "risk_per_trade": item["risk_per_trade"],
+            "risk_overrides": item.get("risk_overrides") or {},
             "risk_usd": round(equity * float(item["risk_per_trade"]), 2),
             "daily_stop": item["daily_stop"],
             "pnl_today": round(pnl, 2),
@@ -1492,6 +1654,11 @@ def _propose(item: dict, *, broker, cfg: dict, settings: Settings,
         )
 
     snap = snapshot_symbol(broker, item["symbol"], cfg, db_path, style=style_name)
+    excluded = _exclusion_reason(
+        cfg, item, snap, now or datetime.now(timezone.utc)
+    )
+    if excluded:
+        raise _Reject(excluded, decision="skip", setup_valid=1, snapshot=snap)
     ok, reason = validate(item["strategy"], item["side"], snap, item["timeframe"])
     if not ok:
         raise _Reject(f"setup no válido: {reason}", decision="no_setup",
@@ -1534,7 +1701,12 @@ def _propose(item: dict, *, broker, cfg: dict, settings: Settings,
             f"coste/R {cost_ratio:.3f} > {float(max_cost):.2f}",
             decision="skip", setup_valid=1, snapshot=snap,
         )
-    risk_usd = equity * float(style["risk_per_trade"])
+    risk_pct = float(
+        (style.get("risk_overrides") or {}).get(
+            str(item["symbol"]).upper(), style["risk_per_trade"]
+        )
+    )
+    risk_usd = equity * risk_pct
     lots, real_risk, risk_per_lot = _volume_for_risk(
         broker, item["symbol"], dist, risk_usd
     )
@@ -1686,7 +1858,7 @@ def skip(payload: dict, *, config: dict | None = None,
     if symbol.lower() not in universe:
         raise AiTraderError(f"símbolo fuera del universo: {symbol}")
     symbol = universe[symbol.lower()]
-    if symbol not in {item.upper() for item in style["universe"]}:
+    if symbol.upper() not in {item.upper() for item in style["universe"]}:
         raise AiTraderError(f"{symbol} fuera del universo de {style_name}")
     strategy = str(payload.get("strategy") or "").strip()
     if strategy not in STRATEGY_TIMEFRAME:
@@ -2656,10 +2828,13 @@ def _summarize_cells(items: list[dict], db_path: str | Path) -> list[dict]:
             item.get("strategy") or "Sin datos",
             item.get("symbol") or "Sin datos",
             item.get("timeframe") or "Sin datos",
+            item.get("playbook_version"),
         )
         groups.setdefault(key, []).append(item)
     cells = []
-    for (style, strategy, symbol, timeframe), rows in sorted(groups.items()):
+    for (style, strategy, symbol, timeframe, playbook_version), rows in sorted(
+        groups.items(), key=lambda pair: tuple(str(part) for part in pair[0])
+    ):
         rs = [float(row["r"]) for row in rows if row.get("r") is not None]
         n = len(rs)
         seed = int(hashlib.sha256(
@@ -2692,6 +2867,7 @@ def _summarize_cells(items: list[dict], db_path: str | Path) -> list[dict]:
             "strategy": strategy,
             "symbol": symbol,
             "timeframe": timeframe,
+            "playbook_version": playbook_version,
             "n": n,
             "hit": round(sum(1 for r in rs if r > 0) / n, 3) if n else None,
             "avg_r": round(sum(rs) / n, 4) if n else None,
@@ -2818,6 +2994,7 @@ def scoreboard(*, broker, config: dict | None = None,
             "r": round(real_r, 4) if real_r is not None else None,
             "shadow_r": shadow.get("r"), "noplan_r": noplan.get("r"),
             "cost_ratio": row.get("cost_ratio"),
+            "playbook_version": row.get("playbook_version"),
         })
     cells = _summarize_cells(
         [
@@ -2830,12 +3007,12 @@ def scoreboard(*, broker, config: dict | None = None,
                 "shadow_r": item["shadow_r"],
                 "noplan_r": item["noplan_r"],
                 "cost_ratio": item["cost_ratio"],
+                "playbook_version": item["playbook_version"],
             }
             for item in out
         ],
         db_path,
     )
-    _pause_cells(cells, db_path)
     for cell in cells:
         cell["cell_status"] = _cell_status(
             db_path, cell["strategy"], cell["symbol"], cell["timeframe"]
@@ -2866,6 +3043,7 @@ def status(*, broker, config: dict | None = None, settings: Settings | None = No
             "enabled": item["enabled"],
             "equity": round(equity, 2),
             "risk_per_trade": item["risk_per_trade"],
+            "risk_overrides": item.get("risk_overrides") or {},
             "max_cost_r": item["max_cost_r"],
             "max_open_risk": item["max_open_risk"],
             "max_trades_per_day": item["max_trades_per_day"],
@@ -2973,6 +3151,7 @@ def panel(db_path: str | Path = DEFAULT_DB, *,
             "r": float(value), "shadow_r": row.get("shadow_r"),
             "noplan_r": row.get("shadow2_r"),
             "cost_ratio": row.get("cost_ratio"),
+            "playbook_version": row.get("playbook_version"),
         })
     day_start = pd.Timestamp(_day_start(settings))
     styles_budget = {}

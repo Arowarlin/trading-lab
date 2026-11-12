@@ -14,6 +14,7 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot "ai_trader_task_common.ps1")
 $python = Join-Path $root ".venv\Scripts\python.exe"
+$lab = Join-Path $root ".venv\Scripts\lab.exe"
 $started = Get-Date
 $log = Get-AiLogPath -Root $root -Session $Session
 $lockPath = Join-Path $root "logs\ai_trader\ai_trader.lock"
@@ -66,6 +67,16 @@ try {
 
     $text = ($result.lines | Out-String)
     Write-AiLog -Log $log -Message $text
+
+    if ($Session -eq "daily") {
+        Write-AiLog -Log $log -Message "learn diario"
+        $learnOut = & $lab ai-trader learn 2>&1
+        Write-AiLog -Log $log -Message (($learnOut | Out-String).Trim())
+        if ($LASTEXITCODE -ne 0) {
+            Write-AiLog -Log $log -Message "learn falló con código $LASTEXITCODE"
+        }
+    }
+
     if ($result.code -eq 0) {
         $status = "ok"
         $stage = "llm"

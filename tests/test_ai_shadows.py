@@ -108,7 +108,7 @@ def test_scoreboard_perdedora_pausa_y_explorando(tmp_path):
     board = scoreboard(broker=_Broker(), db_path=db)
     cell = board["cells"][0]
     assert cell["state"] == "loser"
-    assert cell["cell_status"] == "paused"
+    assert cell["cell_status"] == "active"
 
     db2 = tmp_path / "lab2.db"
     init_db(db2)

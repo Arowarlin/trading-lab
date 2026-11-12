@@ -8993,20 +8993,29 @@ def campaign_register_cmd(
             "pasada de la campaña.[/yellow]"
         )
         raise typer.Exit(2)
+    path = CAMPAIGNS_DIR / f"{campaign}.yaml"
+    stored = None
+    skip_adjacent = False
+    if path.exists():
+        try:
+            stored = load_campaign_yaml(path)
+            skip_adjacent = bool(
+                (stored.get("plateau") or {}).get("skip_adjacent_if_empty")
+            )
+        except CampaignError as exc:
+            console.print(f"[red]{exc}[/red]")
+            raise typer.Exit(2) from exc
     try:
         universe = _campaign_load_universe()
-        config = _campaign_config(universe, campaign)
+        config = _campaign_config(
+            universe, campaign,
+            skip_adjacent_if_empty=skip_adjacent,
+        )
     except CampaignError as exc:
         console.print(f"[red]{exc}[/red]")
         raise typer.Exit(2) from exc
 
-    path = CAMPAIGNS_DIR / f"{campaign}.yaml"
     if path.exists():
-        try:
-            stored = load_campaign_yaml(path)
-        except CampaignError as exc:
-            console.print(f"[red]{exc}[/red]")
-            raise typer.Exit(2) from exc
         if campaign_hash(stored) != config["config_hash"]:
             console.print(
                 f"[red]{path.name} no coincide con el universo medido: "
@@ -9518,9 +9527,9 @@ def ai_trader_scoreboard_cmd() -> None:
         broker.shutdown()
     cells = data["cells"]
     table = Table(title="IA discrecional · scoreboard")
-    for column in ("Estilo", "Estrategia", "Símbolo", "TF", "N", "Hit", "R medio",
-                   "IC 90%", "Coste/R", "Slippage", "Δ sombra", "Δ sin plan",
-                   "Estado", "Celda"):
+    for column in ("Estilo", "Estrategia", "Símbolo", "TF", "Versión", "N", "Hit",
+                   "R medio", "IC 90%", "Coste/R", "Slippage", "Δ sombra",
+                   "Δ sin plan", "Estado", "Celda"):
         table.add_column(column)
     for cell in cells:
         ci = cell.get("ci90_r")
@@ -9544,6 +9553,7 @@ def ai_trader_scoreboard_cmd() -> None:
             str(cell["strategy"]),
             str(cell["symbol"]),
             str(cell["timeframe"]),
+            str(cell.get("playbook_version") or "-"),
             str(cell["n"]),
             f"{cell['hit']:.0%}" if cell["hit"] is not None else "-",
             f"{cell['avg_r']:+.3f}" if cell["avg_r"] is not None else "-",
@@ -9563,6 +9573,22 @@ def ai_trader_scoreboard_cmd() -> None:
     console.print(table)
     if any(cell["insufficient"] for cell in cells):
         console.print("[yellow]muestra insuficiente: n<30 en alguna celda[/yellow]")
+
+
+@ai_trader_app.command("learn")
+def ai_trader_learn_cmd(
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Muestra candidatos sin aplicar ni escribir"
+    ),
+) -> None:
+    """Aprendizaje diario: solo cambios que reducen riesgo, con límite semanal."""
+    from .ai_learn import LearnError, learn
+
+    try:
+        result = learn(apply=not dry_run, db_path=DEFAULT_DB)
+    except LearnError as exc:
+        _ai_trader_error(exc)
+    typer.echo(json.dumps(result, ensure_ascii=False, separators=(",", ":")))
 
 
 @ai_trader_app.command("replay")

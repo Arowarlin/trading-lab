@@ -22,11 +22,12 @@ revisa. Nada de esto opera en live.
 
 Las tareas **AI-*** se registraron el **2026-11-12** con
 `scripts/register_ai_trader_tasks.ps1` (hora de República Dominicana, usuario
-actual, sin elevación, solo con sesión iniciada). Las cinco quedan `Ready`;
-`AI-Scalp` está habilitada y sin plan solo registra `no_plan`. El script de
-sesión sale sin LLM fuera de ventana/mercado/kill-switch y deja log y estado en
-`logs/ai_trader/`; `lab doctor` muestra `IA tareas` si una tarea no corrió o
-falló.
+actual, sin elevación, solo con sesión iniciada). Las cinco quedan `Ready`
+salvo **`AI-Scalp`, deshabilitada hasta el primer plan**: se habilita con
+`Enable-ScheduledTask -TaskName 'TradingLab-AI-Scalp'` después de crear el plan
+con `lab ai-trader plan`. El script de sesión sale sin LLM fuera de
+ventana/mercado/kill-switch y deja log y estado en `logs/ai_trader/`;
+`lab doctor` muestra `IA tareas` si una tarea no corrió o falló.
 
 Notas de lectura:
 
@@ -88,6 +89,12 @@ Notas de lectura:
   DeepSeek V4.1 Flash en lotes y guarda `ai_decisions` con `source=replay`;
   queda fuera del marcador forward, del panel y de la destilación, y solo
   puede pausar celdas con n≥50 y IC90 de la diferencia vs sombra < 0.
+  El **aprendizaje diario** (`lab ai-trader learn`, sin LLM al final del daily)
+  solo aplica cambios que reducen riesgo (pausa, exclusión de hora/día/
+  condición y mitad de riesgo por símbolo), con máximo 2 por semana y subida de
+  `playbook_version`; reactivar, subir riesgo o ampliar quedan como lección
+  `proposed`. Cada cambio actualiza el YAML, el skill y deja evidencia en
+  `ai_learn_changes`.
 
 ## No construir hasta
 

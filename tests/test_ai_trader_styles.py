@@ -306,6 +306,22 @@ def test_skip_registra_decision_y_auditoria(tmp_path):
         }, db_path=db)
 
 
+def test_skip_acepta_simbolo_canonico_con_minusculas(tmp_path):
+    db = tmp_path / "lab.db"
+    init_db(db)
+    result = skip({
+        "style": "swing", "strategy": "rsi2_connors", "symbol": "US100.cash",
+        "timeframe": "D1", "reason": "sin setup rsi2", "confidence": 3,
+    }, db_path=db)
+    with connect(db) as con:
+        row = con.execute(
+            "SELECT symbol, decision FROM ai_decisions WHERE id=?",
+            (result["id"],),
+        ).fetchone()
+    assert row["symbol"] == "US100.cash"
+    assert row["decision"] == "skip"
+
+
 def test_propose_no_setup_registra_decision(tmp_path, monkeypatch):
     db = tmp_path / "lab.db"
     snap = {

@@ -117,7 +117,7 @@ una razón independiente, se pre-registra `2026-11-B` con una regla de (c)
 escrita **antes** de correr (p. ej. "no aplica si el timeframe adyacente no
 tiene elegibles") y su propio `N_total`, y se corre una sola vez.
 
-## 2026-11-B (regla (c) decidida, sin registrar)
+## 2026-11-B (regla (c) decidida; registrada, sin ejecutar)
 
 - **Regla (c) decidida el 2026-11-12, antes de registrar:** si el timeframe
   adyacente no tiene **ninguna** celda elegible, la condición (c) no se aplica
@@ -130,8 +130,10 @@ tiene elegibles") y su propio `N_total`, y se corre una sola vez.
   exime (c) solo cuando el timeframe adyacente no tiene celdas; el flag entra en
   `config_hash`. `config/campaigns/2026-11-B.yaml` escrito con `N_total=232`,
   corte `2024-08-08`, `config_hash=5bed9520…` y el mismo `holdout_hash=768204bd…`.
-- **No se ha registrado ni ejecutado.** `2026-11-A` sigue siendo el registro
-  histórico y no se toca.
+- **Registrada el 2026-11-12** con `lab campaign register --campaign
+  2026-11-B --confirm`: `N_total=232`, `config_hash=5bed9520…`, `holdout_hash=768204bd…`;
+  `count_tests` 801 → **1033**. **No ejecutada** (`run_id`/`started_at`/`finished_at`
+  vacíos). `2026-11-A` sigue siendo el registro histórico y no se toca.
 
 ## Lecciones de 2026-11-A
 

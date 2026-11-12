@@ -987,6 +987,20 @@ def _migrate_ai_trades(con: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_ai_decisions_style ON ai_decisions(style, decision);
         CREATE INDEX IF NOT EXISTS idx_ai_decisions_source
             ON ai_decisions(source, decision);
+        CREATE TABLE IF NOT EXISTS ai_learn_changes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ts TEXT NOT NULL,
+            kind TEXT NOT NULL,
+            style TEXT,
+            symbol TEXT,
+            strategy TEXT,
+            timeframe TEXT,
+            detail TEXT,
+            evidence TEXT,
+            playbook_version INTEGER
+        );
+        CREATE INDEX IF NOT EXISTS idx_ai_learn_changes_ts
+            ON ai_learn_changes(ts);
         """
     )
     columns = [row["name"] for row in con.execute("PRAGMA table_info(ai_trades)").fetchall()]

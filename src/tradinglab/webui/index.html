@@ -5718,6 +5718,7 @@ async function renderAiTrader() {
       esc(c.strategy),
       esc(c.symbol),
       esc(c.timeframe),
+      `<span class="muted tiny">v${esc(c.playbook_version == null ? "-" : c.playbook_version)}</span>`,
       num(c.n, 0),
       c.hit == null ? "Sin datos" : `${num(c.hit * 100, 1)}%`,
       c.avg_r == null ? "Sin datos" : `${num(c.avg_r, 3)}R`,
@@ -5761,7 +5762,7 @@ async function renderAiTrader() {
       <div class="panel" style="margin-bottom:14px">
         <div class="panel-head"><h2>Marcador por celda</h2><span class="muted tiny">solo forward · IC bootstrap 90%</span></div>
         <div id="ai-trader-cells">
-          ${grid([{ label: "Estilo" }, { label: "Estrategia" }, { label: "Símbolo" }, { label: "TF" }, { label: "N", num: true }, { label: "Hit", num: true }, { label: "R medio", num: true }, { label: "IC 90%" }, { label: "Coste/R", num: true }, { label: "Slippage", num: true }, { label: "Δ sombra" }, { label: "Δ sin plan" }, { label: "Estado" }, { label: "Celda" }], cellRows, { empty: "Sin celdas forward." })}
+          ${grid([{ label: "Estilo" }, { label: "Estrategia" }, { label: "Símbolo" }, { label: "TF" }, { label: "Versión" }, { label: "N", num: true }, { label: "Hit", num: true }, { label: "R medio", num: true }, { label: "IC 90%" }, { label: "Coste/R", num: true }, { label: "Slippage", num: true }, { label: "Δ sombra" }, { label: "Δ sin plan" }, { label: "Estado" }, { label: "Celda" }], cellRows, { empty: "Sin celdas forward." })}
         </div>
       </div>
       <div class="panel" style="margin-bottom:14px">
