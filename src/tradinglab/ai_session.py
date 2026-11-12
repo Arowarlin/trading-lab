@@ -126,7 +126,7 @@ def preflight(
         if not connect:
             return {**base, "ok": False, "stage": "mt5", "reason": "MT5 no disponible"}
         try:
-            from .execution.mt5 import get_mt5_broker
+            from .execution import get_mt5_broker
 
             broker = get_mt5_broker(settings, dry_run=True)
             broker.connect()

@@ -105,8 +105,32 @@ Register-AiTask -Name "TradingLab-AI-Scalp" -Script $scalpScript `
 $manage = New-AiWeeklyRepetitionTrigger -Days @([System.DayOfWeek]::Sunday) `
     -At "17:00" -Interval (New-TimeSpan -Minutes 15) `
     -Duration (New-TimeSpan -Days 5 -Hours 1)
+$manageTriggers = @($manage)
+# Si se registra a mitad de semana, añade una ventana única hasta el viernes
+# para no esperar al domingo siguiente.
+$now = Get-Date
+$manageOpen = (
+    ($now.DayOfWeek -eq [System.DayOfWeek]::Sunday -and $now.Hour -ge 17) -or
+    ($now.DayOfWeek -in @([System.DayOfWeek]::Monday, [System.DayOfWeek]::Tuesday,
+                          [System.DayOfWeek]::Wednesday, [System.DayOfWeek]::Thursday)) -or
+    ($now.DayOfWeek -eq [System.DayOfWeek]::Friday -and $now.Hour -lt 18)
+)
+if ($manageOpen) {
+    $next = $now.AddMinutes(15 - ($now.Minute % 15))
+    $next = $next.AddSeconds(-$next.Second).AddMilliseconds(-$next.Millisecond)
+    $daysToFriday = (5 - [int]$now.DayOfWeek + 7) % 7
+    $fridayEnd = $now.Date.AddDays($daysToFriday).AddHours(18)
+    $duration = $fridayEnd - $next
+    if ($duration.TotalMinutes -gt 0) {
+        $once = New-ScheduledTaskTrigger -Once -At $next `
+            -RepetitionInterval (New-TimeSpan -Minutes 15) `
+            -RepetitionDuration $duration
+        $manageTriggers += $once
+        Write-Output "Manage: ventana única desde $next hasta $fridayEnd"
+    }
+}
 Register-AiTask -Name "TradingLab-AI-Manage" -Script $manageScript `
-    -Arguments "" -Triggers $manage -LimitMinutes 5 `
+    -Arguments "" -Triggers $manageTriggers -LimitMinutes 5 `
     -Description "TradingLab IA manage sin LLM: trailing y cierres; solo demo."
 
 Write-Output ""

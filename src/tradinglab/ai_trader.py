@@ -3156,7 +3156,7 @@ def session_activity(db_path: str | Path = DEFAULT_DB, *,
         if scalp_latest:
             try:
                 fresh = (
-                    moment - pd.Timestamp(str(scalp_latest.get("ts"))).to_pydatetime()
+                    pd.Timestamp(moment) - pd.Timestamp(str(scalp_latest.get("ts")))
                 ).total_seconds() <= 300
             except Exception:
                 fresh = False
@@ -3180,7 +3180,7 @@ def session_activity(db_path: str | Path = DEFAULT_DB, *,
         if manage_latest:
             try:
                 fresh = (
-                    moment - pd.Timestamp(str(manage_latest.get("ts"))).to_pydatetime()
+                    pd.Timestamp(moment) - pd.Timestamp(str(manage_latest.get("ts")))
                 ).total_seconds() <= 1800
             except Exception:
                 fresh = False

@@ -14,16 +14,17 @@ revisa. Nada de esto opera en live.
 | **Fills MT5** (dentro del ciclo IntradayForward) | Deals del terminal desde la última lectura para los magics del laboratorio; idempotente por `deal_id`. Los deals con magic ajeno se guardan como `manual`. | **2026-11-11** | tras cada ciclo | `lab journal` · `lab tca` · `lab mt5 positions` |
 | **Drill** (`TradingLab-Drill`, domingo 03:00) | Simulación mensual del simulacro R8: inventario, canales y kill-switch, sin tocar nada. El simulacro real exige operador armado. | **2026-11-15** (primera) | 1 ejecución (mensual) | `lab drill --dry-run` · `logs/drill_*.log` |
 | **Guardian** (EA `TradingLabGuardian` en MT5, siempre) | Defensa de equity dentro del terminal: equity, pico trailing y límites diario/total; escribe `tradinglab_guardian.log`. En **ALERT** solo avisa. | **2026-11-10** | **5 sesiones** en ALERT sin disparos | `lab guardian status` · `logs/intraday_forward/guardian_state.txt` · `MQL5/Files/tradinglab_guardian.log` |
-| **AI-London** (`TradingLab-AI-London`, L-V 03:05 DOM) | Preflight, snapshot intraday de EURUSD/GBPUSD/XAUUSD/USDJPY, propose/execute o skip con motivo. Solo demo. | **script listo, no registrado** | cada sesión London | `logs/ai_trader/<fecha>_london.log` · `lab doctor` (IA tareas) |
-| **AI-NY** (`TradingLab-AI-NY`, L-V 09:35 y 10:35 DOM) | Igual para US100/XAUUSD intraday y plan de scalping; el script decide la apertura NY según DST y sale en la otra. | **script listo, no registrado** | cada sesión NY | `logs/ai_trader/<fecha>_ny.log` · `lab doctor` (IA tareas) |
-| **AI-Daily** (`TradingLab-AI-Daily`, L-V 18:15 DOM) | Snapshot swing del universo y propose/execute o skip con motivo. | **script listo, no registrado** | diario L-V | `logs/ai_trader/<fecha>_daily.log` · `lab doctor` (IA tareas) |
-| **AI-Scalp** (`TradingLab-AI-Scalp`, L-V cada minuto 09:25-13:05 DOM) | `lab ai-trader scalp` sin LLM; ventana 09:30-12:00 NY, plan activo y candado. | **script listo, no registrado** | cada minuto en ventana | `logs/ai_trader/<fecha>_scalp.log` · `lab doctor` (IA tareas) |
-| **AI-Manage** (`TradingLab-AI-Manage`, cada 15 min dom 17:00-vie 18:00 DOM) | `lab ai-trader manage` sin LLM: BE, trailing, Donchian/SMA5 y cierres de sesión. | **script listo, no registrado** | cada 15 min en ventana | `logs/ai_trader/<fecha>_manage.log` · `lab doctor` (IA tareas) |
+| **AI-London** (`TradingLab-AI-London`, L-V 03:05 DOM) | Preflight, snapshot intraday de EURUSD/GBPUSD/XAUUSD/USDJPY, propose/execute o skip con motivo. Solo demo. | **registrada 2026-11-12** | cada sesión London | `logs/ai_trader/<fecha>_london.log` · `lab doctor` (IA tareas) |
+| **AI-NY** (`TradingLab-AI-NY`, L-V 09:35 y 10:35 DOM) | Igual para US100/XAUUSD intraday y plan de scalping; el script decide la apertura NY según DST y sale en la otra. | **registrada 2026-11-12** | cada sesión NY | `logs/ai_trader/<fecha>_ny.log` · `lab doctor` (IA tareas) |
+| **AI-Daily** (`TradingLab-AI-Daily`, L-V 18:15 DOM) | Snapshot swing del universo y propose/execute o skip con motivo. | **registrada 2026-11-12** | diario L-V | `logs/ai_trader/<fecha>_daily.log` · `lab doctor` (IA tareas) |
+| **AI-Scalp** (`TradingLab-AI-Scalp`, L-V cada minuto 09:25-13:05 DOM) | `lab ai-trader scalp` sin LLM; ventana 09:30-12:00 NY, plan activo y candado. | **registrada 2026-11-12** | cada minuto en ventana | `logs/ai_trader/<fecha>_scalp.log` · `lab doctor` (IA tareas) |
+| **AI-Manage** (`TradingLab-AI-Manage`, cada 15 min dom 17:00-vie 18:00 DOM) | `lab ai-trader manage` sin LLM: BE, trailing, Donchian/SMA5 y cierres de sesión. | **registrada 2026-11-12** | cada 15 min en ventana | `logs/ai_trader/<fecha>_manage.log` · `lab doctor` (IA tareas) |
 
-Las tareas **AI-*** no se registran desde el laboratorio: el operador revisa y
-ejecuta `scripts/register_ai_trader_tasks.ps1` (hora de República Dominicana,
-usuario actual, sin elevación, solo con sesión iniciada). El script de sesión
-sale sin LLM fuera de ventana/mercado/kill-switch y deja log y estado en
+Las tareas **AI-*** se registraron el **2026-11-12** con
+`scripts/register_ai_trader_tasks.ps1` (hora de República Dominicana, usuario
+actual, sin elevación, solo con sesión iniciada). Las cinco quedan `Ready`;
+`AI-Scalp` está habilitada y sin plan solo registra `no_plan`. El script de
+sesión sale sin LLM fuera de ventana/mercado/kill-switch y deja log y estado en
 `logs/ai_trader/`; `lab doctor` muestra `IA tareas` si una tarea no corrió o
 falló.
 
