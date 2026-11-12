@@ -2548,17 +2548,18 @@ def write_report(
         values: dict[tuple[str, str], float | None] = {}
         for cell in subset:
             values[(cell["symbol"], cell["timeframe"])] = cell["sharpe"]
-        svg = svg_heatmap(f"{family} · 2026-11-A", symbols, list(TIMEFRAMES), values)
+        svg = svg_heatmap(f"{family} · {campaign_id}", symbols, list(TIMEFRAMES), values)
         name = f"heatmap_{family}.svg"
         (target / name).write_text(svg, encoding="utf-8")
         charts.append(name)
 
+    heading = (
+        f"# Campaña {campaign_id} — 0 confirmadas"
+        if not confirmed
+        else f"# Campaña {campaign_id} — {len(confirmed)} confirmadas"
+    )
     lines = [
-        (
-            "# Campaña 2026-11-A — 0 confirmadas"
-            if not confirmed
-            else f"# Campaña 2026-11-A — {len(confirmed)} confirmadas"
-        ),
+        heading,
         "",
         f"- Generado: {_now()}",
         f"- `N_total` registrado antes de correr: **{n_total}**",

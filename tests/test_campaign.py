@@ -34,6 +34,7 @@ from tradinglab.campaign import (
     split_frame,
     trim_for_holdout,
     universe_symbols,
+    write_report,
 )
 from tradinglab.db import connect, init_db
 from tradinglab.learning import count_tests
@@ -621,3 +622,12 @@ def test_plateau_exencion_c_si_adyacente_vacio() -> None:
     assert target["adjacent_ok"] is True
     assert target["plateau"] is True
     assert not any(item.startswith("c:") for item in target["failed"])
+
+
+def test_write_report_usa_el_campaign_id(tmp_path):
+    result = write_report(
+        "2026-11-B", [], [], n_total=232, out_dir=tmp_path,
+    )
+    text = Path(result["md"]).read_text(encoding="utf-8")
+    assert text.startswith("# Campaña 2026-11-B")
+    assert "2026-11-A" not in text

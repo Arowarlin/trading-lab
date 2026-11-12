@@ -132,14 +132,15 @@ tiene elegibles") y su propio `N_total`, y se corre una sola vez.
   corte `2024-08-08`, `config_hash=5bed9520…` y el mismo `holdout_hash=768204bd…`.
 - **Registrada el 2026-11-12** con `lab campaign register --campaign
   2026-11-B --confirm`: `N_total=232`, `config_hash=5bed9520…`, `holdout_hash=768204bd…`;
-  `count_tests` 801 → **1033**. **No ejecutada** (`run_id`/`started_at`/`finished_at`
-  vacíos). `2026-11-A` sigue siendo el registro histórico y no se toca.
-- **Decisión del 2026-11-12: no ejecutarla todavía.** El presupuesto DSR ya
-  está contado completo y el primer ciclo de destilación del carril IA aún no
-  tiene celdas ganadoras. Correrla ahora solo cerraría una campaña sin
-  candidatas y añadiría otra pasada antes de que el embudo IA→destilado tenga
-  evidencia. Queda sellada y disponible para una única ejecución cuando el
-  operador lo decida.
+  `count_tests` 801 → **1033**. `2026-11-A` sigue siendo el registro histórico
+  y no se toca.
+- **Ejecutada el 2026-11-12** con `lab campaign run --campaign 2026-11-B --confirm`:
+  `run_id=0315bb0089ea`, 232 celdas, **23 candidatas** tras la meseta y
+  **0 confirmadas** en el holdout. `count_tests` sigue en 1033; no se registró
+  ningún candidato en el ciclo de vida. Informe en
+  `reports/research/campaign/2026-11-B.md`. El generador de informes ya usa
+  el `campaign_id` en el título y en los mapas de calor; el informe B se
+  corrigió a mano antes del arreglo.
 
 ## Lecciones de 2026-11-A
 

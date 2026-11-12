@@ -107,9 +107,11 @@ Notas de lectura:
   bias both, horas prohibidas 09:30-09:45 y 11:30-12:00 NY). `TradingLab-AI-Scalp`
   quedó `Ready` el 2026-11-12; próxima ejecución 2026-11-13 09:25 DOM. Sin plan
   no opera; el plan se recrea cada sesión.
-- **2026-11-B**: registrada (232 pruebas DSR) y **no ejecutada**. Decisión:
-  no correrla hasta cerrar el primer ciclo de destilación con celdas ganadoras;
-  `2026-11-A` sigue intacta.
+- **2026-11-B**: **ejecutada el 2026-11-12** con 232 pruebas DSR ya
+  contadas. `run_id=0315bb0089ea`, 232 celdas, 23 candidatas tras la
+  meseta y **0 confirmadas** en el holdout; no se registró ningún bot.
+  Informe: `reports/research/campaign/2026-11-B.md`. `2026-11-A` sigue
+  intacta.
 
 ## No construir hasta
 
