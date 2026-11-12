@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-11-09T00:00:00+00:00",
+  "generated_at": "2026-11-12T00:00:00+00:00",
   "source": "src/tradinglab/webui/index.html",
   "views": [
     "accounts",
@@ -135,6 +135,12 @@
     "agents-count",
     "agents-table",
     "ai-trader-body",
+    "ai-trader-budget",
+    "ai-trader-cells",
+    "ai-trader-meta",
+    "ai-trader-plan",
+    "ai-trader-positions",
+    "ai-trader-stats",
     "asset-agents",
     "asset-bots",
     "asset-chart",

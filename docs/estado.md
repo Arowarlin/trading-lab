@@ -63,7 +63,13 @@ Notas de lectura:
   trailing de 1 ATR desde 1R, el canal de 10 días de `donchian_turtle`, la
   salida D1 sobre SMA5 de `rsi2_connors` y los cierres de sesión de `orb_ny`
   (16:00 NY) y `london_breakout` (16:00 Londres), sin alejar nunca el stop y
-  solo sobre los magics 20261191/92/93.
+  solo sobre los magics 20261191/92/93. El marcador (`lab ai-trader scoreboard`)
+  compara cada celda con su sombra aleatoria y, en scalping, con la sombra «sin
+  plan», con IC bootstrap del 90 % y estados explorando/ganadora/perdedora/
+  neutral; solo cuenta `source=forward`. El panel web «IA discrecional» muestra
+  posiciones por estilo, presupuesto diario por estilo/global, marcador y plan
+  de scalping activo, de solo lectura. El skill `trading-lab-operador` contiene
+  el procedimiento London/NY/daily y su copia está en `docs/ai_trader_skill.md`.
 
 ## No construir hasta
 

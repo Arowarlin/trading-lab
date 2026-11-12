@@ -454,7 +454,8 @@ def _trades_today(
     with connect(db_path) as con:
         row = con.execute(
             "SELECT COUNT(*) AS n FROM ai_trades WHERE magic=? AND ts>=? "
-            "AND status IN ('open','closed')",
+            "AND status IN ('open','closed') "
+            "AND COALESCE(source,'forward')='forward'",
             (magic, _day_start(settings).isoformat()),
         ).fetchone()
     return int(row["n"])
@@ -465,7 +466,8 @@ def _open_risk(db_path: str | Path, magic: int) -> float:
     with connect(db_path) as con:
         row = con.execute(
             "SELECT COALESCE(SUM(risk_usd), 0) AS risk FROM ai_trades "
-            "WHERE magic=? AND status='open'",
+            "WHERE magic=? AND status='open' "
+            "AND COALESCE(source,'forward')='forward'",
             (magic,),
         ).fetchone()
     return float(row["risk"] or 0.0)
@@ -1727,6 +1729,37 @@ def skip(payload: dict, *, config: dict | None = None,
 # ------------------------------------------------------------------ execute
 
 
+def _noplan_side(style_name: str, side: str) -> str | None:
+    """Lado de la sombra sin plan: el contrario al real, solo en scalping."""
+    if style_name != "scalping":
+        return None
+    return "sell" if str(side).lower() == "buy" else "buy"
+
+
+def _twin_levels(entry: float, sl: float, tp: float | None, *,
+                 seed: int, side: str | None = None) -> dict:
+    """Niveles de una sombra con la misma geometría que la operación real.
+
+    Sin ``side`` la dirección sale de una semilla fija (determinista por id).
+    Con ``side`` se usa esa dirección; el scalping la usa para la sombra "sin
+    plan", que toma el lado contrario al real (el que el bias habría excluido).
+    """
+    rng = random.Random(int(seed))
+    twin_side = side or rng.choice(["buy", "sell"])
+    sl_dist = abs(float(entry) - float(sl))
+    tp_dist = abs(float(tp) - float(entry)) if tp is not None else sl_dist
+    return {
+        "side": twin_side,
+        "entry": round(float(entry), 8),
+        "sl": round(
+            float(entry) - sl_dist if twin_side == "buy" else float(entry) + sl_dist, 8
+        ),
+        "tp": round(
+            float(entry) + tp_dist if twin_side == "buy" else float(entry) - tp_dist, 8
+        ),
+    }
+
+
 def execute(proposal_id: str, *, broker, config: dict | None = None,
             db_path: str | Path = DEFAULT_DB) -> dict:
     cfg = config or load_config()
@@ -1759,20 +1792,32 @@ def execute(proposal_id: str, *, broker, config: dict | None = None,
     )
     now = utcnow()
     seed = int(hashlib.sha256(proposal_id.encode()).hexdigest()[:8], 16)
-    rng = random.Random(seed)
-    shadow_side = rng.choice(["buy", "sell"])
     entry = float(row["entry"])
-    sl_dist = abs(entry - float(row["sl"]))
-    tp_dist = abs(float(row["tp"]) - entry) if row["tp"] is not None else sl_dist
-    shadow_sl = entry - sl_dist if shadow_side == "buy" else entry + sl_dist
-    shadow_tp = entry + tp_dist if shadow_side == "buy" else entry - tp_dist
+    real_sl = float(row["sl"])
+    real_tp = float(row["tp"]) if row["tp"] is not None else None
+    shadow = _twin_levels(entry, real_sl, real_tp, seed=seed)
+    noplan = None
+    noplan_side = _noplan_side(style_name, side)
+    if noplan_side:
+        noplan = _twin_levels(
+            entry, real_sl, real_tp, seed=seed, side=noplan_side,
+        )
     with connect(db_path) as con:
         con.execute(
             "UPDATE ai_trades SET status='open', ticket=?, entry=?, shadow_side=?, "
             "shadow_entry=?, shadow_sl=?, shadow_tp=?, shadow_status='open', "
-            "shadow_seed=?, updated_at=? WHERE proposal_id=?",
-            (int(order.get("order_id") or 0), round(entry, 8), shadow_side, round(entry, 8),
-             round(shadow_sl, 8), round(shadow_tp, 8), seed, now, proposal_id),
+            "shadow_seed=?, shadow2_side=?, shadow2_entry=?, shadow2_sl=?, "
+            "shadow2_tp=?, shadow2_status=?, updated_at=? WHERE proposal_id=?",
+            (
+                int(order.get("order_id") or 0), round(entry, 8),
+                shadow["side"], shadow["entry"], shadow["sl"], shadow["tp"], seed,
+                noplan["side"] if noplan else None,
+                noplan["entry"] if noplan else None,
+                noplan["sl"] if noplan else None,
+                noplan["tp"] if noplan else None,
+                "open" if noplan else None,
+                now, proposal_id,
+            ),
         )
     fills = None
     fills_error = None
@@ -2257,18 +2302,23 @@ def scalp(*, broker=None, config: dict | None = None,
 # -------------------------------------------------------- manage / cierres
 
 
-def _shadow_sim(row: dict, bars: pd.DataFrame) -> dict:
-    side = str(row.get("shadow_side") or "")
-    entry = float(row.get("shadow_entry") or row.get("entry") or 0)
-    sl = float(row.get("shadow_sl") or row.get("sl") or 0)
-    tp = float(row.get("shadow_tp") or row.get("tp") or 0)
-    if not side or bars is None or len(bars) < 2 or not tp:
+def _shadow_sim(row: dict, bars: pd.DataFrame, prefix: str = "shadow",
+                strategy: str | None = None) -> dict:
+    side = str(row.get(f"{prefix}_side") or "")
+    entry = float(row.get(f"{prefix}_entry") or row.get("entry") or 0)
+    sl = float(row.get(f"{prefix}_sl") or row.get("sl") or 0)
+    tp = float(row.get(f"{prefix}_tp") or row.get("tp") or 0)
+    if not side or bars is None or len(bars) < 2:
         return {"status": "Sin datos", "r": None}
     short = side == "sell"
     risk = abs(entry - sl)
     if risk <= 0:
         return {"status": "Sin datos", "r": None}
+    strat = strategy or str(row.get("setup") or "")
     atr_series = atr(bars)
+    sma5 = bars["close"].rolling(5).mean() if strat == "rsi2_connors" else None
+    lows10 = bars["low"].rolling(10).min() if strat == "donchian_turtle" else None
+    highs10 = bars["high"].rolling(10).max() if strat == "donchian_turtle" else None
     best = entry
     for ts, bar in bars.iterrows():
         high, low, close = float(bar["high"]), float(bar["low"]), float(bar["close"])
@@ -2276,20 +2326,45 @@ def _shadow_sim(row: dict, bars: pd.DataFrame) -> dict:
             best = min(best, low)
             if high >= sl:
                 return {"status": "closed", "r": round((entry - sl) / risk, 4)}
-            if low <= tp:
+            if tp and low <= tp:
                 return {"status": "closed", "r": round((entry - tp) / risk, 4)}
             profit_r = (entry - close) / risk
         else:
             best = max(best, high)
             if low <= sl:
                 return {"status": "closed", "r": round((sl - entry) / risk, 4)}
-            if high >= tp:
+            if tp and high >= tp:
                 return {"status": "closed", "r": round((tp - entry) / risk, 4)}
             profit_r = (close - entry) / risk
-        new_sl = next_stop(side=side, entry=entry, best=best, atr_value=float(atr_series.loc[ts]),
-                           current_sl=sl, profit_r=profit_r, digits=8)
-        if new_sl is not None:
-            sl = new_sl
+        if strat == "rsi2_connors" and not short and sma5 is not None:
+            value = sma5.loc[ts]
+            if pd.notna(value) and close > float(value):
+                return {"status": "closed", "r": round((close - entry) / risk, 4)}
+        if strat == "donchian_turtle":
+            if short:
+                channel = highs10.loc[ts]
+                if pd.notna(channel):
+                    candidate = float(channel)
+                    if profit_r >= 0.5:
+                        candidate = min(candidate, entry)
+                    if candidate < sl:
+                        sl = candidate
+            else:
+                channel = lows10.loc[ts]
+                if pd.notna(channel):
+                    candidate = float(channel)
+                    if profit_r >= 0.5:
+                        candidate = max(candidate, entry)
+                    if candidate > sl:
+                        sl = candidate
+        else:
+            new_sl = next_stop(
+                side=side, entry=entry, best=best,
+                atr_value=float(atr_series.loc[ts]),
+                current_sl=sl, profit_r=profit_r, digits=8,
+            )
+            if new_sl is not None:
+                sl = new_sl
     last = float(bars["close"].iloc[-1])
     r = (entry - last) / risk if short else (last - entry) / risk
     return {"status": "open", "r": round(r, 4)}
@@ -2488,12 +2563,31 @@ def sync_closed(broker, *, magic: int, db_path: str | Path = DEFAULT_DB,
                   + float(d.get("commission") or 0) for d in rel)
         risk = float(row.get("risk_usd") or 0)
         result_r = round(pnl / risk, 4) if risk else None
+        shadow_r = None
+        shadow2_r = None
+        try:
+            bars = broker.rates(row["symbol"], str(row.get("timeframe") or "H1"), 800)
+            start = pd.Timestamp(row["ts"])
+            end = pd.Timestamp(str(rel[-1].get("ts_utc") or moment.isoformat()))
+            since = bars[(bars.index >= start) & (bars.index <= end)]
+            if len(since) and row.get("shadow_entry"):
+                shadow_r = _shadow_sim(
+                    row, since, prefix="shadow", strategy=row.get("setup")
+                ).get("r")
+            if len(since) and row.get("shadow2_entry"):
+                shadow2_r = _shadow_sim(
+                    row, since, prefix="shadow2", strategy=row.get("setup")
+                ).get("r")
+        except Exception:
+            pass
         with connect(db_path) as con:
             con.execute(
                 "UPDATE ai_trades SET status='closed', exit_price=?, exit_ts=?, pnl=?, "
-                "r_multiple=?, result_r=?, updated_at=? WHERE proposal_id=?",
+                "r_multiple=?, result_r=?, shadow_r=?, shadow2_r=?, updated_at=? "
+                "WHERE proposal_id=?",
                 (float(rel[-1].get("price") or 0), str(rel[-1].get("ts_utc") or moment.isoformat()),
-                 round(pnl, 2), result_r, result_r, utcnow(), row["proposal_id"]),
+                 round(pnl, 2), result_r, result_r, shadow_r, shadow2_r,
+                 utcnow(), row["proposal_id"]),
             )
         closed += 1
     return closed
@@ -2502,21 +2596,145 @@ def sync_closed(broker, *, magic: int, db_path: str | Path = DEFAULT_DB,
 # ------------------------------------------------------------- scoreboard
 
 
+def _bootstrap_ci(values: list, *, level: float = 0.90, iterations: int = 2000,
+                  seed: int = 0) -> list | None:
+    clean = [float(value) for value in values if value is not None]
+    if not clean:
+        return None
+    if len(clean) == 1:
+        return [round(clean[0], 4), round(clean[0], 4)]
+    rng = random.Random(int(seed))
+    n = len(clean)
+    means = []
+    for _ in range(iterations):
+        total = 0.0
+        for _ in range(n):
+            total += clean[rng.randrange(n)]
+        means.append(total / n)
+    means.sort()
+    alpha = (1.0 - level) / 2.0
+    lo = means[max(0, int(alpha * iterations))]
+    hi = means[min(iterations - 1, int((1.0 - alpha) * iterations) - 1)]
+    return [round(lo, 4), round(hi, 4)]
+
+
+def _diff_stats(pairs: list[tuple], *, seed: int = 0) -> dict:
+    clean = [
+        (float(real), float(other))
+        for real, other in pairs
+        if real is not None and other is not None
+    ]
+    if not clean:
+        return {"n": 0, "diff": None, "ci90": None, "avg_r": None}
+    diffs = [real - other for real, other in clean]
+    return {
+        "n": len(diffs),
+        "diff": round(sum(diffs) / len(diffs), 4),
+        "ci90": _bootstrap_ci(diffs, seed=seed),
+        "avg_r": round(sum(other for _, other in clean) / len(clean), 4),
+    }
+
+
+def _slippage_avg(db_path: str | Path, bot: str, symbol: str) -> tuple:
+    init_db(db_path)
+    with connect(db_path) as con:
+        row = con.execute(
+            "SELECT AVG(slippage_bps) AS avg, COUNT(*) AS n FROM tca "
+            "WHERE bot=? AND symbol=? AND slippage_bps IS NOT NULL",
+            (bot, symbol),
+        ).fetchone()
+    if row is None or row["avg"] is None:
+        return None, 0
+    return round(float(row["avg"]), 2), int(row["n"])
+
+
+def _summarize_cells(items: list[dict], db_path: str | Path) -> list[dict]:
+    groups: dict[tuple, list] = {}
+    for item in items:
+        key = (
+            item.get("style") or "Sin datos",
+            item.get("strategy") or "Sin datos",
+            item.get("symbol") or "Sin datos",
+            item.get("timeframe") or "Sin datos",
+        )
+        groups.setdefault(key, []).append(item)
+    cells = []
+    for (style, strategy, symbol, timeframe), rows in sorted(groups.items()):
+        rs = [float(row["r"]) for row in rows if row.get("r") is not None]
+        n = len(rs)
+        seed = int(hashlib.sha256(
+            f"{style}|{strategy}|{symbol}|{timeframe}".encode()
+        ).hexdigest()[:8], 16)
+        ci = _bootstrap_ci(rs, seed=seed)
+        if n < 30:
+            state = "exploring"
+        elif ci is not None and ci[0] > 0:
+            state = "winner"
+        elif ci is not None and ci[1] < 0:
+            state = "loser"
+        else:
+            state = "neutral"
+        shadow = _diff_stats(
+            [(row.get("r"), row.get("shadow_r")) for row in rows], seed=seed + 1
+        )
+        noplan = _diff_stats(
+            [(row.get("r"), row.get("noplan_r")) for row in rows], seed=seed + 2
+        )
+        costs = [
+            float(row["cost_ratio"]) for row in rows
+            if row.get("cost_ratio") is not None
+        ]
+        slippage, slippage_n = _slippage_avg(
+            db_path, f"ai:{style}", symbol
+        )
+        cells.append({
+            "style": style,
+            "strategy": strategy,
+            "symbol": symbol,
+            "timeframe": timeframe,
+            "n": n,
+            "hit": round(sum(1 for r in rs if r > 0) / n, 3) if n else None,
+            "avg_r": round(sum(rs) / n, 4) if n else None,
+            "expectancy_r": round(sum(rs) / n, 4) if n else None,
+            "ci90_r": ci,
+            "state": state,
+            "shadow": shadow,
+            "noplan": noplan if noplan["n"] else None,
+            "shadow_expectancy_r": shadow["avg_r"],
+            "cost_ratio_avg": round(sum(costs) / len(costs), 4) if costs else None,
+            "slippage_avg": slippage,
+            "slippage_n": slippage_n,
+            "insufficient": n < 30,
+            "cell_status": _cell_status(db_path, strategy, symbol, timeframe),
+        })
+    return cells
+
+
 def _pause_cells(cells: list[dict], db_path: str | Path) -> None:
     init_db(db_path)
     for cell in cells:
-        if cell["n"] < 30 or cell["expectancy_r"] is None or cell["shadow_expectancy_r"] is None:
+        if cell["n"] < 30:
             continue
-        if cell["expectancy_r"] < cell["shadow_expectancy_r"]:
-            with connect(db_path) as con:
-                con.execute(
-                    "INSERT INTO ai_cell_state(strategy, symbol, timeframe, status, reason, updated_at) "
-                    "VALUES(?,?,?,'paused',?,?) ON CONFLICT(strategy,symbol,timeframe) DO UPDATE SET "
-                    "status='paused', reason=excluded.reason, updated_at=excluded.updated_at",
-                    (cell["strategy"], cell["symbol"], cell["timeframe"],
-                     f"expectativa {cell['expectancy_r']:.3f}R < sombra {cell['shadow_expectancy_r']:.3f}R",
-                     utcnow()),
-                )
+        state = cell.get("state")
+        if state == "loser":
+            ci = cell.get("ci90_r") or [None, None]
+            reason = f"IC90 R [{ci[0]:.3f}, {ci[1]:.3f}] < 0"
+        elif state is None and cell.get("expectancy_r") is not None and cell.get("shadow_expectancy_r") is not None:
+            if cell["expectancy_r"] >= cell["shadow_expectancy_r"]:
+                continue
+            reason = (
+                f"expectativa {cell['expectancy_r']:.3f}R < "
+                f"sombra {cell['shadow_expectancy_r']:.3f}R"
+            )
+        else:
+            continue
+        with connect(db_path) as con:
+            con.execute(
+                "INSERT INTO ai_cell_state(strategy, symbol, timeframe, status, reason, updated_at) "
+                "VALUES(?,?,?,'paused',?,?) ON CONFLICT(strategy,symbol,timeframe) DO UPDATE SET "
+                "status='paused', reason=excluded.reason, updated_at=excluded.updated_at",
+                (cell["strategy"], cell["symbol"], cell["timeframe"], reason, utcnow()),
+            )
 
 
 def resume_cell(strategy: str, symbol: str, timeframe: str,
@@ -2537,8 +2755,12 @@ def scoreboard(*, broker, config: dict | None = None,
                db_path: str | Path = DEFAULT_DB) -> dict:
     init_db(db_path)
     with connect(db_path) as con:
-        rows = [dict(r) for r in con.execute("SELECT * FROM ai_trades ORDER BY ts").fetchall()]
+        rows = [dict(r) for r in con.execute(
+            "SELECT * FROM ai_trades "
+            "WHERE COALESCE(source,'forward')='forward' "
+            "AND status IN ('open','closed') ORDER BY ts").fetchall()]
     positions = {int(p["ticket"]): p for p in (broker.positions() or [])}
+    bars_cache: dict[tuple, pd.DataFrame] = {}
     out = []
     for row in rows:
         real_r = None
@@ -2553,44 +2775,71 @@ def scoreboard(*, broker, config: dict | None = None,
             if risk > 0:
                 price = float(pos["price_current"])
                 real_r = (entry - price) / risk if row["side"] == "sell" else (price - entry) / risk
+        timeframe = str(row.get("timeframe") or "H1")
+
+        def _simulate(prefix: str) -> dict:
+            if row["status"] == "closed":
+                stored = row.get(f"{prefix}_r")
+                if stored is not None:
+                    return {"status": "closed", "r": round(float(stored), 4)}
+            if not row.get(f"{prefix}_entry"):
+                return {"status": "Sin datos", "r": None}
+            key = (row["symbol"], timeframe)
+            if key not in bars_cache:
+                bars_cache[key] = broker.rates(row["symbol"], timeframe, 800)
+            bars = bars_cache[key]
+            start = pd.Timestamp(row["ts"])
+            end = (
+                pd.Timestamp(row["exit_ts"]) if row.get("exit_ts")
+                else pd.Timestamp.now(tz="UTC")
+            )
+            since = bars[(bars.index >= start) & (bars.index <= end)]
+            if len(since) == 0:
+                return {"status": "Sin datos", "r": None}
+            return _shadow_sim(
+                row, since, prefix=prefix, strategy=row.get("setup")
+            )
+
         shadow = {"status": "Sin datos", "r": None}
+        noplan = {"status": "Sin datos", "r": None}
         try:
-            if row.get("shadow_entry"):
-                bars = broker.rates(row["symbol"], str(row.get("timeframe") or "H1"), 800)
-                since = bars[bars.index >= pd.Timestamp(row["ts"])]
-                shadow = _shadow_sim(row, since)
+            shadow = _simulate("shadow")
         except Exception:
             pass
-        out.append({"id": row["proposal_id"], "ts": row["ts"], "symbol": row["symbol"],
-                    "style": row.get("style"), "strategy": row["setup"],
-                    "timeframe": row.get("timeframe") or "Sin datos",
-                    "side": row["side"], "status": row["status"],
-                    "r": round(real_r, 4) if real_r is not None else None,
-                    "shadow_r": shadow["r"], "cost_ratio": row.get("cost_ratio")})
-    groups: dict[tuple, list] = {}
-    for row in out:
-        groups.setdefault((row["strategy"], row["symbol"], row["timeframe"]), []).append(row)
-    cells = []
-    for (strategy, symbol, timeframe), items in sorted(groups.items()):
-        rs = [float(i["r"]) for i in items if i["r"] is not None]
-        sr = [float(i["shadow_r"]) for i in items if i["shadow_r"] is not None]
-        costs = [float(i["cost_ratio"]) for i in items if i["cost_ratio"] is not None]
-        styles = sorted({str(i["style"]) for i in items if i["style"]})
-        cells.append({
-            "strategy": strategy, "symbol": symbol, "timeframe": timeframe,
-            "style": styles[0] if len(styles) == 1 else (",".join(styles) or None),
-            "n": len(items),
-            "hit": round(sum(1 for r in rs if r > 0) / len(rs), 3) if rs else None,
-            "avg_r": round(sum(rs) / len(rs), 4) if rs else None,
-            "expectancy_r": round(sum(rs) / len(rs), 4) if rs else None,
-            "shadow_expectancy_r": round(sum(sr) / len(sr), 4) if sr else None,
-            "cost_ratio_avg": round(sum(costs) / len(costs), 4) if costs else None,
-            "insufficient": len(items) < 30,
-            "cell_status": _cell_status(db_path, strategy, symbol, timeframe),
+        try:
+            noplan = _simulate("shadow2")
+        except Exception:
+            pass
+        out.append({
+            "id": row["proposal_id"], "ts": row["ts"], "symbol": row["symbol"],
+            "style": row.get("style"), "strategy": row["setup"],
+            "timeframe": row.get("timeframe") or "Sin datos",
+            "side": row["side"], "status": row["status"],
+            "r": round(real_r, 4) if real_r is not None else None,
+            "shadow_r": shadow.get("r"), "noplan_r": noplan.get("r"),
+            "cost_ratio": row.get("cost_ratio"),
         })
+    cells = _summarize_cells(
+        [
+            {
+                "style": item["style"] or "Sin datos",
+                "strategy": item["strategy"],
+                "symbol": item["symbol"],
+                "timeframe": item["timeframe"],
+                "r": item["r"],
+                "shadow_r": item["shadow_r"],
+                "noplan_r": item["noplan_r"],
+                "cost_ratio": item["cost_ratio"],
+            }
+            for item in out
+        ],
+        db_path,
+    )
     _pause_cells(cells, db_path)
     for cell in cells:
-        cell["cell_status"] = _cell_status(db_path, cell["strategy"], cell["symbol"], cell["timeframe"])
+        cell["cell_status"] = _cell_status(
+            db_path, cell["strategy"], cell["symbol"], cell["timeframe"]
+        )
     return {"trades": out, "cells": cells, "n": len(out)}
 
 
@@ -2675,14 +2924,18 @@ def log_no_trade(reason: str, *, symbols: list[str] | None = None,
     return {"ok": True, "reason": text}
 
 
-def panel(db_path: str | Path = DEFAULT_DB) -> dict:
+def panel(db_path: str | Path = DEFAULT_DB, *,
+          equity: float | None = None) -> dict:
+    cfg = load_config()
+    settings = get_settings()
     init_db(db_path)
     with connect(db_path) as con:
-        rows = [dict(r) for r in con.execute(
+        all_rows = [dict(r) for r in con.execute(
             "SELECT proposal_id, ts, style, symbol, setup, side, timeframe, thesis, "
             "confidence, entry, sl, tp, volume, risk_usd, status, pnl, r_multiple, "
-            "result_r, shadow_side, shadow_r, cost_ratio FROM ai_trades "
-            "ORDER BY ts DESC LIMIT 100").fetchall()]
+            "result_r, shadow_r, shadow2_r, cost_ratio, ticket, exit_ts "
+            "FROM ai_trades WHERE COALESCE(source,'forward')='forward' "
+            "ORDER BY ts DESC").fetchall()]
         decisions = [dict(r) for r in con.execute(
             "SELECT id, ts, style, symbol, strategy, timeframe, decision, reason, "
             "confidence FROM ai_decisions ORDER BY id DESC LIMIT 50").fetchall()]
@@ -2692,15 +2945,174 @@ def panel(db_path: str | Path = DEFAULT_DB) -> dict:
         cells = [dict(r) for r in con.execute(
             "SELECT strategy, symbol, timeframe, status, reason FROM ai_cell_state "
             "WHERE status='paused' ORDER BY updated_at DESC").fetchall()]
+    rows = all_rows
     opened = [r for r in rows if r["status"] == "open"]
     closed = [r for r in rows if r["status"] == "closed"]
-    real = [float(r["result_r"] if r["result_r"] is not None else r["r_multiple"])
-            for r in closed if r["result_r"] is not None or r["r_multiple"] is not None]
+    real = [
+        float(r["result_r"] if r["result_r"] is not None else r["r_multiple"])
+        for r in closed
+        if r["result_r"] is not None or r["r_multiple"] is not None
+    ]
     shadow = [float(r["shadow_r"]) for r in closed if r["shadow_r"] is not None]
-    return {"open": opened, "closed": {"n": len(closed),
+    noplan = [float(r["shadow2_r"]) for r in closed if r["shadow2_r"] is not None]
+    items = []
+    for row in all_rows:
+        if row["status"] != "closed":
+            continue
+        value = (
+            row["result_r"] if row["result_r"] is not None
+            else row["r_multiple"]
+        )
+        if value is None:
+            continue
+        items.append({
+            "style": row.get("style") or "Sin datos",
+            "strategy": row["setup"], "symbol": row["symbol"],
+            "timeframe": row.get("timeframe") or "Sin datos",
+            "r": float(value), "shadow_r": row.get("shadow_r"),
+            "noplan_r": row.get("shadow2_r"),
+            "cost_ratio": row.get("cost_ratio"),
+        })
+    day_start = pd.Timestamp(_day_start(settings))
+    styles_budget = {}
+    for name, style in cfg["styles"].items():
+        style_rows = [r for r in all_rows if (r.get("style") or "") == name]
+        pnl_today = 0.0
+        open_risk = 0.0
+        for row in style_rows:
+            if row["status"] == "open":
+                open_risk += float(row.get("risk_usd") or 0.0)
+                continue
+            stamp = row.get("exit_ts") or row.get("ts")
+            try:
+                if pd.Timestamp(stamp) < day_start:
+                    continue
+            except (TypeError, ValueError):
+                continue
+            pnl_today += float(row.get("pnl") or 0.0)
+        limit = float(equity) * float(style["daily_stop"]) if equity else None
+        loss_used = max(0.0, -pnl_today)
+        styles_budget[name] = {
+            "daily_stop": style["daily_stop"],
+            "pnl_today": round(pnl_today, 2),
+            "loss_used_usd": round(loss_used, 2),
+            "open_risk_usd": round(open_risk, 2),
+            "limit_usd": round(limit, 2) if limit is not None else None,
+            "remaining_usd": (
+                round(max(0.0, limit - loss_used), 2)
+                if limit is not None else None
+            ),
+            "stop_hit": bool(limit is not None and pnl_today <= -limit + 1e-9),
+        }
+    total_pnl = 0.0
+    total_open = 0.0
+    for row in all_rows:
+        if row["status"] == "open":
+            total_open += float(row.get("risk_usd") or 0.0)
+            continue
+        if row["status"] != "closed":
+            continue
+        stamp = row.get("exit_ts") or row.get("ts")
+        try:
+            if pd.Timestamp(stamp) < day_start:
+                continue
+        except (TypeError, ValueError):
+            continue
+        total_pnl += float(row.get("pnl") or 0.0)
+    global_limit = (
+        float(equity) * float(cfg["global"]["daily_stop"]) if equity else None
+    )
+    total_loss = max(0.0, -total_pnl)
+    global_budget = {
+        "daily_stop": cfg["global"]["daily_stop"],
+        "pnl_today": round(total_pnl, 2),
+        "loss_used_usd": round(total_loss, 2),
+        "open_risk_usd": round(total_open, 2),
+        "limit_usd": round(global_limit, 2) if global_limit is not None else None,
+        "remaining_usd": (
+            round(max(0.0, global_limit - total_loss), 2)
+            if global_limit is not None else None
+        ),
+        "stop_hit": bool(
+            global_limit is not None and total_pnl <= -global_limit + 1e-9
+        ),
+    }
+    open_by_style: dict[str, list] = {}
+    for row in opened:
+        open_by_style.setdefault(row.get("style") or "Sin datos", []).append(row)
+    return {
+        "generated_at": utcnow(),
+        "equity": round(float(equity), 2) if equity else None,
+        "open": opened,
+        "open_by_style": open_by_style,
+        "closed": {
+            "n": len(closed),
             "avg_r": round(sum(real) / len(real), 4) if real else None,
-            "shadow_avg_r": round(sum(shadow) / len(shadow), 4) if shadow else None},
-            "decisions": decisions, "lessons": lessons, "paused": cells, "n": len(rows)}
+            "shadow_avg_r": round(sum(shadow) / len(shadow), 4) if shadow else None,
+            "noplan_avg_r": round(sum(noplan) / len(noplan), 4) if noplan else None,
+        },
+        "budget": {
+            "equity": round(float(equity), 2) if equity else None,
+            "styles": styles_budget,
+            "global": global_budget,
+        },
+        "cells": _summarize_cells(items, db_path),
+        "plans": _active_plans(db_path, _reset_date(settings)),
+        "decisions": decisions,
+        "lessons": lessons,
+        "paused": cells,
+        "n": len(all_rows),
+    }
+
+
+def session_activity(db_path: str | Path = DEFAULT_DB, *,
+                     settings: Settings | None = None,
+                     now: datetime | None = None) -> dict:
+    """Filas de ai_decisions por sesión; avisa si una sesión cerrada no dejó ninguna."""
+    moment = _as_utc(now)
+    settings = settings or get_settings()
+    session_date = _reset_date(settings)
+    init_db(db_path)
+    with connect(db_path) as con:
+        def count(session: str | None = None, style: str | None = None) -> int:
+            sql = (
+                "SELECT COUNT(*) AS n FROM ai_decisions "
+                "WHERE decision_date=? AND source='forward'"
+            )
+            params: list = [session_date]
+            if session:
+                sql += " AND session=?"
+                params.append(session)
+            if style:
+                sql += " AND style=?"
+                params.append(style)
+            return int(con.execute(sql, params).fetchone()["n"])
+
+        london = count("Londres") > 0
+        ny = count("Nueva York") > 0
+        daily = count(style="swing") > 0
+
+    warnings: list[str] = []
+    if moment.weekday() < 5:
+        if moment.hour >= 13 and not london:
+            warnings.append("Londres sin filas en ai_decisions")
+        if moment.hour >= 21 and not ny:
+            warnings.append("Nueva York sin filas en ai_decisions")
+        if moment.hour >= 21 and not daily:
+            warnings.append("swing/daily sin filas en ai_decisions")
+    detail = (
+        f"Londres={'ok' if london else 'sin filas'} · "
+        f"NY={'ok' if ny else 'sin filas'} · "
+        f"daily={'ok' if daily else 'sin filas'}"
+    )
+    return {
+        "session_date": session_date,
+        "london": london,
+        "ny": ny,
+        "daily": daily,
+        "warnings": warnings,
+        "detail": detail,
+    }
 
 
 def review(*, config: dict | None = None, settings: Settings | None = None,

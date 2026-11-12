@@ -656,6 +656,18 @@ def doctor(network: bool = typer.Option(False, "--network", help="Probar descarg
     except Exception as exc:
         table.add_row("IA discrecional", WARN, str(exc)[:160])
 
+    # IA sesiones: una sesión cerrada sin ninguna fila en ai_decisions.
+    try:
+        from .ai_trader import session_activity
+
+        activity = session_activity()
+        if activity["warnings"]:
+            table.add_row("IA sesiones", WARN, "; ".join(activity["warnings"])[:160])
+        else:
+            table.add_row("IA sesiones", OK, activity["detail"][:160])
+    except Exception as exc:
+        table.add_row("IA sesiones", WARN, str(exc)[:160])
+
     # Datos
     if network:
         try:
@@ -9468,9 +9480,27 @@ def ai_trader_scoreboard_cmd() -> None:
         broker.shutdown()
     cells = data["cells"]
     table = Table(title="IA discrecional · scoreboard")
-    for column in ("Estilo", "Estrategia", "Símbolo", "TF", "N", "Hit", "R medio", "R sombra", "Coste/R", "Estado"):
+    for column in ("Estilo", "Estrategia", "Símbolo", "TF", "N", "Hit", "R medio",
+                   "IC 90%", "Coste/R", "Slippage", "Δ sombra", "Δ sin plan",
+                   "Estado", "Celda"):
         table.add_column(column)
     for cell in cells:
+        ci = cell.get("ci90_r")
+        ci_text = f"[{ci[0]:+.2f}, {ci[1]:+.2f}]" if ci else "-"
+        shadow = cell.get("shadow") or {}
+        diff = shadow.get("diff")
+        dci = shadow.get("ci90")
+        diff_text = (
+            f"{diff:+.3f} [{dci[0]:+.2f}, {dci[1]:+.2f}]"
+            if diff is not None and dci else "-"
+        )
+        noplan = cell.get("noplan") or {}
+        ndiff = noplan.get("diff")
+        nci = noplan.get("ci90")
+        noplan_text = (
+            f"{ndiff:+.3f} [{nci[0]:+.2f}, {nci[1]:+.2f}]"
+            if ndiff is not None and nci else "-"
+        )
         table.add_row(
             str(cell.get("style") or "-"),
             str(cell["strategy"]),
@@ -9479,9 +9509,18 @@ def ai_trader_scoreboard_cmd() -> None:
             str(cell["n"]),
             f"{cell['hit']:.0%}" if cell["hit"] is not None else "-",
             f"{cell['avg_r']:+.3f}" if cell["avg_r"] is not None else "-",
-            f"{cell['shadow_expectancy_r']:+.3f}" if cell["shadow_expectancy_r"] is not None else "-",
+            ci_text,
             f"{cell['cost_ratio_avg']:.3f}" if cell["cost_ratio_avg"] is not None else "-",
-            "pausada" if cell["cell_status"] == "paused" else ("insuficiente" if cell["insufficient"] else "activa"),
+            f"{cell['slippage_avg']:.1f} bps" if cell["slippage_avg"] is not None else "Sin datos",
+            diff_text,
+            noplan_text,
+            {
+                "winner": "ganadora",
+                "loser": "perdedora",
+                "neutral": "neutral",
+                "exploring": "explorando",
+            }.get(str(cell["state"]), str(cell["state"])),
+            "pausada" if cell["cell_status"] == "paused" else "activa",
         )
     console.print(table)
     if any(cell["insufficient"] for cell in cells):

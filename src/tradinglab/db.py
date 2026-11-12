@@ -909,6 +909,7 @@ def _migrate_ai_trades(con: sqlite3.Connection) -> None:
             magic INTEGER,
             ticket INTEGER,
             status TEXT NOT NULL DEFAULT 'proposed',
+            source TEXT NOT NULL DEFAULT 'forward',
             exit_price REAL,
             exit_ts TEXT,
             pnl REAL,
@@ -922,6 +923,12 @@ def _migrate_ai_trades(con: sqlite3.Connection) -> None:
             shadow_pnl REAL,
             shadow_r REAL,
             shadow_seed INTEGER,
+            shadow2_side TEXT,
+            shadow2_entry REAL,
+            shadow2_sl REAL,
+            shadow2_tp REAL,
+            shadow2_status TEXT,
+            shadow2_r REAL,
             created_at TEXT,
             updated_at TEXT
         );
@@ -975,8 +982,14 @@ def _migrate_ai_trades(con: sqlite3.Connection) -> None:
         """
     )
     columns = [row["name"] for row in con.execute("PRAGMA table_info(ai_trades)").fetchall()]
-    for column, kind in (("timeframe", "TEXT"), ("cost_ratio", "REAL"),
-                         ("style", "TEXT"), ("result_r", "REAL")):
+    for column, kind in (
+        ("timeframe", "TEXT"), ("cost_ratio", "REAL"),
+        ("style", "TEXT"), ("result_r", "REAL"),
+        ("source", "TEXT NOT NULL DEFAULT 'forward'"),
+        ("shadow2_side", "TEXT"), ("shadow2_entry", "REAL"),
+        ("shadow2_sl", "REAL"), ("shadow2_tp", "REAL"),
+        ("shadow2_status", "TEXT"), ("shadow2_r", "REAL"),
+    ):
         if column not in columns:
             con.execute(f"ALTER TABLE ai_trades ADD COLUMN {column} {kind}")
     decision_columns = [

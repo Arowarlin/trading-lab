@@ -1743,9 +1743,10 @@
     <!-- =========================================================== IA DISCRECIONAL -->
     <section class="view" id="view-ai-trader">
       <div class="note" style="margin:0 0 14px">
-        <strong>IA discrecional (solo demo).</strong> Operaciones del carril con magic
-        20261190. El LLM elige setup, simbolo y lado; los niveles los calcula el codigo.
-        Cada operacion tiene una gemela sombra con direccion aleatoria. Solo lectura.
+        <strong>IA discrecional (solo demo).</strong> Tres estilos con magics
+        20261191/92/93. El LLM elige setup, símbolo y lado; los niveles los calcula
+        el código. Cada operación real tiene una gemela aleatoria; el scalping
+        añade una sombra «sin plan». Panel de solo lectura.
       </div>
       <div id="ai-trader-body"></div>
     </section>
@@ -5661,32 +5662,117 @@ async function renderAiTrader() {
     const open = data.open || [];
     const closed = data.closed || {};
     const lessons = data.lessons || [];
+    const cells = data.cells || [];
+    const plans = data.plans || [];
+    const budget = data.budget || {};
+    const styles = budget.styles || {};
+    const g = budget.global || {};
+    const ciText = (ci) => ci ? `[${num(ci[0], 2)}, ${num(ci[1], 2)}]` : "Sin datos";
+    const diffText = (item) => (
+      item && item.diff != null && item.ci90
+        ? `${num(item.diff, 3)}R ${ciText(item.ci90)}`
+        : "Sin datos"
+    );
+    const stateTag = (state) => {
+      const label = state === "winner" ? "ganadora"
+        : state === "loser" ? "perdedora"
+        : state === "neutral" ? "neutral" : "explorando";
+      const cls = state === "winner" ? "green" : state === "loser" ? "red" : "";
+      return `<span class="tag ${cls}">${label}</span>`;
+    };
+    const setupText = (s) => (
+      typeof s === "string" ? s : `${s.strategy || "?"} ${s.timeframe || ""}`.trim()
+    );
     const openRows = open.map((t) => [
-      `<b>${esc(t.symbol)}</b> <span class="muted tiny">${esc(t.setup)}</span>`,
+      `<b>${esc(t.symbol)}</b><div class="muted tiny">${esc(t.style || "Sin datos")}</div>`,
+      esc(t.setup || "—"),
       t.side === "buy" ? "compra" : "venta",
       num(t.volume, 2),
       num(t.entry, 5),
       num(t.sl, 5),
       num(t.tp, 5),
       `${num(t.risk_usd, 2)} USD`,
-      `<span class="muted tiny">${esc(t.thesis || "")}</span>`,
+    ]);
+    const budgetRows = Object.entries(styles).map(([name, b]) => [
+      `<b>${esc(name)}</b>`,
+      `${num((b.daily_stop || 0) * 100, 2)}%`,
+      `${num(b.pnl_today, 2)} USD`,
+      `${num(b.loss_used_usd, 2)} USD`,
+      `${num(b.open_risk_usd, 2)} USD`,
+      b.limit_usd == null ? "Sin datos" : `${num(b.limit_usd, 2)} USD`,
+      b.remaining_usd == null ? "Sin datos" : `${num(b.remaining_usd, 2)} USD`,
+      b.stop_hit ? `<span class="tag red">TOCADO</span>` : "ok",
+    ]);
+    budgetRows.push([
+      `<b>Global</b>`,
+      `${num((g.daily_stop || 0) * 100, 2)}%`,
+      `${num(g.pnl_today, 2)} USD`,
+      `${num(g.loss_used_usd, 2)} USD`,
+      `${num(g.open_risk_usd, 2)} USD`,
+      g.limit_usd == null ? "Sin datos" : `${num(g.limit_usd, 2)} USD`,
+      g.remaining_usd == null ? "Sin datos" : `${num(g.remaining_usd, 2)} USD`,
+      g.stop_hit ? `<span class="tag red">TOCADO</span>` : "ok",
+    ]);
+    const cellRows = cells.map((c) => [
+      `<b>${esc(c.style || "Sin datos")}</b>`,
+      esc(c.strategy),
+      esc(c.symbol),
+      esc(c.timeframe),
+      num(c.n, 0),
+      c.hit == null ? "Sin datos" : `${num(c.hit * 100, 1)}%`,
+      c.avg_r == null ? "Sin datos" : `${num(c.avg_r, 3)}R`,
+      ciText(c.ci90_r),
+      c.cost_ratio_avg == null ? "Sin datos" : num(c.cost_ratio_avg, 3),
+      c.slippage_avg == null ? "Sin datos" : `${num(c.slippage_avg, 1)} bps`,
+      diffText(c.shadow),
+      diffText(c.noplan),
+      stateTag(c.state),
+      c.cell_status === "paused" ? `<span class="tag red">pausada</span>` : "activa",
+    ]);
+    const planRows = plans.map((p) => [
+      `<b>${esc(p.symbol)}</b>`,
+      (p.setups || []).map(setupText).join(", "),
+      esc(p.bias || "—"),
+      esc((p.forbidden_hours || []).join(", ") || "—"),
+      `<span class="muted tiny">${esc(p.reason || "")}</span>`,
     ]);
     const lessonRows = lessons.map((l) => [`#${l.id}`, esc(l.hypothesis)]);
     body.innerHTML = `
-      <div class="stats">
+      <div class="stats" id="ai-trader-stats">
         <div class="stat"><div class="label">Abiertas</div><div class="value">${open.length}</div></div>
         <div class="stat"><div class="label">Cerradas</div><div class="value">${closed.n || 0}</div></div>
         <div class="stat"><div class="label">R medio</div><div class="value">${closed.avg_r == null ? "Sin datos" : num(closed.avg_r, 2)}</div></div>
         <div class="stat"><div class="label">R sombra</div><div class="value">${closed.shadow_avg_r == null ? "Sin datos" : num(closed.shadow_avg_r, 2)}</div></div>
+        <div class="stat"><div class="label">R sin plan</div><div class="value">${closed.noplan_avg_r == null ? "Sin datos" : num(closed.noplan_avg_r, 2)}</div></div>
         <div class="stat"><div class="label">Lecciones</div><div class="value">${lessons.length}</div></div>
       </div>
       <div class="panel" style="margin-bottom:14px">
-        <div class="panel-head"><h2>Operaciones abiertas</h2><span class="muted tiny">magic 20261190</span></div>
-        ${grid([{ label: "Activo" }, { label: "Lado" }, { label: "Lotes", num: true }, { label: "Entrada", num: true }, { label: "SL", num: true }, { label: "TP", num: true }, { label: "Riesgo", num: true }, { label: "Tesis", wrap: true }], openRows, { empty: "Sin posiciones abiertas del carril." })}
+        <div class="panel-head"><h2>Presupuesto diario</h2><span class="muted tiny" id="ai-trader-meta">${esc(data.generated_at || "")} · equity ${budget.equity == null ? "Sin datos" : num(budget.equity, 2)}</span></div>
+        <div id="ai-trader-budget">
+          ${grid([{ label: "Estilo" }, { label: "Stop", num: true }, { label: "PnL día", num: true }, { label: "Pérdida usada", num: true }, { label: "Riesgo abierto", num: true }, { label: "Límite", num: true }, { label: "Restante", num: true }, { label: "Estado" }], budgetRows, { empty: "Sin datos de presupuesto." })}
+        </div>
+      </div>
+      <div class="panel" style="margin-bottom:14px">
+        <div class="panel-head"><h2>Posiciones abiertas por estilo</h2><span class="muted tiny">magics 20261191/92/93</span></div>
+        <div id="ai-trader-positions">
+          ${grid([{ label: "Activo" }, { label: "Setup" }, { label: "Lado" }, { label: "Lotes", num: true }, { label: "Entrada", num: true }, { label: "SL", num: true }, { label: "TP", num: true }, { label: "Riesgo", num: true }], openRows, { empty: "Sin posiciones abiertas del carril." })}
+        </div>
+      </div>
+      <div class="panel" style="margin-bottom:14px">
+        <div class="panel-head"><h2>Marcador por celda</h2><span class="muted tiny">solo forward · IC bootstrap 90%</span></div>
+        <div id="ai-trader-cells">
+          ${grid([{ label: "Estilo" }, { label: "Estrategia" }, { label: "Símbolo" }, { label: "TF" }, { label: "N", num: true }, { label: "Hit", num: true }, { label: "R medio", num: true }, { label: "IC 90%" }, { label: "Coste/R", num: true }, { label: "Slippage", num: true }, { label: "Δ sombra" }, { label: "Δ sin plan" }, { label: "Estado" }, { label: "Celda" }], cellRows, { empty: "Sin celdas forward." })}
+        </div>
+      </div>
+      <div class="panel" style="margin-bottom:14px">
+        <div class="panel-head"><h2>Plan de scalping activo</h2><span class="muted tiny">sin plan no se opera</span></div>
+        <div id="ai-trader-plan">
+          ${grid([{ label: "Símbolo" }, { label: "Setups" }, { label: "Bias" }, { label: "Horas prohibidas" }, { label: "Motivo", wrap: true }], planRows, { empty: "Sin plan activo para la sesión." })}
+        </div>
       </div>
       <div class="panel">
-        <div class="panel-head"><h2>Lecciones propuestas</h2><span class="muted tiny">requieren aprobacion humana</span></div>
-        ${grid([{ label: "ID" }, { label: "Hipotesis", wrap: true }], lessonRows, { empty: "Sin lecciones pendientes." })}
+        <div class="panel-head"><h2>Lecciones propuestas</h2><span class="muted tiny">requieren aprobación humana</span></div>
+        ${grid([{ label: "ID" }, { label: "Hipótesis", wrap: true }], lessonRows, { empty: "Sin lecciones pendientes." })}
       </div>`;
   } catch (err) {
     body.innerHTML = `<div class="empty">Sin datos: ${esc(err.message || err)}</div>`;
