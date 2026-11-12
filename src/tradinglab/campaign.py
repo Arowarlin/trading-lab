@@ -1148,14 +1148,16 @@ def register_campaign(
             )
         con.execute(
             "INSERT INTO campaign_registry"
-            "(campaign_id, registered_at, n_total, discovery_pct, config_hash, note) "
-            "VALUES(?,?,?,?,?,?)",
+            "(campaign_id, registered_at, n_total, discovery_pct, config_hash,"
+            " holdout_hash, note) "
+            "VALUES(?,?,?,?,?,?,?)",
             (
                 campaign_id,
                 _now(),
                 n_total,
                 float(config.get("discovery_pct", DISCOVERY_PCT)),
                 digest,
+                config.get("holdout_hash"),
                 str(note or "")[:2000],
             ),
         )

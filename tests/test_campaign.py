@@ -189,13 +189,16 @@ def _config(n_total: int, *, campaign: str = "TEST-A") -> dict:
         "discovery_pct": 0.70,
         "cutoff_utc": "2020-02-28 00:00:00+00:00",
         "n_total": n_total,
+        "holdout_hash": "abc123",
     }
 
 
 def test_second_registration_is_refused(tmp_path: Path) -> None:
     db = tmp_path / "lab.db"
     init_campaigns(db)
-    register_campaign(db, _config(5))
+    record = register_campaign(db, _config(5))
+    assert record["n_total"] == 5
+    assert record["holdout_hash"] == "abc123"
     with pytest.raises(CampaignError):
         register_campaign(db, _config(5))
 
