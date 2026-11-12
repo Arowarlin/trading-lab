@@ -2938,7 +2938,8 @@ def panel(db_path: str | Path = DEFAULT_DB, *,
             "ORDER BY ts DESC").fetchall()]
         decisions = [dict(r) for r in con.execute(
             "SELECT id, ts, style, symbol, strategy, timeframe, decision, reason, "
-            "confidence FROM ai_decisions ORDER BY id DESC LIMIT 50").fetchall()]
+            "confidence FROM ai_decisions WHERE source='forward' "
+            "ORDER BY id DESC LIMIT 50").fetchall()]
         lessons = [dict(r) for r in con.execute(
             "SELECT id, hypothesis, status FROM lessons WHERE status='proposed' "
             "AND kind='lesson' ORDER BY id DESC LIMIT 10").fetchall()]

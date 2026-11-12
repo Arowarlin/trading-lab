@@ -12,6 +12,7 @@ import yaml
 from tradinglab.campaign import (
     CAMPAIGN_BARS,
     CampaignError,
+    apply_plateau,
     campaign_config,
     campaign_hash,
     common_cutoff,
@@ -585,3 +586,38 @@ def test_finish_campaign_runs_once(tmp_path: Path) -> None:
     assert record["finished_at"]
     with pytest.raises(CampaignError):
         finish_campaign(db, "TEST-A")
+
+
+def test_plateau_exencion_c_si_adyacente_vacio() -> None:
+    cells = [
+        {
+            "symbol": "AAA", "timeframe": "D1", "family": "tsmom",
+            "variant": variant, "sharpe": 1.0, "trades": 40,
+        }
+        for variant in ("lb20", "lb60", "lb120", "lb250")
+    ]
+    cells.append({
+        "symbol": "BBB", "timeframe": "D1", "family": "tsmom",
+        "variant": "lb20", "sharpe": 1.0, "trades": 40,
+    })
+    clusters = {"AAA|D1": {"BBB": 1.0}}
+    without = apply_plateau([dict(cell) for cell in cells], clusters)
+    target = next(
+        cell for cell in without
+        if cell["symbol"] == "AAA" and cell["variant"] == "lb20"
+    )
+    assert target["adjacent_ok"] is False
+    assert any(item.startswith("c:") for item in target["failed"])
+
+    with_exemption = apply_plateau(
+        [dict(cell) for cell in cells], clusters,
+        skip_adjacent_if_empty=True,
+    )
+    target = next(
+        cell for cell in with_exemption
+        if cell["symbol"] == "AAA" and cell["variant"] == "lb20"
+    )
+    assert target["adjacent_exempt"] is True
+    assert target["adjacent_ok"] is True
+    assert target["plateau"] is True
+    assert not any(item.startswith("c:") for item in target["failed"])

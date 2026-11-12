@@ -126,6 +126,10 @@ tiene elegibles") y su propio `N_total`, y se corre una sola vez.
   evita que D1 quede en 0/232 cuando H4 no tiene elegibles.
 - Requiere implementar la exención en `campaign.py` y escribir el yaml con
   `lab campaign plan --campaign 2026-11-B --force` antes de registrar.
+- **Implementado el 2026-11-12:** `apply_plateau(..., skip_adjacent_if_empty=True)`
+  exime (c) solo cuando el timeframe adyacente no tiene celdas; el flag entra en
+  `config_hash`. `config/campaigns/2026-11-B.yaml` escrito con `N_total=232`,
+  corte `2024-08-08`, `config_hash=5bed9520…` y el mismo `holdout_hash=768204bd…`.
 - **No se ha registrado ni ejecutado.** `2026-11-A` sigue siendo el registro
   histórico y no se toca.
 

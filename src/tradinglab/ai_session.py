@@ -236,7 +236,7 @@ def recent_decisions(db_path: str | Path = DEFAULT_DB, limit: int = 8) -> list[d
     with connect(db_path) as con:
         rows = con.execute(
             "SELECT ts, style, symbol, strategy, timeframe, decision, reason "
-            "FROM ai_decisions ORDER BY id DESC LIMIT ?",
+            "FROM ai_decisions WHERE source='forward' ORDER BY id DESC LIMIT ?",
             (int(limit),),
         ).fetchall()
     return [dict(row) for row in rows]

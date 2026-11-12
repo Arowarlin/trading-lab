@@ -82,6 +82,11 @@ Notas de lectura:
   posiciones por estilo, presupuesto diario por estilo/global, marcador y plan
   de scalping activo, de solo lectura. El skill `trading-lab-operador` contiene
   el procedimiento London/NY/daily y su copia está en `docs/ai_trader_skill.md`.
+  El **replay ciego** (`lab ai-trader replay --style intraday|swing`) muestrea
+  setups históricos anteriores al corte de `2026-11-A`, pide take/skip a
+  DeepSeek V4.1 Flash en lotes y guarda `ai_decisions` con `source=replay`;
+  queda fuera del marcador forward, del panel y de la destilación, y solo
+  puede pausar celdas con n≥50 y IC90 de la diferencia vs sombra < 0.
 
 ## No construir hasta
 

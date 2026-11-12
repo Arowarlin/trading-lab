@@ -1,0 +1,345 @@
+id: 2026-11-B
+universe:
+- AUS200.CASH
+- EU50.CASH
+- FRA40.CASH
+- HK50.CASH
+- JP225.CASH
+- NZDUSD
+- UK100.CASH
+- US100.CASH
+- US2000.CASH
+- US30.CASH
+- US500.CASH
+- XAGAUD
+- XAGEUR
+- XAGUSD
+- XAUEUR
+- XAUUSD
+mt5_names:
+  NZDUSD: NZDUSD
+  AUS200.CASH: AUS200.cash
+  EU50.CASH: EU50.cash
+  FRA40.CASH: FRA40.cash
+  HK50.CASH: HK50.cash
+  JP225.CASH: JP225.cash
+  UK100.CASH: UK100.cash
+  US100.CASH: US100.cash
+  US2000.CASH: US2000.cash
+  US30.CASH: US30.cash
+  US500.CASH: US500.cash
+  XAGAUD: XAGAUD
+  XAGEUR: XAGEUR
+  XAGUSD: XAGUSD
+  XAUEUR: XAUEUR
+  XAUUSD: XAUUSD
+timeframes:
+- H1
+- H4
+- D1
+families:
+- tsmom
+- st_reversal
+- vol_breakout
+- calendar
+variants_per_family:
+  tsmom: 4
+  st_reversal: 4
+  vol_breakout: 4
+  calendar: 4
+eligible_by_timeframe:
+  H1: []
+  H4: []
+  D1:
+  - NZDUSD
+  - AUS200.CASH
+  - EU50.CASH
+  - FRA40.CASH
+  - HK50.CASH
+  - JP225.CASH
+  - UK100.CASH
+  - US100.CASH
+  - US2000.CASH
+  - US30.CASH
+  - US500.CASH
+  - XAGAUD
+  - XAGEUR
+  - XAGUSD
+  - XAUEUR
+  - XAUUSD
+asset_classes:
+  NZDUSD: forex
+  AUS200.CASH: indices
+  EU50.CASH: indices
+  FRA40.CASH: indices
+  HK50.CASH: indices
+  JP225.CASH: indices
+  UK100.CASH: indices
+  US100.CASH: indices
+  US2000.CASH: indices
+  US30.CASH: indices
+  US500.CASH: indices
+  XAGAUD: metals
+  XAGEUR: metals
+  XAGUSD: metals
+  XAUEUR: metals
+  XAUUSD: metals
+discovery_pct: 0.7
+holdout_pct: 0.3
+cutoff_utc: '2024-08-08 00:00:00+00:00'
+n_total: 232
+n_total_detail:
+  H1: 0
+  H4: 0
+  D1: 232
+n_total_theoretical: 232
+holdout_years: 2.263
+min_holdout_years: 2.0
+excluded_assets:
+- XCUUSD
+holdout_hash: 768204bd714e44212ac9317a234ffc03f85ee2601547a89df39294deb3d46b62
+holdout_series:
+- symbol: AUS200.CASH
+  timeframe: D1
+  start: '2024-08-08 00:00:00+00:00'
+  end: '2026-11-12 00:00:00+00:00'
+  rows: 586
+- symbol: AUS200.CASH
+  timeframe: H1
+  start: '2024-08-08 00:00:00+00:00'
+  end: '2026-11-12 18:00:00+00:00'
+  rows: 12812
+- symbol: AUS200.CASH
+  timeframe: H4
+  start: '2024-08-08 01:00:00+00:00'
+  end: '2026-11-12 14:00:00+00:00'
+  rows: 3447
+- symbol: EU50.CASH
+  timeframe: D1
+  start: '2024-08-08 00:00:00+00:00'
+  end: '2026-11-12 00:00:00+00:00'
+  rows: 575
+- symbol: EU50.CASH
+  timeframe: H1
+  start: '2024-08-08 00:00:00+00:00'
+  end: '2026-11-12 17:00:00+00:00'
+  rows: 8871
+- symbol: EU50.CASH
+  timeframe: H4
+  start: '2024-08-08 01:00:00+00:00'
+  end: '2026-11-12 14:00:00+00:00'
+  rows: 2482
+- symbol: FRA40.CASH
+  timeframe: D1
+  start: '2024-08-08 00:00:00+00:00'
+  end: '2026-11-12 00:00:00+00:00'
+  rows: 579
+- symbol: FRA40.CASH
+  timeframe: H1
+  start: '2024-08-08 00:00:00+00:00'
+  end: '2026-11-12 17:00:00+00:00'
+  rows: 8883
+- symbol: FRA40.CASH
+  timeframe: H4
+  start: '2024-08-08 01:00:00+00:00'
+  end: '2026-11-12 14:00:00+00:00'
+  rows: 2487
+- symbol: HK50.CASH
+  timeframe: D1
+  start: '2024-08-08 00:00:00+00:00'
+  end: '2026-11-12 00:00:00+00:00'
+  rows: 561
+- symbol: HK50.CASH
+  timeframe: H1
+  start: '2024-08-08 00:00:00+00:00'
+  end: '2026-11-12 17:00:00+00:00'
+  rows: 9856
+- symbol: HK50.CASH
+  timeframe: H4
+  start: '2024-08-08 01:00:00+00:00'
+  end: '2026-11-12 14:00:00+00:00'
+  rows: 2980
+- symbol: JP225.CASH
+  timeframe: D1
+  start: '2024-08-08 00:00:00+00:00'
+  end: '2026-11-12 00:00:00+00:00'
+  rows: 590
+- symbol: JP225.CASH
+  timeframe: H1
+  start: '2024-08-08 00:00:00+00:00'
+  end: '2026-11-12 17:00:00+00:00'
+  rows: 13382
+- symbol: JP225.CASH
+  timeframe: H4
+  start: '2024-08-08 01:00:00+00:00'
+  end: '2026-11-12 14:00:00+00:00'
+  rows: 3497
+- symbol: NZDUSD
+  timeframe: D1
+  start: '2024-08-08 00:00:00+00:00'
+  end: '2026-11-12 00:00:00+00:00'
+  rows: 591
+- symbol: NZDUSD
+  timeframe: H1
+  start: '2024-08-08 00:00:00+00:00'
+  end: '2026-11-12 17:00:00+00:00'
+  rows: 14081
+- symbol: NZDUSD
+  timeframe: H4
+  start: '2024-08-08 01:00:00+00:00'
+  end: '2026-11-12 14:00:00+00:00'
+  rows: 3520
+- symbol: UK100.CASH
+  timeframe: D1
+  start: '2024-08-08 00:00:00+00:00'
+  end: '2026-11-12 00:00:00+00:00'
+  rows: 586
+- symbol: UK100.CASH
+  timeframe: H1
+  start: '2024-08-08 00:00:00+00:00'
+  end: '2026-11-12 17:00:00+00:00'
+  rows: 13029
+- symbol: UK100.CASH
+  timeframe: H4
+  start: '2024-08-08 01:00:00+00:00'
+  end: '2026-11-12 14:00:00+00:00'
+  rows: 3434
+- symbol: US100.CASH
+  timeframe: D1
+  start: '2024-08-08 00:00:00+00:00'
+  end: '2026-11-12 00:00:00+00:00'
+  rows: 590
+- symbol: US100.CASH
+  timeframe: H1
+  start: '2024-08-08 00:00:00+00:00'
+  end: '2026-11-12 17:00:00+00:00'
+  rows: 13376
+- symbol: US100.CASH
+  timeframe: H4
+  start: '2024-08-08 01:00:00+00:00'
+  end: '2026-11-12 14:00:00+00:00'
+  rows: 3497
+- symbol: US2000.CASH
+  timeframe: D1
+  start: '2024-08-08 00:00:00+00:00'
+  end: '2026-11-12 00:00:00+00:00'
+  rows: 590
+- symbol: US2000.CASH
+  timeframe: H1
+  start: '2024-08-08 00:00:00+00:00'
+  end: '2026-11-12 15:00:00+00:00'
+  rows: 13371
+- symbol: US2000.CASH
+  timeframe: H4
+  start: '2024-08-08 01:00:00+00:00'
+  end: '2026-11-12 14:00:00+00:00'
+  rows: 3496
+- symbol: US30.CASH
+  timeframe: D1
+  start: '2024-08-08 00:00:00+00:00'
+  end: '2026-11-12 00:00:00+00:00'
+  rows: 590
+- symbol: US30.CASH
+  timeframe: H1
+  start: '2024-08-08 00:00:00+00:00'
+  end: '2026-11-12 17:00:00+00:00'
+  rows: 13374
+- symbol: US30.CASH
+  timeframe: H4
+  start: '2024-08-08 01:00:00+00:00'
+  end: '2026-11-12 14:00:00+00:00'
+  rows: 3496
+- symbol: US500.CASH
+  timeframe: D1
+  start: '2024-08-08 00:00:00+00:00'
+  end: '2026-11-12 00:00:00+00:00'
+  rows: 590
+- symbol: US500.CASH
+  timeframe: H1
+  start: '2024-08-08 00:00:00+00:00'
+  end: '2026-11-12 17:00:00+00:00'
+  rows: 13376
+- symbol: US500.CASH
+  timeframe: H4
+  start: '2024-08-08 01:00:00+00:00'
+  end: '2026-11-12 14:00:00+00:00'
+  rows: 3497
+- symbol: XAGAUD
+  timeframe: D1
+  start: '2024-08-08 00:00:00+00:00'
+  end: '2026-11-12 00:00:00+00:00'
+  rows: 589
+- symbol: XAGAUD
+  timeframe: H1
+  start: '2024-08-08 00:00:00+00:00'
+  end: '2026-11-12 18:00:00+00:00'
+  rows: 13401
+- symbol: XAGAUD
+  timeframe: H4
+  start: '2024-08-08 01:00:00+00:00'
+  end: '2026-11-12 18:00:00+00:00'
+  rows: 3506
+- symbol: XAGEUR
+  timeframe: D1
+  start: '2024-08-08 00:00:00+00:00'
+  end: '2026-11-12 00:00:00+00:00'
+  rows: 589
+- symbol: XAGEUR
+  timeframe: H1
+  start: '2024-08-08 00:00:00+00:00'
+  end: '2026-11-12 18:00:00+00:00'
+  rows: 13402
+- symbol: XAGEUR
+  timeframe: H4
+  start: '2024-08-08 01:00:00+00:00'
+  end: '2026-11-12 18:00:00+00:00'
+  rows: 3506
+- symbol: XAGUSD
+  timeframe: D1
+  start: '2024-08-08 00:00:00+00:00'
+  end: '2026-11-12 00:00:00+00:00'
+  rows: 589
+- symbol: XAGUSD
+  timeframe: H1
+  start: '2024-08-08 00:00:00+00:00'
+  end: '2026-11-12 15:00:00+00:00'
+  rows: 13400
+- symbol: XAGUSD
+  timeframe: H4
+  start: '2024-08-08 01:00:00+00:00'
+  end: '2026-11-12 18:00:00+00:00'
+  rows: 3506
+- symbol: XAUEUR
+  timeframe: D1
+  start: '2024-08-08 00:00:00+00:00'
+  end: '2026-11-12 00:00:00+00:00'
+  rows: 589
+- symbol: XAUEUR
+  timeframe: H1
+  start: '2024-08-08 00:00:00+00:00'
+  end: '2026-11-12 18:00:00+00:00'
+  rows: 13403
+- symbol: XAUEUR
+  timeframe: H4
+  start: '2024-08-08 01:00:00+00:00'
+  end: '2026-11-12 18:00:00+00:00'
+  rows: 3506
+- symbol: XAUUSD
+  timeframe: D1
+  start: '2024-08-08 00:00:00+00:00'
+  end: '2026-11-12 00:00:00+00:00'
+  rows: 589
+- symbol: XAUUSD
+  timeframe: H1
+  start: '2024-08-08 00:00:00+00:00'
+  end: '2026-11-12 18:00:00+00:00'
+  rows: 13403
+- symbol: XAUUSD
+  timeframe: H4
+  start: '2024-08-08 01:00:00+00:00'
+  end: '2026-11-12 18:00:00+00:00'
+  rows: 3506
+excluded_cells: 0
+plateau:
+  skip_adjacent_if_empty: true
+config_hash: 5bed95207b01c638b68b9ff2d6599ca90d1e0e1763916190dbe47ceca279ea0c

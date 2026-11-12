@@ -1243,7 +1243,8 @@ def compute_n_total(universe: dict) -> dict:
     }
 
 
-def campaign_config(universe: dict, campaign: str) -> dict:
+def campaign_config(universe: dict, campaign: str, *,
+                    skip_adjacent_if_empty: bool = False) -> dict:
     """Configuración de la campaña a partir del universo final y su plan.
 
     No registra nada: la misma función alimenta `lab campaign plan` (escribe el
@@ -1306,6 +1307,10 @@ def campaign_config(universe: dict, campaign: str) -> dict:
         "holdout_hash": plan.get("holdout_hash"),
         "holdout_series": list(plan.get("holdout_series") or []),
         "excluded_cells": len(plan.get("excluded") or []),
+        "plateau": (
+            {"skip_adjacent_if_empty": True}
+            if skip_adjacent_if_empty else {}
+        ),
     }
     if config["n_total"] <= 0:
         raise CampaignError(
@@ -1337,6 +1342,8 @@ def campaign_hash(config: dict) -> str:
         "cutoff_utc": config.get("cutoff_utc"),
         "n_total": int(config.get("n_total") or 0),
     }
+    if config.get("plateau"):
+        payload["plateau"] = config["plateau"]
     raw = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
@@ -2259,6 +2266,8 @@ ADJACENT = {"H1": ("H4",), "H4": ("H1", "D1"), "D1": ("H4",)}
 def apply_plateau(
     cells: list[dict],
     clusters: dict[str, dict[str, float]],
+    *,
+    skip_adjacent_if_empty: bool = False,
 ) -> list[dict]:
     """Marca cada celda con las cuatro condiciones de meseta.
 
@@ -2287,7 +2296,13 @@ def apply_plateau(
         adjacent_hits = [
             index.get((symbol, other, family, variant)) for other in ADJACENT.get(timeframe, ())
         ]
-        adjacent_ok = any(
+        adjacent_timeframes = ADJACENT.get(timeframe, ())
+        adjacent_present = any(
+            str(other_cell.get("timeframe")) in adjacent_timeframes
+            for other_cell in cells
+        )
+        adjacent_exempt = bool(skip_adjacent_if_empty and not adjacent_present)
+        adjacent_ok = adjacent_exempt or any(
             item is not None and item["sharpe"] > 0.0 for item in adjacent_hits
         )
         related = clusters.get(f"{symbol}|{timeframe}", {})
@@ -2320,6 +2335,7 @@ def apply_plateau(
                 "neighbours_positive": positive_neighbours,
                 "neighbours_total": len(neighbours),
                 "adjacent_ok": adjacent_ok,
+                "adjacent_exempt": adjacent_exempt,
                 "cluster_ok": cluster_ok,
                 "cluster": sorted(related),
                 "plateau": condition_a and condition_b and adjacent_ok and cluster_ok,

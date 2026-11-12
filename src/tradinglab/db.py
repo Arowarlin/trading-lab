@@ -975,10 +975,18 @@ def _migrate_ai_trades(con: sqlite3.Connection) -> None:
             snapshot TEXT,
             playbook_version INTEGER,
             source TEXT NOT NULL DEFAULT 'forward',
-            plan_id TEXT
+            plan_id TEXT,
+            result_r REAL,
+            shadow_r REAL,
+            entry REAL,
+            sl REAL,
+            tp REAL,
+            exit_ts TEXT
         );
         CREATE INDEX IF NOT EXISTS idx_ai_decisions_ts ON ai_decisions(ts);
         CREATE INDEX IF NOT EXISTS idx_ai_decisions_style ON ai_decisions(style, decision);
+        CREATE INDEX IF NOT EXISTS idx_ai_decisions_source
+            ON ai_decisions(source, decision);
         """
     )
     columns = [row["name"] for row in con.execute("PRAGMA table_info(ai_trades)").fetchall()]
@@ -997,7 +1005,9 @@ def _migrate_ai_trades(con: sqlite3.Connection) -> None:
     ]
     for column, kind in (("decision_date", "TEXT"), ("session", "TEXT"),
                          ("snapshot", "TEXT"), ("source", "TEXT DEFAULT 'forward'"),
-                         ("plan_id", "TEXT")):
+                         ("plan_id", "TEXT"), ("result_r", "REAL"),
+                         ("shadow_r", "REAL"), ("entry", "REAL"),
+                         ("sl", "REAL"), ("tp", "REAL"), ("exit_ts", "TEXT")):
         if column not in decision_columns:
             con.execute(f"ALTER TABLE ai_decisions ADD COLUMN {column} {kind}")
 

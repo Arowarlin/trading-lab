@@ -8807,7 +8807,8 @@ def campaign_ntotal_cmd() -> None:
     )
 
 
-def _campaign_config(universe: dict, campaign: str) -> dict:
+def _campaign_config(universe: dict, campaign: str, *,
+                     skip_adjacent_if_empty: bool = False) -> dict:
     """Configuración de la campaña a partir del universo y su plan.
 
     No registra nada: es la misma función la que escribe el yaml y la que
@@ -8815,7 +8816,10 @@ def _campaign_config(universe: dict, campaign: str) -> dict:
     """
     from .campaign import campaign_config
 
-    return campaign_config(universe, campaign)
+    return campaign_config(
+        universe, campaign,
+        skip_adjacent_if_empty=skip_adjacent_if_empty,
+    )
 
 
 @campaign_app.command("fetch")
@@ -8916,13 +8920,20 @@ def campaign_fetch_cmd() -> None:
 def campaign_plan_cmd(
     campaign: str = typer.Option("2026-11-A", "--campaign", help="Identificador"),
     force: bool = typer.Option(False, "--force", help="Reescribe un yaml existente"),
+    skip_adjacent_if_empty: bool = typer.Option(
+        False, "--skip-adjacent-if-empty",
+        help="Exime (c) si el timeframe adyacente no tiene celdas",
+    ),
 ) -> None:
     """Escribe config/campaigns/<id>.yaml con el corte y N_total. No registra."""
     from .campaign import CAMPAIGNS_DIR, CampaignError
 
     try:
         universe = _campaign_load_universe()
-        config = _campaign_config(universe, campaign)
+        config = _campaign_config(
+            universe, campaign,
+            skip_adjacent_if_empty=skip_adjacent_if_empty,
+        )
     except CampaignError as exc:
         console.print(f"[red]{exc}[/red]")
         raise typer.Exit(2) from exc
@@ -9176,7 +9187,12 @@ def campaign_run_cmd(
     )
 
     clusters = correlation_clusters(frames, cutoff)
-    plateau = apply_plateau(discovery["cells"], clusters)
+    plateau = apply_plateau(
+        discovery["cells"], clusters,
+        skip_adjacent_if_empty=bool(
+            (config.get("plateau") or {}).get("skip_adjacent_if_empty")
+        ),
+    )
     selected = candidates(plateau)
     console.print(
         f"[green]Meseta[/green] · {len(selected)} candidatas de {len(plateau)} celdas"
@@ -9547,6 +9563,32 @@ def ai_trader_scoreboard_cmd() -> None:
     console.print(table)
     if any(cell["insufficient"] for cell in cells):
         console.print("[yellow]muestra insuficiente: n<30 en alguna celda[/yellow]")
+
+
+@ai_trader_app.command("replay")
+def ai_trader_replay_cmd(
+    style: str = typer.Option(..., "--style", help="intraday o swing"),
+    n: int = typer.Option(200, "--n", min=1, help="Decisiones a pedir"),
+    strategy: str = typer.Option(None, "--strategy", help="Filtra una estrategia"),
+    symbol: str = typer.Option(None, "--symbol", help="Filtra un símbolo"),
+    yes: bool = typer.Option(False, "--yes", help="Confirma la ejecución"),
+) -> None:
+    """Replay ciego de setups históricos anteriores al corte de la campaña."""
+    from .ai_replay import ReplayError, prepare_replay, run_replay
+
+    try:
+        plan = prepare_replay(style, n=n, strategy=strategy, symbol=symbol)
+    except ReplayError as exc:
+        _ai_trader_error(exc)
+    typer.echo(json.dumps(plan.summary(), ensure_ascii=False, separators=(",", ":")))
+    if not yes:
+        console.print("[yellow]Replay no ejecutado: falta --yes.[/yellow]")
+        return
+    try:
+        result = run_replay(plan, yes=True, db_path=DEFAULT_DB)
+    except ReplayError as exc:
+        _ai_trader_error(exc)
+    typer.echo(json.dumps(result, ensure_ascii=False, separators=(",", ":")))
 
 
 @ai_trader_app.command("resume")
