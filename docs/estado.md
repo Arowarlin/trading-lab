@@ -50,15 +50,20 @@ Notas de lectura:
 - **IA discrecional (3 estilos)**: biblioteca de 10 estrategias con reglas
   exactas en `ai_setups.py`; el LLM solo elige estilo, símbolo, estrategia,
   timeframe y dirección. La asignación del playbook v1 está en
-  `config/ai_trader.yaml` (`intraday`: M15/H1; `swing`: H4/D1). **`scalping`
-  queda sin asignaciones M1/M5**: el estilo está configurado, pero `propose`
-  rechaza cualquier combinación hasta que se añada una asignación explícita.
-  `snapshot --style --symbols` devuelve el JSON compacto (≤3.000 tokens) con
-  indicadores, setups válidos, coste/R, eventos 24 h, posiciones y presupuesto.
-  `manage` aplica breakeven a 0,5R, trailing de 1 ATR desde 1R, el canal de 10
-  días de `donchian_turtle`, la salida D1 sobre SMA5 de `rsi2_connors` y los
-  cierres de sesión de `orb_ny` (16:00 NY) y `london_breakout` (16:00 Londres),
-  sin alejar nunca el stop y solo sobre los magics 20261191/92/93.
+  `config/ai_trader.yaml` (`scalping`: M1/M5; `intraday`: M15/H1; `swing`:
+  H4/D1). `scalping` usa cuatro estrategias propias (`ema_ribbon_pullback`,
+  `vwap_bounce`, `orb_5m`, `momentum_burst`) solo en US100 y XAUUSD, con un
+  `plan` diario por símbolo (setups, bias, horas prohibidas y motivo) y el
+  comando `scalp` sin LLM, pensado para ejecutarse cada minuto dentro de
+  09:30–12:00 NY. Sin plan activo, el scalper no opera; si MT5 no responde, el
+  dato tiene más de dos velas de antigüedad o el kill-switch está activo,
+  registra el `skip` y no envía nada. `snapshot --style --symbols` devuelve el
+  JSON compacto (≤3.000 tokens) con indicadores, setups válidos, coste/R,
+  eventos 24 h, posiciones y presupuesto. `manage` aplica breakeven a 0,5R,
+  trailing de 1 ATR desde 1R, el canal de 10 días de `donchian_turtle`, la
+  salida D1 sobre SMA5 de `rsi2_connors` y los cierres de sesión de `orb_ny`
+  (16:00 NY) y `london_breakout` (16:00 Londres), sin alejar nunca el stop y
+  solo sobre los magics 20261191/92/93.
 
 ## No construir hasta
 

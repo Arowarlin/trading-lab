@@ -24,15 +24,17 @@ from .ai_setups import (
     STRATEGY_TIMEFRAME,
     TIMEFRAMES,
     SetupError,
-    plan,
     supports,
     validate,
 )
+from .ai_setups import plan as setup_plan
 from .audit import append_hashed
 from .config import DEFAULT_DB, ROOT, Settings, get_settings
 from .db import connect, init_db, utcnow
 from .indicators import atr, ema
 from .intraday_costs import asset_costs
+from .killswitch import ensure as ensure_killswitch
+from .killswitch import load_state as load_killswitch_state
 from .prop.guard import PropGuard
 from .prop.rules import from_yaml
 from .trailing import next_stop
@@ -587,6 +589,14 @@ def _block_from_bars(bars: pd.DataFrame, timeframe: str, d1: pd.DataFrame,
     orb_high = float(orb["high"].max()) if orb_valid else float("nan")
     orb_low = float(orb["low"].min()) if orb_valid else float("nan")
 
+    expected_orb5 = max(1, 15 // minutes)
+    orb5 = bars[(bars.index >= et_open.astimezone(timezone.utc))
+                & (bars.index < (et_open + timedelta(minutes=15)).astimezone(timezone.utc))]
+    orb5_complete = moment >= (et_open + timedelta(minutes=15)).astimezone(timezone.utc)
+    orb5_valid = orb5_complete and len(orb5) >= expected_orb5
+    orb5_high = float(orb5["high"].max()) if orb5_valid else float("nan")
+    orb5_low = float(orb5["low"].min()) if orb5_valid else float("nan")
+
     london_start = moment.astimezone(LONDON).replace(hour=0, minute=0, second=0, microsecond=0)
     expected_asian = max(1, 420 // minutes)
     asian = bars[(bars.index >= london_start.astimezone(timezone.utc))
@@ -606,7 +616,9 @@ def _block_from_bars(bars: pd.DataFrame, timeframe: str, d1: pd.DataFrame,
     block = {
         "atr": _round_or_none(atr_value),
         "sma20": _round_or_none(mid),
+        "ema8": _round_or_none(float(ema(bars["close"], 8).iloc[-1])),
         "ema9": _round_or_none(float(ema(bars["close"], 9).iloc[-1])),
+        "ema13": _round_or_none(float(ema(bars["close"], 13).iloc[-1])),
         "ema21": _round_or_none(float(ema(bars["close"], 21).iloc[-1])),
         "ema50": _round_or_none(float(ema(bars["close"], 50).iloc[-1])),
         "bb_upper": _round_or_none(bb_upper),
@@ -619,6 +631,9 @@ def _block_from_bars(bars: pd.DataFrame, timeframe: str, d1: pd.DataFrame,
         "orb_high": _round_or_none(orb_high if orb_valid else None),
         "orb_low": _round_or_none(orb_low if orb_valid else None),
         "orb_valid": orb_valid,
+        "orb5_high": _round_or_none(orb5_high if orb5_valid else None),
+        "orb5_low": _round_or_none(orb5_low if orb5_valid else None),
+        "orb5_valid": orb5_valid,
         "asian_high": _round_or_none(asian_high if asian_valid else None),
         "asian_low": _round_or_none(asian_low if asian_valid else None),
         "asian_valid": asian_valid,
@@ -631,6 +646,7 @@ def _block_from_bars(bars: pd.DataFrame, timeframe: str, d1: pd.DataFrame,
         "high": round(float(last["high"]), 8),
         "low": round(float(last["low"]), 8),
         "close": round(float(last["close"]), 8),
+        "last_bar": bars.index[-1].isoformat(),
     }
     if timeframe in {"H4", "D1"} and len(bars) >= 3:
         prev_bar, mother = bars.iloc[-2], bars.iloc[-3]
@@ -686,7 +702,9 @@ def _daily_block(d1: pd.DataFrame) -> dict:
         "close": round(price, 8),
         "vwap": round(price, 8),
         "vwap_sigma": 0.0,
+        "ema8": _round_or_none(float(ema(d1["close"], 8).iloc[-1])),
         "ema9": _round_or_none(float(ema(d1["close"], 9).iloc[-1])),
+        "ema13": _round_or_none(float(ema(d1["close"], 13).iloc[-1])),
         "ema21": _round_or_none(float(ema(d1["close"], 21).iloc[-1])),
         "ema50": _round_or_none(float(ema(d1["close"], 50).iloc[-1])),
         "bb_upper": "Sin datos",
@@ -697,12 +715,16 @@ def _daily_block(d1: pd.DataFrame) -> dict:
         "orb_high": "Sin datos",
         "orb_low": "Sin datos",
         "orb_valid": False,
+        "orb5_high": "Sin datos",
+        "orb5_low": "Sin datos",
+        "orb5_valid": False,
         "asian_high": "Sin datos",
         "asian_low": "Sin datos",
         "asian_valid": False,
         "prev_mid": round((float(prev["high"]) + float(prev["low"])) / 2, 8),
         "sweep_high": False,
         "sweep_low": False,
+        "last_bar": d1.index[-1].isoformat(),
     }
 
 
@@ -711,31 +733,46 @@ def _clean(frame: pd.DataFrame) -> pd.DataFrame:
     return frame.sort_index()
 
 
-def _safe_rates(broker, symbol: str, timeframe: str, count: int) -> pd.DataFrame | None:
-    """Velas del bróker; si el offset no se puede confirmar, Sin datos."""
+def _safe_rates(broker, symbol: str, timeframe: str, count: int,
+                *, now: datetime | None = None,
+                closed_only: bool = False) -> pd.DataFrame | None:
+    """Velas del bróker; si el offset no se puede confirmar, Sin datos.
+
+    Con ``closed_only`` se descarta la vela en formación: el scalp solo
+    evalúa velas cerradas.
+    """
     try:
         frame = broker.rates(symbol, timeframe, count)
     except Exception:
         return None
     if frame is None or len(frame) == 0:
         return None
-    return _clean(frame)
+    frame = _clean(frame)
+    if closed_only:
+        moment = _as_utc(now)
+        duration = pd.Timedelta(minutes=TF_MINUTES.get(timeframe, 60))
+        frame = frame[frame.index + duration <= moment]
+        if len(frame) == 0:
+            return None
+    return frame
 
 
 def _empty_block(reason: str) -> dict:
     return {
         "error": reason,
         "atr": "Sin datos", "sma20": "Sin datos",
-        "ema9": "Sin datos", "ema21": "Sin datos",
-        "ema50": "Sin datos", "bb_upper": "Sin datos", "bb_mid": "Sin datos",
+        "ema8": "Sin datos", "ema9": "Sin datos", "ema13": "Sin datos",
+        "ema21": "Sin datos", "ema50": "Sin datos",
+        "bb_upper": "Sin datos", "bb_mid": "Sin datos",
         "bb_lower": "Sin datos", "bb_width": "Sin datos", "bb_squeeze": False,
         "vwap": "Sin datos", "vwap_sigma": "Sin datos",
         "orb_high": "Sin datos", "orb_low": "Sin datos", "orb_valid": False,
+        "orb5_high": "Sin datos", "orb5_low": "Sin datos", "orb5_valid": False,
         "asian_high": "Sin datos", "asian_low": "Sin datos", "asian_valid": False,
         "prev_high": "Sin datos", "prev_low": "Sin datos", "prev_mid": "Sin datos",
         "sweep_high": False, "sweep_low": False,
         "open": "Sin datos", "high": "Sin datos", "low": "Sin datos",
-        "close": "Sin datos",
+        "close": "Sin datos", "last_bar": "Sin datos",
     }
 
 
@@ -756,22 +793,23 @@ def session_open(style: dict, now: datetime | None = None) -> bool | None:
 
 def snapshot_symbol(broker, symbol: str, config: dict,
                     db_path: str | Path = DEFAULT_DB,
-                    style: str | None = None) -> dict:
+                    style: str | None = None,
+                    closed_only: bool = False) -> dict:
     key = str(symbol).upper()
+    now = datetime.now(timezone.utc)
     counts = {"M1": 20_000, "M5": 6_000, "M15": 2_000, "H1": 1_000, "H4": 3_000}
     frames = {
-        tf: _safe_rates(broker, symbol, tf, count)
+        tf: _safe_rates(broker, symbol, tf, count, now=now, closed_only=closed_only)
         for tf, count in counts.items()
     }
     tick = broker.tick(symbol)
     price = (float(tick["bid"]) + float(tick["ask"])) / 2.0
     spread = float(tick["ask"]) - float(tick["bid"])
-    now = datetime.now(timezone.utc)
 
     d1 = None
     if frames["H4"] is not None and len(frames["H4"]) >= 300:
         raw_daily = _daily(frames["H4"])
-        today = pd.Timestamp.now(tz="UTC").normalize()
+        today = pd.Timestamp(now).normalize()
         raw_daily = raw_daily[raw_daily.index < today]
         if len(raw_daily) >= 55:
             d1 = raw_daily
@@ -916,11 +954,18 @@ STRATEGY_FIELDS = {
     ),
     "inside_bar": ("atr", "mother_high", "mother_low", "inside_bar", "close"),
     "trend_pullback": ("atr", "sma20", "high", "low", "close"),
+    "ema_ribbon_pullback": (
+        "atr", "ema8", "ema13", "ema21", "high", "low", "open", "close",
+    ),
+    "vwap_bounce": ("atr", "vwap", "high", "low", "open", "close"),
+    "orb_5m": ("atr", "orb5_high", "orb5_low", "orb5_valid"),
+    "momentum_burst": ("atr", "high", "low", "open", "close"),
 }
 
 # Secciones adicionales que una estrategia mira fuera de su timeframe.
 STRATEGY_EXTRA = {
     "trend_pullback": {"d1": ("close", "sma200")},
+    "vwap_bounce": {"m15": ("ema9", "ema21", "ema50")},
 }
 
 
@@ -997,7 +1042,7 @@ def _style_setups(snap: dict, strategies: dict[str, list[str]]) -> list[dict]:
                     ok, _reason = validate(strategy, side, snap, tf)
                     if not ok:
                         continue
-                    level = plan(strategy, side, snap, tf)
+                    level = setup_plan(strategy, side, snap, tf)
                 except (SetupError, KeyError, TypeError, ValueError):
                     continue
                 out.append(
@@ -1054,6 +1099,7 @@ def snapshot_style(broker, style: str, symbols: list[str] | None = None,
     canonical = {str(symbol).lower(): str(symbol) for symbol in cfg["universe"]}
 
     now = datetime.now(timezone.utc)
+    window_open = session_open(item, now)
     positions = _all_lane_positions(broker, cfg)
     lane = [
         position for position in positions
@@ -1071,7 +1117,7 @@ def snapshot_style(broker, style: str, symbols: list[str] | None = None,
         "style": style,
         "magic": item["magic"],
         "playbook_version": cfg["playbook_version"],
-        "session_open": session_open(item),
+        "session_open": window_open,
         "budget": {
             "equity": round(equity, 2),
             "risk_per_trade": item["risk_per_trade"],
@@ -1127,7 +1173,7 @@ def snapshot_style(broker, style: str, symbols: list[str] | None = None,
                 for tf in (used or item["timeframes"])
             },
             "data": _style_data(snap, strategies),
-            "setups": _style_setups(snap, strategies),
+            "setups": [] if window_open is False else _style_setups(snap, strategies),
         }
 
     text = json.dumps(payload, ensure_ascii=False, separators=(",", ":"), default=str)
@@ -1388,7 +1434,9 @@ def daily_stop_state(db_path: str | Path = DEFAULT_DB, config: dict | None = Non
 
 
 def _propose(item: dict, *, broker, cfg: dict, settings: Settings,
-             db_path: str | Path) -> dict:
+             db_path: str | Path, plan_id: str | None = None,
+             defer_decision: bool = False,
+             now: datetime | None = None) -> dict:
     style_name = item["style"]
     style = cfg["styles"][style_name]
     if not cfg["enabled"]:
@@ -1396,7 +1444,7 @@ def _propose(item: dict, *, broker, cfg: dict, settings: Settings,
     health = _assert_demo(broker)
     if not style["enabled"]:
         raise AiTraderError(f"estilo {style_name} deshabilitado")
-    is_open = session_open(style)
+    is_open = session_open(style, now)
     if is_open is False:
         window = style["session"]
         raise _Reject(
@@ -1447,7 +1495,7 @@ def _propose(item: dict, *, broker, cfg: dict, settings: Settings,
         raise _Reject(f"setup no válido: {reason}", decision="no_setup",
                       setup_valid=0, snapshot=snap)
     try:
-        level = plan(item["strategy"], item["side"], snap, item["timeframe"])
+        level = setup_plan(item["strategy"], item["side"], snap, item["timeframe"])
     except SetupError as exc:
         raise _Reject(f"setup no válido: {exc}", decision="no_setup",
                       setup_valid=0, snapshot=snap) from exc
@@ -1535,18 +1583,21 @@ def _propose(item: dict, *, broker, cfg: dict, settings: Settings,
                 "proposed", now, now,
             ),
         )
-    decision = _record_decision(
-        db_path=db_path, config=cfg, style=style_name, symbol=item["symbol"],
-        timeframe=item["timeframe"], strategy=item["strategy"], setup_valid=True,
-        decision="take", reason="propuesta aceptada", confidence=item["confidence"],
-        snapshot_payload=snap, source="forward", plan_id=pid, settings=settings,
-    )
+    decision = None
+    if not defer_decision:
+        decision = _record_decision(
+            db_path=db_path, config=cfg, style=style_name, symbol=item["symbol"],
+            timeframe=item["timeframe"], strategy=item["strategy"], setup_valid=True,
+            decision="take", reason="propuesta aceptada", confidence=item["confidence"],
+            snapshot_payload=snap, source="forward", plan_id=plan_id or pid,
+            settings=settings,
+        )
     return {
         "id": pid,
         "status": "proposed",
         "style": style_name,
         "strategy": item["strategy"],
-        "decision_id": decision["id"],
+        "decision_id": decision["id"] if decision else None,
         "snapshot": snap,
         "order": {
             "style": style_name,
@@ -1569,7 +1620,10 @@ def _propose(item: dict, *, broker, cfg: dict, settings: Settings,
 
 def propose(payload: dict, *, broker, config: dict | None = None,
             settings: Settings | None = None,
-            db_path: str | Path = DEFAULT_DB) -> dict:
+            db_path: str | Path = DEFAULT_DB,
+            plan_id: str | None = None,
+            defer_decision: bool = False,
+            now: datetime | None = None) -> dict:
     cfg = config or load_config()
     settings = settings or get_settings()
     if not cfg["enabled"]:
@@ -1577,13 +1631,16 @@ def propose(payload: dict, *, broker, config: dict | None = None,
     item = _validate_payload(payload, cfg)
     try:
         result = _propose(item, broker=broker, cfg=cfg, settings=settings,
-                          db_path=db_path)
+                          db_path=db_path, plan_id=plan_id,
+                          defer_decision=defer_decision, now=now)
     except _Reject as exc:
         params = {
             "style": item.get("style"), "symbol": item.get("symbol"),
             "strategy": item.get("strategy"), "timeframe": item.get("timeframe"),
             "decision": exc.decision,
         }
+        if plan_id:
+            params["plan_id"] = plan_id
         try:
             _record_decision(
                 db_path=db_path, config=cfg, style=item["style"],
@@ -1591,21 +1648,24 @@ def propose(payload: dict, *, broker, config: dict | None = None,
                 strategy=item["strategy"], setup_valid=bool(exc.setup_valid),
                 decision=exc.decision, reason=str(exc),
                 confidence=item.get("confidence"),
-                snapshot_payload=exc.snapshot, source="forward", settings=settings,
+                snapshot_payload=exc.snapshot, source="forward",
+                plan_id=plan_id, settings=settings,
             )
         except Exception:
             pass
         _audit(db_path, "ai_trader_reject", params, "rejected",
                detail=str(exc), ok=0)
         raise
-    _audit(
-        db_path, "ai_trader_propose",
-        {"proposal_id": result["id"], "style": item["style"],
-         "symbol": item["symbol"], "strategy": item["strategy"],
-         "timeframe": item["timeframe"], "side": item["side"],
-         "volume": result["order"]["volume"], "magic": result["order"]["magic"]},
-        "proposed", detail=item["thesis"],
-    )
+    audit_params = {
+        "proposal_id": result["id"], "style": item["style"],
+        "symbol": item["symbol"], "strategy": item["strategy"],
+        "timeframe": item["timeframe"], "side": item["side"],
+        "volume": result["order"]["volume"], "magic": result["order"]["magic"],
+    }
+    if plan_id:
+        audit_params["plan_id"] = plan_id
+    _audit(db_path, "ai_trader_propose", audit_params, "proposed",
+           detail=item["thesis"])
     return result
 
 
@@ -1734,6 +1794,463 @@ def execute(proposal_id: str, *, broker, config: dict | None = None,
     return {
         "id": proposal_id, "status": "open", "style": style_name,
         "order": order, "fills": fills, "fills_error": fills_error,
+    }
+
+
+# --------------------------------------------------------------- plan/scalp
+
+
+def _active_plans(db_path: str | Path, session_date: str) -> list[dict]:
+    init_db(db_path)
+    with connect(db_path) as con:
+        rows = con.execute(
+            "SELECT * FROM ai_plans WHERE session_date=? AND active=1 ORDER BY id",
+            (session_date,),
+        ).fetchall()
+    out: list[dict] = []
+    for row in rows:
+        try:
+            setups = json.loads(row["setups"] or "[]")
+        except (TypeError, ValueError):
+            setups = []
+        if isinstance(setups, list):
+            setups = [
+                item if isinstance(item, dict)
+                else {
+                    "strategy": str(item),
+                    "timeframe": STRATEGY_TIMEFRAME.get(str(item), ""),
+                }
+                for item in setups
+                if isinstance(item, (dict, str))
+            ]
+        try:
+            forbidden = json.loads(row["forbidden_hours"] or "[]")
+        except (TypeError, ValueError):
+            forbidden = []
+        if not isinstance(setups, list) or not setups:
+            continue
+        out.append({
+            "plan_id": str(row["plan_id"]),
+            "session_date": str(row["session_date"]),
+            "symbol": str(row["symbol"]),
+            "setups": setups,
+            "bias": (
+                str(row["bias"] or "both")
+                if str(row["bias"] or "both") in {"long", "short", "both"}
+                else "both"
+            ),
+            "forbidden_hours": forbidden if isinstance(forbidden, list) else [],
+            "reason": str(row["reason"] or ""),
+            "playbook_version": int(row["playbook_version"] or 0),
+            "active": bool(row["active"]),
+        })
+    return out
+
+
+def _forbidden_match(now: datetime, ranges: list, zone_name: str) -> str | None:
+    try:
+        zone = ZoneInfo(zone_name)
+    except ZoneInfoNotFoundError:
+        zone = NEW_YORK
+    current = _as_utc(now).astimezone(zone).time()
+    for text in ranges:
+        raw = str(text).strip()
+        try:
+            start_s, end_s = raw.split("-", 1)
+            start = dtime.fromisoformat(start_s.strip())
+            end = dtime.fromisoformat(end_s.strip())
+        except ValueError:
+            continue
+        if start <= end:
+            if start <= current < end:
+                return raw
+        elif current >= start or current < end:
+            return raw
+    return None
+
+
+def _record_scalp_skip(plan: dict, setup: dict, reason: str, *,
+                       cfg: dict, settings: Settings, db_path: str | Path,
+                       snapshot: dict | None = None,
+                       setup_valid: bool = False) -> None:
+    try:
+        _record_decision(
+            db_path=db_path, config=cfg, style="scalping",
+            symbol=plan["symbol"], timeframe=setup.get("timeframe"),
+            strategy=setup.get("strategy") or "scalp", setup_valid=setup_valid,
+            decision="skip", reason=reason, confidence=None,
+            snapshot_payload=snapshot, source="forward",
+            plan_id=plan.get("plan_id"), settings=settings,
+        )
+    except Exception:
+        pass
+
+
+def create_plan(payload: dict, *, config: dict | None = None,
+                settings: Settings | None = None,
+                db_path: str | Path = DEFAULT_DB) -> dict:
+    """Valida y guarda el plan de scalping de un símbolo y sesión."""
+    cfg = config or load_config()
+    settings = settings or get_settings()
+    if not isinstance(payload, dict):
+        raise AiTraderError("plan inválido")
+    style = cfg["styles"].get("scalping")
+    if style is None:
+        raise AiTraderError("estilo scalping no configurado")
+    raw_symbol = str(payload.get("symbol") or "").strip()
+    universe = {str(item).lower(): str(item) for item in cfg["universe"]}
+    if raw_symbol.lower() not in universe:
+        raise AiTraderError(f"símbolo fuera del universo: {raw_symbol}")
+    symbol = universe[raw_symbol.lower()]
+    if symbol.upper() not in {str(item).upper() for item in style["universe"]}:
+        raise AiTraderError(f"{symbol} fuera del universo de scalping")
+    allowed = style["allowed"].get(symbol.upper(), {})
+    if not allowed:
+        raise AiTraderError(f"scalping no tiene estrategias asignadas a {symbol}")
+    raw_setups = payload.get("setups")
+    if raw_setups is None:
+        raw_setups = payload.get("setups_permitidos")
+    if not isinstance(raw_setups, list) or not raw_setups:
+        raise AiTraderError("setups debe ser una lista no vacía")
+    setups: list[dict] = []
+    seen: set[tuple[str, str]] = set()
+    for raw in raw_setups:
+        if isinstance(raw, str):
+            strategy = raw.strip()
+            timeframe = None
+        elif isinstance(raw, dict):
+            strategy = str(raw.get("strategy") or "").strip()
+            timeframe = raw.get("timeframe")
+        else:
+            raise AiTraderError("cada setup debe ser texto u objeto {strategy,timeframe}")
+        if strategy not in allowed:
+            raise AiTraderError(f"estrategia no permitida en scalping/{symbol}: {strategy}")
+        frames = allowed[strategy]
+        tf = str(timeframe or frames[0]).strip().upper()
+        if tf not in frames:
+            raise AiTraderError(f"{strategy} no asignada a {symbol} en {tf}")
+        key = (strategy, tf)
+        if key not in seen:
+            setups.append({"strategy": strategy, "timeframe": tf})
+            seen.add(key)
+    bias = str(payload.get("bias") or "").strip().lower()
+    if bias not in {"long", "short", "both"}:
+        raise AiTraderError("bias debe ser long, short o both")
+    raw_forbidden = payload.get("forbidden_hours")
+    if raw_forbidden is None:
+        raw_forbidden = payload.get("horas_prohibidas", [])
+    if isinstance(raw_forbidden, str):
+        raw_forbidden = [part.strip() for part in raw_forbidden.split(",") if part.strip()]
+    if raw_forbidden is None:
+        raw_forbidden = []
+    if not isinstance(raw_forbidden, list):
+        raise AiTraderError("forbidden_hours debe ser una lista")
+    forbidden: list[str] = []
+    for item in raw_forbidden:
+        text = str(item).strip()
+        try:
+            start_s, end_s = text.split("-", 1)
+            start = dtime.fromisoformat(start_s.strip())
+            end = dtime.fromisoformat(end_s.strip())
+        except ValueError as exc:
+            raise AiTraderError(f"hora prohibida inválida: {text}") from exc
+        if start == end:
+            raise AiTraderError(f"hora prohibida vacía: {text}")
+        forbidden.append(
+            f"{start.strftime('%H:%M')}-{end.strftime('%H:%M')}"
+        )
+    reason = str(payload.get("reason") or payload.get("motivo") or "").strip()
+    if not reason or len(reason) > 300:
+        raise AiTraderError("motivo obligatorio y <= 300 caracteres")
+    plan_id = str(payload.get("plan_id") or uuid.uuid4().hex).strip()
+    if not plan_id:
+        raise AiTraderError("plan_id inválido")
+    session_date = _reset_date(settings)
+    init_db(db_path)
+    with connect(db_path) as con:
+        exists = con.execute(
+            "SELECT plan_id FROM ai_plans WHERE plan_id=?", (plan_id,)
+        ).fetchone()
+        if exists is not None:
+            raise AiTraderError(f"plan_id ya existe: {plan_id}")
+        con.execute(
+            "UPDATE ai_plans SET active=0 WHERE symbol=? AND session_date=? AND active=1",
+            (symbol, session_date),
+        )
+        con.execute(
+            "INSERT INTO ai_plans(plan_id, ts, session_date, symbol, setups, bias, "
+            "forbidden_hours, reason, playbook_version, active, created_at) "
+            "VALUES(?,?,?,?,?,?,?,?,?,1,?)",
+            (
+                plan_id, utcnow(), session_date, symbol,
+                json.dumps(setups, ensure_ascii=False, separators=(",", ":")),
+                bias,
+                json.dumps(forbidden, ensure_ascii=False, separators=(",", ":")),
+                reason, cfg["playbook_version"], utcnow(),
+            ),
+        )
+    out = {
+        "plan_id": plan_id,
+        "session_date": session_date,
+        "symbol": symbol,
+        "setups": setups,
+        "bias": bias,
+        "forbidden_hours": forbidden,
+        "reason": reason,
+        "playbook_version": cfg["playbook_version"],
+        "active": True,
+    }
+    _audit(
+        db_path, "ai_trader_plan",
+        {"plan_id": plan_id, "symbol": symbol, "bias": bias,
+         "setups": [item["strategy"] for item in setups]},
+        "active", detail=reason,
+    )
+    return out
+
+
+def scalp_window_open(now: datetime | None = None, *,
+                      config: dict | None = None) -> bool:
+    cfg = config or load_config()
+    style = cfg["styles"].get("scalping")
+    return style is not None and session_open(style, now) is True
+
+
+def scalp(*, broker=None, config: dict | None = None,
+          settings: Settings | None = None,
+          db_path: str | Path = DEFAULT_DB,
+          now: datetime | None = None) -> dict:
+    """Una pasada del scalper sin LLM. El plan manda; fuera de ventana no hace nada."""
+    cfg = config or load_config()
+    settings = settings or get_settings()
+    moment = _as_utc(now)
+    style = cfg["styles"].get("scalping")
+    if not cfg["enabled"] or style is None or not style["enabled"]:
+        return {"status": "disabled"}
+    if session_open(style, moment) is not True:
+        return {"status": "outside_window", "now": moment.isoformat()}
+    session_date = _reset_date(settings)
+    plans = _active_plans(db_path, session_date)
+    if not plans:
+        return {"status": "no_plan", "session_date": session_date}
+
+    def fail(status: str, reason: str, *, ok: int = 0) -> dict:
+        for plan in plans:
+            if plan["setups"]:
+                _record_scalp_skip(
+                    plan, plan["setups"][0], reason, cfg=cfg, settings=settings,
+                    db_path=db_path,
+                )
+        _audit(
+            db_path, "ai_trader_scalp",
+            {"session_date": session_date, "plans": len(plans)},
+            status, detail=reason, ok=ok,
+        )
+        return {
+            "status": status, "reason": reason,
+            "session_date": session_date, "plans": len(plans),
+        }
+
+    try:
+        state = load_killswitch_state(db_path)
+    except Exception:
+        state = None
+    if state is not None and state.active:
+        return fail(
+            "killswitch", f"kill-switch activo: {state.reason}", ok=1
+        )
+    if broker is None:
+        return fail("mt5_down", "MT5 no responde")
+    try:
+        health = _assert_demo(broker)
+    except Exception as exc:
+        return fail("mt5_down", f"MT5 no responde: {exc}")
+    try:
+        state, _ = ensure_killswitch(
+            db_path, broker.equity_series(), settings.risk,
+            current=float(health.get("equity") or 0),
+            tz=settings.timezone, now=moment,
+        )
+    except Exception:
+        try:
+            state = load_killswitch_state(db_path)
+        except Exception:
+            state = None
+    if state is not None and state.active:
+        return fail(
+            "killswitch", f"kill-switch activo: {state.reason}", ok=1
+        )
+
+    executed: list[dict] = []
+    skipped = 0
+    for plan in plans:
+        if plan["playbook_version"] != int(cfg["playbook_version"]):
+            reason = (
+                f"plan de playbook {plan['playbook_version']}; "
+                f"actual {cfg['playbook_version']}"
+            )
+            if plan["setups"]:
+                _record_scalp_skip(
+                    plan, plan["setups"][0], reason, cfg=cfg, settings=settings,
+                    db_path=db_path,
+                )
+            skipped += 1
+            continue
+        if plan["symbol"].upper() not in {
+            str(item).upper() for item in style["universe"]
+        }:
+            if plan["setups"]:
+                _record_scalp_skip(
+                    plan, plan["setups"][0],
+                    "símbolo fuera del universo de scalping",
+                    cfg=cfg, settings=settings, db_path=db_path,
+                )
+            skipped += 1
+            continue
+        window_tz = (style.get("session") or {}).get("tz") or "America/New_York"
+        forbidden = _forbidden_match(
+            moment, plan["forbidden_hours"], window_tz
+        )
+        if forbidden:
+            reason = f"plan: hora prohibida {forbidden}"
+            if plan["setups"]:
+                _record_scalp_skip(
+                    plan, plan["setups"][0], reason, cfg=cfg, settings=settings,
+                    db_path=db_path,
+                )
+            skipped += 1
+            continue
+        try:
+            snap = snapshot_symbol(
+                broker, plan["symbol"], cfg, db_path,
+                style="scalping", closed_only=True,
+            )
+        except Exception as exc:
+            reason = f"Sin datos: {exc}"
+            for setup in plan["setups"]:
+                _record_scalp_skip(
+                    plan, setup, reason, cfg=cfg, settings=settings,
+                    db_path=db_path,
+                )
+            skipped += len(plan["setups"])
+            continue
+        snap_now = pd.Timestamp(snap.get("now") or moment)
+        plan_executed = False
+        for setup in plan["setups"]:
+            strategy = str(setup.get("strategy") or "")
+            timeframe = str(
+                setup.get("timeframe") or STRATEGY_TIMEFRAME.get(strategy, "")
+            ).upper()
+            if not supports(strategy, timeframe):
+                _record_scalp_skip(
+                    plan, setup, "estrategia/timeframe no soportado",
+                    cfg=cfg, settings=settings, db_path=db_path,
+                )
+                skipped += 1
+                continue
+            block = snap.get(TF_SECTION.get(timeframe, "")) or {}
+            if block.get("error"):
+                _record_scalp_skip(
+                    plan, setup, f"Sin datos: {block['error']}",
+                    cfg=cfg, settings=settings, db_path=db_path,
+                )
+                skipped += 1
+                continue
+            last_raw = block.get("last_bar")
+            if last_raw in (None, "", "Sin datos"):
+                _record_scalp_skip(
+                    plan, setup, "Sin datos: última vela",
+                    cfg=cfg, settings=settings, db_path=db_path,
+                )
+                skipped += 1
+                continue
+            duration = pd.Timedelta(minutes=TF_MINUTES.get(timeframe, 60))
+            last_close = pd.Timestamp(last_raw) + duration
+            if snap_now - last_close > 2 * duration:
+                _record_scalp_skip(
+                    plan, setup,
+                    f"datos obsoletos: última vela {last_raw}",
+                    cfg=cfg, settings=settings, db_path=db_path,
+                    snapshot=snap,
+                )
+                skipped += 1
+                continue
+            sides = {
+                "long": ["buy"],
+                "short": ["sell"],
+                "both": ["buy", "sell"],
+            }[plan["bias"]]
+            for side in sides:
+                payload = {
+                    "style": "scalping",
+                    "strategy": strategy,
+                    "symbol": plan["symbol"],
+                    "timeframe": timeframe,
+                    "side": side,
+                    "thesis": plan["reason"][:300],
+                    "confidence": 3,
+                }
+                try:
+                    result = propose(
+                        payload, broker=broker, config=cfg, settings=settings,
+                        db_path=db_path, plan_id=plan["plan_id"],
+                        defer_decision=True, now=moment,
+                    )
+                except AiTraderError as exc:
+                    if not isinstance(exc, _Reject):
+                        _record_scalp_skip(
+                            plan, setup, str(exc), cfg=cfg, settings=settings,
+                            db_path=db_path, snapshot=snap,
+                        )
+                    skipped += 1
+                    continue
+                try:
+                    order = execute(
+                        result["id"], broker=broker, config=cfg,
+                        db_path=db_path,
+                    )
+                except Exception as exc:
+                    _record_scalp_skip(
+                        plan, setup, f"execute: {exc}",
+                        cfg=cfg, settings=settings, db_path=db_path,
+                        snapshot=result.get("snapshot"), setup_valid=True,
+                    )
+                    skipped += 1
+                    continue
+                _record_decision(
+                    db_path=db_path, config=cfg, style="scalping",
+                    symbol=plan["symbol"], timeframe=timeframe,
+                    strategy=strategy, setup_valid=True, decision="take",
+                    reason="señal ejecutada", confidence=3,
+                    snapshot_payload=result.get("snapshot"), source="forward",
+                    plan_id=plan["plan_id"], settings=settings,
+                )
+                executed.append({
+                    "plan_id": plan["plan_id"],
+                    "proposal_id": result["id"],
+                    "symbol": plan["symbol"],
+                    "strategy": strategy,
+                    "timeframe": timeframe,
+                    "side": side,
+                    "ticket": (order.get("order") or {}).get("order_id"),
+                })
+                plan_executed = True
+                break
+            if plan_executed:
+                break
+
+    _audit(
+        db_path, "ai_trader_scalp",
+        {"session_date": session_date, "plans": len(plans)},
+        "executed" if executed else "no_trade",
+        detail=f"executed={len(executed)} skipped={skipped}",
+    )
+    return {
+        "status": "ok",
+        "session_date": session_date,
+        "plans": len(plans),
+        "executed": executed,
+        "skipped": skipped,
     }
 
 

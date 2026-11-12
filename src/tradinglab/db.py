@@ -936,6 +936,22 @@ def _migrate_ai_trades(con: sqlite3.Connection) -> None:
             updated_at TEXT NOT NULL,
             PRIMARY KEY (strategy, symbol, timeframe)
         );
+        CREATE TABLE IF NOT EXISTS ai_plans (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            plan_id TEXT UNIQUE NOT NULL,
+            ts TEXT NOT NULL,
+            session_date TEXT NOT NULL,
+            symbol TEXT NOT NULL,
+            setups TEXT NOT NULL,
+            bias TEXT NOT NULL,
+            forbidden_hours TEXT,
+            reason TEXT,
+            playbook_version INTEGER,
+            active INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_ai_plans_active
+            ON ai_plans(session_date, symbol, active);
         CREATE TABLE IF NOT EXISTS ai_decisions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             ts TEXT NOT NULL,

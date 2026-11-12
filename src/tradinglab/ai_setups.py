@@ -29,6 +29,10 @@ STRATEGY_TIMEFRAME = {
     "donchian_turtle": "D1",
     "inside_bar": "D1",
     "trend_pullback": "H4",
+    "ema_ribbon_pullback": "M1",
+    "vwap_bounce": "M5",
+    "orb_5m": "M5",
+    "momentum_burst": "M1",
 }
 
 # Timeframes en los que cada estrategia tiene una implementación honesta.
@@ -43,6 +47,10 @@ STRATEGY_TIMEFRAMES = {
     "donchian_turtle": ("H4", "D1"),
     "inside_bar": ("H4", "D1"),
     "trend_pullback": ("H4",),
+    "ema_ribbon_pullback": ("M1",),
+    "vwap_bounce": ("M5",),
+    "orb_5m": ("M5",),
+    "momentum_burst": ("M1",),
 }
 
 SECTION = {"M1": "m1", "M5": "m5", "M15": "m15",
@@ -56,12 +64,20 @@ ALLOWED = {
         "rsi2_connors": "D1",
         "donchian_turtle": "D1",
         "trend_pullback": "H4",
+        "ema_ribbon_pullback": "M1",
+        "vwap_bounce": "M5",
+        "orb_5m": "M5",
+        "momentum_burst": "M1",
     },
     "XAUUSD": {
         "liquidity_sweep": "H1",
         "donchian_turtle": "D1",
         "inside_bar": "D1",
         "trend_pullback": "H4",
+        "ema_ribbon_pullback": "M1",
+        "vwap_bounce": "M5",
+        "orb_5m": "M5",
+        "momentum_burst": "M1",
     },
     "EURUSD": {
         "london_breakout": "H1",
@@ -261,6 +277,60 @@ def validate(
                 and close <= sma20,
                 "sin tendencia D1 bajista o sin retroceso a SMA20 H4",
             )
+        if strategy == "ema_ribbon_pullback":
+            e8, e13, e21 = (_b(block, key) for key in ("ema8", "ema13", "ema21"))
+            low, high = _b(block, "low"), _b(block, "high")
+            close, open_ = _b(block, "close"), _b(block, "open")
+            if side == "buy":
+                return _ok(
+                    e8 > e13 > e21 and low <= e13 and close > e13 and close > open_,
+                    "sin alineación 8>13>21 o sin retroceso a EMA13",
+                )
+            return _ok(
+                e8 < e13 < e21 and high >= e13 and close < e13 and close < open_,
+                "sin alineación 8<13<21 o sin retroceso a EMA13",
+            )
+        if strategy == "vwap_bounce":
+            e9 = _f(snap, "m15", "ema9")
+            e21 = _f(snap, "m15", "ema21")
+            e50 = _f(snap, "m15", "ema50")
+            vwap = _b(block, "vwap")
+            low, high = _b(block, "low"), _b(block, "high")
+            close, open_ = _b(block, "close"), _b(block, "open")
+            if side == "buy":
+                return _ok(
+                    e9 > e21 > e50 and low <= vwap and close > vwap and close > open_,
+                    "sin tendencia M15 alcista o sin rebote en VWAP",
+                )
+            return _ok(
+                e9 < e21 < e50 and high >= vwap and close < vwap and close < open_,
+                "sin tendencia M15 bajista o sin rebote en VWAP",
+            )
+        if strategy == "orb_5m":
+            local = _snap_now(snap).astimezone(NEW_YORK)
+            if not (time(9, 45) <= local.time() < time(12, 0)):
+                return False, "fuera de la ventana de scalping NY (09:45-12:00)"
+            if not bool(block.get("orb5_valid")):
+                return False, "rango de 15 minutos NY incompleto"
+            high, low = _b(block, "orb5_high"), _b(block, "orb5_low")
+            return _ok(
+                (side == "buy" and price > high) or (side == "sell" and price < low),
+                "precio dentro del rango de 15 minutos",
+            )
+        if strategy == "momentum_burst":
+            high, low = _b(block, "high"), _b(block, "low")
+            close, open_ = _b(block, "close"), _b(block, "open")
+            span = high - low
+            atr = _b(block, "atr")
+            if side == "buy":
+                return _ok(
+                    span > 2 * atr and close >= low + 0.8 * span and close > open_,
+                    "vela sin impulso alcista >2 ATR o cierre fuera del 20% extremo",
+                )
+            return _ok(
+                span > 2 * atr and close <= low + 0.2 * span and close < open_,
+                "vela sin impulso bajista >2 ATR o cierre fuera del 20% extremo",
+            )
     except (KeyError, TypeError) as exc:
         return False, f"snapshot incompleto: {exc}"
     except SetupError as exc:
@@ -326,6 +396,22 @@ def plan(
         dist = 1.5 * dist_atr
         sl = price - stop * dist
         tp = price + stop * 3.0 * dist_atr
+    elif strategy == "ema_ribbon_pullback":
+        dist = _b(block, "atr")
+        sl = price - stop * dist
+        tp = price + stop * 1.5 * dist
+    elif strategy == "vwap_bounce":
+        dist = _b(block, "atr")
+        sl = price - stop * dist
+        tp = price + stop * 1.5 * dist
+    elif strategy == "orb_5m":
+        sl = _b(block, "orb5_low") if side == "buy" else _b(block, "orb5_high")
+        dist = abs(price - sl)
+        tp = price + stop * 1.5 * dist
+    elif strategy == "momentum_burst":
+        sl = _b(block, "low") if side == "buy" else _b(block, "high")
+        dist = abs(price - sl)
+        tp = price + stop * dist
     else:
         raise SetupError(f"estrategia sin niveles: {strategy}")
     if dist <= 0:
@@ -358,4 +444,8 @@ def describe() -> dict:
         "donchian_turtle": "H4/D1: ruptura 20 días con filtro 55; SL 2 ATR D1; trailing 10 días",
         "inside_bar": "H4/D1: inside bar; ruptura de la madre; SL al otro lado; TP 2R",
         "trend_pullback": "H4: tendencia D1 (close vs SMA200); retroceso a SMA20 H4 ±0,5 ATR; SL 1,5 ATR; TP 3 ATR",
+        "ema_ribbon_pullback": "M1: EMA8>13>21 (o inverso); retroceso a EMA13 con reanudación; SL 1 ATR; TP 1,5R",
+        "vwap_bounce": "M5: toque del VWAP de sesión a favor de la tendencia M15; SL 1 ATR; TP 1,5R",
+        "orb_5m": "M5: rango de los primeros 15 minutos de NY; ruptura; SL al otro lado; TP 1,5R",
+        "momentum_burst": "M1: vela >2 ATR con cierre en el 20% extremo; SL tras la vela; TP 1R",
     }

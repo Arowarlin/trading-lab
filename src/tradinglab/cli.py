@@ -9270,6 +9270,70 @@ def ai_trader_skip_cmd(
     )
 
 
+@ai_trader_app.command("plan")
+def ai_trader_plan_cmd(
+    plan: str = typer.Option(..., "--json", help="JSON del plan de scalping"),
+) -> None:
+    """Valida y guarda el plan del día para un símbolo de scalping."""
+    from .ai_trader import AiTraderError, create_plan
+
+    try:
+        payload = json.loads(plan)
+    except json.JSONDecodeError as exc:
+        console.print(f"[red]JSON inválido:[/red] {exc}")
+        raise typer.Exit(2) from exc
+    try:
+        result = create_plan(payload, db_path=DEFAULT_DB)
+    except AiTraderError as exc:
+        _ai_trader_error(exc)
+    typer.echo(json.dumps(result, ensure_ascii=False, separators=(",", ":")))
+
+
+@ai_trader_app.command("scalp")
+def ai_trader_scalp_cmd() -> None:
+    """Una pasada del scalper sin LLM; pensada para ejecutarse cada minuto."""
+    from .ai_trader import AiTraderError, scalp, scalp_window_open
+
+    settings = get_settings()
+    try:
+        window = scalp_window_open()
+    except AiTraderError as exc:
+        _ai_trader_error(exc)
+    if not window:
+        typer.echo(json.dumps({"status": "outside_window"}))
+        return
+    broker = None
+    try:
+        broker = _mt5(settings, dry_run=False)
+    except typer.Exit:
+        result = scalp(broker=None, settings=settings, db_path=DEFAULT_DB)
+        typer.echo(json.dumps(result, ensure_ascii=False, separators=(",", ":")))
+        return
+    try:
+        result = scalp(broker=broker, settings=settings, db_path=DEFAULT_DB)
+    except AiTraderError as exc:
+        _ai_trader_error(exc)
+    finally:
+        broker.shutdown()
+    if result.get("status") == "ok":
+        console.print(
+            f"[green]scalp[/green] · {result.get('session_date')} · "
+            f"{result.get('plans', 0)} planes · "
+            f"{len(result.get('executed') or [])} ejecutadas · "
+            f"{result.get('skipped', 0)} sin operar"
+        )
+        for item in result.get("executed") or []:
+            console.print(
+                f"  {item['symbol']} {item['strategy']} {item['side']} "
+                f"{item['timeframe']} · ticket {item.get('ticket')}"
+            )
+    else:
+        console.print(
+            f"[yellow]scalp: {result.get('status')}[/yellow] "
+            f"{result.get('reason') or ''}".rstrip()
+        )
+
+
 @ai_trader_app.command("execute")
 def ai_trader_execute_cmd(
     proposal_id: str = typer.Option(..., "--id", help="ID de la propuesta"),

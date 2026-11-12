@@ -34,10 +34,19 @@ styles:
       start: "09:30"
       end: "12:00"
       tz: America/New_York
-    # Playbook v1: no hay estrategias asignadas a M1/M5. El estilo queda
-    # configurado, pero propose rechaza cualquier combinación hasta que se
-    # añada una asignación explícita.
-    allowed: {}
+    # Playbook v1: cuatro estrategias M1/M5 solo para US100 y XAUUSD.
+    # Sin asignación fuera de esta lista, propose rechaza.
+    allowed:
+      US100.CASH:
+        ema_ribbon_pullback: M1
+        vwap_bounce: M5
+        orb_5m: M5
+        momentum_burst: M1
+      XAUUSD:
+        ema_ribbon_pullback: M1
+        vwap_bounce: M5
+        orb_5m: M5
+        momentum_burst: M1
 
   intraday:
     enabled: true

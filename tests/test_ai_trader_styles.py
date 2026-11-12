@@ -237,6 +237,11 @@ def test_payload_valida_estilo_timeframe_y_estrategia():
         "side": "buy", "thesis": "x", "confidence": 3,
     }, cfg)
     assert inferred["style"] == "intraday"
+    scalp_item = _validate_payload({
+        "style": "scalping", "symbol": "US100.cash", "strategy": "orb_5m",
+        "timeframe": "M5", "side": "buy", "thesis": "x", "confidence": 3,
+    }, cfg)
+    assert scalp_item["style"] == "scalping"
 
 
 def test_estrategias_soportan_sus_timeframes():
@@ -348,6 +353,9 @@ def test_migracion_aditiva_de_columnas(tmp_path):
         decisions = {
             row["name"] for row in con.execute("PRAGMA table_info(ai_decisions)")
         }
+        plans = {
+            row["name"] for row in con.execute("PRAGMA table_info(ai_plans)")
+        }
         old = con.execute("SELECT proposal_id, pnl FROM ai_trades").fetchone()
     assert {"style", "result_r", "timeframe", "cost_ratio"} <= columns
     assert {
@@ -355,4 +363,8 @@ def test_migracion_aditiva_de_columnas(tmp_path):
         "setup_valid", "decision", "reason", "confidence", "snapshot",
         "playbook_version", "source", "plan_id",
     } <= decisions
+    assert {
+        "plan_id", "session_date", "symbol", "setups", "bias",
+        "forbidden_hours", "reason", "playbook_version", "active",
+    } <= plans
     assert old["proposal_id"] == "old" and old["pnl"] == pytest.approx(-10)

@@ -67,6 +67,11 @@ lab campaign status
   `holdout_hash = 768204bd…`. El yaml se reescribió con `lab campaign plan
   --force` y **no se registró**: la campaña sigue con el registro histórico de
   la primera pasada.
+- **Decisión de id (2026-11-12):** este plan reconstruido se registrará como
+  **`2026-11-B`**; `2026-11-A` queda como registro histórico y no se toca.
+  Antes de registrar hay que fijar por escrito la regla de (c) (H4 no tiene
+  elegibles) y generar el yaml con
+  `lab campaign plan --campaign 2026-11-B --force`. **No se registra ahora.**
 
 ### Primera pasada registrada (histórica, 0 candidatas)
 
