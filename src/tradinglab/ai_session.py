@@ -17,7 +17,7 @@ from zoneinfo import ZoneInfo
 from .config import DEFAULT_DB, Settings, get_settings
 from .db import connect, init_db
 
-SESSIONS = ("london", "ny", "daily", "scalp", "manage")
+SESSIONS = ("london", "ny", "daily", "scalp", "manage", "distill")
 SANTO_DOMINGO = ZoneInfo("America/Santo_Domingo")
 LONDON = ZoneInfo("Europe/London")
 NEW_YORK = ZoneInfo("America/New_York")
@@ -28,6 +28,7 @@ REFERENCES = {
     "daily": ("EURUSD", "XAUUSD"),
     "scalp": ("US100.cash", "XAUUSD"),
     "manage": ("EURUSD", "XAUUSD"),
+    "distill": (),
 }
 
 
@@ -45,6 +46,8 @@ def _zone(session: str) -> ZoneInfo:
     if session == "london":
         return LONDON
     if session == "manage":
+        return SANTO_DOMINGO
+    if session == "distill":
         return SANTO_DOMINGO
     raise ValueError(f"sesión desconocida: {session}")
 
@@ -70,6 +73,12 @@ def session_window(session: str, now: datetime | None = None) -> tuple[bool, str
     elif session == "scalp":
         ok = weekday < 5 and time(9, 30) <= current < time(12, 0)
         detail = f"NY {local:%H:%M} ({zone.key}); ventana 09:30-12:00 L-V"
+    elif session == "distill":
+        ok = weekday == 6 and time(12, 0) <= current < time(14, 0)
+        detail = (
+            f"Santo Domingo {local:%H:%M} ({zone.key}); "
+            "ventana domingo 12:00-14:00"
+        )
     else:  # manage: domingo 17:00 -> viernes 18:00 en República Dominicana
         if weekday == 5:
             ok = False
@@ -120,6 +129,12 @@ def preflight(
             }
     except Exception as exc:
         return {**base, "ok": False, "stage": "killswitch", "reason": str(exc)}
+
+    if session == "distill":
+        return {
+            **base, "ok": True, "stage": "ok",
+            "reason": "destilación semanal (sin broker)",
+        }
 
     created = False
     if broker is None:

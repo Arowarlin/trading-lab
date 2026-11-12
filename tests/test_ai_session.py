@@ -94,6 +94,15 @@ def test_ventanas_con_y_sin_horario_de_verano():
     assert session_window(
         "manage", datetime(2026, 1, 17, 12, 0, tzinfo=SANTO)
     )[0] is False
+    assert session_window(
+        "distill", datetime(2026, 1, 18, 12, 30, tzinfo=SANTO)
+    )[0] is True
+    assert session_window(
+        "distill", datetime(2026, 1, 19, 12, 30, tzinfo=SANTO)
+    )[0] is False
+    assert session_window(
+        "distill", datetime(2026, 1, 18, 15, 0, tzinfo=SANTO)
+    )[0] is False
 
 
 def test_candado_adquiere_bloquea_y_libera(tmp_path):
@@ -122,6 +131,14 @@ def test_preflight_sale_por_mt5_sin_conexion(tmp_path):
     result = preflight("ny", now=now, db_path=tmp_path / "lab.db", connect=False)
     assert result["ok"] is False
     assert result["stage"] == "mt5"
+
+
+def test_preflight_distill_sin_broker(tmp_path):
+    now = datetime(2026, 1, 18, 12, 30, tzinfo=SANTO)
+    result = preflight("distill", now=now, db_path=tmp_path / "lab.db", connect=False)
+    assert result["ok"] is True
+    assert result["stage"] == "ok"
+    assert "sin broker" in result["reason"]
 
 
 def test_preflight_sale_por_killswitch(tmp_path):

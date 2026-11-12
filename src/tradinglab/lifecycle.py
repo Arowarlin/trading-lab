@@ -273,6 +273,16 @@ def report_bot(
     total_days = max(1, (end_day - start_day).days)
     elapsed = min(total_days, max(0, (current - start_day).days))
     criteria = json.loads(data.get("criteria") or "{}")
+    tick_confirmation = None
+    if criteria.get("require_tick_confirmation"):
+        try:
+            from .ai_distill import scalping_tick_confirmation
+
+            tick_confirmation = scalping_tick_confirmation(
+                db_path, bot, criteria=criteria
+            )
+        except Exception as exc:
+            tick_confirmation = {"ok": False, "reason": str(exc)}
     metrics = {
         "n_trades": int(summary.get("n") or 0),
         "sharpe": summary.get("sharpe"),
@@ -284,6 +294,7 @@ def report_bot(
             "slippage_p95_bps": execution.get("slippage_p95_bps"),
             "drift_status": drift.get("status"),
             "guard_breaches": breaches,
+            "tick_confirmation": tick_confirmation,
         },
         criteria,
     )
@@ -295,6 +306,7 @@ def report_bot(
         "slippage_p95_bps": execution.get("slippage_p95_bps"),
         "drift": drift,
         "guard_breaches": breaches,
+        "tick_confirmation": tick_confirmation,
         "proposal": None if current < end_day else ("rechazado" if failures else "promovible"),
         "failures": failures,
         "criteria": criteria,
@@ -334,6 +346,13 @@ def evaluate_criteria(metrics: dict, criteria: dict) -> list[str]:
             f"brechas de guard {metrics.get('guard_breaches')} > "
             f"{criteria.get('max_guard_breaches')}"
         )
+    if criteria.get("require_tick_confirmation"):
+        tick = metrics.get("tick_confirmation") or {}
+        if not tick.get("ok"):
+            failures.append(
+                "ticks Dukascopy: "
+                + str(tick.get("reason") or "sin confirmación")
+            )
     return failures
 
 

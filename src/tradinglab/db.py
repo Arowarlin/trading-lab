@@ -1001,6 +1001,25 @@ def _migrate_ai_trades(con: sqlite3.Connection) -> None:
         );
         CREATE INDEX IF NOT EXISTS idx_ai_learn_changes_ts
             ON ai_learn_changes(ts);
+        CREATE TABLE IF NOT EXISTS ai_distill_runs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ts TEXT NOT NULL,
+            style TEXT NOT NULL,
+            symbol TEXT NOT NULL,
+            strategy TEXT NOT NULL,
+            timeframe TEXT NOT NULL,
+            bot TEXT,
+            status TEXT NOT NULL,
+            reason TEXT,
+            filter TEXT,
+            evidence TEXT,
+            validation TEXT,
+            playbook_version INTEGER
+        );
+        CREATE INDEX IF NOT EXISTS idx_ai_distill_runs_ts
+            ON ai_distill_runs(ts);
+        CREATE INDEX IF NOT EXISTS idx_ai_distill_runs_bot
+            ON ai_distill_runs(bot, status);
         """
     )
     columns = [row["name"] for row in con.execute("PRAGMA table_info(ai_trades)").fetchall()]

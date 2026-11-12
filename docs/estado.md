@@ -95,6 +95,21 @@ Notas de lectura:
   `playbook_version`; reactivar, subir riesgo o ampliar quedan como lección
   `proposed`. Cada cambio actualiza el YAML, el skill y deja evidencia en
   `ai_learn_changes`.
+- **Destilación semanal**: `lab ai-trader distill` corre domingos 12:00 DOM sin
+  LLM. De una celda ganadora aprende un filtro de profundidad ≤2, escribe un
+  candidato `ai-<estrategia>-<símbolo>-<tf>` con `enabled:false` y magic propio,
+  y lo valida con/sin filtro (costes, DSR +2, PBO, walk-forward y Monte Carlo
+  FTMO). Si pasa, incuba 60 días y la celda IA queda `destilada`; el LLM no la
+  opera. El panel muestra el embudo IA → destilado → validado → incubando →
+  promovible. `TradingLab-AI-Distill` está en el script de registro pero **no
+  registrada**.
+- **Scalping**: primer plan activo para US100.cash y XAUUSD (4 setups M1/M5,
+  bias both, horas prohibidas 09:30-09:45 y 11:30-12:00 NY). `TradingLab-AI-Scalp`
+  quedó `Ready` el 2026-11-12; próxima ejecución 2026-11-13 09:25 DOM. Sin plan
+  no opera; el plan se recrea cada sesión.
+- **2026-11-B**: registrada (232 pruebas DSR) y **no ejecutada**. Decisión:
+  no correrla hasta cerrar el primer ciclo de destilación con celdas ganadoras;
+  `2026-11-A` sigue intacta.
 
 ## No construir hasta
 

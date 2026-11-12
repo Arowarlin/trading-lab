@@ -104,11 +104,27 @@ actualiza el YAML y este skill. Reactivar una celda, subir riesgo o ampliar
 estrategias/activos/estilos queda como leccion `proposed` para el operador. El
 LLM no ejecuta `learn`; solo lee el marcador y las lecciones aprobadas.
 
+## Destilacion semanal
+
+`lab ai-trader distill` corre los domingos 12:00 DOM, sin LLM y sin broker.
+Solo toma celdas ganadoras del carril IA (n>=30 e IC90 del R > 0); en scalping
+exige ademas que el plan (bias/horas) supere a la sombra sin plan. Aprende un
+filtro legible de profundidad <=2 sobre el snapshot con numpy, sin sklearn, y
+lo valida con y sin filtro: backtest completo con costes, DSR (cada destilacion
+suma 2 pruebas), PBO, walk-forward y Monte Carlo FTMO.
+
+El bot candidato `ai-<estrategia>-<simbolo>-<tf>` nace `enabled: false`, con el
+riesgo de su estilo, `origin: destilado de ia-discrecional` y el filtro escrito
+en la configuracion. Si pasa, queda incubando 60 dias con >=15 trades, Sharpe
+forward >0, slippage <=3 bps y 0 breach. La celda IA equivalente pasa a
+`destilada` y el LLM deja de operarla. En scalping la promocion exige ademas
+ticks Dukascopy de las mismas horas. Nunca pasa a piloto/live sin el operador.
+
 ## Reglas que no se negocian
 
 - Solo demo; si el broker no esta en demo, se para.
 - No editar archivos ni configuracion desde el skill. No cambiar `enabled`, magics, riesgo ni playbook.
-- No operar sin `propose`, sin plan de scalping, con celda pausada/perdedora, stop diario tocado, coste/R fuera de limite o datos `Sin datos`.
+- No operar sin `propose`, sin plan de scalping, con celda pausada/perdedora/destilada, stop diario tocado, coste/R fuera de limite o datos `Sin datos`.
 - No repetir simbolo con posicion abierta del carril; maximo 5 abiertas en total.
 - No inventar niveles, lotes ni resultados. Si falta un dato, se registra `skip` con el motivo.
 - El `scalp` no lo decide el LLM: ejecuta el plan validado y registra `take`/`skip`/`no_setup`. El LLM solo crea el plan y opera las sesiones discrecionales.

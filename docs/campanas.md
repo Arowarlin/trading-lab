@@ -134,6 +134,12 @@ tiene elegibles") y su propio `N_total`, y se corre una sola vez.
   2026-11-B --confirm`: `N_total=232`, `config_hash=5bed9520…`, `holdout_hash=768204bd…`;
   `count_tests` 801 → **1033**. **No ejecutada** (`run_id`/`started_at`/`finished_at`
   vacíos). `2026-11-A` sigue siendo el registro histórico y no se toca.
+- **Decisión del 2026-11-12: no ejecutarla todavía.** El presupuesto DSR ya
+  está contado completo y el primer ciclo de destilación del carril IA aún no
+  tiene celdas ganadoras. Correrla ahora solo cerraría una campaña sin
+  candidatas y añadiría otra pasada antes de que el embudo IA→destilado tenga
+  evidencia. Queda sellada y disponible para una única ejecución cuando el
+  operador lo decida.
 
 ## Lecciones de 2026-11-A
 

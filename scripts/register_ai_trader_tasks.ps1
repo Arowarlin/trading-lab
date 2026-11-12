@@ -11,8 +11,9 @@ $user = "$env:USERDOMAIN\$env:USERNAME"
 $sessionScript = Join-Path $root "scripts\ai_trader_session.ps1"
 $manageScript = Join-Path $root "scripts\ai_trader_manage.ps1"
 $scalpScript = Join-Path $root "scripts\ai_trader_scalp.ps1"
+$distillScript = Join-Path $root "scripts\ai_trader_distill.ps1"
 
-foreach ($script in @($sessionScript, $manageScript, $scalpScript)) {
+foreach ($script in @($sessionScript, $manageScript, $scalpScript, $distillScript)) {
     if (-not (Test-Path $script)) { throw "No existe $script" }
 }
 
@@ -90,6 +91,12 @@ Register-AiTask -Name "TradingLab-AI-Daily" -Script $sessionScript `
     -Arguments "-Session daily" -Triggers $daily -LimitMinutes 15 `
     -Description "TradingLab IA discrecional daily: swing; solo demo."
 
+# Distill: domingo 12:00 DOM. Sin LLM, sin broker y sin activar nada.
+$distill = New-ScheduledTaskTrigger -Weekly -DaysOfWeek @([System.DayOfWeek]::Sunday) -At "12:00"
+Register-AiTask -Name "TradingLab-AI-Distill" -Script $distillScript `
+    -Arguments "" -Triggers $distill -LimitMinutes 60 `
+    -Description "TradingLab IA destilación: filtro, embudo e incubación; solo demo."
+
 # Scalp: cada minuto de 09:25 a 13:05 DOM, L-V. El script comprueba 09:30-12:00
 # NY y sale sin operar fuera de la ventana.
 $scalpTriggers = @()
@@ -135,4 +142,4 @@ Register-AiTask -Name "TradingLab-AI-Manage" -Script $manageScript `
 
 Write-Output ""
 Write-Output "Tareas registradas (no iniciadas). Revisa con: Get-ScheduledTask -TaskName 'TradingLab-AI-*'"
-Write-Output "London 03:05 L-V · NY 09:35 y 10:35 L-V · Daily 18:15 L-V · Scalp 09:25-13:05 L-V · Manage cada 15 min dom 17:00-vie 18:00 (hora DOM, UTC-4)"
+Write-Output "London 03:05 L-V · NY 09:35 y 10:35 L-V · Daily 18:15 L-V · Scalp 09:25-13:05 L-V · Manage cada 15 min dom 17:00-vie 18:00 · Distill domingo 12:00 (hora DOM, UTC-4)"

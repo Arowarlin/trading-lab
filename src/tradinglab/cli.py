@@ -159,7 +159,7 @@ app.add_typer(risk_budget_app, name="risk-budget")
 app.add_typer(lifecycle_app, name="lifecycle")
 ai_trader_app = typer.Typer(
     no_args_is_help=True,
-    help="Carril IA discrecional (solo demo): snapshot, propose, skip, execute, status, manage, scoreboard, review.",
+    help="Carril IA discrecional (solo demo): snapshot, propose, skip, execute, status, manage, scoreboard, learn, distill, replay, review.",
 )
 app.add_typer(ai_trader_app, name="ai-trader")
 app.add_typer(llm_app, name="llm")
@@ -9568,7 +9568,10 @@ def ai_trader_scoreboard_cmd() -> None:
                 "neutral": "neutral",
                 "exploring": "explorando",
             }.get(str(cell["state"]), str(cell["state"])),
-            "pausada" if cell["cell_status"] == "paused" else "activa",
+            {
+                "paused": "pausada",
+                "destilada": "destilada",
+            }.get(str(cell["cell_status"]), "activa"),
         )
     console.print(table)
     if any(cell["insufficient"] for cell in cells):
@@ -9587,6 +9590,27 @@ def ai_trader_learn_cmd(
     try:
         result = learn(apply=not dry_run, db_path=DEFAULT_DB)
     except LearnError as exc:
+        _ai_trader_error(exc)
+    typer.echo(json.dumps(result, ensure_ascii=False, separators=(",", ":")))
+
+
+@ai_trader_app.command("distill")
+def ai_trader_distill_cmd(
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Aprende filtros sin validar ni escribir"
+    ),
+    no_validate: bool = typer.Option(
+        False, "--no-validate", help="No corre el embudo de validación"
+    ),
+) -> None:
+    """Destilación semanal: filtro legible, candidato enabled:false e incubación."""
+    from .ai_distill import DistillError, distill
+
+    try:
+        result = distill(
+            apply=not dry_run, validate=not no_validate, db_path=DEFAULT_DB,
+        )
+    except DistillError as exc:
         _ai_trader_error(exc)
     typer.echo(json.dumps(result, ensure_ascii=False, separators=(",", ":")))
 

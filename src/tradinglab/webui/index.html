@@ -5664,6 +5664,9 @@ async function renderAiTrader() {
     const lessons = data.lessons || [];
     const cells = data.cells || [];
     const plans = data.plans || [];
+    const distill = data.distill || {};
+    const funnel = distill.funnel || {};
+    const distillBots = distill.bots || [];
     const budget = data.budget || {};
     const styles = budget.styles || {};
     const g = budget.global || {};
@@ -5728,7 +5731,9 @@ async function renderAiTrader() {
       diffText(c.shadow),
       diffText(c.noplan),
       stateTag(c.state),
-      c.cell_status === "paused" ? `<span class="tag red">pausada</span>` : "activa",
+      c.cell_status === "paused" ? `<span class="tag red">pausada</span>`
+        : c.cell_status === "destilada" ? `<span class="tag">destilada</span>`
+        : "activa",
     ]);
     const planRows = plans.map((p) => [
       `<b>${esc(p.symbol)}</b>`,
@@ -5737,6 +5742,19 @@ async function renderAiTrader() {
       esc((p.forbidden_hours || []).join(", ") || "—"),
       `<span class="muted tiny">${esc(p.reason || "")}</span>`,
     ]);
+    const distillRows = distillBots.map((b) => {
+      const v = b.validation || {};
+      return [
+        `<b>${esc(b.bot)}</b><div class="muted tiny">${esc(b.symbol || "")} ${esc(b.timeframe || "")}</div>`,
+        esc(b.state || "Sin datos"),
+        `<span class="muted tiny">${esc(b.filter_text || "sin filtro: tomar siempre")}</span>`,
+        v.sharpe == null ? "Sin datos" : num(v.sharpe, 2),
+        v.dsr == null ? "Sin datos" : `${num(v.dsr * 100, 1)}%`,
+        v.pbo == null ? "Sin datos" : `${num(v.pbo * 100, 1)}%`,
+        esc(v.wf || "Sin datos"),
+        b.slippage_p95_bps == null ? "Sin datos" : `${num(b.slippage_p95_bps, 1)} bps`,
+      ];
+    });
     const lessonRows = lessons.map((l) => [`#${l.id}`, esc(l.hypothesis)]);
     body.innerHTML = `
       <div class="stats" id="ai-trader-stats">
@@ -5763,6 +5781,13 @@ async function renderAiTrader() {
         <div class="panel-head"><h2>Marcador por celda</h2><span class="muted tiny">solo forward · IC bootstrap 90%</span></div>
         <div id="ai-trader-cells">
           ${grid([{ label: "Estilo" }, { label: "Estrategia" }, { label: "Símbolo" }, { label: "TF" }, { label: "Versión" }, { label: "N", num: true }, { label: "Hit", num: true }, { label: "R medio", num: true }, { label: "IC 90%" }, { label: "Coste/R", num: true }, { label: "Slippage", num: true }, { label: "Δ sombra" }, { label: "Δ sin plan" }, { label: "Estado" }, { label: "Celda" }], cellRows, { empty: "Sin celdas forward." })}
+        </div>
+      </div>
+      <div class="panel" style="margin-bottom:14px">
+        <div class="panel-head"><h2>Embudo de destilación</h2><span class="muted tiny">IA → destilado → validado → incubando → promovible · nada se activa solo</span></div>
+        <p class="muted tiny">Ganadoras IA: ${funnel.ia_ganadoras || 0} · destiladas: ${funnel.destiladas || 0} · validadas: ${funnel.validadas || 0} · incubando: ${funnel.incubando || 0} · promovibles: ${funnel.promovibles || 0}</p>
+        <div id="ai-trader-distill">
+          ${grid([{ label: "Bot" }, { label: "Estado" }, { label: "Filtro legible", wrap: true }, { label: "Sharpe", num: true }, { label: "DSR", num: true }, { label: "PBO", num: true }, { label: "WF" }, { label: "Slippage", num: true }], distillRows, { empty: "Sin bots destilados." })}
         </div>
       </div>
       <div class="panel" style="margin-bottom:14px">

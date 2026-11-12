@@ -1616,9 +1616,17 @@ def _propose(item: dict, *, broker, cfg: dict, settings: Settings,
             f"{window['tz']}",
             decision="skip", setup_valid=0,
         )
-    if _cell_status(db_path, item["strategy"], item["symbol"], item["timeframe"]) == "paused":
+    cell_state = _cell_status(
+        db_path, item["strategy"], item["symbol"], item["timeframe"]
+    )
+    if cell_state == "paused":
         raise _Reject(
             "celda pausada por el scoreboard; requiere reactivación del operador",
+            decision="skip", setup_valid=1,
+        )
+    if cell_state == "destilada":
+        raise _Reject(
+            "celda destilada: la opera el bot destilado, no el LLM",
             decision="skip", setup_valid=1,
         )
     all_positions = _all_lane_positions(broker, cfg)
@@ -3102,6 +3110,23 @@ def log_no_trade(reason: str, *, symbols: list[str] | None = None,
     return {"ok": True, "reason": text}
 
 
+def _distill_panel(db_path: str | Path) -> dict:
+    try:
+        from .ai_distill import panel_payload
+
+        return panel_payload(db_path)
+    except Exception as exc:
+        return {
+            "funnel": {
+                "ia_ganadoras": 0, "destiladas": 0, "validadas": 0,
+                "incubando": 0, "promovibles": 0,
+            },
+            "bots": [],
+            "n": 0,
+            "error": str(exc)[:200],
+        }
+
+
 def panel(db_path: str | Path = DEFAULT_DB, *,
           equity: float | None = None) -> dict:
     cfg = load_config()
@@ -3241,6 +3266,7 @@ def panel(db_path: str | Path = DEFAULT_DB, *,
         "decisions": decisions,
         "lessons": lessons,
         "paused": cells,
+        "distill": _distill_panel(db_path),
         "n": len(all_rows),
     }
 
