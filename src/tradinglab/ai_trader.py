@@ -568,9 +568,11 @@ def _block_from_bars(bars: pd.DataFrame, timeframe: str, d1: pd.DataFrame,
     width_series = 4 * sd20 / mean20
     squeeze = bool(pd.notna(width) and width <= float(width_series.tail(120).min()))
 
-    # VWAP de la sesión de Nueva York (día de trading completo).
-    ny_day = moment.astimezone(NEW_YORK).replace(hour=0, minute=0, second=0, microsecond=0)
-    session_bars = bars[bars.index >= ny_day.astimezone(timezone.utc)]
+    # VWAP de la sesión de Nueva York (desde la apertura 09:30 NY).
+    ny_open = moment.astimezone(NEW_YORK).replace(
+        hour=9, minute=30, second=0, microsecond=0
+    )
+    session_bars = bars[bars.index >= ny_open.astimezone(timezone.utc)]
     if len(session_bars) == 0:
         session_bars = bars.tail(1)
     vwap, sigma = _vwap(session_bars)
