@@ -239,8 +239,14 @@ def report(db_path: str | Path, *, min_sample: int = MIN_SAMPLE) -> dict:
     init_db(db_path)
     with connect(db_path) as con:
         rows = con.execute(
-            "SELECT * FROM agent_comparisons WHERE retrospective = 0 ORDER BY id"
+            "SELECT * FROM agent_comparisons WHERE retrospective = 0 "
+            "AND (deep_error IS NULL OR deep_error = '') ORDER BY id"
         ).fetchall()
+        deep_errors = con.execute(
+            "SELECT COUNT(*) AS n FROM agent_comparisons "
+            "WHERE retrospective = 0 AND deep_error IS NOT NULL "
+            "AND deep_error != ''"
+        ).fetchone()["n"]
     n = len(rows)
     agreements = sum(1 for row in rows if row["agreement"])
     matrix: dict[str, dict[str, int]] = {}
@@ -254,6 +260,7 @@ def report(db_path: str | Path, *, min_sample: int = MIN_SAMPLE) -> dict:
             diffs.append(float(row["deep_target"]) - float(row["lite_target"]))
     return {
         "n": n,
+        "deep_errors": int(deep_errors),
         "agreement_rate": (agreements / n) if n else None,
         "matrix": matrix,
         "mean_target_diff": (sum(diffs) / len(diffs)) if diffs else None,

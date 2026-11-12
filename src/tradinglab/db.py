@@ -695,8 +695,30 @@ def init_db(path: str | Path) -> None:
         _migrate_orders(con)
         _migrate_audit_chain(con)
         _migrate_f13(con)
+        _migrate_strategy_trials(con)
         _migrate_fills_mt5(con)
         _migrate_forward_state(con)
+
+
+def _migrate_strategy_trials(con: sqlite3.Connection) -> None:
+    """Añade `counted` a bases anteriores y marca todo lo previo como contado.
+
+    Una prueba antigua no nació de una campaña, así que cuenta entera en el
+    DSR. Las celdas de campaña se insertan después con `counted = 0` para no
+    contarse dos veces (su `N_total` ya está en `campaign_registry`), y esta
+    migración **no** las toca: solo rellena la columna cuando falta y los NULL.
+    """
+    columns = [
+        row["name"] for row in con.execute("PRAGMA table_info(strategy_trials)").fetchall()
+    ]
+    if not columns:
+        return
+    if "counted" not in columns:
+        con.execute(
+            "ALTER TABLE strategy_trials "
+            "ADD COLUMN counted INTEGER NOT NULL DEFAULT 1"
+        )
+    con.execute("UPDATE strategy_trials SET counted = 1 WHERE counted IS NULL")
 
 
 def _migrate_f13(con: sqlite3.Connection) -> None:

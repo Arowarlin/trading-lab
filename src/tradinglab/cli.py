@@ -92,6 +92,10 @@ operator_app = typer.Typer(
     no_args_is_help=True,
     help="Modo operador de la consola: PIN, estado y auditoría.",
 )
+campaign_app = typer.Typer(
+    no_args_is_help=True,
+    help="Campaña de investigación registrada: universo, N_total y una sola pasada.",
+)
 lessons_app = typer.Typer(no_args_is_help=True, help="Aprendizaje controlado: lecciones y holdout.")
 reports_app = typer.Typer(no_args_is_help=True, help="Reportes CSV/HTML con validación y vista previa.")
 markets_app = typer.Typer(no_args_is_help=True, help="Agentes por mercado y coordinador determinista.")
@@ -150,6 +154,7 @@ app.add_typer(bots_app, name="bots")
 app.add_typer(decisions_app, name="decisions")
 app.add_typer(fund_app, name="fund")
 app.add_typer(operator_app, name="operator")
+app.add_typer(campaign_app, name="campaign")
 app.add_typer(risk_budget_app, name="risk-budget")
 app.add_typer(lifecycle_app, name="lifecycle")
 app.add_typer(llm_app, name="llm")
@@ -558,6 +563,40 @@ def doctor(network: bool = typer.Option(False, "--network", help="Probar descarg
                 )
         except Exception as exc:
             table.add_row("LM Studio", WARN, f"servidor no disponible: {str(exc)[:120]}")
+
+    # Proveedor del deep (OpenCode Go u otro): avisa si la clave o el saldo
+    # están caídos. Solo se consulta el listado de modelos; no gasta tokens.
+    deep_base = os.getenv("LAB_DEEP_LLM_BASE_URL", "").strip()
+    deep_key = os.getenv("LAB_DEEP_LLM_API_KEY", "").strip()
+    if not deep_base or not deep_key:
+        table.add_row(
+            "Deep LLM", WARN, "sin configurar: el deep se corre bajo demanda"
+        )
+    else:
+        import urllib.error
+        import urllib.request
+
+        request_headers = {"Authorization": f"Bearer {deep_key}"}
+        if "opencode.ai" in deep_base:
+            request_headers["x-opencode-session"] = "lab-doctor"
+            request_headers["User-Agent"] = "trading-lab/1.0"
+        request = urllib.request.Request(
+            deep_base.rstrip("/") + "/models", headers=request_headers
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=6) as response:
+                code = int(response.status)
+            table.add_row("Deep LLM", OK, f"{deep_base} · HTTP {code}")
+        except urllib.error.HTTPError as exc:
+            if exc.code == 401:
+                detail = "clave inválida (401): regenera LAB_DEEP_LLM_API_KEY"
+            elif exc.code == 402:
+                detail = "saldo agotado (402): recarga y luego regenera la clave"
+            else:
+                detail = f"HTTP {exc.code} en {deep_base}"
+            table.add_row("Deep LLM", WARN, detail)
+        except Exception as exc:
+            table.add_row("Deep LLM", WARN, f"no responde: {str(exc)[:120]}")
 
     # MetaTrader 5
     if settings:
@@ -5515,7 +5554,6 @@ def intraday_forward_status() -> None:
     except Exception as exc:
         console.print(Panel(str(exc), title="Forward no disponible", style="bold red"))
         raise typer.Exit(1) from exc
-    configured = list(bots)
 
     console.print("[bold]Forward intradía · configuración congelada[/bold]")
     for bot in bots:
@@ -5570,6 +5608,7 @@ def intraday_forward_cmd(
     except Exception as exc:
         console.print(Panel(str(exc), title="Forward no disponible", style="bold red"))
         raise typer.Exit(1) from exc
+    configured = list(bots)
 
     if bot:
         wanted = {item.strip() for item in bot.split(",") if item.strip()}
@@ -8580,6 +8619,555 @@ def alerts_budget_cmd() -> None:
         for row in state["rows"][:20]:
             r.add_row(str(row["event"]), str(row["channel"]), str(row["n"]))
         console.print(r)
+
+
+# ================================================================== Campaña
+
+
+def _campaign_universe_path() -> Path:
+    from .campaign import REPORT_DIR
+
+    return REPORT_DIR / "universe.json"
+
+
+def _campaign_load_universe() -> dict:
+    from .campaign import CampaignError
+
+    path = _campaign_universe_path()
+    if not path.exists():
+        raise CampaignError(
+            f"falta el universo: {path}. Corre antes `lab campaign universe`."
+        )
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+@campaign_app.command("universe")
+def campaign_universe_cmd(
+    bars_h1: int = typer.Option(2000, "--bars-h1", help="Velas H1 para el spread horario"),
+    bars_h4: int = typer.Option(6000, "--bars-h4", help="Velas H4 para ATR y D1"),
+    save: bool = typer.Option(True, "--save/--no-save", help="Cachea las velas medidas"),
+) -> None:
+    """Mide el universo por coste y escribe universe.md/.json. Solo lectura."""
+    from .campaign import CampaignError, build_universe, compute_n_total, write_universe
+
+    settings = get_settings()
+    broker = _mt5(settings, dry_run=True)
+    try:
+        universe = build_universe(
+            broker,
+            bars={"H1": int(bars_h1), "H4": int(bars_h4)},
+            cache_dir=settings.data.cache_dir,
+            save=bool(save),
+        )
+    except CampaignError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2) from exc
+    finally:
+        broker.shutdown()
+
+    paths = write_universe(universe)
+    totals = compute_n_total(universe)
+    counts = universe["counts"]
+    console.print(
+        f"[green]Universo medido[/green] · {counts['measured']} activos · "
+        f"{counts['verified_commission']} con comisión verificada"
+    )
+    table = Table(title="Elegibles por timeframe (cost_atr < 0,05)")
+    table.add_column("Timeframe", style="bold")
+    table.add_column("Activos", justify="right")
+    table.add_column("Nombres", overflow="fold")
+    for timeframe in ("H1", "H4", "D1"):
+        names = universe["eligible_by_timeframe"].get(timeframe) or []
+        table.add_row(
+            timeframe,
+            str(len(names)),
+            ", ".join(names) if names else "Sin datos",
+        )
+    console.print(table)
+    console.print(
+        f"[bold]N_total[/bold] = {totals['n_total']} "
+        f"({totals['per_timeframe']})"
+    )
+    console.print(f"Escrito: {paths['md']} · {paths['json']}")
+
+
+@campaign_app.command("n-total")
+def campaign_ntotal_cmd() -> None:
+    """Calcula N_total con el corte común. No registra nada."""
+    from .campaign import CampaignError, compute_n_total
+
+    try:
+        universe = _campaign_load_universe()
+    except CampaignError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2) from exc
+    plan = universe.get("plan") or {}
+    if not plan:
+        console.print(
+            "[yellow]Sin plan: N_total teórico. Corre `lab campaign fetch` para "
+            "excluir celdas sin historia con el corte común.[/yellow]"
+        )
+        totals = compute_n_total(universe)
+        table = Table(title=f"N_total teórico = {totals['n_total']}")
+        table.add_column("Timeframe", style="bold")
+        table.add_column("Activos", justify="right")
+        table.add_column("Familias", overflow="fold")
+        table.add_column("Celdas", justify="right")
+        for timeframe in ("H1", "H4", "D1"):
+            rows = totals["detail"].get(timeframe) or []
+            families = sorted({name for row in rows for name in row["families"]})
+            table.add_row(
+                timeframe,
+                str(len(rows)),
+                ", ".join(families) if families else "Sin datos",
+                str(totals["per_timeframe"].get(timeframe, 0)),
+            )
+        console.print(table)
+        return
+    table = Table(title=f"N_total = {plan['n_total']} · corte {plan['cutoff_utc']}")
+    table.add_column("Timeframe", style="bold")
+    table.add_column("Celdas", justify="right")
+    for timeframe in ("H1", "H4", "D1"):
+        table.add_row(timeframe, str(plan["per_timeframe"].get(timeframe, 0)))
+    console.print(table)
+    excluded = plan.get("excluded") or []
+    console.print(
+        f"Excluidas por historia: {len(excluded)} · "
+        f"holdout_hash = {str(plan.get('holdout_hash') or 'Sin datos')[:16]}…"
+    )
+
+
+def _campaign_eligible_symbols(universe: dict) -> list[str]:
+    """Activos elegibles en cualquier timeframe, sin repetir."""
+    return sorted(
+        {
+            str(name).upper()
+            for timeframe in ("H1", "H4", "D1")
+            for name in (universe.get("eligible_by_timeframe", {}).get(timeframe) or [])
+        }
+    )
+
+
+def _campaign_config(universe: dict, campaign: str) -> dict:
+    """Configuración de la campaña a partir del universo y su plan.
+
+    No registra nada: es la misma función la que escribe el yaml y la que
+    sella, para que las dos no puedan divergir.
+    """
+    from .campaign import (
+        DISCOVERY_PCT,
+        FAMILIES,
+        CampaignError,
+        campaign_hash,
+        compute_n_total,
+        variants_for,
+    )
+
+    plan = universe.get("plan") or {}
+    if not plan:
+        raise CampaignError(
+            "falta el plan con el corte común: corre antes `lab campaign fetch`."
+        )
+    symbols = _campaign_eligible_symbols(universe)
+    if not symbols:
+        raise CampaignError("sin activos elegibles: no hay nada que planificar")
+    totals = compute_n_total(universe)
+    broker_names = {
+        str(row["symbol"]).upper(): str(row.get("mt5_name") or row["symbol"])
+        for row in universe.get("symbols") or []
+        if str(row["symbol"]).upper() in set(symbols)
+    }
+    config = {
+        "id": campaign,
+        "universe": symbols,
+        "mt5_names": broker_names,
+        "timeframes": ["H1", "H4", "D1"],
+        "families": list(FAMILIES),
+        "variants_per_family": {
+            family: len(variants_for(family)) for family in FAMILIES
+        },
+        "discovery_pct": float(DISCOVERY_PCT),
+        "holdout_pct": float(round(1.0 - DISCOVERY_PCT, 2)),
+        "cutoff_utc": plan.get("cutoff_utc"),
+        "n_total": int(plan.get("n_total") or 0),
+        "n_total_detail": dict(plan.get("per_timeframe") or {}),
+        "n_total_theoretical": int(totals["n_total"]),
+        "holdout_hash": plan.get("holdout_hash"),
+        "holdout_series": list(plan.get("holdout_series") or []),
+        "excluded_cells": len(plan.get("excluded") or []),
+    }
+    if config["n_total"] <= 0:
+        raise CampaignError(
+            "N_total es 0 con el corte común: no hay celdas con historia suficiente"
+        )
+    config["config_hash"] = campaign_hash(config)
+    return config
+
+
+@campaign_app.command("fetch")
+def campaign_fetch_cmd() -> None:
+    """Descarga H1/H4 de los elegibles, fija el corte común y lista las celdas."""
+    from .campaign import (
+        CAMPAIGN_BARS,
+        CampaignError,
+        common_cutoff,
+        holdout_hash,
+        holdout_rows,
+        load_campaign_frames,
+        plan_cells,
+        series_summary,
+        write_universe,
+    )
+
+    try:
+        universe = _campaign_load_universe()
+    except CampaignError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2) from exc
+    symbols = _campaign_eligible_symbols(universe)
+    if not symbols:
+        console.print("[red]Sin activos elegibles: no hay velas que descargar.[/red]")
+        raise typer.Exit(2)
+
+    settings = get_settings()
+    broker = _mt5(settings, dry_run=True)
+    names = {
+        str(row["symbol"]).upper(): str(row.get("mt5_name") or row["symbol"])
+        for row in universe.get("symbols") or []
+    }
+    try:
+        frames, _ = load_campaign_frames(
+            broker, symbols, names=names, cache_dir=settings.data.cache_dir
+        )
+    finally:
+        broker.shutdown()
+    if not frames:
+        console.print("[red]Sin datos: el bróker no devolvió velas.[/red]")
+        raise typer.Exit(2)
+
+    cutoff = common_cutoff(frames)
+    if cutoff is None:
+        console.print("[red]Sin datos: no se pudo fijar el corte común.[/red]")
+        raise typer.Exit(2)
+    plan = plan_cells(universe, frames, cutoff)
+    sealed = holdout_rows(frames, cutoff)
+    plan["holdout_hash"] = holdout_hash(sealed, cutoff)
+    plan["holdout_series"] = sealed
+    universe["bars"] = {**CAMPAIGN_BARS, "D1": "desde H4"}
+    universe["cutoff_utc"] = plan["cutoff_utc"]
+    universe["series"] = series_summary(frames, cutoff)
+    universe["plan"] = plan
+    paths = write_universe(universe)
+
+    table = Table(title=f"Celdas con historia suficiente · corte {plan['cutoff_utc']}")
+    table.add_column("Timeframe", style="bold")
+    table.add_column("Celdas", justify="right")
+    table.add_column("Activos", justify="right")
+    for timeframe in ("H1", "H4", "D1"):
+        table.add_row(
+            timeframe,
+            str(plan["per_timeframe"].get(timeframe, 0)),
+            str(len(universe["eligible_by_timeframe"].get(timeframe) or [])),
+        )
+    console.print(table)
+    console.print(
+        f"[bold]N_total[/bold] = {plan['n_total']} · series selladas = {len(sealed)} · "
+        f"celdas excluidas por historia = {len(plan['excluded'])}"
+    )
+    console.print(
+        f"holdout_hash = {plan['holdout_hash']}",
+        markup=False,
+    )
+    console.print(f"Escrito: {paths['md']} · {paths['json']}")
+
+
+@campaign_app.command("plan")
+def campaign_plan_cmd(
+    campaign: str = typer.Option("2026-11-A", "--campaign", help="Identificador"),
+    force: bool = typer.Option(False, "--force", help="Reescribe un yaml existente"),
+) -> None:
+    """Escribe config/campaigns/<id>.yaml con el corte y N_total. No registra."""
+    from .campaign import CAMPAIGNS_DIR, CampaignError
+
+    try:
+        universe = _campaign_load_universe()
+        config = _campaign_config(universe, campaign)
+    except CampaignError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2) from exc
+
+    CAMPAIGNS_DIR.mkdir(parents=True, exist_ok=True)
+    path = CAMPAIGNS_DIR / f"{campaign}.yaml"
+    if path.exists() and not force:
+        console.print(
+            f"[yellow]{path} ya existe. Usa --force solo si aún no se ha "
+            "registrado.[/yellow]"
+        )
+        raise typer.Exit(2)
+    try:
+        import yaml
+
+        path.write_text(
+            yaml.safe_dump(config, sort_keys=False, allow_unicode=True),
+            encoding="utf-8",
+        )
+    except Exception as exc:
+        console.print(f"[red]No se pudo escribir {path}: {exc}[/red]")
+        raise typer.Exit(1) from exc
+
+    table = Table(title=f"Plan {campaign} (sin registrar)")
+    table.add_column("Campo", style="bold")
+    table.add_column("Valor", overflow="fold")
+    table.add_row("N_total", str(config["n_total"]))
+    table.add_row("Por timeframe", str(config["n_total_detail"]))
+    table.add_row("N_total teórico", str(config["n_total_theoretical"]))
+    table.add_row("Corte común", str(config["cutoff_utc"]))
+    table.add_row("Celdas excluidas", str(config["excluded_cells"]))
+    table.add_row("config_hash", str(config["config_hash"]))
+    table.add_row("holdout_hash", str(config["holdout_hash"]))
+    console.print(table)
+    console.print(f"Escrito: {path} · [yellow]no registrado[/yellow]")
+
+
+@campaign_app.command("register")
+def campaign_register_cmd(
+    campaign: str = typer.Option("2026-11-A", "--campaign", help="Identificador"),
+    confirm: bool = typer.Option(False, "--confirm", help="Sella la campaña de verdad"),
+) -> None:
+    """Sella la campaña una sola vez con el corte común ya fijado. No corre."""
+    from .campaign import (
+        CAMPAIGNS_DIR,
+        CampaignError,
+        campaign_hash,
+        load_campaign_yaml,
+        register_campaign,
+    )
+
+    if not confirm:
+        console.print(
+            "[yellow]Sin --confirm no se sella nada. Esto consume la única "
+            "pasada de la campaña.[/yellow]"
+        )
+        raise typer.Exit(2)
+    try:
+        universe = _campaign_load_universe()
+        config = _campaign_config(universe, campaign)
+    except CampaignError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2) from exc
+
+    path = CAMPAIGNS_DIR / f"{campaign}.yaml"
+    if path.exists():
+        try:
+            stored = load_campaign_yaml(path)
+        except CampaignError as exc:
+            console.print(f"[red]{exc}[/red]")
+            raise typer.Exit(2) from exc
+        if campaign_hash(stored) != config["config_hash"]:
+            console.print(
+                f"[red]{path.name} no coincide con el universo medido: "
+                "rejilla, corte o N_total cambiaron. Regenera el plan antes de "
+                "sellar.[/red]"
+            )
+            raise typer.Exit(2)
+    else:
+        CAMPAIGNS_DIR.mkdir(parents=True, exist_ok=True)
+        try:
+            import yaml
+
+            path.write_text(
+                yaml.safe_dump(config, sort_keys=False, allow_unicode=True),
+                encoding="utf-8",
+            )
+        except Exception as exc:
+            console.print(f"[red]No se pudo escribir {path}: {exc}[/red]")
+            raise typer.Exit(1) from exc
+
+    try:
+        record = register_campaign(
+            DEFAULT_DB,
+            config,
+            note=(
+                f"corte común {config['cutoff_utc']}; "
+                f"{len(config['universe'])} activos; "
+                f"{config['excluded_cells']} celdas fuera por historia"
+            ),
+        )
+    except CampaignError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2) from exc
+    console.print(
+        f"[green]Campaña sellada[/green] · {record['campaign_id']} · "
+        f"N_total={record['n_total']} · series selladas="
+        f"{len(config['holdout_series'])}"
+    )
+    console.print(f"corte común = {config['cutoff_utc']}")
+    console.print(f"config_hash = {record['config_hash'][:16]}…")
+    console.print(f"holdout_hash = {str(config['holdout_hash'])[:16]}…")
+    console.print(f"YAML: {path}")
+
+
+
+@campaign_app.command("status")
+def campaign_status_cmd() -> None:
+    """Estado del registro: N_total, hashes y si ya se ejecutó."""
+    from .campaign import init_campaigns
+
+    init_campaigns(DEFAULT_DB)
+    from .db import connect
+
+    with connect(DEFAULT_DB) as con:
+        rows = con.execute(
+            "SELECT * FROM campaign_registry ORDER BY id DESC"
+        ).fetchall()
+    if not rows:
+        console.print("[yellow]Ninguna campaña registrada.[/yellow]")
+        return
+    table = Table(title="Campañas registradas")
+    for column in (
+        "id",
+        "N_total",
+        "discovery",
+        "config_hash",
+        "holdout_hash",
+        "run_id",
+        "started_at",
+    ):
+        table.add_column(column, overflow="fold")
+    for row in rows:
+        table.add_row(
+            str(row["campaign_id"]),
+            str(row["n_total"]),
+            f"{float(row['discovery_pct']):.0%}",
+            str(row["config_hash"])[:12] + "…",
+            (str(row["holdout_hash"])[:12] + "…") if row["holdout_hash"] else "Sin datos",
+            str(row["run_id"] or "Sin datos"),
+            str(row["started_at"] or "no ejecutada"),
+        )
+    console.print(table)
+
+
+@campaign_app.command("run")
+def campaign_run_cmd(
+    campaign: str = typer.Option("2026-11-A", "--campaign", help="Identificador"),
+    confirm: bool = typer.Option(False, "--confirm", help="Consume la única pasada"),
+    paths: int = typer.Option(5_000, "--paths", help="Caminos del Monte Carlo FTMO"),
+) -> None:
+    """Corre la campaña una sola vez: descubrimiento, meseta y holdout."""
+    from .campaign import (
+        CampaignError,
+        apply_plateau,
+        candidates,
+        clip_seal,
+        correlation_clusters,
+        holdout_hash,
+        holdout_rows,
+        load_campaign,
+        load_campaign_frames,
+        load_campaign_yaml,
+        run_discovery,
+        run_holdout,
+        seal_ends,
+        write_report,
+    )
+    from .learning import count_tests
+
+    if not confirm:
+        console.print(
+            "[yellow]Sin --confirm no se corre. La campaña solo se puede "
+            "ejecutar una vez.[/yellow]"
+        )
+        raise typer.Exit(2)
+    from .campaign import CAMPAIGNS_DIR
+
+    try:
+        record = load_campaign(DEFAULT_DB, campaign)
+        config = load_campaign_yaml(CAMPAIGNS_DIR / f"{campaign}.yaml")
+    except CampaignError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2) from exc
+    cutoff = config.get("cutoff_utc")
+    expected = config.get("holdout_hash")
+    if not cutoff or not expected:
+        console.print(
+            "[red]El yaml no tiene corte común ni holdout_hash: regenera el "
+            "plan con `lab campaign fetch` y `lab campaign plan`.[/red]"
+        )
+        raise typer.Exit(2)
+
+    settings = get_settings()
+    broker = _mt5(settings, dry_run=True)
+    try:
+        frames, points = load_campaign_frames(
+            broker,
+            list(config.get("universe") or []),
+            names=dict(config.get("mt5_names") or {}),
+            cache_dir=settings.data.cache_dir,
+        )
+    finally:
+        broker.shutdown()
+    if not frames:
+        console.print("[red]Sin datos: no hay velas para ningún activo.[/red]")
+        raise typer.Exit(2)
+
+    # El holdout se congela en su fin sellado: barras posteriores al sello no
+    # entran ni en la confirmación ni en la huella.
+    ends = seal_ends(config)
+    frames = {key: clip_seal(frame, ends.get(key)) for key, frame in frames.items()}
+    sealed_now = holdout_rows(frames, cutoff)
+    if holdout_hash(sealed_now, cutoff) != str(expected):
+        console.print(
+            "[red]El holdout ya no coincide con el sello: los datos cambiaron "
+            "antes del fin sellado. No se corre.[/red]"
+        )
+        raise typer.Exit(2)
+
+    prior = max(0, int(count_tests(DEFAULT_DB)) - int(record["n_total"]))
+    try:
+        discovery = run_discovery(DEFAULT_DB, config, frames, points=points)
+    except CampaignError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2) from exc
+    console.print(
+        f"[green]Descubrimiento[/green] · {discovery['n_cells']} celdas · "
+        f"run_id={discovery['run_id']}"
+    )
+
+    clusters = correlation_clusters(frames, cutoff)
+    plateau = apply_plateau(discovery["cells"], clusters)
+    selected = candidates(plateau)
+    console.print(
+        f"[green]Meseta[/green] · {len(selected)} candidatas de {len(plateau)} celdas"
+    )
+    confirmed = run_holdout(
+        DEFAULT_DB,
+        config,
+        frames,
+        selected,
+        points=points,
+        prior_tests=prior,
+        paths=int(paths),
+    )
+    paths_out = write_report(
+        campaign,
+        plateau,
+        confirmed,
+        n_total=int(record["n_total"]),
+    )
+    console.print(
+        f"[bold]{len(confirmed)} confirmadas[/bold] · informe: {paths_out['md']}"
+    )
+    if not confirmed:
+        console.print(
+            "[yellow]0 confirmadas: no se registra ningún candidato en el "
+            "ciclo de vida.[/yellow]"
+        )
+
+
+def _campaign_now() -> str:
+    from datetime import datetime, timezone
+
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
 def main() -> None:

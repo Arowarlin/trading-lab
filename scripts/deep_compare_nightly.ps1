@@ -26,6 +26,39 @@ if (-not (Test-Path $lab)) {
     exit 1
 }
 
+# Deep en pausa (2026-11-11): sin saldo (402) ni clave valida (401) no se
+# lanza. El deep se corre bajo demanda; la tarea programada queda deshabilitada
+# en cuanto haya permisos de administrador para el Programador de tareas.
+$envFile = Join-Path $root ".env"
+$deepKey = $env:LAB_DEEP_LLM_API_KEY
+$deepBase = $env:LAB_DEEP_LLM_BASE_URL
+if (Test-Path $envFile) {
+    foreach ($line in Get-Content $envFile) {
+        if ($line -match '^\s*LAB_DEEP_LLM_API_KEY\s*=\s*(.+)$') {
+            $deepKey = $Matches[1].Trim().Trim('"').Trim("'")
+        }
+        if ($line -match '^\s*LAB_DEEP_LLM_BASE_URL\s*=\s*(.+)$') {
+            $deepBase = $Matches[1].Trim().Trim('"').Trim("'")
+        }
+    }
+}
+if (-not $deepKey -or -not $deepBase) {
+    Write-Log "Deep en pausa: sin credencial o endpoint. El deep se corre bajo demanda."
+    exit 0
+}
+try {
+    $headers = @{ Authorization = "Bearer $deepKey" }
+    if ($deepBase -match 'opencode\.ai') {
+        $headers["x-opencode-session"] = "lab-deep-nightly"
+        $headers["User-Agent"] = "trading-lab/1.0"
+    }
+    Invoke-WebRequest -Uri ($deepBase.TrimEnd("/") + "/models") -Headers $headers -TimeoutSec 10 -UseBasicParsing | Out-Null
+} catch {
+    $status = $_.Exception.Response.StatusCode.value__
+    Write-Log ("Deep en pausa: proveedor no disponible (HTTP {0}). Saldo agotado (402) o clave invalida (401); el deep se corre bajo demanda." -f $status)
+    exit 0
+}
+
 if ($PreflightOnly) {
     & $lab agent-compare --report *>> $log
     Write-Log "PreflightOnly: fin sin lanzar deep."

@@ -168,6 +168,11 @@ def count_tests(db_path: str | Path, settings: Settings | None = None) -> int:
     Suman las lecciones, los trials de Optuna, las lecturas del holdout, cada
     intento registrado en `strategy_trials` (también los fallidos) y los bots
     incubados.
+
+    Las campañas registradas suman su `N_total` **completo** desde el momento
+    del registro, antes de correr nada: el denominador del DSR no puede crecer
+    mientras se mira el resultado. Sus celdas entran en `strategy_trials` con
+    `counted = 0` justo para no contarse dos veces.
     """
     init_learning(db_path, settings)
     with connect(db_path) as con:
@@ -179,13 +184,23 @@ def count_tests(db_path: str | Path, settings: Settings | None = None) -> int:
             "SELECT COUNT(*) AS n FROM holdout_reads"
         ).fetchone()["n"]
         strategies = con.execute(
-            "SELECT COUNT(*) AS n FROM strategy_trials"
+            "SELECT COUNT(*) AS n FROM strategy_trials WHERE counted = 1"
         ).fetchone()["n"]
+        has_campaigns = con.execute(
+            "SELECT 1 FROM sqlite_master "
+            "WHERE type = 'table' AND name = 'campaign_registry'"
+        ).fetchone()
+        campaigns = 0
+        if has_campaigns is not None:
+            campaigns = con.execute(
+                "SELECT COALESCE(SUM(n_total), 0) AS n FROM campaign_registry"
+            ).fetchone()["n"]
     return (
         int(lessons)
         + int(trials)
         + int(holdout)
         + int(strategies)
+        + int(campaigns)
         + count_incubated(db_path)
     )
 

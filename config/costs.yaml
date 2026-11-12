@@ -1,14 +1,194 @@
 # Costes por activo. No usar un valor global para comisiones.
 # Fuentes oficiales:
-# - Forex/Exotics: FTMO, "Trading Update | 25 Sep 2025", 2.50 USD/lote/lado,
-#   vigente desde 2025-09-29.
+# - Forex: FTMO, "Trading Update | 25 Sep 2025", 2.50 USD/lote/lado,
+#   vigente desde 2025-09-29. La tabla es por grupo, no por par: los 28
+#   símbolos del grupo Forex de FTMO comparten la misma comisión.
 #   https://ftmo.com/en/blog/trading-updates/trading-update-25-sep-2025/
 # - Metals CFD: misma tabla, 0.0007% del volumen por lado desde 2025-09-29.
 # - Índices: FTMO, "Zero Commissions on Indices", publicado 2025-08-01 y
 #   actualizado 2025-11-04; todos los símbolos de índice, comisión 0.
 #   https://ftmo.com/en/blog/zero-commissions-on-indices/
-# Verificado el 2026-11-09 contra las tablas publicadas.
+#
+# Entran los grupos MT5 Forex, Metals CFD y Cash CFD / Cash II CFD /
+# Cash III CFD (índices). Quedan FUERA, con "Sin datos": exóticos, cripto,
+# acciones, agrícolas y commodities/energía (USOIL.CASH, UKOIL.CASH,
+# NATGAS.CASH, HEATOIL.C) aunque MT5 los agrupe en Cash II/Commodities:
+# son energía, no índices, y no tienen comisión verificada en esta tabla.
+#
+# El spread y el slippage NO se fijan aquí: se miden por símbolo en el
+# universo de la campaña (spread mediano por hora) y por el supuesto de
+# slippage de abajo.
+# Verificado el 2026-11-11 contra las tablas publicadas.
 assets:
+  # --- Forex (28): 2,50 USD/lote/lado ---
+  AUDCAD:
+    verified: true
+    commission_type: per_lot_usd
+    commission_per_lot_usd: 2.50
+    commission_side: per_side
+    contract_size: 100000
+    base_currency: AUD
+    quote_currency: CAD
+    source: "FTMO Trading Update | 25 Sep 2025 (Forex)"
+    source_date: "2025-09-25"
+    effective_from: "2025-09-29"
+    source_url: "https://ftmo.com/en/blog/trading-updates/trading-update-25-sep-2025/"
+  AUDCHF:
+    verified: true
+    commission_type: per_lot_usd
+    commission_per_lot_usd: 2.50
+    commission_side: per_side
+    contract_size: 100000
+    base_currency: AUD
+    quote_currency: CHF
+    source: "FTMO Trading Update | 25 Sep 2025 (Forex)"
+    source_date: "2025-09-25"
+    effective_from: "2025-09-29"
+    source_url: "https://ftmo.com/en/blog/trading-updates/trading-update-25-sep-2025/"
+  AUDJPY:
+    verified: true
+    commission_type: per_lot_usd
+    commission_per_lot_usd: 2.50
+    commission_side: per_side
+    contract_size: 100000
+    base_currency: AUD
+    quote_currency: JPY
+    source: "FTMO Trading Update | 25 Sep 2025 (Forex)"
+    source_date: "2025-09-25"
+    effective_from: "2025-09-29"
+    source_url: "https://ftmo.com/en/blog/trading-updates/trading-update-25-sep-2025/"
+  AUDNZD:
+    verified: true
+    commission_type: per_lot_usd
+    commission_per_lot_usd: 2.50
+    commission_side: per_side
+    contract_size: 100000
+    base_currency: AUD
+    quote_currency: NZD
+    source: "FTMO Trading Update | 25 Sep 2025 (Forex)"
+    source_date: "2025-09-25"
+    effective_from: "2025-09-29"
+    source_url: "https://ftmo.com/en/blog/trading-updates/trading-update-25-sep-2025/"
+  AUDUSD:
+    verified: true
+    commission_type: per_lot_usd
+    commission_per_lot_usd: 2.50
+    commission_side: per_side
+    contract_size: 100000
+    base_currency: AUD
+    quote_currency: USD
+    source: "FTMO Trading Update | 25 Sep 2025 (Forex)"
+    source_date: "2025-09-25"
+    effective_from: "2025-09-29"
+    source_url: "https://ftmo.com/en/blog/trading-updates/trading-update-25-sep-2025/"
+  CADCHF:
+    verified: true
+    commission_type: per_lot_usd
+    commission_per_lot_usd: 2.50
+    commission_side: per_side
+    contract_size: 100000
+    base_currency: CAD
+    quote_currency: CHF
+    source: "FTMO Trading Update | 25 Sep 2025 (Forex)"
+    source_date: "2025-09-25"
+    effective_from: "2025-09-29"
+    source_url: "https://ftmo.com/en/blog/trading-updates/trading-update-25-sep-2025/"
+  CADJPY:
+    verified: true
+    commission_type: per_lot_usd
+    commission_per_lot_usd: 2.50
+    commission_side: per_side
+    contract_size: 100000
+    base_currency: CAD
+    quote_currency: JPY
+    source: "FTMO Trading Update | 25 Sep 2025 (Forex)"
+    source_date: "2025-09-25"
+    effective_from: "2025-09-29"
+    source_url: "https://ftmo.com/en/blog/trading-updates/trading-update-25-sep-2025/"
+  CHFJPY:
+    verified: true
+    commission_type: per_lot_usd
+    commission_per_lot_usd: 2.50
+    commission_side: per_side
+    contract_size: 100000
+    base_currency: CHF
+    quote_currency: JPY
+    source: "FTMO Trading Update | 25 Sep 2025 (Forex)"
+    source_date: "2025-09-25"
+    effective_from: "2025-09-29"
+    source_url: "https://ftmo.com/en/blog/trading-updates/trading-update-25-sep-2025/"
+  EURAUD:
+    verified: true
+    commission_type: per_lot_usd
+    commission_per_lot_usd: 2.50
+    commission_side: per_side
+    contract_size: 100000
+    base_currency: EUR
+    quote_currency: AUD
+    source: "FTMO Trading Update | 25 Sep 2025 (Forex)"
+    source_date: "2025-09-25"
+    effective_from: "2025-09-29"
+    source_url: "https://ftmo.com/en/blog/trading-updates/trading-update-25-sep-2025/"
+  EURCAD:
+    verified: true
+    commission_type: per_lot_usd
+    commission_per_lot_usd: 2.50
+    commission_side: per_side
+    contract_size: 100000
+    base_currency: EUR
+    quote_currency: CAD
+    source: "FTMO Trading Update | 25 Sep 2025 (Forex)"
+    source_date: "2025-09-25"
+    effective_from: "2025-09-29"
+    source_url: "https://ftmo.com/en/blog/trading-updates/trading-update-25-sep-2025/"
+  EURCHF:
+    verified: true
+    commission_type: per_lot_usd
+    commission_per_lot_usd: 2.50
+    commission_side: per_side
+    contract_size: 100000
+    base_currency: EUR
+    quote_currency: CHF
+    source: "FTMO Trading Update | 25 Sep 2025 (Forex)"
+    source_date: "2025-09-25"
+    effective_from: "2025-09-29"
+    source_url: "https://ftmo.com/en/blog/trading-updates/trading-update-25-sep-2025/"
+  EURGBP:
+    verified: true
+    commission_type: per_lot_usd
+    commission_per_lot_usd: 2.50
+    commission_side: per_side
+    contract_size: 100000
+    base_currency: EUR
+    quote_currency: GBP
+    source: "FTMO Trading Update | 25 Sep 2025 (Forex)"
+    source_date: "2025-09-25"
+    effective_from: "2025-09-29"
+    source_url: "https://ftmo.com/en/blog/trading-updates/trading-update-25-sep-2025/"
+  EURJPY:
+    verified: true
+    commission_type: per_lot_usd
+    commission_per_lot_usd: 2.50
+    commission_side: per_side
+    contract_size: 100000
+    base_currency: EUR
+    quote_currency: JPY
+    source: "FTMO Trading Update | 25 Sep 2025 (Forex)"
+    source_date: "2025-09-25"
+    effective_from: "2025-09-29"
+    source_url: "https://ftmo.com/en/blog/trading-updates/trading-update-25-sep-2025/"
+  EURNZD:
+    verified: true
+    commission_type: per_lot_usd
+    commission_per_lot_usd: 2.50
+    commission_side: per_side
+    contract_size: 100000
+    base_currency: EUR
+    quote_currency: NZD
+    source: "FTMO Trading Update | 25 Sep 2025 (Forex)"
+    source_date: "2025-09-25"
+    effective_from: "2025-09-29"
+    source_url: "https://ftmo.com/en/blog/trading-updates/trading-update-25-sep-2025/"
   EURUSD:
     verified: true
     commission_type: per_lot_usd
@@ -17,25 +197,71 @@ assets:
     contract_size: 100000
     base_currency: EUR
     quote_currency: USD
-    source: "FTMO Trading Update | 25 Sep 2025"
+    source: "FTMO Trading Update | 25 Sep 2025 (Forex)"
     source_date: "2025-09-25"
     effective_from: "2025-09-29"
     source_url: "https://ftmo.com/en/blog/trading-updates/trading-update-25-sep-2025/"
-  USDJPY:
+  GBPAUD:
     verified: true
     commission_type: per_lot_usd
     commission_per_lot_usd: 2.50
     commission_side: per_side
     contract_size: 100000
-    base_currency: USD
+    base_currency: GBP
+    quote_currency: AUD
+    source: "FTMO Trading Update | 25 Sep 2025 (Forex)"
+    source_date: "2025-09-25"
+    effective_from: "2025-09-29"
+    source_url: "https://ftmo.com/en/blog/trading-updates/trading-update-25-sep-2025/"
+  GBPCAD:
+    verified: true
+    commission_type: per_lot_usd
+    commission_per_lot_usd: 2.50
+    commission_side: per_side
+    contract_size: 100000
+    base_currency: GBP
+    quote_currency: CAD
+    source: "FTMO Trading Update | 25 Sep 2025 (Forex)"
+    source_date: "2025-09-25"
+    effective_from: "2025-09-29"
+    source_url: "https://ftmo.com/en/blog/trading-updates/trading-update-25-sep-2025/"
+  GBPCHF:
+    verified: true
+    commission_type: per_lot_usd
+    commission_per_lot_usd: 2.50
+    commission_side: per_side
+    contract_size: 100000
+    base_currency: GBP
+    quote_currency: CHF
+    source: "FTMO Trading Update | 25 Sep 2025 (Forex)"
+    source_date: "2025-09-25"
+    effective_from: "2025-09-29"
+    source_url: "https://ftmo.com/en/blog/trading-updates/trading-update-25-sep-2025/"
+  GBPJPY:
+    verified: true
+    commission_type: per_lot_usd
+    commission_per_lot_usd: 2.50
+    commission_side: per_side
+    contract_size: 100000
+    base_currency: GBP
     quote_currency: JPY
-    source: "FTMO Trading Update | 25 Sep 2025"
+    source: "FTMO Trading Update | 25 Sep 2025 (Forex)"
+    source_date: "2025-09-25"
+    effective_from: "2025-09-29"
+    source_url: "https://ftmo.com/en/blog/trading-updates/trading-update-25-sep-2025/"
+  GBPNZD:
+    verified: true
+    commission_type: per_lot_usd
+    commission_per_lot_usd: 2.50
+    commission_side: per_side
+    contract_size: 100000
+    base_currency: GBP
+    quote_currency: NZD
+    source: "FTMO Trading Update | 25 Sep 2025 (Forex)"
     source_date: "2025-09-25"
     effective_from: "2025-09-29"
     source_url: "https://ftmo.com/en/blog/trading-updates/trading-update-25-sep-2025/"
   GBPUSD:
-    # La tabla de FTMO es por grupo "Forex" (2,50 USD/lote/lado), no por par:
-    # GBPUSD entra en el mismo grupo que EURUSD y USDJPY.
     verified: true
     commission_type: per_lot_usd
     commission_per_lot_usd: 2.50
@@ -47,16 +273,320 @@ assets:
     source_date: "2025-09-25"
     effective_from: "2025-09-29"
     source_url: "https://ftmo.com/en/blog/trading-updates/trading-update-25-sep-2025/"
+  NZDCAD:
+    verified: true
+    commission_type: per_lot_usd
+    commission_per_lot_usd: 2.50
+    commission_side: per_side
+    contract_size: 100000
+    base_currency: NZD
+    quote_currency: CAD
+    source: "FTMO Trading Update | 25 Sep 2025 (Forex)"
+    source_date: "2025-09-25"
+    effective_from: "2025-09-29"
+    source_url: "https://ftmo.com/en/blog/trading-updates/trading-update-25-sep-2025/"
+  NZDCHF:
+    verified: true
+    commission_type: per_lot_usd
+    commission_per_lot_usd: 2.50
+    commission_side: per_side
+    contract_size: 100000
+    base_currency: NZD
+    quote_currency: CHF
+    source: "FTMO Trading Update | 25 Sep 2025 (Forex)"
+    source_date: "2025-09-25"
+    effective_from: "2025-09-29"
+    source_url: "https://ftmo.com/en/blog/trading-updates/trading-update-25-sep-2025/"
+  NZDJPY:
+    verified: true
+    commission_type: per_lot_usd
+    commission_per_lot_usd: 2.50
+    commission_side: per_side
+    contract_size: 100000
+    base_currency: NZD
+    quote_currency: JPY
+    source: "FTMO Trading Update | 25 Sep 2025 (Forex)"
+    source_date: "2025-09-25"
+    effective_from: "2025-09-29"
+    source_url: "https://ftmo.com/en/blog/trading-updates/trading-update-25-sep-2025/"
+  NZDUSD:
+    verified: true
+    commission_type: per_lot_usd
+    commission_per_lot_usd: 2.50
+    commission_side: per_side
+    contract_size: 100000
+    base_currency: NZD
+    quote_currency: USD
+    source: "FTMO Trading Update | 25 Sep 2025 (Forex)"
+    source_date: "2025-09-25"
+    effective_from: "2025-09-29"
+    source_url: "https://ftmo.com/en/blog/trading-updates/trading-update-25-sep-2025/"
+  USDCAD:
+    verified: true
+    commission_type: per_lot_usd
+    commission_per_lot_usd: 2.50
+    commission_side: per_side
+    contract_size: 100000
+    base_currency: USD
+    quote_currency: CAD
+    source: "FTMO Trading Update | 25 Sep 2025 (Forex)"
+    source_date: "2025-09-25"
+    effective_from: "2025-09-29"
+    source_url: "https://ftmo.com/en/blog/trading-updates/trading-update-25-sep-2025/"
+  USDCHF:
+    verified: true
+    commission_type: per_lot_usd
+    commission_per_lot_usd: 2.50
+    commission_side: per_side
+    contract_size: 100000
+    base_currency: USD
+    quote_currency: CHF
+    source: "FTMO Trading Update | 25 Sep 2025 (Forex)"
+    source_date: "2025-09-25"
+    effective_from: "2025-09-29"
+    source_url: "https://ftmo.com/en/blog/trading-updates/trading-update-25-sep-2025/"
+  USDJPY:
+    verified: true
+    commission_type: per_lot_usd
+    commission_per_lot_usd: 2.50
+    commission_side: per_side
+    contract_size: 100000
+    base_currency: USD
+    quote_currency: JPY
+    source: "FTMO Trading Update | 25 Sep 2025 (Forex)"
+    source_date: "2025-09-25"
+    effective_from: "2025-09-29"
+    source_url: "https://ftmo.com/en/blog/trading-updates/trading-update-25-sep-2025/"
+
+  # --- Metales CFD (9): 0,0007 % del volumen por lado ---
+  XAGAUD:
+    verified: true
+    commission_type: percent_of_volume
+    commission_percent_per_side: 0.0007
+    commission_side: per_side
+    contract_size: 5000
+    base_currency: AUD
+    quote_currency: AUD
+    source: "FTMO Trading Update | 25 Sep 2025 (Metals CFD)"
+    source_date: "2025-09-25"
+    effective_from: "2025-09-29"
+    source_url: "https://ftmo.com/en/blog/trading-updates/trading-update-25-sep-2025/"
+  XAGEUR:
+    verified: true
+    commission_type: percent_of_volume
+    commission_percent_per_side: 0.0007
+    commission_side: per_side
+    contract_size: 5000
+    base_currency: EUR
+    quote_currency: EUR
+    source: "FTMO Trading Update | 25 Sep 2025 (Metals CFD)"
+    source_date: "2025-09-25"
+    effective_from: "2025-09-29"
+    source_url: "https://ftmo.com/en/blog/trading-updates/trading-update-25-sep-2025/"
+  XAGUSD:
+    verified: true
+    commission_type: percent_of_volume
+    commission_percent_per_side: 0.0007
+    commission_side: per_side
+    contract_size: 5000
+    base_currency: USD
+    quote_currency: USD
+    source: "FTMO Trading Update | 25 Sep 2025 (Metals CFD)"
+    source_date: "2025-09-25"
+    effective_from: "2025-09-29"
+    source_url: "https://ftmo.com/en/blog/trading-updates/trading-update-25-sep-2025/"
+  XAUAUD:
+    verified: true
+    commission_type: percent_of_volume
+    commission_percent_per_side: 0.0007
+    commission_side: per_side
+    contract_size: 100
+    base_currency: AUD
+    quote_currency: AUD
+    source: "FTMO Trading Update | 25 Sep 2025 (Metals CFD)"
+    source_date: "2025-09-25"
+    effective_from: "2025-09-29"
+    source_url: "https://ftmo.com/en/blog/trading-updates/trading-update-25-sep-2025/"
+  XAUEUR:
+    verified: true
+    commission_type: percent_of_volume
+    commission_percent_per_side: 0.0007
+    commission_side: per_side
+    contract_size: 100
+    base_currency: EUR
+    quote_currency: EUR
+    source: "FTMO Trading Update | 25 Sep 2025 (Metals CFD)"
+    source_date: "2025-09-25"
+    effective_from: "2025-09-29"
+    source_url: "https://ftmo.com/en/blog/trading-updates/trading-update-25-sep-2025/"
   XAUUSD:
     verified: true
     commission_type: percent_of_volume
     commission_percent_per_side: 0.0007
     commission_side: per_side
+    contract_size: 100
+    base_currency: USD
+    quote_currency: USD
     source: "FTMO Trading Update | 25 Sep 2025 (Metals CFD)"
     source_date: "2025-09-25"
     effective_from: "2025-09-29"
     source_url: "https://ftmo.com/en/blog/trading-updates/trading-update-25-sep-2025/"
+  XCUUSD:
+    verified: true
+    commission_type: percent_of_volume
+    commission_percent_per_side: 0.0007
+    commission_side: per_side
+    contract_size: 100
+    base_currency: USD
+    quote_currency: USD
+    source: "FTMO Trading Update | 25 Sep 2025 (Metals CFD)"
+    source_date: "2025-09-25"
+    effective_from: "2025-09-29"
+    source_url: "https://ftmo.com/en/blog/trading-updates/trading-update-25-sep-2025/"
+  XPDUSD:
+    verified: true
+    commission_type: percent_of_volume
+    commission_percent_per_side: 0.0007
+    commission_side: per_side
+    contract_size: 100
+    base_currency: USD
+    quote_currency: USD
+    source: "FTMO Trading Update | 25 Sep 2025 (Metals CFD)"
+    source_date: "2025-09-25"
+    effective_from: "2025-09-29"
+    source_url: "https://ftmo.com/en/blog/trading-updates/trading-update-25-sep-2025/"
+  XPTUSD:
+    verified: true
+    commission_type: percent_of_volume
+    commission_percent_per_side: 0.0007
+    commission_side: per_side
+    contract_size: 100
+    base_currency: USD
+    quote_currency: USD
+    source: "FTMO Trading Update | 25 Sep 2025 (Metals CFD)"
+    source_date: "2025-09-25"
+    effective_from: "2025-09-29"
+    source_url: "https://ftmo.com/en/blog/trading-updates/trading-update-25-sep-2025/"
+
+  # --- Índices cash (14): comisión 0 ---
+  AUS200.CASH:
+    verified: true
+    commission_type: zero
+    commission_side: per_side
+    source: "FTMO Zero Commissions on Indices"
+    source_date: "2025-08-01"
+    source_updated: "2025-11-04"
+    effective_from: "2025-08-01"
+    source_url: "https://ftmo.com/en/blog/zero-commissions-on-indices/"
+  DXY.CASH:
+    verified: true
+    commission_type: zero
+    commission_side: per_side
+    source: "FTMO Zero Commissions on Indices"
+    source_date: "2025-08-01"
+    source_updated: "2025-11-04"
+    effective_from: "2025-08-01"
+    source_url: "https://ftmo.com/en/blog/zero-commissions-on-indices/"
+  EU50.CASH:
+    verified: true
+    commission_type: zero
+    commission_side: per_side
+    source: "FTMO Zero Commissions on Indices"
+    source_date: "2025-08-01"
+    source_updated: "2025-11-04"
+    effective_from: "2025-08-01"
+    source_url: "https://ftmo.com/en/blog/zero-commissions-on-indices/"
+  FRA40.CASH:
+    verified: true
+    commission_type: zero
+    commission_side: per_side
+    source: "FTMO Zero Commissions on Indices"
+    source_date: "2025-08-01"
+    source_updated: "2025-11-04"
+    effective_from: "2025-08-01"
+    source_url: "https://ftmo.com/en/blog/zero-commissions-on-indices/"
+  GER40.CASH:
+    verified: true
+    commission_type: zero
+    commission_side: per_side
+    source: "FTMO Zero Commissions on Indices"
+    source_date: "2025-08-01"
+    source_updated: "2025-11-04"
+    effective_from: "2025-08-01"
+    source_url: "https://ftmo.com/en/blog/zero-commissions-on-indices/"
+  HK50.CASH:
+    verified: true
+    commission_type: zero
+    commission_side: per_side
+    source: "FTMO Zero Commissions on Indices"
+    source_date: "2025-08-01"
+    source_updated: "2025-11-04"
+    effective_from: "2025-08-01"
+    source_url: "https://ftmo.com/en/blog/zero-commissions-on-indices/"
+  JP225.CASH:
+    verified: true
+    commission_type: zero
+    commission_side: per_side
+    source: "FTMO Zero Commissions on Indices"
+    source_date: "2025-08-01"
+    source_updated: "2025-11-04"
+    effective_from: "2025-08-01"
+    source_url: "https://ftmo.com/en/blog/zero-commissions-on-indices/"
+  N25.CASH:
+    verified: true
+    commission_type: zero
+    commission_side: per_side
+    source: "FTMO Zero Commissions on Indices"
+    source_date: "2025-08-01"
+    source_updated: "2025-11-04"
+    effective_from: "2025-08-01"
+    source_url: "https://ftmo.com/en/blog/zero-commissions-on-indices/"
+  SPN35.CASH:
+    verified: true
+    commission_type: zero
+    commission_side: per_side
+    source: "FTMO Zero Commissions on Indices"
+    source_date: "2025-08-01"
+    source_updated: "2025-11-04"
+    effective_from: "2025-08-01"
+    source_url: "https://ftmo.com/en/blog/zero-commissions-on-indices/"
+  UK100.CASH:
+    verified: true
+    commission_type: zero
+    commission_side: per_side
+    source: "FTMO Zero Commissions on Indices"
+    source_date: "2025-08-01"
+    source_updated: "2025-11-04"
+    effective_from: "2025-08-01"
+    source_url: "https://ftmo.com/en/blog/zero-commissions-on-indices/"
   US100.CASH:
+    verified: true
+    commission_type: zero
+    commission_side: per_side
+    source: "FTMO Zero Commissions on Indices"
+    source_date: "2025-08-01"
+    source_updated: "2025-11-04"
+    effective_from: "2025-08-01"
+    source_url: "https://ftmo.com/en/blog/zero-commissions-on-indices/"
+  US2000.CASH:
+    verified: true
+    commission_type: zero
+    commission_side: per_side
+    source: "FTMO Zero Commissions on Indices"
+    source_date: "2025-08-01"
+    source_updated: "2025-11-04"
+    effective_from: "2025-08-01"
+    source_url: "https://ftmo.com/en/blog/zero-commissions-on-indices/"
+  US30.CASH:
+    verified: true
+    commission_type: zero
+    commission_side: per_side
+    source: "FTMO Zero Commissions on Indices"
+    source_date: "2025-08-01"
+    source_updated: "2025-11-04"
+    effective_from: "2025-08-01"
+    source_url: "https://ftmo.com/en/blog/zero-commissions-on-indices/"
+  US500.CASH:
     verified: true
     commission_type: zero
     commission_side: per_side
