@@ -489,6 +489,7 @@ def plan_orders(
             "price": price,
             "sl": order.stop,
             "tp": order.target,
+            "bot": "daytrader",
         }
         try:
             plan = service._plan_order(params)

@@ -126,17 +126,32 @@ def _filtered_params(func, params: dict) -> dict:
     return {k: v for k, v in params.items() if k in allowed}
 
 
-def _trades_today(bot: str) -> int:
-    """Cuenta órdenes del bot en la fecha UTC actual."""
+def _trades_today(bot: str, account_id: str = "paper_main") -> int:
+    """Cuenta órdenes del bot en la fecha UTC actual y en su cuenta.
+
+    F13 puede haber operado hoy en paper_main y reiniciarse en alpaca_paper:
+    sin la cuenta, el límite diario contaría la orden vieja y bloquearía la
+    primera apertura del bróker nuevo.
+    """
     try:
         with connect(DEFAULT_DB) as con:
             row = con.execute(
-                "SELECT COUNT(*) AS n FROM orders WHERE bot = ? AND ts >= ?",
-                (bot, utcnow()[:10]),
+                "SELECT COUNT(*) AS n FROM orders o "
+                "JOIN order_accounts oa ON oa.order_id = o.id "
+                "WHERE o.bot = ? AND o.ts >= ? AND oa.account_id = ?",
+                (bot, utcnow()[:10], account_id),
             ).fetchone()
         return int(row["n"])
     except Exception:
-        return 0
+        try:
+            with connect(DEFAULT_DB) as con:
+                row = con.execute(
+                    "SELECT COUNT(*) AS n FROM orders WHERE bot = ? AND ts >= ?",
+                    (bot, utcnow()[:10]),
+                ).fetchone()
+            return int(row["n"])
+        except Exception:
+            return 0
 
 
 def _open_risk_usd(positions: list[dict]) -> float:
@@ -222,7 +237,9 @@ def run_bot(
         else rules_from_settings(settings)
     )
     open_risk_usd = _open_risk_usd(snap.get("positions") or [])
-    trades_today = _trades_today(spec.id)
+    trades_today = _trades_today(
+        spec.id, account.id if account is not None else "paper_main"
+    )
     opened_today = 0
     opened_risk = 0.0
     try:
@@ -580,8 +597,9 @@ def run_bot(
 
 def run_all(
     settings: Settings,
-    broker,
+    broker=None,
     *,
+    broker_factory=None,
     only: str | None = None,
     dry_run: bool = False,
     include_disabled: bool = False,
@@ -589,6 +607,14 @@ def run_all(
     profiles: dict[str, BotProfile] | None = None,
     cluster_report: dict | None = None,
 ) -> list[BotAction]:
+    """Ejecuta los bots habilitados, cada uno contra el bróker de su cuenta.
+
+    `broker_factory(account)` permite que F13 use `alpaca_paper` mientras
+    `trend-spy` sigue en `paper_main`. Si no se pasa fábrica, se usa el
+    `broker` recibido (comportamiento anterior y tests existentes).
+    """
+    if broker is None and broker_factory is None:
+        raise ValueError("run_all necesita un broker o un broker_factory")
     actions: list[BotAction] = []
     current = now or datetime.now(timezone.utc)
     profile_map = profiles if profiles is not None else load_profiles()
@@ -601,9 +627,17 @@ def run_all(
     from .market_pilots import active_market, market_for_bot
 
     active_pilot = active_market(DEFAULT_DB)
-    equity = (
-        float(broker.snapshot({}).get("equity") or 0.0) if needs_cluster else 0.0
-    )
+    brokers: dict[str, object] = {}
+    account_equity: dict[str, float] = {}
+
+    def _broker_for(account):
+        if broker_factory is None:
+            return broker
+        key = str(account.id)
+        if key not in brokers:
+            brokers[key] = broker_factory(account)
+        return brokers[key]
+
     cluster_used: dict[str, float] = {}
     for spec in specs:
         if only and spec.id != only:
@@ -623,16 +657,46 @@ def run_all(
         account = account_map.get(spec.account or "paper_main")
         if account is None:
             continue
+        # El orquestador diario solo enruta cuentas de acciones paper/Alpaca.
+        # Los bots MT5/futuros tienen su propio motor intradía.
+        if str(account.platform).lower() not in {"internal", "paper", "alpaca"}:
+            continue
+        try:
+            active_broker = _broker_for(account)
+        except Exception as exc:
+            actions.append(
+                BotAction(
+                    spec.id,
+                    spec.universe[0] if spec.universe else "?",
+                    0.0,
+                    0.0,
+                    0.0,
+                    0,
+                    0,
+                    "error",
+                    f"bróker {account.id}: {exc}"[:200],
+                )
+            )
+            continue
         limits = effective_limits(DEFAULT_DB, account)
         if not profile.schedule.allows(current):
             continue
+        equity = account_equity.get(account.id)
+        if equity is None:
+            equity = (
+                float(active_broker.snapshot({}).get("equity") or 0.0)
+                if needs_cluster
+                else 0.0
+            )
+            account_equity[account.id] = equity
         cluster = _cluster_key(spec, clusters)
+        cluster_key = f"{account.id}:{cluster}" if cluster else None
         risk_pct = min(profile.max_risk_pct, limits.per_trade_risk_pct)
         reserved = equity * risk_pct if equity > 0 else 0.0
         if (
-            cluster is not None
+            cluster_key is not None
             and equity > 0
-            and cluster_used.get(cluster, 0.0) + reserved
+            and cluster_used.get(cluster_key, 0.0) + reserved
             > equity * profile.max_cluster_risk_pct + 1e-9
         ):
             continue
@@ -640,23 +704,23 @@ def run_all(
             run_bot(
                 spec,
                 settings,
-                broker,
+                active_broker,
                 dry_run=dry_run,
                 profile=profile,
                 account=account,
                 limits=limits,
-                cluster_open_risk_usd=cluster_used.get(cluster, 0.0)
-                if cluster is not None
+                cluster_open_risk_usd=cluster_used.get(cluster_key, 0.0)
+                if cluster_key is not None
                 else 0.0,
                 max_cluster_risk_pct=profile.max_cluster_risk_pct,
             )
         )
-        if cluster is not None and any(
+        if cluster_key is not None and any(
             action.delta > 0 and action.status in {"dry_run", "ejecutado"}
             for action in actions
             if action.bot == spec.id
         ):
-            cluster_used[cluster] = cluster_used.get(cluster, 0.0) + reserved
+            cluster_used[cluster_key] = cluster_used.get(cluster_key, 0.0) + reserved
     return actions
 
 

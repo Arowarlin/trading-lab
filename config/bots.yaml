@@ -17,7 +17,7 @@ bots:
   - id: qqq-trend-f13
     type: deterministic
     profile: swing_equity
-    account: paper_main
+    account: alpaca_paper
     cluster: trend_equity
     strategy: trend
     universe: [QQQ]

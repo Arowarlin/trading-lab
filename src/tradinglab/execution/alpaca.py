@@ -21,6 +21,9 @@ class AlpacaBroker:
 
     Requiere ALPACA_API_KEY y ALPACA_SECRET_KEY en el entorno/.env.
     Salvaguarda: si `paper=False`, exige ALLOW_LIVE=YES para enviar órdenes.
+    Además, toda orden queda registrada en `orders`/`fills` con la cuenta y el
+    bot que la originó; sin eso la reconciliación no puede separar F13 del
+    daytrader.
     """
 
     def __init__(
@@ -29,6 +32,7 @@ class AlpacaBroker:
         secret_key: str | None = None,
         paper: bool = True,
         db_path: str | Path | None = None,
+        account: str = "alpaca_paper",
     ) -> None:
         from alpaca.trading.client import TradingClient
 
@@ -43,12 +47,33 @@ class AlpacaBroker:
 
         self.client = TradingClient(self.api_key, self.secret_key, paper=paper)
         self.db_path = Path(db_path) if db_path else None
+        self.account_id = str(account or "alpaca_paper")
+
+    # ------------------------------------------------------------ identidad
+
+    @staticmethod
+    def _value(value, default: str = "") -> str:
+        if value is None:
+            return default
+        return str(getattr(value, "value", value))
+
+    def _base_url(self) -> str:
+        base = getattr(self.client, "_base_url", None)
+        return self._value(base, "")
 
     def health(self) -> dict:
+        base_url = self._base_url()
+        paper_api = bool(base_url) and "paper-api" in base_url.lower()
+        if self.paper and base_url and not paper_api:
+            raise AlpacaError(
+                f"la URL de Alpaca no es paper-api: {base_url}"
+            )
         account = self.client.get_account()
         return {
             "ok": True,
             "paper": self.paper,
+            "paper_api": paper_api or not base_url,
+            "base_url": base_url,
             "status": str(account.status),
             "currency": account.currency,
             "cash": float(account.cash),
@@ -86,6 +111,74 @@ class AlpacaBroker:
             "equity": float(account.equity),
         }
 
+    # --------------------------------------------------------------- órdenes
+
+    @classmethod
+    def _order_status(cls, order) -> str:
+        return cls._value(getattr(order, "status", ""), "").lower()
+
+    @staticmethod
+    def _filled_qty(order) -> float:
+        try:
+            return float(getattr(order, "filled_qty", 0) or 0)
+        except (TypeError, ValueError):
+            return 0.0
+
+    @staticmethod
+    def _filled_price(order) -> float | None:
+        raw = getattr(order, "filled_avg_price", None)
+        if raw in (None, ""):
+            return None
+        try:
+            value = float(raw)
+        except (TypeError, ValueError):
+            return None
+        return value if value > 0 else None
+
+    def _insert_fill(
+        self,
+        con,
+        db_order_id: int,
+        *,
+        bot: str,
+        symbol: str,
+        side: str,
+        qty: float,
+        price: float,
+        ts: str | None = None,
+    ) -> bool:
+        exists = con.execute(
+            "SELECT 1 FROM fills WHERE order_id = ? AND account = ? LIMIT 1",
+            (int(db_order_id), self.account_id),
+        ).fetchone()
+        if exists:
+            return False
+        stamp = ts or utcnow()
+        con.execute(
+            "INSERT INTO fills("
+            "order_id, ts, qty, price, commission, bot, account, symbol, side, "
+            "volume, swap, deal_id, magic, ts_utc, contract_size"
+            ") VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (
+                int(db_order_id),
+                stamp,
+                abs(float(qty)),
+                float(price),
+                0.0,
+                str(bot or "manual")[:80],
+                self.account_id,
+                symbol.upper(),
+                side,
+                abs(float(qty)),
+                0.0,
+                None,
+                None,
+                stamp,
+                None,
+            ),
+        )
+        return True
+
     def submit_market(
         self,
         ticker: str,
@@ -105,6 +198,7 @@ class AlpacaBroker:
             raise ValueError("qty no puede ser 0")
 
         side = OrderSide.BUY if qty > 0 else OrderSide.SELL
+        side_text = "buy" if qty > 0 else "sell"
         request = MarketOrderRequest(
             symbol=ticker.upper(),
             qty=int(abs(qty)),
@@ -117,14 +211,55 @@ class AlpacaBroker:
         except Exception as exc:
             raise AlpacaError(f"Alpaca rechazó la orden: {exc}") from exc
 
-        result = {
-            "order_id": str(order.id),
-            "ticker": ticker.upper(),
-            "side": "buy" if qty > 0 else "sell",
-            "qty": int(abs(qty)),
-            "status": str(order.status),
-            "submitted_at": str(order.submitted_at),
-        }
+        status = self._order_status(order)
+        filled_qty = self._filled_qty(order)
+        filled_px = self._filled_price(order)
+        db_order_id: int | None = None
+        recorded = False
+        if self.db_path:
+            try:
+                with connect(self.db_path) as con:
+                    db_order_id = append_hashed(
+                        con,
+                        "orders",
+                        {
+                            "ts": utcnow(),
+                            "ticker": ticker.upper(),
+                            "side": side_text,
+                            "qty": int(abs(qty)),
+                            "order_type": "market",
+                            "status": status or "submitted",
+                            "broker_id": str(order.id),
+                            "bot": bot,
+                            "reason": reason,
+                            "run_id": run_id,
+                            "risk_usd": None if risk_usd is None else float(risk_usd),
+                            "stop_price": None if stop_price is None else float(stop_price),
+                        },
+                    )
+                    con.execute(
+                        "INSERT OR REPLACE INTO order_accounts"
+                        "(order_id, account_id, created_at) VALUES(?,?,?)",
+                        (db_order_id, self.account_id, utcnow()),
+                    )
+                    if filled_qty > 0 and filled_px is not None:
+                        self._insert_fill(
+                            con,
+                            db_order_id,
+                            bot=bot,
+                            symbol=ticker,
+                            side=side_text,
+                            qty=filled_qty,
+                            price=filled_px,
+                            ts=str(getattr(order, "filled_at", "") or "") or None,
+                        )
+                    recorded = True
+            except Exception as exc:
+                logger.error(
+                    "Alpaca: la orden %s se envió pero no se pudo registrar: %s",
+                    order.id,
+                    exc,
+                )
 
         try:
             from ..tca import record_fill as tca_record
@@ -133,7 +268,7 @@ class AlpacaBroker:
                 self.db_path,
                 bot=bot,
                 symbol=ticker.upper(),
-                side="buy" if qty > 0 else "sell",
+                side=side_text,
                 signal_px=price,
                 order_px=price,
                 expected_cost_bps=float(getattr(self, "slippage_bps", 0.0) or 0.0),
@@ -141,32 +276,77 @@ class AlpacaBroker:
         except Exception:
             pass
 
-        return result
-        if self.db_path:
-            try:
-                with connect(self.db_path) as con:
-                    append_hashed(
-                        con,
-                        "orders",
-                        {
-                            "ts": utcnow(),
-                            "ticker": result["ticker"],
-                            "side": result["side"],
-                            "qty": result["qty"],
-                            "order_type": "market",
-                            "status": result["status"],
-                            "broker_id": result["order_id"],
-                            "bot": bot,
-                            "reason": reason,
-                            "run_id": run_id,
-                            "risk_usd": None if risk_usd is None else float(risk_usd),
-                            "stop_price": None if stop_price is None else float(stop_price),
-                        },
-                    )
-            except Exception:
-                pass
+        return {
+            "order_id": str(order.id),
+            "db_order_id": db_order_id,
+            "recorded": recorded,
+            "ticker": ticker.upper(),
+            "side": side_text,
+            "qty": int(abs(qty)),
+            "status": status or "submitted",
+            "filled_qty": filled_qty,
+            "filled_avg_price": filled_px,
+            "submitted_at": str(getattr(order, "submitted_at", "") or ""),
+        }
 
-        return result
+    def sync_fills(self, *, bot: str | None = None, limit: int = 50) -> dict:
+        """Trae los fills de órdenes Alpaca ya enviadas y los deja en SQLite.
+
+        Es idempotente: una orden solo produce una fila en `fills`. Se llama
+        desde `lab reconcile --account alpaca_paper` antes de comparar, porque
+        una orden enviada tras el cierre se llena en la apertura siguiente.
+        """
+        if not self.db_path:
+            return {"checked": 0, "synced": 0, "orders": []}
+        with connect(self.db_path) as con:
+            rows = [
+                dict(row)
+                for row in con.execute(
+                    "SELECT o.id, o.broker_id, o.ticker, o.side, o.qty, o.bot "
+                    "FROM orders o WHERE o.broker_id IS NOT NULL "
+                    "AND (? IS NULL OR o.bot = ?) "
+                    "AND o.status NOT IN ('canceled','cancelled','rejected','expired') "
+                    "AND NOT EXISTS (SELECT 1 FROM fills f WHERE f.order_id = o.id) "
+                    "ORDER BY o.id DESC LIMIT ?",
+                    (bot, bot, max(1, int(limit))),
+                ).fetchall()
+            ]
+        synced = 0
+        details: list[dict] = []
+        for row in rows:
+            try:
+                order = self.client.get_order_by_id(str(row["broker_id"]))
+            except Exception as exc:
+                details.append(
+                    {"order_id": row["id"], "status": "error", "error": str(exc)[:200]}
+                )
+                continue
+            qty = self._filled_qty(order)
+            price = self._filled_price(order)
+            status = self._order_status(order)
+            if qty > 0 and price is not None:
+                with connect(self.db_path) as con:
+                    if self._insert_fill(
+                        con,
+                        int(row["id"]),
+                        bot=str(row.get("bot") or "manual"),
+                        symbol=str(row["ticker"]),
+                        side=str(row["side"]),
+                        qty=qty,
+                        price=price,
+                        ts=str(getattr(order, "filled_at", "") or "") or None,
+                    ):
+                        synced += 1
+            details.append(
+                {
+                    "order_id": row["id"],
+                    "broker_id": row["broker_id"],
+                    "status": status,
+                    "filled_qty": qty,
+                    "filled_avg_price": price,
+                }
+            )
+        return {"checked": len(rows), "synced": synced, "orders": details}
 
     def mark_to_market(self, prices: dict[str, float] | None = None) -> float:
         return self.snapshot(prices)["equity"]

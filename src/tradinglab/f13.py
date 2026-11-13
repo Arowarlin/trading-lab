@@ -433,6 +433,248 @@ def _set_bot_enabled(root: Path, bot: str, enabled: bool) -> None:
     tmp.replace(path)
 
 
+def _set_bot_account(root: Path, bot: str, account: str) -> tuple[str, str]:
+    """Cambia solo la línea `account:` del bloque del bot."""
+    path = root / "config" / "bots.yaml"
+    text = path.read_text(encoding="utf-8")
+    lines = text.splitlines(keepends=True)
+    start = None
+    for index, line in enumerate(lines):
+        if re.match(rf"^\s*-\s+id:\s*['\"]?{re.escape(bot)}['\"]?\s*$", line):
+            start = index
+            break
+    if start is None:
+        raise ValueError(f"Bot no encontrado en bots.yaml: {bot}")
+    end = len(lines)
+    for index in range(start + 1, len(lines)):
+        if re.match(r"^[^\s#]", lines[index]):
+            end = index
+            break
+        if re.match(r"^\s*-\s+id:\s*", lines[index]):
+            end = index
+            break
+    changed = False
+    for index in range(start, end):
+        match = re.match(r"^(\s*)account:\s*.*$", lines[index])
+        if not match:
+            continue
+        indent = match.group(1)
+        newline = "\n" if lines[index].endswith("\n") else ""
+        lines[index] = f"{indent}account: {account}{newline}"
+        changed = True
+        break
+    if not changed:
+        raise ValueError(f"No encuentro account: en el bloque de {bot}")
+    new_text = "".join(lines)
+    old_data = yaml.safe_load(text) or {}
+    new_data = yaml.safe_load(new_text) or {}
+    expected = copy.deepcopy(old_data)
+    for item in expected.get("bots", []):
+        if item.get("id") == bot:
+            item["account"] = account
+    if new_data != expected:
+        raise ValueError("La edición de bots.yaml cambió más de lo previsto.")
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(new_text, encoding="utf-8")
+    tmp.replace(path)
+    return text, new_text
+
+
+def _set_f13_start_date(root: Path, start_date: str) -> tuple[str, str]:
+    """Fija `start_date` en f13.yaml sin tocar los criterios."""
+    path = root / "config" / "f13.yaml"
+    text = path.read_text(encoding="utf-8")
+    lines = text.splitlines(keepends=True)
+    newline = "\r\n" if "\r\n" in text else "\n"
+    changed = False
+    for index, line in enumerate(lines):
+        if re.match(r"^start_date:\s*.*$", line):
+            lines[index] = f'start_date: "{start_date}"{newline}'
+            changed = True
+            break
+    if not changed:
+        symbol_index = next(
+            (
+                index
+                for index, line in enumerate(lines)
+                if re.match(r"^symbol:\s*", line)
+            ),
+            None,
+        )
+        if symbol_index is None:
+            raise ValueError("f13.yaml no tiene `symbol:`; no se puede insertar start_date.")
+        lines.insert(
+            symbol_index + 1, f'start_date: "{start_date}"{newline}'
+        )
+    new_text = "".join(lines)
+    old_data = yaml.safe_load(text) or {}
+    new_data = yaml.safe_load(new_text) or {}
+    expected = copy.deepcopy(old_data)
+    expected["start_date"] = start_date
+    if new_data != expected:
+        raise ValueError("La edición de f13.yaml cambió más de lo previsto.")
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(new_text, encoding="utf-8")
+    tmp.replace(path)
+    return text, new_text
+
+
+def migrate_account(
+    db_path: str | Path,
+    *,
+    bot: str,
+    new_account: str,
+    start_date: str,
+    reason: str,
+    root: Path = ROOT,
+    settings: Settings | None = None,
+) -> dict:
+    """Migra F13 a otra cuenta paper y re-congela con un motivo explícito.
+
+    Solo acepta un cambio controlado: la línea `account:` del bloque F13 en
+    `bots.yaml` y `start_date` en `f13.yaml`. `prop.yaml`, `accounts.yaml` y
+    `lab.yaml` deben seguir idénticos al freeze. Rechaza live.
+    """
+    init_db(db_path)
+    frozen = status(db_path)
+    if not frozen:
+        raise ValueError("F13 no está congelado; usa `lab f13 freeze`.")
+    bot_id = str(bot or frozen.get("bot") or "")
+    if bot_id != str(frozen.get("bot")):
+        raise ValueError(f"F13 está congelado para {frozen.get('bot')}, no para {bot_id}.")
+    reason = str(reason or "").strip()
+    if not reason:
+        raise ValueError("La migración exige un motivo (--reason).")
+    try:
+        new_start = date.fromisoformat(str(start_date))
+        old_start = date.fromisoformat(str(frozen.get("start_date")))
+    except ValueError as exc:
+        raise ValueError("start_date debe ser YYYY-MM-DD.") from exc
+    if new_start < old_start:
+        raise ValueError("La nueva fecha de inicio no puede ser anterior al freeze.")
+    settings = settings or get_settings()
+    if settings.mode == "live":
+        raise ValueError("F13 no migra a live: solo paper/demo.")
+
+    from .accounts import load_accounts
+
+    accounts_path = root / "config" / "accounts.yaml"
+    accounts = load_accounts(accounts_path)
+    account = accounts.get(str(new_account))
+    if account is None:
+        raise ValueError(f"cuenta desconocida: {new_account}")
+    platform = str(account.platform).lower()
+    if platform not in {"internal", "paper", "alpaca"}:
+        raise ValueError(f"cuenta {new_account}: plataforma {platform} no paper")
+    if str(account.status).lower() not in {"active", "paper", "demo", "simulated"}:
+        raise ValueError(f"cuenta {new_account}: estado {account.status} no paper/demo")
+    if float(account.account_size) <= 0:
+        raise ValueError(f"cuenta {new_account}: sin saldo declarado")
+
+    bots_path = root / "config" / "bots.yaml"
+    bots_data = _yaml_doc(bots_path)
+    bot_block = next(
+        (item for item in (bots_data.get("bots") or []) if item.get("id") == bot_id),
+        None,
+    )
+    if bot_block is None:
+        raise ValueError(f"Bot no encontrado en bots.yaml: {bot_id}")
+    old_account = str(bot_block.get("account") or F13_DEFAULT_ACCOUNT)
+    if old_account == str(new_account):
+        raise ValueError(f"{bot_id} ya usa {new_account}; no hay migración.")
+
+    # El punto de partida debe ser exactamente el freeze: así el único cambio
+    # permitido es el de la migración.
+    try:
+        frozen_digests = json.loads(str(frozen.get("file_hashes") or "{}"))
+    except (TypeError, ValueError):
+        frozen_digests = {}
+    if not isinstance(frozen_digests, dict) or not frozen_digests:
+        raise ValueError("Sin huellas por archivo del freeze; no se migra a ciegas.")
+    current = file_digests(root)
+    changed = [
+        name
+        for name, digest in current.items()
+        if name in frozen_digests and frozen_digests.get(name) != digest
+    ]
+    if changed:
+        raise ValueError(
+            "La configuración ya cambió respecto al freeze: "
+            f"{', '.join(sorted(changed))}. Re-congela o revisa antes de migrar."
+        )
+
+    bots_original = bots_path.read_text(encoding="utf-8")
+    f13_original = (root / "config" / "f13.yaml").read_text(encoding="utf-8")
+    try:
+        _, _ = _set_bot_account(root, bot_id, str(new_account))
+        _, _ = _set_f13_start_date(root, new_start.isoformat())
+        new_hash = config_hash(root)
+        previous = str(frozen.get("config_hash") or "")
+        if new_hash == previous:
+            raise ValueError("El hash no cambió; no hay migración que congelar.")
+        now = utcnow()
+        payload = json.dumps(file_digests(root), sort_keys=True, ensure_ascii=False)
+        with connect(db_path) as con:
+            con.execute(
+                "UPDATE f13_config SET start_date=?, config_hash=?, frozen_at=?, "
+                "file_hashes=?, previous_hash=?, refreeze_reason=?, refrozen_at=? "
+                "WHERE id=1",
+                (new_start.isoformat(), new_hash, now, payload, previous, reason, now),
+            )
+            con.execute(
+                "INSERT INTO f13_refreezes"
+                "(ts, bot, previous_hash, new_hash, reason, changed_files, "
+                "file_hashes, actor) VALUES(?,?,?,?,?,?,?,?)",
+                (
+                    now,
+                    bot_id,
+                    previous,
+                    new_hash,
+                    reason,
+                    json.dumps(["bots.yaml", "f13.yaml"], ensure_ascii=False),
+                    payload,
+                    "cli",
+                ),
+            )
+        try:
+            from .runtime import record_console_action
+
+            record_console_action(
+                db_path,
+                action="f13_migrate_account",
+                params={
+                    "bot": bot_id,
+                    "old_account": old_account,
+                    "new_account": str(new_account),
+                    "previous_hash": previous,
+                    "new_hash": new_hash,
+                    "start_date": new_start.isoformat(),
+                },
+                result="migrado",
+                ok=True,
+                actor="cli",
+                detail=reason[:900],
+            )
+        except Exception:
+            pass
+    except Exception:
+        (root / "config" / "bots.yaml").write_text(bots_original, encoding="utf-8")
+        (root / "config" / "f13.yaml").write_text(f13_original, encoding="utf-8")
+        raise
+
+    return {
+        "bot": bot_id,
+        "old_account": old_account,
+        "new_account": str(new_account),
+        "start_date": new_start.isoformat(),
+        "previous_hash": previous,
+        "new_hash": new_hash,
+        "reason": reason,
+        "changed_files": ["bots.yaml", "f13.yaml"],
+        "frozen_at": now,
+    }
+
+
 def activate(
     db_path: str | Path,
     *,
@@ -1113,6 +1355,7 @@ __all__ = [
     "execution_metrics",
     "freeze",
     "load_criteria",
+    "migrate_account",
     "record_snapshot",
     "signal_check",
     "status",

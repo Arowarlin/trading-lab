@@ -6,7 +6,7 @@ revisa. Nada de esto opera en live.
 
 | Proceso | Qué mide | Desde | Muestra suficiente | Revisar con |
 |---|---|---|---|---|
-| **F13** (`TradingLab-F13`, L-V 22:20) | Operativa del bot `qqq-trend-f13`: ciclos diarios, reconciliación, slippage, error de tamaño y hash congelado. El edge solo se evalúa a 6 meses o ≥20 trades. | **2026-11-09** | 8 semanas (95 % de ciclos) y **20 trades** para opinar del edge | `lab f13 status` · `lab f13 report` · `lab f13 check` · `lab readiness` |
+| **F13** (`TradingLab-F13`, L-V 22:20) | Operativa del bot `qqq-trend-f13`: ciclos diarios, reconciliación, slippage, error de tamaño y hash congelado. El edge solo se evalúa a 6 meses o ≥20 trades. | **2026-11-13** (reinicio; antes 2026-11-09 en `paper_main`) | 8 semanas (95 % de ciclos) y **20 trades** para opinar del edge | `lab f13 status` · `lab f13 report` · `lab f13 check` · `lab readiness` |
 | **Agents** (`TradingLab-Agents`, L-V 22:45) | Decisiones de los 4 analistas (lite) y su retorno a 1/5/20 días. | **2026-11-07** | **30 decisiones** con retorno a 20 días | `lab decisions` · `lab readiness` |
 | **LLMCompare** (`TradingLab-LLMCompare`, L-V 18:30) | Lite vs deep por ticker: decisión, confianza, latencia y acuerdo; tasa `schema_ok`. | **2026-11-09** | 30 comparaciones por modelo (aviso si <30) | `lab llm status` · `lab llm report` · `lab llm ranking` |
 | **DeepCompare** (`TradingLab-DeepCompare`, diario 02:30) | Pasada profunda de TradingAgents (4 analistas + debate + riesgo) para el mismo ticker, en el proveedor OpenCode Go. | **2026-11-09**, **pausada 2026-11-11**, **tarea deshabilitada 2026-11-12** | 30 pasadas con el proveedor con saldo | `lab agent-compare --report` · `lab models ranking` · `lab doctor` |
@@ -161,9 +161,13 @@ Notas de lectura:
   está consumido y `register` rechaza solapamientos; hay que esperar datos
   posteriores al `2026-11-12` o activos fuera del universo consumido. En este
   bloque no se ejecutó ninguna campaña ni barrido.
-- **F13**: re-congelado por cambios ajenos al bot en `config/lab.yaml`
-  (`heartbeat`, `backup.offsite_dir`): hash `9c183b780e6849e4…`, baseline
-  `f13_config`; `f13 config-check` OK.
+- **F13**: migrado de `paper_main` a `alpaca_paper` el **2026-11-13** para
+  medir slippage, reconciliación y tamaño contra un bróker real. Informe de los
+  4 días archivado en `reports/f13/paper_main_2026-11-09_a_13.md`; la parte de
+  F13 (5 QQQ) se cerró con una orden auditada del bróker interno. Nueva ventana
+  de 8 semanas: **2026-11-13 → 2027-01-08**. Hash `26fd15fdbebd3db4…`;
+  `f13 config-check` OK. La reconciliación de `alpaca_paper` separa los fills
+  de F13 (QQQ) y del daytrader (AAPL).
 
 ## No construir hasta
 

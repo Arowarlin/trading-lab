@@ -1,0 +1,149 @@
+{
+  "alerts": [],
+  "bot": "qqq-trend-f13",
+  "config": {
+    "current_hash": "d701f7d2287fa8771fec2e55e71fb323571a3ed52ab90a885bbe10d1db97d8ae",
+    "frozen_hash": "d701f7d2287fa8771fec2e55e71fb323571a3ed52ab90a885bbe10d1db97d8ae",
+    "hash": "d701f7d2287fa8771fec2e55e71fb323571a3ed52ab90a885bbe10d1db97d8ae",
+    "ok": true,
+    "short": "d701f7d2287fa877"
+  },
+  "criteria": {
+    "edge_extension": "6 meses o >=20 trades",
+    "expected_trades_8w_high": 3,
+    "expected_trades_8w_low": 0,
+    "hard_stops": [
+      "cualquier breach de guard o kill-switch",
+      "cualquier orden no autorizada o intento de live",
+      "reconciliación con diferencia no explicada",
+      "hash de configuración distinto al congelado",
+      "dos ciclos diarios consecutivos perdidos"
+    ],
+    "max_size_error_shares": 1,
+    "max_slippage_bps_p50": 10,
+    "max_slippage_bps_p95": 25,
+    "min_cycles_pct": 0.95,
+    "min_reconciliation_ok_pct": 0.95,
+    "window_weeks": 8
+  },
+  "cycles": {
+    "executed": 4,
+    "expected": 4,
+    "last_cycle_at": "2026-11-13T18:55:28Z",
+    "missing": [],
+    "monday": {
+      "date": "2026-11-09",
+      "ok": true
+    },
+    "ok": true,
+    "pct": 1.0,
+    "today": true
+  },
+  "files": {
+    "json": "E:\\trading-lab\\reports\\f13\\2026-11-13.json",
+    "markdown": "E:\\trading-lab\\reports\\f13\\2026-11-13.md"
+  },
+  "generated_at": "2026-11-13T19:30:46.424+00:00",
+  "read_only": true,
+  "reconciliations": {
+    "count": 7,
+    "last": {
+      "broker_equity": 99991.20118192649,
+      "broker_positions": 2,
+      "db_equity": 99991.20118192649,
+      "db_positions": 2,
+      "details": "",
+      "diff_equity": 0.0,
+      "diff_positions": 0,
+      "id": 8,
+      "source": "paper",
+      "status": "ok",
+      "ts": "2026-11-13T11:59:49.093+00:00"
+    },
+    "ok": true,
+    "ok_count": 7,
+    "ok_pct": 1.0
+  },
+  "refreezes": [
+    {
+      "actor": "cli",
+      "bot": "qqq-trend-f13",
+      "changed_files": "[]",
+      "file_hashes": "{\"accounts.yaml\": \"d02d8fbfb1bff253f68edee4c37a04c52083d07eacee17e948eaf1ddf4eed2b3\", \"bots.yaml\": \"83d58ea4869a348e4b0e73d146f2dbea0641fbb0cb6343699e395c850510eecd\", \"f13.yaml\": \"e69f2ef2fe81b27d597890b1ec47a891f05a2ee5690ef89a7c05ffa3a5952fdd\", \"lab.yaml\": \"c2342c669648559ef26f3e1b40fbb3ff4d0ac62d6ba0603aa621dc2a5eccd926\", \"prop.yaml\": \"698369f12c39ff30c0cbd76125df753b4f6954e3981ea8269d17ef253fbc8c92\"}",
+      "id": 6,
+      "new_hash": "d701f7d2287fa8771fec2e55e71fb323571a3ed52ab90a885bbe10d1db97d8ae",
+      "previous_hash": "02a06348f7afab59e7825864976480649cbf7c45ab96839c0a2f2b14a4e908da",
+      "reason": "F13 usa paper_main; el hash cubre su cuenta real y el bot no cambia",
+      "ts": "2026-11-13T18:55:12.235+00:00"
+    },
+    {
+      "actor": "cli",
+      "bot": "qqq-trend-f13",
+      "changed_files": "[\"lab.yaml\"]",
+      "file_hashes": "{\"accounts.yaml\": \"d02d8fbfb1bff253f68edee4c37a04c52083d07eacee17e948eaf1ddf4eed2b3\", \"bots.yaml\": \"83d58ea4869a348e4b0e73d146f2dbea0641fbb0cb6343699e395c850510eecd\", \"f13.yaml\": \"e69f2ef2fe81b27d597890b1ec47a891f05a2ee5690ef89a7c05ffa3a5952fdd\", \"lab.yaml\": \"c2342c669648559ef26f3e1b40fbb3ff4d0ac62d6ba0603aa621dc2a5eccd926\", \"prop.yaml\": \"698369f12c39ff30c0cbd76125df753b4f6954e3981ea8269d17ef253fbc8c92\"}",
+      "id": 5,
+      "new_hash": "02a06348f7afab59e7825864976480649cbf7c45ab96839c0a2f2b14a4e908da",
+      "previous_hash": "9c183b780e6849e4cb577f8749ffb28189f9b5ee4afefb98ae311dce082b629b",
+      "reason": "separación de configuración de operación (ops.yaml); el bot no cambia",
+      "ts": "2026-11-13T18:44:04.338+00:00"
+    },
+    {
+      "actor": "cli",
+      "bot": "qqq-trend-f13",
+      "changed_files": "[\"lab.yaml\"]",
+      "file_hashes": "{\"bots.yaml\": \"83d58ea4869a348e4b0e73d146f2dbea0641fbb0cb6343699e395c850510eecd\", \"f13.yaml\": \"e69f2ef2fe81b27d597890b1ec47a891f05a2ee5690ef89a7c05ffa3a5952fdd\", \"lab.yaml\": \"a5503af8feef461237ca294e3f4ba926663e8879b47ea7509d76661767b9d1c2\", \"prop.yaml\": \"698369f12c39ff30c0cbd76125df753b4f6954e3981ea8269d17ef253fbc8c92\"}",
+      "id": 4,
+      "new_hash": "9c183b780e6849e4cb577f8749ffb28189f9b5ee4afefb98ae311dce082b629b",
+      "previous_hash": "1ac90c80be91620257e165e13ac95b3e41292da17b6c4dfa1dcf70e4983fb453",
+      "reason": "cambio ajeno al bot: backup.offsite_dir a OneDrive",
+      "ts": "2026-11-13T01:58:30.136+00:00"
+    },
+    {
+      "actor": "cli",
+      "bot": "qqq-trend-f13",
+      "changed_files": "[\"lab.yaml\"]",
+      "file_hashes": "{\"bots.yaml\": \"83d58ea4869a348e4b0e73d146f2dbea0641fbb0cb6343699e395c850510eecd\", \"f13.yaml\": \"e69f2ef2fe81b27d597890b1ec47a891f05a2ee5690ef89a7c05ffa3a5952fdd\", \"lab.yaml\": \"5f08bd9a3d37798de6cb48196c361d4a359a7c9864f58848b96f5f9696820336\", \"prop.yaml\": \"698369f12c39ff30c0cbd76125df753b4f6954e3981ea8269d17ef253fbc8c92\"}",
+      "id": 3,
+      "new_hash": "1ac90c80be91620257e165e13ac95b3e41292da17b6c4dfa1dcf70e4983fb453",
+      "previous_hash": "bc780c24cd03c98dffa51ba8d0729a3392853b709dcb329075f2498701b801ae",
+      "reason": "cambio ajeno al bot: backup offsite, heartbeat y stop de cuenta",
+      "ts": "2026-11-13T00:54:49.391+00:00"
+    },
+    {
+      "actor": "cli",
+      "bot": "qqq-trend-f13",
+      "changed_files": "[\"lab.yaml\"]",
+      "file_hashes": "{\"bots.yaml\": \"83d58ea4869a348e4b0e73d146f2dbea0641fbb0cb6343699e395c850510eecd\", \"f13.yaml\": \"e69f2ef2fe81b27d597890b1ec47a891f05a2ee5690ef89a7c05ffa3a5952fdd\", \"lab.yaml\": \"54e450fc81c3f60affe84517ca7a4483e904690eff4954ad22c053fa18fbeab2\", \"prop.yaml\": \"698369f12c39ff30c0cbd76125df753b4f6954e3981ea8269d17ef253fbc8c92\"}",
+      "id": 2,
+      "new_hash": "bc780c24cd03c98dffa51ba8d0729a3392853b709dcb329075f2498701b801ae",
+      "previous_hash": "7fe0f5a637bf29cb524b778d566d7aa58658bd5cc8fd0cfcccdf17556ac8c767",
+      "reason": "Modelo LLM local cambiado a qwen3-30b-a3b (MoE, mas rapido en CPU); bloque daytrader intacto",
+      "ts": "2026-11-11T23:02:32.093+00:00"
+    },
+    {
+      "actor": "cli",
+      "bot": "qqq-trend-f13",
+      "changed_files": "[\"lab.yaml\"]",
+      "file_hashes": "{\"bots.yaml\": \"83d58ea4869a348e4b0e73d146f2dbea0641fbb0cb6343699e395c850510eecd\", \"f13.yaml\": \"e69f2ef2fe81b27d597890b1ec47a891f05a2ee5690ef89a7c05ffa3a5952fdd\", \"lab.yaml\": \"ee4a6c0e64e367b45972712e6600a9faaec028d017a98cad1d5f04e7f7547562\", \"prop.yaml\": \"698369f12c39ff30c0cbd76125df753b4f6954e3981ea8269d17ef253fbc8c92\"}",
+      "id": 1,
+      "new_hash": "7fe0f5a637bf29cb524b778d566d7aa58658bd5cc8fd0cfcccdf17556ac8c767",
+      "previous_hash": "54b420360f17c75d1768000b8a8587afbddc8e748713cb4bb05b8d853e469d12",
+      "reason": "cambio ajeno al bot: bloque daytrader (carril AAPL)",
+      "ts": "2026-11-11T15:19:09.131+00:00"
+    }
+  ],
+  "report_date": "2026-11-13",
+  "size": {
+    "max_error_shares": 0.0,
+    "ok": true
+  },
+  "slippage": {
+    "fills": 1,
+    "ok": true,
+    "p50_bps": 4.999999999998339,
+    "p95_bps": 4.999999999998339
+  },
+  "start_date": "2026-11-09",
+  "status": "ok",
+  "symbol": "QQQ"
+}

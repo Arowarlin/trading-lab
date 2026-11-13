@@ -18,11 +18,13 @@ class PaperBroker:
         starting_cash: float = 100_000.0,
         commission_bps: float = 1.0,
         slippage_bps: float = 5.0,
+        account: str = "paper_main",
     ) -> None:
         self.db_path = Path(db_path)
         self.starting_cash = float(starting_cash)
         self.commission_bps = float(commission_bps)
         self.slippage_bps = float(slippage_bps)
+        self.account_id = str(account or "paper_main")
 
     def _ensure_account(self, con) -> None:
         row = con.execute("SELECT cash FROM account WHERE id = 1").fetchone()
@@ -128,6 +130,11 @@ class PaperBroker:
             con.execute(
                 "INSERT INTO fills(order_id, ts, qty, price, commission) VALUES(?,?,?,?,?)",
                 (order_id, utcnow(), abs(qty), fill_px, fee),
+            )
+            con.execute(
+                "INSERT OR REPLACE INTO order_accounts(order_id, account_id, created_at) "
+                "VALUES(?,?,?)",
+                (order_id, self.account_id, utcnow()),
             )
             try:
                 from ..tca import record_fill as tca_record

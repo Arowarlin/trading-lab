@@ -21,6 +21,45 @@ def get_broker(settings: Settings, db_path=None):
     )
 
 
+def get_broker_for_account(settings: Settings, account, db_path=None):
+    """Broker que corresponde a la cuenta declarada por un bot.
+
+    Regla dura: solo paper/demo. La cuenta `alpaca_paper` se abre siempre con
+    `paper=True`; una cuenta marcada como live se rechaza antes de crear el
+    cliente. El broker interno sigue usando el efectivo y las posiciones de
+    `paper_main`.
+    """
+    if str(getattr(settings, "mode", "paper")) == "live":
+        raise ValueError("modo live bloqueado: el laboratorio solo opera paper/demo")
+    platform = str(
+        getattr(account, "platform", "") or getattr(account, "broker", "")
+    ).lower()
+    status = str(getattr(account, "status", "")).lower()
+    if status not in {"active", "paper", "demo", "simulated"}:
+        raise ValueError(f"cuenta {getattr(account, 'id', '?')} no paper/demo: {status}")
+    if platform in {"internal", "paper"}:
+        if db_path is None:
+            from ..config import DEFAULT_DB
+
+            db_path = DEFAULT_DB
+        return PaperBroker(
+            db_path,
+            settings.starting_cash,
+            settings.execution.commission_bps,
+            settings.execution.slippage_bps,
+        )
+    if platform == "alpaca":
+        return AlpacaBroker(
+            paper=True,
+            db_path=db_path,
+            account=str(getattr(account, "id", "alpaca_paper")),
+        )
+    raise ValueError(
+        f"cuenta {getattr(account, 'id', '?')} con plataforma {platform}: "
+        "sin broker de acciones paper"
+    )
+
+
 def get_projectx_broker(settings: Settings, db_path=None, dry_run: bool | None = None):
     """Broker de futuros vía ProjectX/TopstepX. Import perezoso (httpx)."""
     from ..config import DEFAULT_DB
@@ -77,6 +116,7 @@ __all__ = [
     "AlpacaBroker",
     "AlpacaError",
     "get_broker",
+    "get_broker_for_account",
     "get_mt5_broker",
     "get_projectx_broker",
     "get_tradestation_broker",

@@ -693,6 +693,7 @@ def init_db(path: str | Path) -> None:
         _migrate_decision_outcomes(con)
         _migrate_llm_calls(con)
         _migrate_orders(con)
+        _migrate_order_accounts(con)
         _migrate_audit_chain(con)
         _migrate_f13(con)
         _migrate_strategy_trials(con)
@@ -768,6 +769,28 @@ def _migrate_orders(con: sqlite3.Connection) -> None:
         con.execute("ALTER TABLE orders ADD COLUMN stop_price REAL")
     if columns and "magic" not in columns:
         con.execute("ALTER TABLE orders ADD COLUMN magic INTEGER")
+
+
+def _migrate_order_accounts(con: sqlite3.Connection) -> None:
+    """Separa las órdenes por cuenta sin tocar la tabla auditada `orders`.
+
+    `orders` tiene una cadena de hash que se calcula con todas sus columnas;
+    añadirle una columna rompería los hashes antiguos. Esta tabla auxiliar
+    guarda la cuenta de cada orden. Las órdenes previas se asignan a
+    `paper_main`, que era la única cuenta del orquestador diario.
+    """
+    con.execute(
+        "CREATE TABLE IF NOT EXISTS order_accounts ("
+        "order_id INTEGER PRIMARY KEY,"
+        "account_id TEXT NOT NULL,"
+        "created_at TEXT NOT NULL"
+        ")"
+    )
+    con.execute(
+        "INSERT OR IGNORE INTO order_accounts(order_id, account_id, created_at) "
+        "SELECT id, 'paper_main', ts FROM orders "
+        "WHERE id NOT IN (SELECT order_id FROM order_accounts)"
+    )
 
 
 def _migrate_audit_chain(con: sqlite3.Connection) -> None:

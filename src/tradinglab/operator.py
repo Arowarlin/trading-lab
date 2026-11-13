@@ -887,6 +887,7 @@ class OperatorService:
                 "price": price,
                 "sl": sl,
                 "risk_usd": risk_usd,
+                "bot": str(params.get("bot") or "console")[:80],
             }
             return {"summary": summary, "payload": payload}
         finally:
@@ -1048,6 +1049,7 @@ class OperatorService:
     def _execute_order(self, payload: dict) -> dict:
         account = self._account_for(payload["account"])
         broker = self._connect_broker(account)
+        bot = str(payload.get("bot") or "console")[:80]
         try:
             signed = payload["qty"] if payload["side"] == "buy" else -payload["qty"]
             if account.platform in {"internal", "paper", "alpaca"}:
@@ -1055,7 +1057,7 @@ class OperatorService:
                     payload["symbol"],
                     int(signed),
                     payload["price"],
-                    bot="console",
+                    bot=bot,
                     reason=f"operator:{payload['sl']:.6f}",
                     risk_usd=payload.get("risk_usd"),
                     stop_price=payload["sl"],
@@ -1065,7 +1067,7 @@ class OperatorService:
                     payload["symbol"],
                     float(signed),
                     sl=payload["sl"],
-                    bot="console",
+                    bot=bot,
                     reason="operator",
                     risk_usd=payload.get("risk_usd"),
                     stop_price=payload["sl"],

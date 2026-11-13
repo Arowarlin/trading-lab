@@ -104,13 +104,17 @@ def test_fund_limites_bolsillos_y_clusters(tmp_path: Path) -> None:
     assert pockets["swing_equity"]["capital"] == pytest.approx(200_000.0)
     assert sum(row["capital"] for row in payload["pockets"]) == pytest.approx(350_000.0)
 
-    clusters = {row["cluster"]: row for row in payload["clusters"]}
-    trend = clusters["trend_equity"]
-    assert trend["account"] == "paper_main"
-    # trend-spy + qqq-trend-f13: dos bots equity activos en el clúster.
-    assert trend["reserved_usd"] == pytest.approx(1000.0)
-    assert trend["budget_usd"] == pytest.approx(1000.0)
-    assert trend["over_budget"] is False
+    trend_rows = [
+        row for row in payload["clusters"] if row["cluster"] == "trend_equity"
+    ]
+    # El clúster se separa por cuenta: trend-spy en paper_main y F13 en
+    # alpaca_paper. Cada uno reserva su 0,5 % de 100.000.
+    by_account = {row["account"]: row for row in trend_rows}
+    assert set(by_account) == {"paper_main", "alpaca_paper"}
+    assert by_account["paper_main"]["reserved_usd"] == pytest.approx(500.0)
+    assert by_account["alpaca_paper"]["reserved_usd"] == pytest.approx(500.0)
+    assert all(row["budget_usd"] == pytest.approx(1000.0) for row in trend_rows)
+    assert all(row["over_budget"] is False for row in trend_rows)
     assert payload["exposure"]["note"]
 
 

@@ -57,15 +57,18 @@ def test_hash_usa_la_cuenta_real_del_bot(tmp_path):
     before = config_hash(root)
     path = root / "config" / "accounts.yaml"
     data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    # F13 está en alpaca_paper: cambiar esa cuenta sí mueve el hash.
     data["accounts"]["alpaca_paper"]["limits"]["daily_loss_pct"] = 0.99
     path.write_text(
         yaml.safe_dump(data, sort_keys=False, allow_unicode=True),
         encoding="utf-8",
     )
-    assert config_hash(root) == before
+    after_alpaca = config_hash(root)
+    assert after_alpaca != before
+    # paper_main es de trend-spy: no entra en el hash de F13.
     data["accounts"]["paper_main"]["limits"]["daily_loss_pct"] = 0.99
     path.write_text(
         yaml.safe_dump(data, sort_keys=False, allow_unicode=True),
         encoding="utf-8",
     )
-    assert config_hash(root) != before
+    assert config_hash(root) == after_alpaca

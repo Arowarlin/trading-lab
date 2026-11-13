@@ -25,13 +25,19 @@ from .db import connect, init_db, utcnow
 from .decisions import compare as decisions_compare
 from .decisions import record_decision, update_outcomes
 from .decisions import report as decisions_report
-from .execution import get_broker, get_mt5_broker, get_projectx_broker
+from .execution import (
+    get_broker,
+    get_broker_for_account,
+    get_mt5_broker,
+    get_projectx_broker,
+)
 from .f13 import activate as f13_activate
 from .f13 import config_check as f13_config_check
 from .f13 import daily_report as f13_daily_report
 from .f13 import execution_metrics as f13_execution
 from .f13 import freeze as f13_freeze
 from .f13 import load_criteria as f13_criteria
+from .f13 import migrate_account as f13_migrate_account
 from .f13 import signal_check as f13_signal_check
 from .f13 import status as f13_status
 from .indicators import atr as atr_indicator
@@ -57,6 +63,7 @@ from .prop import AccountState, PropGuard, PropRules, from_yaml, ftmo, monte_car
 from .prop.defense import FlattenClock, TrailingDrawdown
 from .reconciliation import last_reconciliation
 from .reconciliation import reconcile as reconcile_broker
+from .reconciliation import reconcile_account as reconcile_account_broker
 from .reporting import build_dashboard
 from .risk import check_order, size_position
 from .session import flatten_required, session_block
@@ -1512,15 +1519,16 @@ def orchestrate(
     settings = get_settings()
     init_db(DEFAULT_DB)
 
-    try:
-        broker = get_broker(settings, DEFAULT_DB)
-    except Exception as exc:
-        console.print(Panel(str(exc), title="Broker no disponible", style="bold red"))
-        raise typer.Exit(1)
+    def broker_for(account):
+        return get_broker_for_account(settings, account, DEFAULT_DB)
 
     try:
         actions = run_all(
-            settings, broker, only=only, dry_run=dry_run, include_disabled=include_disabled
+            settings,
+            broker_factory=broker_for,
+            only=only,
+            dry_run=dry_run,
+            include_disabled=include_disabled,
         )
     except Exception as exc:
         console.print(Panel(str(exc)[-2000:], title="Orquestador detenido", style="bold red"))
@@ -1530,7 +1538,7 @@ def orchestrate(
         console.print("[yellow]No hay bots habilitados. Revisa config/bots.yaml[/yellow]")
         return
 
-    t = Table(title=f"Orquestador · broker={settings.execution.broker} · dry_run={dry_run}")
+    t = Table(title=f"Orquestador · broker=por cuenta · dry_run={dry_run}")
     for col in ("Bot", "Ticker", "Target", "Precio", "Pos.", "Objetivo", "Delta", "Estado", "Detalle"):
         t.add_column(col, justify="right" if col not in ("Bot", "Ticker", "Estado", "Detalle") else "left")
     for a in actions:
@@ -2640,19 +2648,38 @@ def alerts_check_cmd() -> None:
 @app.command("reconcile")
 def reconcile_cmd(
     mt5: bool = typer.Option(False, "--mt5", help="Reconciliar contra la cuenta MT5 en vez del broker"),
+    account: str = typer.Option(
+        None,
+        "--account",
+        help="Cuenta del laboratorio (p. ej. paper_main o alpaca_paper)",
+    ),
 ) -> None:
     """Compara posiciones/equity del broker con SQLite y alerta diferencias."""
     settings = get_settings()
     init_db(DEFAULT_DB)
     broker = None
-    source = "mt5" if mt5 else settings.execution.broker
+    source = "mt5" if mt5 else (account or settings.execution.broker)
     try:
         if mt5:
             broker = get_mt5_broker(settings, DEFAULT_DB, dry_run=True)
             broker.connect()
+            result = reconcile_broker(broker, DEFAULT_DB, source=source)
+        elif account:
+            from .accounts import load_accounts
+
+            definition = load_accounts().get(str(account))
+            if definition is None:
+                raise ValueError(f"cuenta desconocida: {account}")
+            broker = get_broker_for_account(settings, definition, DEFAULT_DB)
+            if str(definition.platform).lower() == "alpaca":
+                result = reconcile_account_broker(
+                    broker, DEFAULT_DB, account_id=str(account)
+                )
+            else:
+                result = reconcile_broker(broker, DEFAULT_DB, source=source)
         else:
             broker = get_broker(settings, DEFAULT_DB)
-        result = reconcile_broker(broker, DEFAULT_DB, source=source)
+            result = reconcile_broker(broker, DEFAULT_DB, source=source)
     except Exception as exc:
         console.print(Panel(f"Reconciliación falló: {exc}", style="bold red"))
         raise typer.Exit(1)
@@ -2845,6 +2872,63 @@ def f13_refreeze_cmd(
         f"[dim]Motivo: {result['reason']} · archivos cambiados: "
         f"{', '.join(result['changed_files']) or 'ninguno'} · "
         f"baseline: {result['source']}[/dim]"
+    )
+
+
+@f13_app.command("migrate-account")
+def f13_migrate_account_cmd(
+    account: str = typer.Option(..., "--account", help="Cuenta paper destino"),
+    start: str = typer.Option(None, "--start", help="YYYY-MM-DD (por defecto hoy)"),
+    reason: str = typer.Option(..., "--reason", help="Motivo del reinicio"),
+    yes: bool = typer.Option(False, "--yes", help="No pedir confirmación"),
+    bot: str = typer.Option("qqq-trend-f13", "--bot"),
+) -> None:
+    """Migra F13 a otra cuenta paper y re-congela. No live."""
+    init_db(DEFAULT_DB)
+    row = f13_status(DEFAULT_DB)
+    if not row:
+        console.print("[yellow]F13 no iniciado. Ejecuta `lab f13 freeze` primero.[/yellow]")
+        raise typer.Exit(2)
+    if not str(reason or "").strip():
+        console.print("[red]Falta --reason: la migración exige un motivo.[/red]")
+        raise typer.Exit(2)
+    settings = get_settings()
+    if settings.mode == "live":
+        console.print("[red]F13 no migra a live.[/red]")
+        raise typer.Exit(2)
+    if not yes:
+        console.print(
+            "Se va a migrar F13 y re-congelar.\n"
+            f"  bot:      {bot}\n"
+            f"  cuenta:   {account}\n"
+            f"  inicio:   {start or _today()}\n"
+            f"  motivo:   {reason}"
+        )
+        console.print(
+            "[dim]Solo se acepta si bots.yaml/f13.yaml están exactamente en el "
+            "freeze; el cambio se limita a account y start_date.[/dim]"
+        )
+        if not typer.confirm("¿Migrar y re-congelar?"):
+            raise typer.Exit(1)
+    try:
+        result = f13_migrate_account(
+            DEFAULT_DB,
+            bot=bot,
+            new_account=account,
+            start_date=start or _today(),
+            reason=reason,
+            settings=settings,
+        )
+    except ValueError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2) from exc
+    console.print(
+        f"[green]F13 migrado[/green] · {result['old_account']} → "
+        f"{result['new_account']} · inicio={result['start_date']}"
+    )
+    console.print(
+        f"[dim]Hash {result['previous_hash'][:16]}… → "
+        f"{result['new_hash'][:16]}… · motivo: {result['reason']}[/dim]"
     )
 
 
