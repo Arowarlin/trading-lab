@@ -156,6 +156,10 @@ Notas de lectura:
 - **VIX**: `lab data vix` actualiza VIXCLS/VXVCLS desde FRED, ratio VIX/VIX3M y
   flag contango/backwardation. Se expone en `conditioners.today_flags` y en el
   snapshot IA, sin tocar tablas de multiplicadores.
+- **Campañas nuevas**: no se abre ninguna ahora. El holdout de `2026-11-B`
+  está consumido y `register` rechaza solapamientos; hay que esperar datos
+  posteriores al `2026-11-12` o activos fuera del universo consumido. En este
+  bloque no se ejecutó ninguna campaña ni barrido.
 - **F13**: re-congelado por cambios ajenos al bot en `config/lab.yaml`
   (`heartbeat`, `backup.offsite_dir`): hash `1ac90c80be916202…`, baseline
   `f13_config`; `f13 config-check` OK.
