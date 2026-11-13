@@ -2634,11 +2634,16 @@ def heartbeat_apply_schedule_cmd(
     ),
 ) -> None:
     """Aplica la tabla de cron por la Management API. Requiere API key."""
-    from .heartbeat import apply_schedules
+    from .heartbeat import CHECK_SCHEDULES, apply_schedules
 
     payload = apply_schedules(apply=apply)
     typer.echo(json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
     if not payload.get("ok"):
+        raise typer.Exit(2)
+    if apply and (
+        payload.get("matched") != len(CHECK_SCHEDULES)
+        or payload.get("applied") != len(CHECK_SCHEDULES)
+    ):
         raise typer.Exit(2)
 
 

@@ -43,7 +43,10 @@ keyring), así que esta tabla es la referencia y **no se cambiaron los checks po
 API**. Para aplicarla a mano: Healthchecks → check → *Schedule* → cron, zona
 `America/Santo_Domingo` y *Grace*. Si se guarda la API key con
 `lab heartbeat setup-api`, `lab heartbeat apply-schedule --apply` actualiza los
-12 checks por la Management API; sin `--apply` solo muestra el dry-run.
+12 checks por la Management API; sin `--apply` solo muestra el dry-run. El
+latido `pc` lo intenta solo una vez: cuando la API key aparece en keyring,
+aplica la tabla y deja la marca `data/heartbeat_schedule_applied`; sin key no
+hace nada ni bloquea el latido.
 
 Notas de los disparadores reales: `TradingLab-AI-Manage` conserva además un
 disparador dominical 17:00 y otro diario 18:00; la tabla aplica la regla L-V

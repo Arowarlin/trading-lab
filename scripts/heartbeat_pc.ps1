@@ -69,6 +69,19 @@ if (Test-Path $cleanup) {
     try { & $cleanup -Root $root -Days 14 2>$null | Out-Null } catch {}
 }
 
+# Piloto automático de la tabla Healthchecks: si algún día aparece la API key
+# en keyring, aplica los 12 cron una sola vez y deja la marca. Sin key sale 2
+# y no escribe nada; no bloquea el latido.
+$scheduleState = Join-Path $root "data\heartbeat_schedule_applied"
+if (-not (Test-Path $scheduleState)) {
+    try {
+        & $lab heartbeat apply-schedule --apply 2>$null | Out-Null
+        if ($LASTEXITCODE -eq 0) {
+            Set-Content -Path $scheduleState -Value (Get-Date -Format "yyyy-MM-dd HH:mm:ss") -Encoding utf8
+        }
+    } catch {}
+}
+
 if ($dbOk -and $mt5Ok) {
     Send-TaskHeartbeat -Root $root -Check "pc" -Status "ok" -Message "db=ok mt5=ok"
     exit 0
