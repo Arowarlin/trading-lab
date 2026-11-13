@@ -34,6 +34,7 @@ FLAGS = (
     "monday_overnight",
     "boundary_extreme",
     "regime_ok",
+    "vix_backwardation",
 )
 
 
@@ -227,10 +228,22 @@ def today_flags(symbol: str, *, db_path: str | Path | None = None) -> dict:
     if frame.empty:
         return {"symbol": symbol, "flags": {}, "warnings": ["sin datos"]}
     last = frame.iloc[-1]
+    flags = {name: bool(last.get(name, False)) for name in FLAGS}
+    try:
+        from .data.vix import latest_structure
+
+        vix = latest_structure()
+    except Exception:
+        vix = {"status": "sin datos", "latest": None}
+    latest_vix = vix.get("latest") or {}
+    flags["vix_backwardation"] = bool(
+        latest_vix.get("vix_backwardation", False)
+    )
     return {
         "symbol": symbol,
         "date": str(frame.index[-1].date()),
-        "flags": {name: bool(last.get(name, False)) for name in FLAGS},
+        "flags": flags,
+        "vix": latest_vix or "Sin datos",
         "warnings": warnings,
     }
 

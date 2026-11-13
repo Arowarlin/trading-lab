@@ -25,6 +25,7 @@ from tradinglab.campaign import (
     init_campaigns,
     load_campaign_frames,
     load_campaign_yaml,
+    mark_campaign_contaminated,
     plan_cells,
     prepare_campaign,
     register_campaign,
@@ -631,3 +632,62 @@ def test_write_report_usa_el_campaign_id(tmp_path):
     text = Path(result["md"]).read_text(encoding="utf-8")
     assert text.startswith("# Campaña 2026-11-B")
     assert "2026-11-A" not in text
+
+def _overlap_config(campaign: str, cutoff: str, start: str, end: str) -> dict:
+    return {
+        "id": campaign,
+        "universe": ["EURUSD"],
+        "timeframes": ["D1"],
+        "families": ["tsmom"],
+        "discovery_pct": 0.70,
+        "n_total": 4,
+        "cutoff_utc": cutoff,
+        "holdout_hash": "hash-" + campaign,
+        "holdout_series": [{
+            "symbol": "EURUSD", "timeframe": "D1",
+            "start": start, "end": end, "rows": 100,
+        }],
+    }
+
+
+def test_register_rechaza_holdout_solapado(tmp_path):
+    db = tmp_path / "lab.db"
+    root = tmp_path / "campaigns"
+    root.mkdir()
+    first = _overlap_config(
+        "OLD", "2024-01-01 00:00:00+00:00",
+        "2024-01-01 00:00:00+00:00", "2025-01-01 00:00:00+00:00",
+    )
+    (root / "OLD.yaml").write_text(
+        yaml.safe_dump(first, sort_keys=False), encoding="utf-8",
+    )
+    register_campaign(db, first, campaigns_dir=root)
+    finish_campaign(db, "OLD")
+    second = _overlap_config(
+        "NEW", "2024-06-01 00:00:00+00:00",
+        "2024-06-01 00:00:00+00:00", "2025-06-01 00:00:00+00:00",
+    )
+    with pytest.raises(CampaignError, match="holdout solapado"):
+        register_campaign(db, second, campaigns_dir=root)
+
+
+def test_campana_contaminada_no_se_ejecuta(tmp_path):
+    db = tmp_path / "lab.db"
+    config = _config(5, campaign="BAD")
+    register_campaign(db, config)
+    mark_campaign_contaminated(db, "BAD", "holdout reutilizado")
+    with pytest.raises(CampaignError, match="contaminada"):
+        run_discovery(db, config, {})
+
+
+def test_campaign_run_exige_aprobacion_del_operador():
+    from typer.testing import CliRunner
+
+    from tradinglab import cli as cli_mod
+
+    result = CliRunner().invoke(
+        cli_mod.app,
+        ["campaign", "run", "--campaign", "2026-11-B", "--confirm"],
+    )
+    assert result.exit_code == 2
+    assert "approved-by-operator" in result.output

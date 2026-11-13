@@ -30,6 +30,12 @@ activa: las confirmadas solo pueden entrar en el ciclo de vida como candidatas.
 - **Una pasada.** `register` rechaza un segundo registro; `run` rechaza una
   segunda ejecución. Un run cortado por un fallo **de código** se reanuda con
   `--resume` (mismo `run_id`, sin reinsertar filas), nunca reiniciando.
+- **Aprobación explícita.** Ningún agente ejecuta `lab campaign run` ni un
+  barrido que sume pruebas al DSR sin aprobación del operador en la misma
+  sesión. `run` exige `--confirm` y `--approved-by-operator`.
+- **Holdout no reutilizable.** `register` rechaza una campaña cuyo holdout se
+  solape con el descubrimiento o el holdout de una campaña ya ejecutada sobre
+  los mismos activos. Un holdout contaminado se marca como tal y no se reusa.
 - **Celdas con `counted = 0`.** Cada celda evaluada entra en `strategy_trials`
   con `counted = 0` para no contarse dos veces: su `N_total` ya está en
   `campaign_registry`.
@@ -47,7 +53,7 @@ lab campaign fetch           # H1/H4 máximos de todos, elegibilidad, corte ≥2
 lab campaign n-total         # N_total y celdas excluidas
 lab campaign plan            # escribe el yaml, sin registrar
 lab campaign register --confirm
-lab campaign run --confirm   # una vez; --resume solo tras un fallo de código
+lab campaign run --confirm --approved-by-operator "operador"  # una vez; --resume solo tras un fallo de código
 lab campaign status
 ```
 
@@ -141,6 +147,13 @@ tiene elegibles") y su propio `N_total`, y se corre una sola vez.
   `reports/research/campaign/2026-11-B.md`. El generador de informes ya usa
   el `campaign_id` en el título y en los mapas de calor; el informe B se
   corrigió a mano antes del arreglo.
+- **Contaminada el 2026-11-12:** su holdout se solapa con el descubrimiento de
+  `2026-11-A` (mismo corte y misma regla (c) decidida después de ver el anexo)
+  y se ejecutó sin la aprobación explícita del operador. El holdout
+  `2024-08-08 → hoy` queda **consumido para esos activos** y no se reutiliza.
+  Las 232 pruebas siguen contando en `count_tests`. `lab campaign register`
+  rechaza cualquier campaña cuyo holdout se solape con el descubrimiento o el
+  holdout de una campaña ya ejecutada sobre los mismos activos.
 
 ## Lecciones de 2026-11-A
 

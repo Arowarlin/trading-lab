@@ -24,9 +24,25 @@ if (-not $Dest) { $Dest = Join-Path $env:TEMP "tradinglab-restore-test-$stamp" }
 
 $failures = New-Object System.Collections.Generic.List[string]
 $expanded = Join-Path $Dest "contenido"
+$python = Join-Path $Root ".venv\Scripts\python.exe"
 
 try {
     New-Item -ItemType Directory -Force -Path $Dest | Out-Null
+    if ($ZipPath.ToLower().EndsWith(".enc")) {
+        if (-not (Test-Path $python)) { throw "Falta python para leer keyring" }
+        $password = (& $python -c "import keyring; print(keyring.get_password('tradinglab','BACKUP_PASSWORD') or '')" 2>$null | Out-String).Trim()
+        if (-not $password) { throw "Falta BACKUP_PASSWORD en keyring para descifrar" }
+        $decrypted = Join-Path $Dest "backup_descifrado.zip"
+        $env:TRADINGLAB_BACKUP_PASSWORD = $password
+        try {
+            & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $Root "scripts\backup_crypto.ps1") -Mode decrypt -Path $ZipPath -Out $decrypted
+            if ($LASTEXITCODE -ne 0) { throw "backup_crypto.ps1 decrypt falló" }
+        } finally {
+            Remove-Item Env:\TRADINGLAB_BACKUP_PASSWORD -ErrorAction SilentlyContinue
+        }
+        $ZipPath = $decrypted
+        Write-Host "Descifrado OK: $decrypted"
+    }
     Expand-Archive -Path $ZipPath -DestinationPath $expanded -Force
 
     Write-Host "Backup: $ZipPath"

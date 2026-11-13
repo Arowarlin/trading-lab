@@ -95,8 +95,8 @@ def test_fund_limites_bolsillos_y_clusters(tmp_path: Path) -> None:
     ftmo = accounts["ftmo_demo"]
     assert ftmo["type"] == "fondeo"
     assert ftmo["firm_limits"]["daily_loss_pct"] == pytest.approx(0.05)
-    assert ftmo["effective_limits"]["daily_loss_pct"] == pytest.approx(0.05)
-    assert ftmo["usage"]["daily_limit_usd"] == pytest.approx(5000.0)
+    assert ftmo["effective_limits"]["daily_loss_pct"] == pytest.approx(0.04)
+    assert ftmo["usage"]["daily_limit_usd"] == pytest.approx(4000.0)
     assert ftmo["usage"]["available"] is False
 
     pockets = {row["pocket"]: row for row in payload["pockets"]}

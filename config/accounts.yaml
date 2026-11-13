@@ -40,6 +40,7 @@ accounts:
     phase: challenge
     status: demo
     account_size: 100000
+    account_daily_stop: 0.04
     pocket: intraday_fx
     limits:
       daily_loss_pct: 0.05

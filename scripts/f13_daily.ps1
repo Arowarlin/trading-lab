@@ -13,6 +13,8 @@ $env:PYTHONIOENCODING = "utf-8"
 $OutputEncoding = [Console]::OutputEncoding
 
 $root = "E:\trading-lab"
+. (Join-Path $PSScriptRoot "heartbeat_task.ps1")
+Send-TaskHeartbeat -Root $root -Check "f13" -Status "start"
 $lab = Join-Path $root ".venv\Scripts\lab.exe"
 $logDir = Join-Path $root "logs\f13"
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
@@ -49,6 +51,7 @@ if ($statusText -match "no iniciado") {
 }
 if ($PreflightOnly) {
     Write-Log "PreflightOnly: fin sin ejecutar el bot."
+    Send-TaskHeartbeat -Root $root -Check "f13" -Status "ok"
     exit 0
 }
 
@@ -67,9 +70,10 @@ if ($failed.Count -gt 0) {
         "-m", "F13 daily fallo codigos $($codes -join ',')",
         "--severity", "error"
     )
+    Send-TaskHeartbeat -Root $root -Check "f13" -Status "fail"
     exit 1
 }
 
 Write-Log "F13 daily OK"
-$null = Invoke-Lab @("alerts", "heartbeat")
+Send-TaskHeartbeat -Root $root -Check "f13" -Status "ok"
 exit 0

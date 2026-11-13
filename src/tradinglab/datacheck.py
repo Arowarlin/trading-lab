@@ -303,6 +303,23 @@ def check_frame(
     checks["ajuste"] = _check_adjustment(metadata)
     checks["bid_ask"] = _check_bid_ask(frame, getattr(instrument, "asset_class", None))
 
+    try:
+        from .data.crosscheck import latest_correlation
+
+        correlation = latest_correlation(symbol)
+    except Exception:
+        correlation = None
+    if correlation is not None:
+        checks["crosscheck"] = (
+            Check("ok", f"correlación 1h {correlation:.3f}")
+            if correlation >= 0.95
+            else Check(
+                "warn",
+                f"correlación 1h {correlation:.3f} < 0.95 "
+                "(revisar reports/data/crosscheck)",
+            )
+        )
+
     if timeframe.lower() in {"1d", "d", "daily"} and len(frame) < 260:
         checks["historico"] = Check(
             "falla",

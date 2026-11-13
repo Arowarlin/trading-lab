@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import pandas as pd
 import pytest
@@ -363,3 +364,27 @@ def test_safe_rates_closed_only_descarta_la_vela_en_formacion():
     )
     assert frame is not None
     assert frame.index[-1].minute == 1
+
+def test_scalp_no_usa_plan_de_dia_anterior(tmp_path):
+    db = tmp_path / "lab.db"
+    init_db(db)
+    with connect(db) as con:
+        con.execute(
+            "INSERT INTO ai_plans(plan_id, ts, session_date, symbol, setups, "
+            "bias, forbidden_hours, reason, playbook_version, active, created_at) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+            (
+                "old-plan", "2026-01-01T00:00:00+00:00", "2026-01-01",
+                "US100.cash", '[{"strategy":"orb_5m","timeframe":"M5"}]',
+                "long", "[]", "plan viejo", 1, 1, "2026-01-01T00:00:00+00:00",
+            ),
+        )
+    result = scalp(broker=_ScalpBroker(), db_path=db, now=_window_now())
+    assert result["status"] == "no_plan"
+
+def test_sesion_ny_crea_el_plan_del_dia():
+    script = Path(__file__).resolve().parents[1] / "scripts" / "ai_trader_session.ps1"
+    text = script.read_text(encoding="utf-8")
+    assert "ai-trader plans" in text
+    assert "ai-trader plan --json-file" in text
+    assert "US100.cash" in text and "XAUUSD" in text

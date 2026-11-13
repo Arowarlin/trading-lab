@@ -5667,6 +5667,7 @@ async function renderAiTrader() {
     const distill = data.distill || {};
     const funnel = distill.funnel || {};
     const distillBots = distill.bots || [];
+    const accountDaily = data.account_daily || {};
     const budget = data.budget || {};
     const styles = budget.styles || {};
     const g = budget.global || {};
@@ -5742,8 +5743,37 @@ async function renderAiTrader() {
       esc((p.forbidden_hours || []).join(", ") || "—"),
       `<span class="muted tiny">${esc(p.reason || "")}</span>`,
     ]);
-    const distillRows = distillBots.map((b) => {
-      const v = b.validation || {};
+    const accountRows = [
+      [
+        `<b>Total cuenta</b>`,
+        accountDaily.daily_stop == null ? "Sin datos" : `${num(accountDaily.daily_stop * 100, 2)}%`,
+        accountDaily.used_pct == null ? "Sin datos" : `${num(accountDaily.used_pct * 100, 1)}%`,
+        accountDaily.total_loss_used_usd == null ? "Sin datos" : `${num(accountDaily.total_loss_used_usd, 2)} USD`,
+        accountDaily.remaining_usd == null ? "Sin datos" : `${num(accountDaily.remaining_usd, 2)} USD`,
+        accountDaily.stop_hit ? `<span class="tag red">TOCADO</span>` : "ok",
+      ],
+    ];
+    for (const [name, value] of Object.entries(accountDaily.lanes || {})) {
+      accountRows.push([
+        `<b>IA ${esc(name)}</b>`,
+        "—",
+        "—",
+        `${num(value, 2)} USD`,
+        "—",
+        value < 0 ? `<span class="tag red">pierde</span>` : "ok",
+      ]);
+    }
+    if (accountDaily.forward_otros_loss_used_usd != null) {
+      accountRows.push([
+        `<b>Forward + otros</b>`,
+        "—",
+        "—",
+        `${num(accountDaily.forward_otros_loss_used_usd, 2)} USD`,
+        "—",
+        "—",
+      ]);
+    }
+    const distillRows = distillBots.map((b) => {      const v = b.validation || {};
       return [
         `<b>${esc(b.bot)}</b><div class="muted tiny">${esc(b.symbol || "")} ${esc(b.timeframe || "")}</div>`,
         esc(b.state || "Sin datos"),
@@ -5769,6 +5799,12 @@ async function renderAiTrader() {
         <div class="panel-head"><h2>Presupuesto diario</h2><span class="muted tiny" id="ai-trader-meta">${esc(data.generated_at || "")} · equity ${budget.equity == null ? "Sin datos" : num(budget.equity, 2)}</span></div>
         <div id="ai-trader-budget">
           ${grid([{ label: "Estilo" }, { label: "Stop", num: true }, { label: "PnL día", num: true }, { label: "Pérdida usada", num: true }, { label: "Riesgo abierto", num: true }, { label: "Límite", num: true }, { label: "Restante", num: true }, { label: "Estado" }], budgetRows, { empty: "Sin datos de presupuesto." })}
+        </div>
+      </div>
+      <div class="panel" style="margin-bottom:14px">
+        <div class="panel-head"><h2>Stop diario de la cuenta</h2><span class="muted tiny">realizada + flotante de todos los magics · ${accountDaily.source || "Sin datos"}</span></div>
+        <div id="ai-trader-account-daily">
+          ${grid([{ label: "Carril" }, { label: "Stop" }, { label: "Usado" }, { label: "Pérdida", num: true }, { label: "Restante", num: true }, { label: "Estado" }], accountRows, { empty: "Sin datos de cuenta." })}
         </div>
       </div>
       <div class="panel" style="margin-bottom:14px">

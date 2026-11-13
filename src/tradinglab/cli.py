@@ -84,6 +84,9 @@ audit_app = typer.Typer(
 alerts_app = typer.Typer(
     no_args_is_help=True, help="Alertas ntfy/Telegram, latido y chequeo de servicios."
 )
+heartbeat_app = typer.Typer(
+    no_args_is_help=True, help="Latidos Healthchecks.io: setup, ping y estado."
+)
 f13_app = typer.Typer(no_args_is_help=True, help="F13: pilot operativo de paper y criterios.")
 bots_app = typer.Typer(no_args_is_help=True, help="Bots: listar, evaluar, proponer, archivar.")
 decisions_app = typer.Typer(no_args_is_help=True, help="Decisiones LLM: resultados y líneas base.")
@@ -95,6 +98,9 @@ operator_app = typer.Typer(
 campaign_app = typer.Typer(
     no_args_is_help=True,
     help="Campaña de investigación registrada: universo, N_total y una sola pasada.",
+)
+data_app = typer.Typer(
+    no_args_is_help=True, help="Datos: control cruzado y fuentes públicas."
 )
 lessons_app = typer.Typer(no_args_is_help=True, help="Aprendizaje controlado: lecciones y holdout.")
 reports_app = typer.Typer(no_args_is_help=True, help="Reportes CSV/HTML con validación y vista previa.")
@@ -149,12 +155,14 @@ app.add_typer(killswitch_app, name="killswitch")
 app.add_typer(guardian_app, name="guardian")
 app.add_typer(audit_app, name="audit")
 app.add_typer(alerts_app, name="alerts")
+app.add_typer(heartbeat_app, name="heartbeat")
 app.add_typer(f13_app, name="f13")
 app.add_typer(bots_app, name="bots")
 app.add_typer(decisions_app, name="decisions")
 app.add_typer(fund_app, name="fund")
 app.add_typer(operator_app, name="operator")
 app.add_typer(campaign_app, name="campaign")
+app.add_typer(data_app, name="data")
 app.add_typer(risk_budget_app, name="risk-budget")
 app.add_typer(lifecycle_app, name="lifecycle")
 ai_trader_app = typer.Typer(
@@ -643,11 +651,16 @@ def doctor(network: bool = typer.Option(False, "--network", help="Probar descarg
 
     # IA discrecional: coherencia de stops por estilo frente al global.
     try:
+        from .accounts import load_accounts
         from .ai_trader import daily_stop_check
         from .ai_trader import load_config as load_ai_config
 
         ai_cfg = load_ai_config()
-        stops = daily_stop_check(ai_cfg)
+        account = load_accounts().get(ai_cfg["account"])
+        stops = daily_stop_check(
+            ai_cfg,
+            account.account_daily_stop if account is not None else None,
+        )
         table.add_row(
             "IA discrecional",
             WARN if stops["warn"] else OK,
@@ -655,6 +668,23 @@ def doctor(network: bool = typer.Option(False, "--network", help="Probar descarg
         )
     except Exception as exc:
         table.add_row("IA discrecional", WARN, str(exc)[:160])
+
+    # Latidos externos: sin URL se omite, pero el doctor avisa.
+    try:
+        from .heartbeat import status as heartbeat_status
+
+        hb = heartbeat_status()
+        table.add_row(
+            "Latidos",
+            WARN if hb["missing"] else OK,
+            (
+                f"{len(hb['configured'])}/{len(hb['checks'])} checks configurados; "
+                f"faltan: {', '.join(hb['missing'])}"
+                if hb["missing"] else "todos los checks configurados"
+            )[:220],
+        )
+    except Exception as exc:
+        table.add_row("Latidos", WARN, str(exc)[:160])
 
     # IA sesiones: una sesión cerrada sin ninguna fila en ai_decisions.
     try:
@@ -2502,6 +2532,50 @@ def alerts_heartbeat_cmd() -> None:
     console.print(f"Heartbeat ok={result.ok} skipped={result.skipped} error={result.error or '—'}")
     if not result.ok:
         raise typer.Exit(1)
+
+
+@heartbeat_app.command("setup")
+def heartbeat_setup_cmd(
+    check: str = typer.Argument(..., help="Nombre del check"),
+    url: str = typer.Option(
+        None, "--url", help="URL de Healthchecks.io; si falta, se pide oculta"
+    ),
+) -> None:
+    """Guarda la URL del check en keyring; nunca la imprime."""
+    from .heartbeat import HeartbeatError, setup
+
+    value = url or typer.prompt("URL del check", hide_input=True)
+    try:
+        result = setup(check, value)
+    except HeartbeatError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2) from exc
+    console.print(f"[green]Check configurado[/green] {result['check']}")
+
+
+@heartbeat_app.command("ping")
+def heartbeat_ping_cmd(
+    check: str = typer.Argument(..., help="Nombre del check"),
+    status: str = typer.Option("ok", "--status", help="ok, start o fail"),
+) -> None:
+    """Envía un latido; si falta la URL se omite sin fallar la tarea."""
+    from .heartbeat import HeartbeatError, ping
+
+    try:
+        result = ping(check, status)
+    except HeartbeatError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2) from exc
+    typer.echo(json.dumps(result, ensure_ascii=False, separators=(",", ":")))
+
+
+@heartbeat_app.command("status")
+def heartbeat_status_cmd() -> None:
+    """Muestra qué checks tienen URL configurada (sin revelarlas)."""
+    from .heartbeat import status
+
+    payload = status()
+    typer.echo(json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
 
 
 @alerts_app.command("check")
@@ -6836,6 +6910,65 @@ def regimes_cmd(
     )
 
 
+@data_app.command("vix")
+def data_vix_cmd() -> None:
+    """Actualiza la estructura VIX/VIX3M desde FRED (o caché)."""
+    from .data.vix import fetch_vix_structure
+
+    result = fetch_vix_structure()
+    typer.echo(json.dumps(result, ensure_ascii=False, separators=(",", ":")))
+
+
+@data_app.command("cot")
+def data_cot_cmd(
+    limit: int = typer.Option(8, "--limit", min=1),
+) -> None:
+    """Descarga el COT público de la CFTC y lo guarda en caché."""
+    from .data.cot import fetch_cot, save_cot
+
+    frame = fetch_cot(limit=limit)
+    path = save_cot(frame)
+    typer.echo(json.dumps(
+        {"rows": len(frame), "path": str(path)},
+        ensure_ascii=False, separators=(",", ":"),
+    ))
+
+
+@data_app.command("crosscheck")
+def data_crosscheck_cmd(
+    symbol: str = typer.Option(
+        None, "--symbol", help="XAUUSD, EURUSD, GBPUSD o USDJPY"
+    ),
+    threshold: float = typer.Option(3.0, "--threshold", min=1.0),
+) -> None:
+    """Compara H1 de MT5 con ticks Dukascopy agregados; escribe informe."""
+    from .data.crosscheck import crosscheck_symbol
+
+    symbols = (
+        [part.strip().upper() for part in symbol.split(",") if part.strip()]
+        if symbol else ["XAUUSD", "EURUSD", "GBPUSD", "USDJPY"]
+    )
+    allowed = {"XAUUSD", "EURUSD", "GBPUSD", "USDJPY"}
+    if any(item not in allowed for item in symbols):
+        console.print("[red]Símbolo no soportado para crosscheck[/red]")
+        raise typer.Exit(2)
+    table = Table(title="Crosscheck MT5 vs Dukascopy")
+    for column in ("Símbolo", "Estado", "Horas", "Corr 1h", "Corr 1d", "Divergencias", "Informe"):
+        table.add_column(column)
+    for item in symbols:
+        result = crosscheck_symbol(item, threshold=threshold)
+        table.add_row(
+            item,
+            str(result.get("status")),
+            str(result.get("n_hours", "Sin datos")),
+            str(result.get("corr_1h", "Sin datos")),
+            str(result.get("corr_1d", "Sin datos")),
+            str(result.get("n_divergences", "Sin datos")),
+            str(result.get("reason") or f"reports/data/crosscheck/{item}.md"),
+        )
+    console.print(table)
+
+
 @app.command("datacheck")
 def datacheck_cmd(
     symbol: str = typer.Argument(..., help="Símbolo, p. ej. SPY o EURUSD=X"),
@@ -9085,6 +9218,7 @@ def campaign_status_cmd() -> None:
         "holdout_hash",
         "run_id",
         "started_at",
+        "estado",
     ):
         table.add_column(column, overflow="fold")
     for row in rows:
@@ -9096,6 +9230,10 @@ def campaign_status_cmd() -> None:
             (str(row["holdout_hash"])[:12] + "…") if row["holdout_hash"] else "Sin datos",
             str(row["run_id"] or "Sin datos"),
             str(row["started_at"] or "no ejecutada"),
+            (
+                "contaminada: " + str(row["contamination_reason"] or "")
+                if row["contaminated_at"] else "ok"
+            ),
         )
     console.print(table)
 
@@ -9104,6 +9242,10 @@ def campaign_status_cmd() -> None:
 def campaign_run_cmd(
     campaign: str = typer.Option("2026-11-A", "--campaign", help="Identificador"),
     confirm: bool = typer.Option(False, "--confirm", help="Consume la única pasada"),
+    approved_by_operator: str = typer.Option(
+        None, "--approved-by-operator",
+        help="Nombre/ID del operador que aprueba esta ejecución en esta sesión",
+    ),
     resume: bool = typer.Option(
         False,
         "--resume",
@@ -9131,10 +9273,10 @@ def campaign_run_cmd(
     )
     from .learning import count_tests
 
-    if not confirm:
+    if not confirm or not str(approved_by_operator or "").strip():
         console.print(
-            "[yellow]Sin --confirm no se corre. La campaña solo se puede "
-            "ejecutar una vez.[/yellow]"
+            "[yellow]Sin --confirm y --approved-by-operator no se corre. "
+            "La aprobación debe ser explícita en esta misma sesión.[/yellow]"
         )
         raise typer.Exit(2)
     from .campaign import CAMPAIGNS_DIR
@@ -9324,14 +9466,24 @@ def ai_trader_skip_cmd(
 
 @ai_trader_app.command("plan")
 def ai_trader_plan_cmd(
-    plan: str = typer.Option(..., "--json", help="JSON del plan de scalping"),
+    plan: str = typer.Option(None, "--json", help="JSON del plan de scalping"),
+    json_file: str = typer.Option(
+        None, "--json-file", help="Archivo JSON del plan de scalping"
+    ),
 ) -> None:
     """Valida y guarda el plan del día para un símbolo de scalping."""
     from .ai_trader import AiTraderError, create_plan
 
+    if bool(plan) == bool(json_file):
+        console.print("[red]Usa exactamente uno de --json o --json-file[/red]")
+        raise typer.Exit(2)
     try:
-        payload = json.loads(plan)
-    except json.JSONDecodeError as exc:
+        raw = (
+            Path(json_file).read_text(encoding="utf-8")
+            if json_file else str(plan)
+        )
+        payload = json.loads(raw)
+    except (OSError, json.JSONDecodeError) as exc:
         console.print(f"[red]JSON inválido:[/red] {exc}")
         raise typer.Exit(2) from exc
     try:
@@ -9339,6 +9491,15 @@ def ai_trader_plan_cmd(
     except AiTraderError as exc:
         _ai_trader_error(exc)
     typer.echo(json.dumps(result, ensure_ascii=False, separators=(",", ":")))
+
+
+@ai_trader_app.command("plans")
+def ai_trader_plans_cmd() -> None:
+    """Lista los planes de scalping activos del día."""
+    from .ai_trader import _active_plans, _reset_date
+
+    plans = _active_plans(DEFAULT_DB, _reset_date())
+    typer.echo(json.dumps(plans, ensure_ascii=False, separators=(",", ":")))
 
 
 @ai_trader_app.command("scalp")

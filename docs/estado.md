@@ -107,11 +107,58 @@ Notas de lectura:
   bias both, horas prohibidas 09:30-09:45 y 11:30-12:00 NY). `TradingLab-AI-Scalp`
   quedó `Ready` el 2026-11-12; próxima ejecución 2026-11-13 09:25 DOM. Sin plan
   no opera; el plan se recrea cada sesión.
+  - **Orden real en hora de República Dominicana (invierno):** apertura de NY
+    **10:30**, sesión `ny` **10:35**, y el primer scalp con plan **después de
+    esa hora** (la tarea corre cada minuto). En verano el orden es 09:30 /
+    09:35 / después. La sesión `ny` crea el plan del día para US100.cash y
+    XAUUSD con `lab ai-trader plan` si aún no existe; los planes de días
+    anteriores no valen.
 - **2026-11-B**: **ejecutada el 2026-11-12** con 232 pruebas DSR ya
   contadas. `run_id=0315bb0089ea`, 232 celdas, 23 candidatas tras la
   meseta y **0 confirmadas** en el holdout; no se registró ningún bot.
-  Informe: `reports/research/campaign/2026-11-B.md`. `2026-11-A` sigue
-  intacta.
+  Informe: `reports/research/campaign/2026-11-B.md`. **Contaminada**: su
+  holdout se solapa con el descubrimiento de `2026-11-A` y la regla (c) se
+  decidió tras ver el anexo; el tramo `2024-08-08 → hoy` queda consumido para
+  esos activos y no se reutiliza. Las pruebas siguen contando. `2026-11-A`
+  sigue intacta.
+
+## Operación, datos y respaldo
+
+- **Campañas**: `lab campaign run` exige `--confirm` y
+  `--approved-by-operator`; `register` rechaza holdouts que solapan con el
+  descubrimiento o el holdout de campañas ejecutadas sobre los mismos activos.
+  `2026-11-B` queda marcada como contaminada y no se reutiliza su tramo
+  `2024-08-08 → hoy`.
+- **Slippage y límites IA**: `slippage_price` por símbolo y coste/R con
+  `2 × slippage_price`; sin dato, `propose`/`scalp` rechazan. `max_open` 2 por
+  estilo, global 5; swing 2 trades/día y coste/R 0,05.
+- **Stop de cuenta**: `account_daily_stop: 0.04` en `config/accounts.yaml`.
+  Suma realizada + flotante de todos los magics; si se toca, ningún carril abre
+  hasta el reset. `PropGuard`, forward y `ai_trader` lo consultan; el panel
+  muestra lo consumido por carril y `guardian.json` exporta 0,04 con los seis
+  magics.
+- **Latidos**: `lab heartbeat` gestiona 12 checks de Healthchecks.io en keyring.
+  Las tareas F13, Agents, LLMCompare, IntradayForward, AI-London/NY/Daily/
+  Scalp/Manage, Drill y backup hacen `start` + `ok|fail`; sin URL se omiten y
+  `lab doctor` avisa. `TradingLab-Heartbeat` (cada 5 min, solo si MT5 y SQLite
+  abren) está preparada en `register_heartbeat_task.ps1`, sin registrar.
+- **Backup offsite**: `backup.ps1 -Offsite` cifra AES-256-CBC con contraseña
+  de keyring (`BACKUP_PASSWORD`), copia al `backup.offsite_dir` configurado,
+  comprueba el 50 % de espacio libre, verifica descifrado y retiene 14 diarias
+  + 8 semanales. `restore_test.ps1` descifra y prueba el zip.
+- **Lease**: `execution_lease` con host/hora y caducidad de 2 minutos. `ai_trader`
+  y `forward_intraday` se niegan a operar si el lease vigente es de otro host.
+- **Control cruzado**: `lab data crosscheck` compara H1 de MT5 con ticks
+  Dukascopy; informe en `reports/data/crosscheck/`. `datacheck` avisa si la
+  correlación de retornos 1h baja de 0,95.
+- **COT**: `lab data cot` guarda el informe público de la CFTC con fecha de
+  referencia y fecha de publicación; `latest_as_of` impide lookahead.
+- **VIX**: `lab data vix` actualiza VIXCLS/VXVCLS desde FRED, ratio VIX/VIX3M y
+  flag contango/backwardation. Se expone en `conditioners.today_flags` y en el
+  snapshot IA, sin tocar tablas de multiplicadores.
+- **F13**: re-congelado por cambios ajenos al bot en `config/lab.yaml`
+  (`heartbeat`, `backup.offsite_dir`): hash `1ac90c80be916202…`, baseline
+  `f13_config`; `f13 config-check` OK.
 
 ## No construir hasta
 

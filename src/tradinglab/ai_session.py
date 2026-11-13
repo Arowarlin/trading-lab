@@ -159,6 +159,22 @@ def preflight(
                 "reason": "la cuenta no es demo",
             }
         equity = float(health.get("equity") or 0)
+        from .account_daily import account_daily_report
+
+        try:
+            account_daily = account_daily_report(
+                db_path, "ftmo_demo", broker=broker, now=moment,
+            )
+        except Exception as exc:
+            return {
+                **base, "ok": False, "stage": "account_stop",
+                "reason": f"stop de cuenta sin datos: {exc}",
+            }
+        if not account_daily["allowed"]:
+            return {
+                **base, "ok": False, "stage": "account_stop",
+                "reason": f"stop diario de la cuenta: {account_daily['reason']}",
+            }
         from .ai_trader import _daily_state, load_config
 
         cfg = load_config()

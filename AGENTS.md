@@ -2,6 +2,10 @@
 
 - **Paper/demo solamente.** Nunca live, nunca dinero real, nunca activar bots ni F13
   sin aprobación humana explícita.
+- **Ningún agente ejecuta `lab campaign run`, `research`, `research-intraday`,
+  `research-swing` ni ningún barrido que sume pruebas al DSR sin aprobación
+  explícita del operador en esa misma sesión.** `lab campaign run` exige además
+  `--approved-by-operator`.
 - **No tocar `.env`.** Los secretos viven en Windows Credential Manager (keyring).
 - **No borrar archivos.** No `git push`, no reescribir historial y no registrar
   tareas programadas sin autorización.

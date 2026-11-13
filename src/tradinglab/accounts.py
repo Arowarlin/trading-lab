@@ -50,6 +50,7 @@ class AccountDefinition:
     firm: str | None
     phase: str | None
     defaults: AccountLimits
+    account_daily_stop: float | None = None
 
 
 def _limits_from_dict(data: dict[str, Any]) -> AccountLimits:
@@ -70,6 +71,7 @@ def load_accounts(path: str | Path | None = None) -> dict[str, AccountDefinition
     out = {}
     for account_id, item in (raw.get("accounts") or {}).items():
         data = item or {}
+        daily_stop_raw = data.get("account_daily_stop")
         out[str(account_id)] = AccountDefinition(
             id=str(account_id),
             name=str(data.get("name") or account_id),
@@ -82,6 +84,11 @@ def load_accounts(path: str | Path | None = None) -> dict[str, AccountDefinition
             firm=data.get("firm"),
             phase=data.get("phase"),
             defaults=_limits_from_dict(data.get("limits") or {}),
+            account_daily_stop=(
+                float(daily_stop_raw)
+                if daily_stop_raw not in (None, "")
+                else None
+            ),
         )
     return out
 
@@ -176,10 +183,13 @@ def effective_limits(
 ) -> AccountLimits:
     own = own_limits(db_path, account, now=now)
     firm = firm_limits(account)
+    daily_candidates = [own.daily_loss_pct]
+    if firm["daily_loss_pct"] is not None:
+        daily_candidates.append(float(firm["daily_loss_pct"]))
+    if account.account_daily_stop is not None:
+        daily_candidates.append(float(account.account_daily_stop))
     return AccountLimits(
-        daily_loss_pct=min(own.daily_loss_pct, firm["daily_loss_pct"])
-        if firm["daily_loss_pct"] is not None
-        else own.daily_loss_pct,
+        daily_loss_pct=min(daily_candidates),
         max_drawdown_pct=min(own.max_drawdown_pct, firm["max_drawdown_pct"])
         if firm["max_drawdown_pct"] is not None
         else own.max_drawdown_pct,

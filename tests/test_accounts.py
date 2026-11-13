@@ -35,7 +35,7 @@ def test_cuentas_y_limites_efectivos(tmp_path):
     assert ftmo.type == "fondeo"
     assert firm_limits(ftmo)["daily_loss_pct"] == pytest.approx(0.05)
     effective = effective_limits(tmp_path / "lab.db", ftmo)
-    assert effective.daily_loss_pct == pytest.approx(0.05)
+    assert effective.daily_loss_pct == pytest.approx(0.04)
     assert effective.max_drawdown_pct == pytest.approx(0.10)
     assert effective.per_trade_risk_pct == pytest.approx(0.005)
 

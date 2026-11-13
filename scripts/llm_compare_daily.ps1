@@ -9,6 +9,8 @@ param(
 
 $ErrorActionPreference = "Continue"
 $root = "E:\trading-lab"
+. (Join-Path $PSScriptRoot "heartbeat_task.ps1")
+Send-TaskHeartbeat -Root $root -Check "llmcompare" -Status "start"
 $lab = Join-Path $root ".venv\Scripts\lab.exe"
 $lms = "C:\Users\PC\.lmstudio\bin\lms.exe"
 $logDir = Join-Path $root "logs\llm"
@@ -25,6 +27,7 @@ function Fail([string]$Message) {
     if (Test-Path $lab) {
         & $lab alerts send llm_compare_failed -m $Message --severity warning *>> $log
     }
+    Send-TaskHeartbeat -Root $root -Check "llmcompare" -Status "fail"
     exit 1
 }
 
@@ -52,6 +55,7 @@ Write-Log "loaded: actual=$actualLoaded candidate=$candidateLoaded"
 if ($PreflightOnly) {
     Write-Log "PreflightOnly: lab, lms y modelos OK; sin cargar ni comparar."
     Write-Output "Preflight OK: $Actual vs $Candidate; cargados actual=$actualLoaded candidato=$candidateLoaded"
+    Send-TaskHeartbeat -Root $root -Check "llmcompare" -Status "ok"
     exit 0
 }
 
@@ -99,4 +103,5 @@ if ($failed) {
 
 & $lab llm report *>> $log
 Write-Log "llm compare daily OK"
+Send-TaskHeartbeat -Root $root -Check "llmcompare" -Status "ok"
 exit 0

@@ -147,9 +147,9 @@ def test_lote_rechaza_si_el_minimo_arriesga_mas():
 
 def test_filtro_coste_r():
     # US100: comisión 0, spread 2, slippage 1 bps, stop 100 -> 0,04
-    assert _cost_ratio("US100.CASH", 20_000.0, 2.0, 100.0) == pytest.approx(0.04)
+    assert _cost_ratio("US100.CASH", 20_000.0, 2.0, 100.0, slippage_price=1.0) == pytest.approx(0.04)
     # stop 10 -> 0,4 > 0,10
-    assert _cost_ratio("US100.CASH", 20_000.0, 2.0, 10.0) > 0.10
+    assert _cost_ratio("US100.CASH", 20_000.0, 2.0, 10.0, slippage_price=1.0) > 0.10
 
 
 def test_stop_diario_y_pausa_de_celda(tmp_path):

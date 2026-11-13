@@ -17,6 +17,8 @@ $env:PYTHONIOENCODING = "utf-8"
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 
 $root = "E:\trading-lab"
+. (Join-Path $PSScriptRoot "heartbeat_task.ps1")
+Send-TaskHeartbeat -Root $root -Check "drill" -Status "start"
 $lab = Join-Path $root ".venv\Scripts\lab.exe"
 $logDir = Join-Path $root "logs"
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
@@ -38,4 +40,5 @@ $output | ForEach-Object {
     Write-Output $_
 }
 Write-Log "FIN simulacro exit=$code"
+if ($code -eq 0) { Send-TaskHeartbeat -Root $root -Check "drill" -Status "ok" } else { Send-TaskHeartbeat -Root $root -Check "drill" -Status "fail" }
 exit $code

@@ -205,6 +205,10 @@ def build_config(
         rules = rules_for_account(account)
         limits_source = "accounts.yaml:limits"
 
+    if account.account_daily_stop is not None:
+        daily = min(daily, float(account.account_daily_stop))
+        limits_source += ":account_daily_stop"
+
     if not 0.0 < daily < 1.0:
         raise GuardianError(f"{account_id}: daily_loss_pct inválido ({daily!r})")
     if not 0.0 < max_dd < 1.0:
@@ -243,6 +247,7 @@ def build_config(
         "account": account_id,
         "account_size": float(account.account_size),
         "daily_loss_pct": float(daily),
+        "account_daily_stop": float(daily),
         "max_drawdown_pct": float(max_dd),
         "reset_tz": reset_tz,
         "reset_time": reset_time,

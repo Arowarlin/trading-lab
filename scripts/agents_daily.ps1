@@ -4,6 +4,8 @@ $ErrorActionPreference = "Continue"
 $env:PYTHONUTF8 = "1"
 
 $root = "E:\trading-lab"
+. (Join-Path $PSScriptRoot "heartbeat_task.ps1")
+Send-TaskHeartbeat -Root $root -Check "agents" -Status "start"
 Set-Location $root
 
 $logDir = Join-Path $root "logs\agents"
@@ -29,7 +31,8 @@ if ($LASTEXITCODE -ne 0) { $failed += "decisions-update" }
 
 if ($failed.Count -gt 0) {
     & ".\.venv\Scripts\lab.exe" alerts send agents_failed -m ("Fallaron: " + ($failed -join ", ")) --severity warning *>> $log
+    Send-TaskHeartbeat -Root $root -Check "agents" -Status "fail"
     exit 1
 }
-& ".\.venv\Scripts\lab.exe" alerts heartbeat *>> $log
+Send-TaskHeartbeat -Root $root -Check "agents" -Status "ok"
 exit 0

@@ -15,6 +15,13 @@ $root = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot "ai_trader_task_common.ps1")
 $python = Join-Path $root ".venv\Scripts\python.exe"
 $lab = Join-Path $root ".venv\Scripts\lab.exe"
+$check = "ai-$Session"
+function Send-Heartbeat([string]$Status) {
+    try {
+        & $lab heartbeat ping $check --status $Status 2>$null | Out-Null
+    } catch {}
+}
+Send-Heartbeat "start"
 $started = Get-Date
 $log = Get-AiLogPath -Root $root -Session $Session
 $lockPath = Join-Path $root "logs\ai_trader\ai_trader.lock"
@@ -30,19 +37,57 @@ if (-not $lock -or -not $lock.ok) {
     Write-AiStatus -Root $root -Session $Session -Status "skipped" -Stage "lock" -Reason $reason -Started $started -Log $log
     $summary = Format-AiSummary -Root $root -Session $Session -Status "skipped" -Reason $reason
     Send-AiSummary -Root $root -Subject "TradingLab AI $Session" -Body $summary
+    Send-Heartbeat "ok"
     exit 0
 }
 
 try {
     $pre = Invoke-AiPreflight -Root $root -Session $Session
     if (-not $pre.ok) {
-        $skippedStages = @("window", "killswitch", "global_stop", "market")
+        $skippedStages = @("window", "killswitch", "account_stop", "global_stop", "market")
         $status = if ($skippedStages -contains $pre.stage) { "skipped" } else { "failed" }
         Write-AiLog -Log $log -Message ("salida temprana [{0}]: {1}" -f $pre.stage, $pre.reason)
         Write-AiStatus -Root $root -Session $Session -Status $status -Stage $pre.stage -Reason $pre.reason -Started $started -Log $log
         $summary = Format-AiSummary -Root $root -Session $Session -Status $status -Reason $pre.reason
         Send-AiSummary -Root $root -Subject "TradingLab AI $Session" -Body $summary
-        if ($status -eq "failed") { exit 2 } else { exit 0 }
+        if ($status -eq "failed") { Send-Heartbeat "fail"; exit 2 } else { Send-Heartbeat "ok"; exit 0 }
+    }
+
+    if ($Session -eq "ny") {
+        $plansRaw = & $lab ai-trader plans 2>$null
+        $plans = @()
+        try { $plans = @($plansRaw | ConvertFrom-Json) } catch { $plans = @() }
+        $defaults = @(
+            @{
+                symbol = "US100.cash"
+                setups = @("ema_ribbon_pullback", "vwap_bounce", "orb_5m", "momentum_burst")
+                bias = "both"
+                forbidden_hours = @("09:30-09:45", "11:30-12:00")
+                reason = "plan NY automatico US100"
+            },
+            @{
+                symbol = "XAUUSD"
+                setups = @("ema_ribbon_pullback", "vwap_bounce", "orb_5m", "momentum_burst")
+                bias = "both"
+                forbidden_hours = @("09:30-09:45", "11:30-12:00")
+                reason = "plan NY automatico XAUUSD"
+            }
+        )
+        foreach ($item in $defaults) {
+            $already = @($plans | Where-Object { $_.symbol -eq $item.symbol })
+            if ($already.Count -gt 0) { continue }
+            $tmp = Join-Path $env:TEMP ("tradinglab-plan-{0}-{1}.json" -f $item.symbol, [guid]::NewGuid().ToString("N"))
+            try {
+                $json = $item | ConvertTo-Json -Compress -Depth 6
+                [System.IO.File]::WriteAllText($tmp, $json, [System.Text.UTF8Encoding]::new($false))
+                $planOut = & $lab ai-trader plan --json-file $tmp 2>&1
+                Write-AiLog -Log $log -Message (($planOut | Out-String).Trim())
+            } catch {
+                Write-AiLog -Log $log -Message ("plan automatico fallo: {0}" -f $_.Exception.Message)
+            } finally {
+                Remove-Item $tmp -Force -ErrorAction SilentlyContinue
+            }
+        }
     }
 
     $model = "opencode-go/deepseek-v4.1-flash"
@@ -93,7 +138,7 @@ try {
     Write-AiStatus -Root $root -Session $Session -Status $status -Stage $stage -Reason $reason -Started $started -Log $log
     $summary = Format-AiSummary -Root $root -Session $Session -Status $status -Reason $reason -OutputLines $result.lines
     Send-AiSummary -Root $root -Subject "TradingLab AI $Session" -Body $summary
-    if ($status -eq "ok") { exit 0 } else { exit 2 }
+    if ($status -eq "ok") { Send-Heartbeat "ok"; exit 0 } else { Send-Heartbeat "fail"; exit 2 }
 }
 finally {
     & $python -m tradinglab.ai_session lock-release --path $lockPath --pid $PID 2>$null | Out-Null

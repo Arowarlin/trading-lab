@@ -95,3 +95,8 @@ learning:
   holdout_start: "2025-01-01"
   holdout_end: "2026-11-07"
   auto_apply_reduce_risk: true
+
+# Backup cifrado fuera de casa. La contraseña vive en keyring como
+# BACKUP_PASSWORD; esta carpeta puede ser la local de Google Drive/OneDrive.
+backup:
+  offsite_dir: null

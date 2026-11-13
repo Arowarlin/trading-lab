@@ -29,3 +29,48 @@ def test_migrate_secrets_no_imprime_valores():
     assert "get_password" in script
     assert "print(f\"OK   {key}\")" in script
     assert "print(f\"OK   {key}: {value}\")" not in script
+
+def test_backup_offsite_cifra_y_restore_descifra():
+    backup = (ROOT / "scripts" / "backup.ps1").read_text(encoding="utf-8")
+    assert "-Offsite" in backup
+    assert "backup.offsite_dir" in backup
+    assert "backup_crypto.ps1" in backup
+    assert "0.5 * $drive.Free" in backup
+    assert "14" in backup and "8" in backup
+    restore = (ROOT / "scripts" / "restore_test.ps1").read_text(encoding="utf-8")
+    assert "backup_crypto.ps1" in restore
+    assert "decrypt" in restore
+    assert "BACKUP_PASSWORD" in restore
+
+
+def test_backup_crypto_ida_y_vuelta(tmp_path):
+    import os
+    import shutil
+    import subprocess
+
+    powershell = shutil.which("powershell") or shutil.which("pwsh")
+    if not powershell:
+        import pytest
+
+        pytest.skip("PowerShell no disponible")
+    source = tmp_path / "plain.txt"
+    source.write_bytes(b"TradingLab backup de prueba")
+    encrypted = tmp_path / "plain.enc"
+    decrypted = tmp_path / "plain.out"
+    env = dict(os.environ)
+    env["TRADINGLAB_BACKUP_PASSWORD"] = "clave-de-test"
+    for mode, origin, target in (
+        ("encrypt", source, encrypted),
+        ("decrypt", encrypted, decrypted),
+    ):
+        result = subprocess.run(
+            [
+                powershell, "-NoProfile", "-ExecutionPolicy", "Bypass",
+                "-File", str(ROOT / "scripts" / "backup_crypto.ps1"),
+                "-Mode", mode, "-Path", str(origin), "-Out", str(target),
+            ],
+            env=env, capture_output=True, text=True,
+        )
+        assert result.returncode == 0, result.stderr
+    assert decrypted.read_bytes() == source.read_bytes()
+    assert b"TradingLab" not in encrypted.read_bytes()

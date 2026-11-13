@@ -33,7 +33,7 @@ lab ai-trader snapshot --style intraday --symbols US100.cash,XAUUSD
 
 Mismo procedimiento: `propose`/`execute` o `skip` con motivo por cada setup valido.
 
-Antes de las 09:30 NY, crea el plan de scalping de cada simbolo. Sin plan, `lab ai-trader scalp` no opera:
+Al inicio de la sesion NY, crea el plan de scalping de cada simbolo. Sin plan, `lab ai-trader scalp` no opera. La sesion `ny` de la tarea crea automaticamente el plan del dia para US100.cash y XAUUSD con `lab ai-trader plan` si no existe; en invierno el orden real en Republica Dominicana es apertura NY 10:30, sesion ny 10:35 y primer scalp con plan despues de esa hora. Los planes de dias anteriores no valen.
 
 ```powershell
 lab ai-trader plan --json '{"symbol":"US100.cash","setups":["orb_5m","vwap_bounce","momentum_burst","ema_ribbon_pullback"],"bias":"both","forbidden_hours":["11:30-12:00"],"reason":"plan NY US100"}'
@@ -86,7 +86,11 @@ lab ai-trader scoreboard
 | Daily | swing | EURUSD, GBPUSD | `inside_bar` D1, `trend_pullback` H4 |
 | Daily | swing | USDJPY | `donchian_turtle` D1, `trend_pullback` H4 |
 
-Fuera de esta asignacion, `propose` rechaza. Los estilos tienen riesgo propio: scalping 0,25 % y stop 1 %; intraday 0,5 % y stop 1 %; swing 1 % y stop 1 %, con riesgo abierto maximo 2 %. El stop global del carril es 3 % y el maximo de posiciones abiertas es 5.
+Fuera de esta asignacion, `propose` rechaza. Los estilos tienen riesgo propio: scalping 0,25 % y stop 1 %; intraday 0,5 % y stop 1 %; swing 1 % y stop 1 %, con riesgo abierto maximo 2 %. El stop global del carril es 3 % y el maximo de posiciones abiertas es 5; cada estilo tiene ademas su propio `max_open` de 2. Swing limita a 2 trades/dia y coste/R 0,05.
+
+El **slippage** se mide en precio por simbolo (`slippage_price`): US100.cash 1,0; XAUUSD 0,15; EURUSD 0,00005; GBPUSD 0,00005; USDJPY 0,005. El coste/R usa `2 x slippage_price`; si falta el simbolo, `propose` y `scalp` rechazan con `Sin datos de slippage`.
+
+La cuenta tiene un **stop diario de 0,04** que suma la perdida realizada y la flotante de todos los magics del forward, `us100-trend-d1` y los tres estilos IA. Al tocarlo, ningun carril abre hasta el reset de FTMO; el panel muestra lo consumido por cada carril.
 
 ## Sombras y marcador
 

@@ -118,7 +118,7 @@ def _legacy_style(data: dict) -> dict:
         "daily_stop": float(data.get("daily_stop") or 0.0),
         "max_trades_per_day": int(data.get("max_trades_per_day") or 0),
         "max_cost_r": 0.10,
-        "slippage_points": 1.0,
+        "max_open": 2,
         "universe": [str(item) for item in (data.get("universe") or [])],
         "session": None,
         "max_open_risk": None,
@@ -144,6 +144,32 @@ def load_config(path: str | Path | None = None) -> dict:
     if not universe:
         raise AiTraderError("universo global vacío")
     canonical = {item.lower(): item for item in universe}
+
+    slippage_raw = (
+        global_raw.get("slippage_price")
+        or data.get("slippage_price")
+        or {}
+    )
+    if not isinstance(slippage_raw, dict):
+        raise AiTraderError("global.slippage_price debe ser un objeto")
+    slippage_price: dict[str, float] = {}
+    for raw_symbol, raw_value in slippage_raw.items():
+        raw_symbol = str(raw_symbol).strip()
+        if raw_symbol.lower() not in canonical:
+            raise AiTraderError(
+                f"slippage_price con símbolo fuera del universo: {raw_symbol}"
+            )
+        try:
+            value = float(raw_value)
+        except (TypeError, ValueError) as exc:
+            raise AiTraderError(
+                f"slippage_price inválido para {raw_symbol}: {raw_value!r}"
+            ) from exc
+        if value <= 0:
+            raise AiTraderError(
+                f"slippage_price debe ser > 0 para {raw_symbol}"
+            )
+        slippage_price[canonical[raw_symbol.lower()].upper()] = value
 
     raw_styles = data.get("styles")
     legacy = False
@@ -184,6 +210,9 @@ def load_config(path: str | Path | None = None) -> dict:
         max_open_risk = _float_or_none(raw.get("max_open_risk"))
         if max_open_risk is not None and not 0 < max_open_risk <= 0.10:
             raise AiTraderError(f"{name}: max_open_risk fuera de rango")
+        max_open = int(raw.get("max_open") or 2)
+        if not 1 <= max_open <= 100:
+            raise AiTraderError(f"{name}: max_open fuera de rango")
         style_universe = [str(item) for item in (raw.get("universe") or universe)]
         for symbol in style_universe:
             if symbol.lower() not in canonical:
@@ -211,7 +240,7 @@ def load_config(path: str | Path | None = None) -> dict:
             "daily_stop": daily,
             "max_trades_per_day": max_trades,
             "max_cost_r": max_cost,
-            "slippage_points": float(raw.get("slippage_points", 1.0)),
+            "max_open": max_open,
             "universe": style_universe,
             "session": _parse_session(raw.get("session")),
             "max_open_risk": max_open_risk,
@@ -339,6 +368,7 @@ def load_config(path: str | Path | None = None) -> dict:
             "max_open_per_symbol_per_style": per_symbol,
             "universe": universe,
             "playbook_version": playbook,
+            "slippage_price": slippage_price,
         },
         "styles": styles,
         "magics": sorted(magics),
@@ -348,6 +378,7 @@ def load_config(path: str | Path | None = None) -> dict:
         "max_open_total": max_open_total,
         "max_open_per_symbol": per_symbol,
         "playbook_version": playbook,
+        "slippage_price": slippage_price,
         "timeframes": sorted({tf for item in styles.values() for tf in item["timeframes"]}),
         "allowed": allowed_flat,
         "exclusions": exclusions,
@@ -375,17 +406,24 @@ def style_for_magic(config: dict, magic: int) -> str | None:
     return None
 
 
-def daily_stop_check(config: dict) -> dict:
+def daily_stop_check(config: dict, account_daily_stop: float | None = None) -> dict:
     total = sum(float(item["daily_stop"]) for item in config["styles"].values())
-    limit = float(config["global"]["daily_stop"])
+    global_limit = float(config["global"]["daily_stop"])
+    limit = float(account_daily_stop) if account_daily_stop is not None else global_limit
     warn = total > limit + 1e-12
     detail = (
-        f"suma de estilos {total:.2%} vs global {limit:.2%} "
+        f"suma de estilos {total:.2%} vs cuenta {limit:.2%} "
         f"({len(config['styles'])} estilos)"
     )
     if warn:
-        detail += " · un estilo puede consumir el stop global"
-    return {"sum": total, "global": limit, "warn": warn, "detail": detail}
+        detail += " · un estilo puede consumir el stop de la cuenta"
+    return {
+        "sum": total,
+        "global": global_limit,
+        "account_daily_stop": limit,
+        "warn": warn,
+        "detail": detail,
+    }
 
 
 # --------------------------------------------------------------- utilidades
@@ -656,24 +694,17 @@ def _cost_ratio(
     spread: float,
     stop_distance: float,
     *,
-    slippage_points: float = 0.0,
-    point: float | None = None,
-    slippage_bps: float | None = None,
+    slippage_price: float | None = None,
 ) -> float | None:
-    """Coste/R en precio: spread + comisión FTMO + slippage del estilo.
-
-    Con ``point`` se usa el slippage en puntos del símbolo (el carril nuevo).
-    Sin ``point`` se conserva el supuesto antiguo de 1 bp por lado.
-    """
+    """Coste/R en precio: spread + comisión FTMO + 2× slippage_price."""
     commission = _commission_bps(symbol, price)
-    if commission is None or stop_distance <= 0:
+    if commission is None or stop_distance <= 0 or slippage_price is None:
         return None
-    if point is not None:
-        slippage_price = max(0.0, float(slippage_points)) * float(point)
-    else:
-        basis = 1.0 if slippage_bps is None else float(slippage_bps)
-        slippage_price = price * basis / 10_000.0
-    cost_price = spread + price * commission / 10_000.0 + slippage_price
+    cost_price = (
+        spread
+        + price * commission / 10_000.0
+        + 2.0 * float(slippage_price)
+    )
     return cost_price / stop_distance
 
 
@@ -988,9 +1019,7 @@ def snapshot_symbol(broker, symbol: str, config: dict,
 
     spec = broker.symbol_spec(symbol)
     point = float(spec.get("point") or 0.0)
-    slip = 1.0
-    if style and style in config["styles"]:
-        slip = float(config["styles"][style]["slippage_points"])
+    slippage_price = config.get("slippage_price", {}).get(str(symbol).upper())
     costs = {}
     for tf in TIMEFRAMES:
         raw_atr = blocks[tf].get("atr")
@@ -1000,7 +1029,7 @@ def snapshot_symbol(broker, symbol: str, config: dict,
             atr_value = 0.0
         ratio = _cost_ratio(
             symbol, price, spread, atr_value,
-            slippage_points=slip, point=point,
+            slippage_price=slippage_price,
         ) if point and atr_value > 0 else None
         costs[tf] = round(ratio, 4) if ratio is not None else "Sin datos"
 
@@ -1023,6 +1052,7 @@ def snapshot_symbol(broker, symbol: str, config: dict,
             "daily_stop": item["daily_stop"],
             "max_trades_per_day": item["max_trades_per_day"],
             "max_cost_r": item["max_cost_r"],
+            "max_open": item["max_open"],
             "timeframes": item["timeframes"],
             "session_open": session_open(item),
             "lane_open": len(lane),
@@ -1036,6 +1066,12 @@ def snapshot_symbol(broker, symbol: str, config: dict,
 
     style_pnl = sum(float(item["pnl_today"]) for item in style_payload.values())
     global_limit = equity * config["global"]["daily_stop"]
+    try:
+        from .data.vix import latest_structure
+
+        vix = latest_structure().get("latest") or "Sin datos"
+    except Exception:
+        vix = "Sin datos"
     payload = {
         "symbol": symbol,
         "is_index": "US100" in key,
@@ -1045,6 +1081,7 @@ def snapshot_symbol(broker, symbol: str, config: dict,
         "now": now.isoformat(),
         "session": _session(now),
         "cost_r": costs,
+        "vix": vix,
         "styles": style_payload,
         "active_style": style,
         "lane_open": len(positions),
@@ -1082,6 +1119,7 @@ def snapshot(broker, symbols: list[str] | None = None,
                 "daily_stop": item["daily_stop"],
                 "max_trades_per_day": item["max_trades_per_day"],
                 "max_cost_r": item["max_cost_r"],
+                "max_open": item["max_open"],
                 "universe": item["universe"],
                 "timeframes": item["timeframes"],
                 "session": item["session"],
@@ -1608,6 +1646,20 @@ def _propose(item: dict, *, broker, cfg: dict, settings: Settings,
     health = _assert_demo(broker)
     if not style["enabled"]:
         raise AiTraderError(f"estilo {style_name} deshabilitado")
+    from .lease import acquire as acquire_lease
+
+    lease = acquire_lease(
+        db_path, session=f"ai:{style_name}", now=now,
+    )
+    if not lease["ok"]:
+        raise _Reject(
+            f"otro host tiene el lease: {lease['reason']}",
+            decision="skip", setup_valid=0,
+        )
+    if str(item["symbol"]).upper() not in cfg["slippage_price"]:
+        raise _Reject(
+            "Sin datos de slippage", decision="skip", setup_valid=0,
+        )
     is_open = session_open(style, now)
     if is_open is False:
         window = style["session"]
@@ -1637,6 +1689,12 @@ def _propose(item: dict, *, broker, cfg: dict, settings: Settings,
         )
     lane = [p for p in all_positions if int(p.get("magic") or 0) == int(style["magic"])]
     same = [p for p in lane if str(p.get("symbol", "")).upper() == item["symbol"].upper()]
+    if len(lane) >= int(style["max_open"]):
+        raise _Reject(
+            f"{style_name}: máximo de posiciones del estilo alcanzado "
+            f"({style['max_open']})",
+            decision="skip", setup_valid=1,
+        )
     if len(same) >= cfg["global"]["max_open_per_symbol_per_style"]:
         raise _Reject(
             f"{item['symbol']}: {style_name} ya tiene una posición abierta",
@@ -1646,6 +1704,22 @@ def _propose(item: dict, *, broker, cfg: dict, settings: Settings,
     if max_trades is not None and _trades_today(db_path, style["magic"], settings) >= max_trades:
         raise _Reject(
             f"{style_name}: máximo de operaciones diarias alcanzado ({max_trades})",
+            decision="skip", setup_valid=1,
+        )
+    try:
+        from .account_daily import account_daily_report
+
+        account_daily = account_daily_report(
+            db_path, cfg["account"], broker=broker, now=now,
+        )
+    except Exception as exc:
+        raise _Reject(
+            f"stop diario de cuenta sin datos: {exc}",
+            decision="skip", setup_valid=0,
+        ) from exc
+    if not account_daily["allowed"]:
+        raise _Reject(
+            f"stop diario de la cuenta: {account_daily['reason']}",
             decision="skip", setup_valid=1,
         )
     equity = float(health.get("equity") or 0.0)
@@ -1698,7 +1772,9 @@ def _propose(item: dict, *, broker, cfg: dict, settings: Settings,
         )
     cost_ratio = _cost_ratio(
         item["symbol"], price, float(snap["spread"]), dist,
-        slippage_points=style["slippage_points"], point=point,
+        slippage_price=cfg["slippage_price"].get(
+            str(item["symbol"]).upper()
+        ),
     )
     if cost_ratio is None:
         raise _Reject("coste/R Sin datos: comisión no verificada",
@@ -2304,6 +2380,33 @@ def scalp(*, broker=None, config: dict | None = None,
     if state is not None and state.active:
         return fail(
             "killswitch", f"kill-switch activo: {state.reason}", ok=1
+        )
+
+    missing_slippage = sorted({
+        plan["symbol"] for plan in plans
+        if plan["symbol"].upper() not in cfg["slippage_price"]
+    })
+    if missing_slippage:
+        return fail(
+            "no_slippage",
+            f"Sin datos de slippage: {', '.join(missing_slippage)}",
+            ok=1,
+        )
+    try:
+        from .account_daily import account_daily_report
+
+        account_daily = account_daily_report(
+            db_path, cfg["account"], broker=broker, now=moment,
+        )
+    except Exception as exc:
+        return fail(
+            "account_stop", f"stop diario de cuenta sin datos: {exc}", ok=1
+        )
+    if not account_daily["allowed"]:
+        return fail(
+            "account_stop",
+            f"stop diario de la cuenta: {account_daily['reason']}",
+            ok=1,
         )
 
     executed: list[dict] = []
@@ -3053,6 +3156,7 @@ def status(*, broker, config: dict | None = None, settings: Settings | None = No
             "risk_per_trade": item["risk_per_trade"],
             "risk_overrides": item.get("risk_overrides") or {},
             "max_cost_r": item["max_cost_r"],
+            "max_open": item["max_open"],
             "max_open_risk": item["max_open_risk"],
             "max_trades_per_day": item["max_trades_per_day"],
             "trades_today": _trades_today(db_path, magic, settings),
@@ -3072,12 +3176,34 @@ def status(*, broker, config: dict | None = None, settings: Settings | None = No
             ],
         }
     global_state = daily["global"]
+    try:
+        from .account_daily import account_daily_report
+
+        account_daily = account_daily_report(
+            db_path, cfg["account"], broker=broker,
+        )
+    except Exception as exc:
+        account_daily = {
+            "allowed": None, "reason": f"Sin datos: {exc}",
+            "daily_stop_pct": None, "daily_stop_usd": None,
+            "pnl_today": None, "loss_used_usd": None,
+            "remaining_usd": None, "floating_by_magic": {},
+        }
+    account_daily["ai_pnl_today"] = round(
+        sum(float(item["pnl_today"]) for item in styles.values()), 2
+    )
+    if account_daily.get("pnl_today") is not None:
+        account_daily["forward_otros_pnl_today"] = round(
+            float(account_daily["pnl_today"])
+            - float(account_daily["ai_pnl_today"]), 2
+        )
     return {
         "generated_at": utcnow(),
         "account": cfg["account"],
         "playbook_version": cfg["playbook_version"],
         "equity": round(equity, 2),
         "styles": styles,
+        "account_daily": account_daily,
         "global": {
             "daily_stop": cfg["global"]["daily_stop"],
             "daily_stop_usd": global_state["limit_usd"],
@@ -3128,7 +3254,8 @@ def _distill_panel(db_path: str | Path) -> dict:
 
 
 def panel(db_path: str | Path = DEFAULT_DB, *,
-          equity: float | None = None) -> dict:
+          equity: float | None = None,
+          account_risk: dict | None = None) -> dict:
     cfg = load_config()
     settings = get_settings()
     init_db(db_path)
@@ -3245,6 +3372,44 @@ def panel(db_path: str | Path = DEFAULT_DB, *,
     open_by_style: dict[str, list] = {}
     for row in opened:
         open_by_style.setdefault(row.get("style") or "Sin datos", []).append(row)
+    try:
+        from .accounts import load_accounts
+
+        account_cfg = load_accounts().get(cfg["account"])
+        account_stop = (
+            account_cfg.account_daily_stop if account_cfg is not None else None
+        )
+    except Exception:
+        account_stop = None
+    ai_pnl = sum(
+        float(item.get("pnl_today") or 0.0)
+        for item in styles_budget.values()
+    )
+    account_block = {
+        "daily_stop": account_stop,
+        "source": (account_risk or {}).get("source"),
+        "used_pct": (account_risk or {}).get("daily_used_pct"),
+        "limit_usd": (account_risk or {}).get("effective_daily_limit"),
+        "remaining_usd": (account_risk or {}).get("remaining_usd"),
+        "stop_hit": bool(
+            (account_risk or {}).get("severity") == "breach"
+            or (account_risk or {}).get("allowed") is False
+        ),
+        "ai_pnl_today": round(ai_pnl, 2),
+        "ai_loss_used_usd": round(max(0.0, -ai_pnl), 2),
+        "lanes": {
+            name: round(float(item.get("pnl_today") or 0.0), 2)
+            for name, item in styles_budget.items()
+        },
+    }
+    if account_risk and account_risk.get("daily_used_pct") is not None:
+        total_loss = float(account_risk.get("effective_daily_limit") or 0.0) * float(
+            account_risk.get("daily_used_pct") or 0.0
+        )
+        account_block["total_loss_used_usd"] = round(total_loss, 2)
+        account_block["forward_otros_loss_used_usd"] = round(
+            max(0.0, total_loss - max(0.0, -ai_pnl)), 2
+        )
     return {
         "generated_at": utcnow(),
         "equity": round(float(equity), 2) if equity else None,
@@ -3261,6 +3426,7 @@ def panel(db_path: str | Path = DEFAULT_DB, *,
             "styles": styles_budget,
             "global": global_budget,
         },
+        "account_daily": account_block,
         "cells": _summarize_cells(items, db_path),
         "plans": _active_plans(db_path, _reset_date(settings)),
         "decisions": decisions,

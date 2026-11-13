@@ -309,6 +309,11 @@ def _valid_for_assignment(symbol: str, strategy: str, timeframe: str,
                           cutoff: pd.Timestamp | None, rng: random.Random,
                           cap: int = 450) -> list[ReplayMoment]:
     frame = bars
+    slippage_price = load_config().get("slippage_price", {}).get(
+        str(symbol).upper()
+    )
+    if slippage_price is None:
+        return []
     duration = timedelta(days=1) if timeframe == "D1" else timedelta(
         minutes=TF_MINUTES.get(timeframe, 60)
     )
@@ -338,7 +343,7 @@ def _valid_for_assignment(symbol: str, strategy: str, timeframe: str,
                 level = setup_plan(strategy, side, snap, timeframe)
                 cost = _cost_ratio(
                     symbol, price, spread, level.stop_distance,
-                    slippage_points=1.0, point=_point(symbol),
+                    slippage_price=slippage_price,
                 )
             except Exception:
                 continue

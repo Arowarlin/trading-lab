@@ -1171,10 +1171,24 @@ def init_campaigns(db_path: str | Path) -> None:
                 run_id TEXT,
                 started_at TEXT,
                 finished_at TEXT,
-                note TEXT
+                note TEXT,
+                contaminated_at TEXT,
+                contamination_reason TEXT
             )
             """
         )
+        columns = {
+            str(row["name"])
+            for row in con.execute("PRAGMA table_info(campaign_registry)").fetchall()
+        }
+        for column, kind in (
+            ("contaminated_at", "TEXT"),
+            ("contamination_reason", "TEXT"),
+        ):
+            if column not in columns:
+                con.execute(
+                    f"ALTER TABLE campaign_registry ADD COLUMN {column} {kind}"
+                )
         con.commit()
 
 
@@ -1375,11 +1389,116 @@ def holdout_hash(rows: list[dict], cutoff: pd.Timestamp | str | None = None) -> 
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
+def _holdout_intervals(config: dict) -> dict[str, tuple[pd.Timestamp, pd.Timestamp]]:
+    out: dict[str, tuple[pd.Timestamp, pd.Timestamp]] = {}
+    for item in config.get("holdout_series") or []:
+        try:
+            symbol = str(item["symbol"]).upper()
+            start = _stamp(item["start"])
+            end = _stamp(item["end"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if symbol not in out:
+            out[symbol] = (start, end)
+        else:
+            old_start, old_end = out[symbol]
+            out[symbol] = (min(old_start, start), max(old_end, end))
+    return out
+
+
+def _overlap(a_start: pd.Timestamp, a_end: pd.Timestamp,
+              b_start: pd.Timestamp, b_end: pd.Timestamp) -> bool:
+    return a_start < b_end and b_start < a_end
+
+
+def campaign_overlap_reasons(
+    db_path: str | Path,
+    config: dict,
+    *,
+    campaigns_dir: str | Path | None = None,
+) -> list[str]:
+    """Holdouts que pisan descubrimiento u holdout de campañas ejecutadas."""
+    intervals = _holdout_intervals(config)
+    if not intervals:
+        return []
+    root = Path(campaigns_dir) if campaigns_dir else CAMPAIGNS_DIR
+    with connect(db_path) as con:
+        rows = [
+            dict(row)
+            for row in con.execute(
+                "SELECT * FROM campaign_registry WHERE campaign_id <> ?",
+                (str(config.get("id") or ""),),
+            ).fetchall()
+        ]
+    reasons: list[str] = []
+    for row in rows:
+        if not (row.get("run_id") or row.get("started_at") or row.get("finished_at")):
+            continue
+        path = root / f"{row['campaign_id']}.yaml"
+        if not path.exists():
+            continue
+        try:
+            old = load_campaign_yaml(path)
+        except Exception:
+            continue
+        old_intervals = _holdout_intervals(old)
+        if not old_intervals:
+            continue
+        old_cutoff = _stamp(old["cutoff_utc"]) if old.get("cutoff_utc") else None
+        for symbol in sorted(set(intervals) & set(old_intervals)):
+            new_start, new_end = intervals[symbol]
+            old_start, old_end = old_intervals[symbol]
+            if _overlap(new_start, new_end, old_start, old_end):
+                reasons.append(
+                    f"{symbol}: holdout {new_start.date()}→{new_end.date()} "
+                    f"solapa con el holdout de {row['campaign_id']} "
+                    f"{old_start.date()}→{old_end.date()}"
+                )
+                continue
+            if old_cutoff is not None and new_start < old_cutoff:
+                reasons.append(
+                    f"{symbol}: holdout empieza {new_start.date()} antes del "
+                    f"corte {old_cutoff.date()} de {row['campaign_id']} "
+                    "(solapa con su descubrimiento)"
+                )
+    return reasons
+
+
+def mark_campaign_contaminated(
+    db_path: str | Path,
+    campaign_id: str,
+    reason: str,
+) -> dict:
+    """Marca una campaña ya registrada como contaminada; no la borra."""
+    init_campaigns(db_path)
+    if not str(reason or "").strip():
+        raise CampaignError("la contaminación necesita motivo")
+    with connect(db_path) as con:
+        row = con.execute(
+            "SELECT * FROM campaign_registry WHERE campaign_id = ?",
+            (str(campaign_id),),
+        ).fetchone()
+        if row is None:
+            raise CampaignError(f"campaña no registrada: {campaign_id}")
+        con.execute(
+            "UPDATE campaign_registry SET contaminated_at = ?, "
+            "contamination_reason = ? WHERE campaign_id = ?",
+            (_now(), str(reason)[:2000], str(campaign_id)),
+        )
+        con.commit()
+        row = con.execute(
+            "SELECT * FROM campaign_registry WHERE campaign_id = ?",
+            (str(campaign_id),),
+        ).fetchone()
+    return dict(row)
+
+
 def register_campaign(
     db_path: str | Path,
     config: dict,
     *,
     note: str = "",
+    campaigns_dir: str | Path | None = None,
 ) -> dict:
     """Registra la campaña una sola vez y fija `N_total` en `count_tests`."""
     init_campaigns(db_path)
@@ -1389,6 +1508,11 @@ def register_campaign(
     n_total = int(config.get("n_total") or 0)
     if n_total <= 0:
         raise CampaignError("N_total debe ser > 0 y calcularse antes de registrar")
+    overlaps = campaign_overlap_reasons(
+        db_path, config, campaigns_dir=campaigns_dir,
+    )
+    if overlaps:
+        raise CampaignError("holdout solapado: " + "; ".join(overlaps[:4]))
     digest = campaign_hash(config)
     with connect(db_path) as con:
         existing = con.execute(
@@ -1430,6 +1554,10 @@ def finish_campaign(db_path: str | Path, campaign_id: str) -> dict:
         ).fetchone()
         if row is None:
             raise CampaignError(f"la campaña {campaign_id} no está registrada")
+        if row["contaminated_at"]:
+            raise CampaignError(
+                f"la campaña {campaign_id} está contaminada; no se cierra como válida"
+            )
         if row["finished_at"]:
             raise CampaignError(
                 f"la campaña {campaign_id} ya terminó el {row['finished_at']}"
@@ -2076,6 +2204,11 @@ def run_discovery(
     umbrales son los mismos, así que el resultado es idéntico.
     """
     record = load_campaign(db_path, str(config["id"]))
+    if record.get("contaminated_at"):
+        raise CampaignError(
+            f"la campaña {config['id']} está contaminada: "
+            f"{record.get('contamination_reason') or 'sin motivo'}"
+        )
     started = record.get("started_at")
     run_id = str(record.get("run_id") or hashlib.sha256(
         f"{config['id']}|{record['config_hash']}".encode("utf-8")
@@ -2655,6 +2788,7 @@ __all__ = [
     "build_universe",
     "campaign_config",
     "campaign_hash",
+    "campaign_overlap_reasons",
     "campaign_symbols",
     "candidates",
     "classify_symbol",
@@ -2672,6 +2806,7 @@ __all__ = [
     "load_campaign",
     "load_campaign_frames",
     "load_campaign_yaml",
+    "mark_campaign_contaminated",
     "observed_bars_per_day",
     "plan_cells",
     "prepare_campaign",

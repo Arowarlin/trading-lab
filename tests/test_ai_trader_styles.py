@@ -54,11 +54,14 @@ class _Broker:
 
 
 class _StopBroker:
+    def __init__(self, positions: list | None = None):
+        self._positions = list(positions or [])
+
     def health(self):
         return {"mode": "demo", "equity": 100_000.0}
 
     def positions(self):
-        return []
+        return self._positions
 
 
 def test_config_tres_estilos_y_global():
@@ -73,15 +76,19 @@ def test_config_tres_estilos_y_global():
     assert cfg["styles"]["scalping"]["daily_stop"] == pytest.approx(0.01)
     assert cfg["styles"]["scalping"]["max_trades_per_day"] == 15
     assert cfg["styles"]["scalping"]["max_cost_r"] == pytest.approx(0.15)
-    assert cfg["styles"]["scalping"]["slippage_points"] == pytest.approx(1.0)
+    assert cfg["slippage_price"]["US100.CASH"] == pytest.approx(1.0)
+    assert cfg["slippage_price"]["XAUUSD"] == pytest.approx(0.15)
     assert cfg["styles"]["scalping"]["universe"] == ["US100.cash", "XAUUSD"]
     assert cfg["styles"]["intraday"]["timeframes"] == ["M15", "H1"]
     assert cfg["styles"]["intraday"]["max_cost_r"] == pytest.approx(0.10)
     assert cfg["styles"]["intraday"]["universe"] == cfg["universe"]
     assert cfg["styles"]["swing"]["timeframes"] == ["H4", "D1"]
     assert cfg["styles"]["swing"]["max_open_risk"] == pytest.approx(0.02)
-    assert cfg["styles"]["swing"]["max_cost_r"] is None
-    assert cfg["styles"]["swing"]["max_trades_per_day"] is None
+    assert cfg["styles"]["swing"]["max_cost_r"] == pytest.approx(0.05)
+    assert cfg["styles"]["swing"]["max_trades_per_day"] == 2
+    assert cfg["styles"]["scalping"]["max_open"] == 2
+    assert cfg["styles"]["intraday"]["max_open"] == 2
+    assert cfg["styles"]["swing"]["max_open"] == 2
     # El mapa plano no puede perder las estrategias intradía al fusionar estilos.
     assert cfg["allowed"]["US100.CASH"]["orb_ny"] == "M15"
     assert cfg["allowed"]["US100.CASH"]["trend_pullback"] == "H4"
@@ -191,17 +198,18 @@ def test_lote_bajo_minimo_se_rechaza_y_maximo_se_respeta():
 
 
 def test_coste_r_spread_comision_y_slippage():
-    # compatibilidad con el supuesto antiguo de 1 bp por lado
-    assert _cost_ratio("US100.CASH", 20_000.0, 2.0, 100.0) == pytest.approx(0.04)
-    # 1 punto de US100 (0,01) por lado: (2 + 0,01) / 100
+    # US100: spread 2 + 2 x slippage_price 1.0, stop 100.
     assert _cost_ratio(
-        "US100.CASH", 20_000.0, 2.0, 100.0, slippage_points=1.0, point=0.01
-    ) == pytest.approx(0.0201)
-    # XAUUSD: comisión 0,0007% por lado + spread + 1 punto
+        "US100.CASH", 20_000.0, 2.0, 100.0, slippage_price=1.0
+    ) == pytest.approx(0.04)
+    # XAUUSD: comisión + spread + 2 x slippage_price 0.15.
     ratio = _cost_ratio(
-        "XAUUSD", 4000.0, 0.30, 2.0, slippage_points=1.0, point=0.01
+        "XAUUSD", 4000.0, 0.30, 2.0, slippage_price=0.15
     )
-    assert ratio == pytest.approx((0.30 + 4000 * 0.0007 / 100 + 0.01) / 2.0)
+    assert ratio == pytest.approx((0.30 + 4000 * 0.0007 / 100 + 0.30) / 2.0)
+    assert _cost_ratio(
+        "EURUSD", 1.10, 0.0001, 0.0010, slippage_price=None
+    ) is None
 
 
 def test_payload_valida_estilo_timeframe_y_estrategia():
@@ -320,6 +328,34 @@ def test_skip_acepta_simbolo_canonico_con_minusculas(tmp_path):
         ).fetchone()
     assert row["symbol"] == "US100.cash"
     assert row["decision"] == "skip"
+
+
+def test_propose_rechaza_max_open_del_estilo(tmp_path):
+    db = tmp_path / "lab.db"
+    init_db(db)
+    payload = {
+        "style": "intraday", "strategy": "liquidity_sweep", "symbol": "XAUUSD",
+        "timeframe": "H1", "side": "sell", "thesis": "prueba", "confidence": 3,
+    }
+    positions = [
+        {"ticket": 1, "symbol": "XAUUSD", "magic": 20261192},
+        {"ticket": 2, "symbol": "EURUSD", "magic": 20261192},
+    ]
+    with pytest.raises(AiTraderError, match="posiciones del estilo"):
+        propose(payload, broker=_StopBroker(positions), db_path=db)
+
+
+def test_propose_sin_slippage_del_simbolo_rechaza(tmp_path):
+    db = tmp_path / "lab.db"
+    init_db(db)
+    cfg = copy.deepcopy(load_config())
+    del cfg["slippage_price"]["XAUUSD"]
+    payload = {
+        "style": "intraday", "strategy": "liquidity_sweep", "symbol": "XAUUSD",
+        "timeframe": "H1", "side": "sell", "thesis": "prueba", "confidence": 3,
+    }
+    with pytest.raises(AiTraderError, match="Sin datos de slippage"):
+        propose(payload, broker=_StopBroker(), config=cfg, db_path=db)
 
 
 def test_propose_no_setup_registra_decision(tmp_path, monkeypatch):

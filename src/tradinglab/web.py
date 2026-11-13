@@ -1248,6 +1248,21 @@ class LabData:
 
     def _risk_uncached(self) -> dict:
         rules = self._rules()
+        try:
+            from dataclasses import replace as dataclass_replace
+
+            from .accounts import effective_limits, load_accounts
+
+            account = load_accounts().get("ftmo_demo")
+            if account is not None:
+                limits = effective_limits(self.db_path, account)
+                rules = dataclass_replace(
+                    rules,
+                    max_daily_loss_pct=limits.daily_loss_pct,
+                    max_loss_pct=limits.max_drawdown_pct,
+                )
+        except Exception:
+            pass
         payload: dict[str, Any] = {
             "generated_at": _now(),
             "rules": self._rules_payload(rules),
@@ -2612,7 +2627,18 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     equity = float(self.server.data.account().get("equity") or 0)
                 except Exception:
                     equity = None
-                self._json(panel(self.server.data.db_path, equity=equity))
+                account_risk = None
+                try:
+                    account_risk = (
+                        self.server.data.risk().get("prop") or {}
+                    )
+                except Exception:
+                    account_risk = None
+                self._json(panel(
+                    self.server.data.db_path,
+                    equity=equity,
+                    account_risk=account_risk,
+                ))
             elif path == "/api/risk":
                 self._json(self.server.data.risk())
             elif path == "/api/market":

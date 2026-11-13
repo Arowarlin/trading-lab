@@ -1020,6 +1020,14 @@ def _migrate_ai_trades(con: sqlite3.Connection) -> None:
             ON ai_distill_runs(ts);
         CREATE INDEX IF NOT EXISTS idx_ai_distill_runs_bot
             ON ai_distill_runs(bot, status);
+        CREATE TABLE IF NOT EXISTS execution_lease (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            host TEXT NOT NULL,
+            pid INTEGER,
+            session TEXT,
+            acquired_at TEXT NOT NULL,
+            expires_at TEXT NOT NULL
+        );
         """
     )
     columns = [row["name"] for row in con.execute("PRAGMA table_info(ai_trades)").fetchall()]

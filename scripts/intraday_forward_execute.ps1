@@ -15,6 +15,8 @@ $env:PYTHONIOENCODING = "utf-8"
 $OutputEncoding = [Console]::OutputEncoding
 
 $root = "E:\trading-lab"
+. (Join-Path $PSScriptRoot "heartbeat_task.ps1")
+Send-TaskHeartbeat -Root $root -Check "intradayforward" -Status "start"
 $lab = Join-Path $root ".venv\Scripts\lab.exe"
 $logDir = Join-Path $root "logs\intraday_forward"
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
@@ -64,12 +66,14 @@ if ($lastGuardian -ne $todayKey) {
 # en los primeros 5 minutos tras el cierre de la vela.
 $barPhase = $utc.Minute % 15
 if (-not $Force -and (-not $inWindow -or $barPhase -gt 4)) {
+    Send-TaskHeartbeat -Root $root -Check "intradayforward" -Status "ok"
     exit 0
 }
 
 $mutex = New-Object System.Threading.Mutex($false, "TradingLab-IntradayForward")
 if (-not $mutex.WaitOne(0)) {
     Write-Log "otra ejecución en curso; se omite"
+    Send-TaskHeartbeat -Root $root -Check "intradayforward" -Status "ok"
     exit 0
 }
 
@@ -132,8 +136,10 @@ try {
     Write-Log "FIN forward demo execute exit=$code"
     if ($code -ne 0) {
         $null = & $lab alerts send intraday_forward_failed -m ("Forward demo execute fallo exit={0} en {1} UTC" -f $code, $utc.ToString("yyyy-MM-dd HH:mm")) --severity error 2>&1
+        Send-TaskHeartbeat -Root $root -Check "intradayforward" -Status "fail"
         exit $code
     }
+    Send-TaskHeartbeat -Root $root -Check "intradayforward" -Status "ok"
     exit 0
 }
 finally {

@@ -90,7 +90,9 @@ def test_build_config_ftmo_demo():
     cfg = build_config("ftmo_demo")
     assert cfg["account"] == "ftmo_demo"
     assert cfg["account_size"] == pytest.approx(100_000)
-    assert cfg["daily_loss_pct"] == pytest.approx(0.045)
+    assert cfg["daily_loss_pct"] == pytest.approx(0.04)
+    assert cfg["account_daily_stop"] == pytest.approx(0.04)
+    assert set(cfg["magics"]) == {20261151, 20261152, 20261153, 20261191, 20261192, 20261193}
     assert cfg["max_drawdown_pct"] == pytest.approx(0.09)
     assert cfg["reset_tz"] == "Europe/Prague"
     expected = int(

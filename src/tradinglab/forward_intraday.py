@@ -980,6 +980,13 @@ def run_forward_bot(
     """Evalúa un candidato y, solo si ``dry_run=False``, envía o cierra."""
     moment = _as_utc(now)
     init_db(db_path)
+    from .lease import acquire as acquire_lease
+
+    lease = acquire_lease(
+        db_path, session=f"forward:{bot.id}", now=moment,
+    )
+    if not lease["ok"]:
+        raise ForwardError(f"{bot.id}: otro host tiene el lease: {lease['reason']}")
     health = _health_guard(broker)
     account = account or _account_for(bot)
     if account.id != bot.account:
