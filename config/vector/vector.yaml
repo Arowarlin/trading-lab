@@ -28,7 +28,6 @@ sources:
     ignore_older_secs: 604800
     encoding:
       charset: utf-16le
-      lossy: true
 
   mt5_experts:
     type: file
@@ -38,7 +37,6 @@ sources:
     ignore_older_secs: 604800
     encoding:
       charset: utf-16le
-      lossy: true
 
   guardian:
     type: file
@@ -53,7 +51,8 @@ sources:
     type: windows_event_log
     channels:
       - Microsoft-Windows-TaskScheduler/Operational
-    read_existing_events: false
+    read_existing_events: true
+    max_event_age_secs: 86400
 
 transforms:
   classify:
@@ -152,7 +151,7 @@ transforms:
       }
 
       if .source == "guardian" {
-        if starts_with(message, "TRIGGER") || starts_with(message, "BLOCK") || starts_with(message, "CLOSE ticket=") {
+        if contains(msg, "trigger ") || contains(msg, "block day=") || contains(msg, "close ticket=") {
           .severity = "critical"
           .pattern = "guardian_trigger"
         } else if contains(msg, "error") {
@@ -355,4 +354,3 @@ tests:
         log_fields:
           message: "2026-11-13 10:00:00 todo correcto"
           file: "E:/trading-lab/logs/f13/f13_20261113.log"
-    outputs: []
