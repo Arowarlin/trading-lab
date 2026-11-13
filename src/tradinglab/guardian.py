@@ -80,17 +80,27 @@ def terminal_data_path(lab_path: Path | None = None) -> Path | None:
     """Ruta de datos del terminal.
 
     Orden: `config/guardian.yaml` (terminal del EA) y después
-    `lab.yaml -> mt5.data_path`.
+    `ops.yaml -> mt5.data_path`.
     """
     if lab_path is None:
         configured = guardian_terminal_path()
         if configured is not None:
             return configured
-    path = Path(lab_path) if lab_path else CONFIG_DIR / "lab.yaml"
-    raw = _read_yaml(path)
+    if lab_path is None:
+        ops_path = CONFIG_DIR / "ops.yaml"
+        lab_file = CONFIG_DIR / "lab.yaml"
+        raw = {}
+        if ops_path.exists():
+            raw.update(_read_yaml(ops_path))
+        if lab_file.exists():
+            lab_raw = _read_yaml(lab_file)
+            raw = {**lab_raw, **raw}
+    else:
+        path = Path(lab_path)
+        raw = _read_yaml(path)
     mt5 = raw.get("mt5") or {}
     if not isinstance(mt5, dict):
-        raise GuardianError(f"{path}: 'mt5' no es un objeto")
+        raise GuardianError("mt5 no es un objeto en config/ops.yaml")
     value = mt5.get("data_path")
     if value is None or not str(value).strip():
         return None
@@ -111,7 +121,7 @@ def resolve_target(
         base = Path(fallback_dir) if fallback_dir else ROOT / "data"
         target = base / "guardian.json"
         warning = (
-            "falta mt5.data_path en config/lab.yaml; escribo en "
+            "falta mt5.data_path en config/ops.yaml; escribo en "
             f"{target}. Copia el JSON a MQL5/Files o configura esa clave."
         )
         return target, True, warning
@@ -342,7 +352,7 @@ def read_exported(
 
 
 def _terminal_data_path() -> Path | None:
-    """Ruta de datos del terminal: `config`, `lab.yaml` o la API de MT5."""
+    """Ruta de datos del terminal: `config`, `ops.yaml` o la API de MT5."""
     try:
         configured = terminal_data_path()
     except GuardianError:

@@ -47,15 +47,54 @@ def config_files(root: Path = ROOT) -> list[Path]:
         root / "config" / "bots.yaml",
         root / "config" / "prop.yaml",
         root / "config" / "f13.yaml",
+        root / "config" / "accounts.yaml",
     ]
 
 
+F13_LAB_KEYS = ("mode", "risk", "data", "execution")
+F13_ACCOUNT = "alpaca_paper"
+
+
+def _yaml_doc(path: Path) -> dict:
+    if not path.exists():
+        return {}
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except Exception:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def config_payload(root: Path = ROOT) -> dict:
+    """Solo lo que cambia la ejecución de qqq-trend-f13."""
+    lab = _yaml_doc(root / "config" / "lab.yaml")
+    f13 = _yaml_doc(root / "config" / "f13.yaml")
+    bots = _yaml_doc(root / "config" / "bots.yaml")
+    accounts = _yaml_doc(root / "config" / "accounts.yaml")
+    bot_id = str(f13.get("bot") or "qqq-trend-f13")
+    bot = next(
+        (
+            item for item in (bots.get("bots") or [])
+            if str(item.get("id")) == bot_id
+        ),
+        None,
+    )
+    account = (accounts.get("accounts") or {}).get(F13_ACCOUNT)
+    return {
+        "lab": {key: lab.get(key) for key in F13_LAB_KEYS if key in lab},
+        "bot": bot,
+        "f13": f13,
+        "prop": _yaml_doc(root / "config" / "prop.yaml"),
+        "account": account,
+    }
+
+
 def config_hash(root: Path = ROOT) -> str:
-    digest = hashlib.sha256()
-    for path in config_files(root):
-        digest.update(path.name.encode("utf-8"))
-        digest.update(path.read_bytes() if path.exists() else b"")
-    return digest.hexdigest()
+    raw = json.dumps(
+        config_payload(root), sort_keys=True, ensure_ascii=False,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
 def _normalised(blob: bytes) -> bytes:
@@ -180,7 +219,7 @@ def freeze(
     return status(db_path) or {}
 
 
-PROTECTED_FILES = ("bots.yaml", "prop.yaml", "f13.yaml")
+PROTECTED_FILES = ("bots.yaml", "prop.yaml", "f13.yaml", "accounts.yaml")
 
 
 def refreeze(
@@ -242,7 +281,8 @@ def refreeze(
     changed = [
         path.name
         for path in config_files(root)
-        if current.get(path.name) != baseline_digests.get(path.name)
+        if path.name in baseline_digests
+        and current.get(path.name) != baseline_digests.get(path.name)
     ]
     protected_changed = [name for name in PROTECTED_FILES if name in changed]
     if protected_changed:

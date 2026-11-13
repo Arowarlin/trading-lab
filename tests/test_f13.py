@@ -315,7 +315,13 @@ def test_refreeze_rechaza_si_cambio_bots_yaml(tmp_path) -> None:
         root=root,
     )
     path = root / "config" / "bots.yaml"
-    path.write_text(path.read_text(encoding="utf-8") + "# ajeno\n", encoding="utf-8")
+    path.write_text(
+        path.read_text(encoding="utf-8").replace(
+            "params: {fast: 50, slow: 200, regime: 200}",
+            "params: {fast: 20, slow: 200, regime: 200}",
+        ),
+        encoding="utf-8",
+    )
     with pytest.raises(ValueError, match="protegidos"):
         refreeze(db, reason="prueba", root=root)
     assert config_check(db, root)["ok"] is False
@@ -516,7 +522,13 @@ def test_activate_rechaza_hash_cambiado(tmp_path) -> None:
         root=root,
     )
     path = root / "config" / "bots.yaml"
-    path.write_text(path.read_text(encoding="utf-8") + "# cambio\n", encoding="utf-8")
+    path.write_text(
+        path.read_text(encoding="utf-8").replace(
+            "params: {fast: 50, slow: 200, regime: 200}",
+            "params: {fast: 20, slow: 200, regime: 200}",
+        ),
+        encoding="utf-8",
+    )
     with pytest.raises(ValueError, match="hash"):
         activate(
             db,

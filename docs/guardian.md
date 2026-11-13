@@ -25,7 +25,7 @@ Código propio. No se copió nada de los repositorios externos revisados.
    .\.venv\Scripts\lab.exe guardian export --account ftmo_demo
    ```
 
-2. Copia el JSON al terminal. Si `config/lab.yaml` tiene `mt5.data_path`
+2. Copia el JSON al terminal. Si `config/ops.yaml` tiene `mt5.data_path`
    (la carpeta de datos del terminal, la que contiene `MQL5/`), el comando
    escribe directamente en `MQL5/Files/tradinglab_guardian.json`. Si no,
    escribe en `data/guardian.json` y avisa: cópialo a mano a

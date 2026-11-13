@@ -117,6 +117,20 @@ def sec_user_agent_status() -> dict:
 
 
 
+def _deep_merge(base: dict, extra: dict) -> dict:
+    """Mezcla secciones sin perder claves del YAML base."""
+    out = dict(base)
+    for key, value in (extra or {}).items():
+        if (
+            isinstance(value, dict)
+            and isinstance(out.get(key), dict)
+        ):
+            out[key] = _deep_merge(out[key], value)
+        else:
+            out[key] = value
+    return out
+
+
 class LLMSettings(BaseModel):
     base_url: str = "http://127.0.0.1:1234/v1"
     model: str = "qwen3.8-27b"
@@ -250,6 +264,14 @@ class Settings(BaseModel):
         raw: dict = {}
         if path.exists():
             raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        ops_path = path.parent / "ops.yaml"
+        if ops_path.exists():
+            try:
+                ops = yaml.safe_load(ops_path.read_text(encoding="utf-8")) or {}
+            except Exception:
+                ops = {}
+            if isinstance(ops, dict):
+                raw = _deep_merge(raw, ops)
         settings = cls(**raw)
 
         # Variables de entorno con prioridad sobre el YAML

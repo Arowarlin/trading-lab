@@ -4,7 +4,7 @@ Cada fetch (yahoo, mt5, ticks) deja una fila en `data_freshness` con la
 fecha del último dato, la hora de la descarga y la fuente. `check()` compara
 esa edad con el umbral del timeframe y devuelve `ok`, `aviso` o `falla`.
 
-Los umbrales viven en `config/lab.yaml -> freshness` cuando esa clave existe.
+Los umbrales viven en `config/ops.yaml -> freshness` cuando esa clave existe.
 Si no existe se usan los valores por defecto de este módulo (documentados en
 `docs/`), para no tocar el archivo congelado de F13.
 
@@ -62,9 +62,11 @@ def _parse(stamp: Any) -> datetime | None:
 
 
 def thresholds(config_path: Path | None = None) -> dict[str, tuple[float, float]]:
-    """Umbrales por timeframe: `lab.yaml -> freshness` o los valores por defecto."""
+    """Umbrales por timeframe: `ops.yaml -> freshness` o los valores por defecto."""
     out = dict(DEFAULT_THRESHOLDS)
-    path = Path(config_path) if config_path else CONFIG_DIR / "lab.yaml"
+    path = Path(config_path) if config_path else CONFIG_DIR / "ops.yaml"
+    if not path.exists():
+        path = CONFIG_DIR / "lab.yaml"
     if not path.exists():
         return out
     try:

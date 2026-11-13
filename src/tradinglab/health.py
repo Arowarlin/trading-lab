@@ -1,7 +1,7 @@
 """Salud de cuenta 0-100 y retorno ajustado por flujos (TWR).
 
 Puntuación determinista y documentada. Los pesos viven en
-`config/lab.yaml -> fund_health.weights`. Si falta un componente, se ignora y
+`config/ops.yaml -> fund_health.weights`. Si falta un componente, se ignora y
 se informa `coverage`; nunca se inventa el dato que falta.
 """
 from __future__ import annotations

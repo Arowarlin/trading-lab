@@ -1,0 +1,88 @@
+# Configuración operativa del laboratorio (no afecta al hash de F13).
+#
+# Aquí viven las secciones que no cambian la ejecución de qqq-trend-f13:
+# zona horaria, LLM, daytrader, MT5, ProjectX, fondeo, operador, salud, aprendizaje
+# y backup. `config/lab.yaml` se queda solo con lo que F13 consume.
+
+timezone: America/New_York
+starting_cash: 100000.0
+currency: USD
+
+llm:
+  base_url: http://127.0.0.1:1234/v1   # LM Studio
+  # MoE (3B activos por token): ~16x mas rapido en CPU que el 27B denso.
+  # Medido en llm_calls: 82 s de media frente a 1340 s con qwen3.8-27b.
+  model: qwen/qwen3-30b-a3b
+  api_key: lm-studio
+  temperature: 0.2
+  # qwen3 razona antes de responder y esos tokens cuentan en max_tokens.
+  # 2048 se queda corto en las tareas JSON: el content vuelve vacío.
+  max_tokens: 4096
+  timeout_s: 600
+
+daytrader:
+  dir: "C:/Users/PC/Proyectos/trading/trader"
+  account: alpaca_paper
+  # Activado por decision del operador (2026-11-11): el carril de acciones
+  # (ORB) queda habilitado en paper. Sigue necesitando --execute, el
+  # veredicto PASS del pipeline externo y los guards del laboratorio, y solo
+  # acepta el ticker de config/equities_lane.yaml (AAPL).
+  enabled: true
+
+# MetaTrader 5 (forex). El terminal ya está instalado.
+mt5:
+  terminal_path: null         # ej. "C:\\Program Files\\Darwinex MetaTrader 5\\terminal64.exe"
+  login: null                 # número de cuenta (mejor en .env: MT5_LOGIN)
+  server: null                # ej. "Darwinex-Live" / "FTMO-Server"
+  magic: 20261105
+  deviation: 20               # desviación máxima en puntos
+  default_symbol: EURUSD
+  dry_run: true               # el orquestador no envía órdenes salvo --execute
+  require_demo: true          # guard de identidad: rechaza cuentas reales
+  server_utc_offset_hours: null   # null = autodetectar (Darwinex ahora va en GMT+2)
+
+# Futuros: ProjectX Gateway (TopstepX). Credenciales en .env.
+projectx:
+  base_url: https://api.topstepx.com
+  username: null              # o PROJECTX_USERNAME
+  account_id: null            # o PROJECTX_ACCOUNT_ID (si hay varias cuentas)
+  dry_run: true               # el laboratorio no envía órdenes salvo --execute
+  require_simulated: true     # el guard rechaza cuentas reales
+
+# Reglas de fondeo. Los valores viven en config/prop.yaml (verifícalos).
+prop:
+  enabled: false
+  firm: FTMO
+  phase: challenge            # challenge | verification | funded
+  account_size: 100000
+  buffer_pct: 0.10            # 10% del límite que el bot no usa
+  reset_tz: Europe/Prague
+
+# Modo operador de la consola. Solo paper/demo. El PIN vive en keyring.
+operator:
+  arm_minutes: 15             # caducidad del armado
+  confirm_seconds: 60         # caducidad del token de confirmación
+  max_pin_attempts: 5         # intentos antes de bloquear
+  lock_seconds: 300           # duración del bloqueo tras fallar
+
+# Salud de cuenta 0-100 y libro de capital.
+fund_health:
+  weights:
+    daily_cushion: 0.30
+    drawdown_cushion: 0.30
+    streak: 0.15
+    drift: 0.15
+    concentration: 0.10
+  max_streak: 5               # racha perdedora que lleva el componente a 0
+  max_concentration: 0.50     # top-3/neto que lleva concentración a 0
+
+# Aprendizaje controlado. El tramo sellado no puede usarse en barridos.
+learning:
+  holdout_start: "2025-01-01"
+  holdout_end: "2026-11-07"
+  auto_apply_reduce_risk: true
+
+# Backup cifrado fuera de casa. La contraseña vive en keyring como
+# BACKUP_PASSWORD; esta carpeta puede ser la local de Google Drive/OneDrive.
+backup:
+  offsite_dir: "C:/Users/PC/OneDrive/TradingLabBackups"

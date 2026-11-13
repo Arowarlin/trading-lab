@@ -26,8 +26,13 @@ def main(argv: list[str] | None = None) -> int:
             print(value)
         return 0
     data = yaml.safe_load(
-        (ROOT / "config" / "lab.yaml").read_text(encoding="utf-8")
+        (ROOT / "config" / "ops.yaml").read_text(encoding="utf-8")
     ) or {}
+    if not ((data.get("backup") or {}).get("offsite_dir")):
+        fallback = yaml.safe_load(
+            (ROOT / "config" / "lab.yaml").read_text(encoding="utf-8")
+        ) or {}
+        data = {**fallback, **data}
     value = ((data.get("backup") or {}).get("offsite_dir") or "")
     print(str(value))
     return 0
