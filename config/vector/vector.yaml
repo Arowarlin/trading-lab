@@ -1,0 +1,358 @@
+# Vector solo observa. No toca MT5, SQLite ni las órdenes.
+# Versión fijada: 0.49.0 (ver docs/vector.md).
+# Las rutas son las de esta máquina; si cambia el hash del terminal MT5,
+# actualiza MT5_TERMINAL_DATA.
+data_dir: E:/trading-lab/data/vector
+
+sources:
+  lab_logs:
+    type: file
+    include:
+      - E:/trading-lab/logs/ai_trader/**/*.log
+      - E:/trading-lab/logs/intraday_forward/**/*.log
+      - E:/trading-lab/logs/f13/**/*.log
+      - E:/trading-lab/logs/drill/**/*.log
+      - E:/trading-lab/logs/backup/**/*.log
+      - E:/trading-lab/logs/heartbeat/**/*.log
+    read_from: end
+    ignore_older_secs: 604800
+    encoding:
+      charset: utf-8
+
+  # MT5 escribe el diario del terminal y el de Experts en UTF-16 LE con BOM.
+  mt5_terminal:
+    type: file
+    include:
+      - C:/Users/PC/AppData/Roaming/MetaQuotes/Terminal/81A933A9AFC5DE3C23B15CAB19C63850/logs/*.log
+    read_from: end
+    ignore_older_secs: 604800
+    encoding:
+      charset: utf-16le
+      lossy: true
+
+  mt5_experts:
+    type: file
+    include:
+      - C:/Users/PC/AppData/Roaming/MetaQuotes/Terminal/81A933A9AFC5DE3C23B15CAB19C63850/MQL5/Logs/*.log
+    read_from: end
+    ignore_older_secs: 604800
+    encoding:
+      charset: utf-16le
+      lossy: true
+
+  guardian:
+    type: file
+    include:
+      - C:/Users/PC/AppData/Roaming/MetaQuotes/Terminal/81A933A9AFC5DE3C23B15CAB19C63850/MQL5/Files/tradinglab_guardian.log
+    read_from: end
+    ignore_older_secs: 604800
+    encoding:
+      charset: utf-8
+
+  task_scheduler:
+    type: windows_event_log
+    channels:
+      - Microsoft-Windows-TaskScheduler/Operational
+    read_existing_events: false
+
+transforms:
+  classify:
+    type: remap
+    inputs:
+      - lab_logs
+      - mt5_terminal
+      - mt5_experts
+      - guardian
+      - task_scheduler
+    source: |
+      message = to_string(.message) ?? ""
+      msg = downcase(message)
+      file = to_string(.file) ?? ""
+
+      .source = "lab"
+      if file != "" {
+        if contains(file, "tradinglab_guardian.log") {
+          .source = "guardian"
+        } else if contains(file, "MQL5") && contains(file, "Logs") {
+          .source = "mt5_experts"
+        } else if contains(file, "MetaQuotes") && contains(file, "logs") {
+          .source = "mt5_terminal"
+        } else if contains(file, "ai_trader") {
+          .source = "ai_trader"
+        } else if contains(file, "intraday_forward") {
+          .source = "intraday_forward"
+        } else if contains(file, "f13") {
+          .source = "f13"
+        } else if contains(file, "drill") {
+          .source = "drill"
+        } else if contains(file, "backup") {
+          .source = "backup"
+        } else if contains(file, "heartbeat") {
+          .source = "heartbeat"
+        }
+      }
+      if exists(.channel) {
+        .source = "task_scheduler"
+      }
+      .source_kind = if exists(.channel) { "windows_event_log" } else { "file" }
+
+      if .source == "task_scheduler" {
+        if !exists(.timestamp) {
+          .timestamp = now()
+        }
+      } else if .source == "guardian" {
+        .timestamp = parse_timestamp(message, format: "%Y.%m.%d %H:%M:%S", timezone: "Europe/Prague") ?? now()
+      } else if .source == "mt5_terminal" || .source == "mt5_experts" {
+        .timestamp = now()
+      } else {
+        if starts_with(message, "[") {
+          .timestamp = parse_timestamp(substring(message, 1, 20), format: "%Y-%m-%d %H:%M:%S", timezone: "America/Santo_Domingo") ?? now()
+        } else {
+          .timestamp = parse_timestamp(substring(message, 0, 19), format: "%Y-%m-%d %H:%M:%S", timezone: "America/Santo_Domingo") ?? now()
+        }
+      }
+
+      .task = ""
+      if .source == "task_scheduler" {
+        parsed_task = parse_regex(message, r'(?P<task>TradingLab-[A-Za-z0-9-]+)') ?? {}
+        if exists(parsed_task.task) {
+          .task = to_string(parsed_task.task) ?? ""
+        }
+      }
+
+      .symbol = ""
+      if contains(msg, "xauusd") {
+        .symbol = "XAUUSD"
+      } else if contains(msg, "us100") {
+        .symbol = "US100"
+      } else if contains(msg, "eurusd") {
+        .symbol = "EURUSD"
+      } else if contains(msg, "gbpusd") {
+        .symbol = "GBPUSD"
+      } else if contains(msg, "usdjpy") {
+        .symbol = "USDJPY"
+      } else if contains(msg, "qqq") {
+        .symbol = "QQQ"
+      } else if contains(msg, "aapl") {
+        .symbol = "AAPL"
+      } else if contains(msg, "spy") {
+        .symbol = "SPY"
+      }
+
+      .severity = "info"
+      .pattern = ""
+
+      if contains(msg, "traceback") {
+        .severity = "critical"
+        .pattern = "traceback"
+      }
+      if contains(msg, "autotrading disabled") {
+        .severity = "critical"
+        .pattern = "autotrading_disabled"
+      }
+
+      if .source == "guardian" {
+        if starts_with(message, "TRIGGER") || starts_with(message, "BLOCK") || starts_with(message, "CLOSE ticket=") {
+          .severity = "critical"
+          .pattern = "guardian_trigger"
+        } else if contains(msg, "error") {
+          .severity = "critical"
+          .pattern = "guardian_error"
+        } else if contains(msg, "warn") && .severity == "info" {
+          .severity = "warn"
+          .pattern = "guardian_warn"
+        }
+      }
+
+      if contains(msg, "retcode") {
+        if contains(msg, "10006") { .severity = "critical"; .pattern = "order_reject_10006" }
+        if contains(msg, "10013") { .severity = "critical"; .pattern = "order_reject_10013" }
+        if contains(msg, "10014") { .severity = "critical"; .pattern = "order_reject_10014" }
+        if contains(msg, "10016") { .severity = "critical"; .pattern = "order_reject_10016" }
+        if contains(msg, "10019") { .severity = "critical"; .pattern = "order_reject_10019" }
+        if contains(msg, "10027") { .severity = "critical"; .pattern = "order_reject_10027" }
+        if contains(msg, "10031") { .severity = "critical"; .pattern = "order_reject_10031" }
+      }
+
+      if .source == "task_scheduler" && contains(msg, "tradinglab-") {
+        if contains(msg, "return code") {
+          parsed_code = parse_regex(message, r'return code (?P<code>-?\d+)') ?? {}
+          if exists(parsed_code.code) {
+            code = to_int(parsed_code.code) ?? 0
+            if code != 0 {
+              .severity = "critical"
+              .pattern = "task_result_nonzero"
+            }
+          }
+        }
+        if contains(msg, "failed") || contains(msg, "error") {
+          .severity = "critical"
+          .pattern = "task_failed"
+        }
+      }
+
+      if .severity == "info" && contains(msg, "requote") {
+        .severity = "warn"
+        .pattern = "requote"
+      }
+      if .severity == "info" && (contains(msg, "reconnect") || contains(msg, "connection restored")) {
+        .severity = "warn"
+        .pattern = "reconnect"
+      }
+      if .severity == "info" && ((contains(msg, "connection to") && contains(msg, "lost")) || contains(msg, "no connection")) {
+        .severity = "warn"
+        .pattern = "mt5_connection"
+      }
+
+  alerts_only:
+    type: filter
+    inputs:
+      - classify
+    condition: '.severity == "warn" || .severity == "critical"'
+
+sinks:
+  all:
+    type: file
+    inputs:
+      - classify
+    path: E:/trading-lab/logs/vector/all-%Y-%m-%d.jsonl
+    encoding:
+      codec: json
+    framing:
+      method: newline_delimited
+
+  alerts:
+    type: file
+    inputs:
+      - alerts_only
+    path: E:/trading-lab/logs/vector/alerts.jsonl
+    encoding:
+      codec: json
+    framing:
+      method: newline_delimited
+
+tests:
+  - name: "critical traceback"
+    inputs:
+      - insert_at: classify
+        type: log
+        log_fields:
+          message: "2026-11-13 10:00:00 Traceback (most recent call last):"
+          file: "E:/trading-lab/logs/ai_trader/2026-11-13_ny.log"
+    outputs:
+      - extract_from: alerts_only
+        conditions:
+          - type: vrl
+            source: |
+              assert_eq!(.severity, "critical")
+              assert_eq!(.pattern, "traceback")
+              assert_eq!(.source, "ai_trader")
+              assert!(is_timestamp(.timestamp))
+
+  - name: "critical autotrading disabled"
+    inputs:
+      - insert_at: classify
+        type: log
+        log_fields:
+          message: "2026-11-13 10:00:00 '1515220028': AutoTrading disabled by client"
+          file: "C:/Users/PC/AppData/Roaming/MetaQuotes/Terminal/81A933A9AFC5DE3C23B15CAB19C63850/logs/20261113.log"
+    outputs:
+      - extract_from: alerts_only
+        conditions:
+          - type: vrl
+            source: |
+              assert_eq!(.severity, "critical")
+              assert_eq!(.pattern, "autotrading_disabled")
+              assert_eq!(.source, "mt5_terminal")
+
+  - name: "critical guardian trigger"
+    inputs:
+      - insert_at: classify
+        type: log
+        log_fields:
+          message: "2026.11.13 10:00:00 TRIGGER daily loss equity=98000.00"
+          file: "C:/Users/PC/AppData/Roaming/MetaQuotes/Terminal/81A933A9AFC5DE3C23B15CAB19C63850/MQL5/Files/tradinglab_guardian.log"
+    outputs:
+      - extract_from: alerts_only
+        conditions:
+          - type: vrl
+            source: |
+              assert_eq!(.severity, "critical")
+              assert_eq!(.pattern, "guardian_trigger")
+              assert_eq!(.source, "guardian")
+
+  - name: "critical order rejection"
+    inputs:
+      - insert_at: classify
+        type: log
+        log_fields:
+          message: "2026-11-13 10:00:00 order send failed retcode=10016"
+          file: "C:/Users/PC/AppData/Roaming/MetaQuotes/Terminal/81A933A9AFC5DE3C23B15CAB19C63850/logs/20261113.log"
+    outputs:
+      - extract_from: alerts_only
+        conditions:
+          - type: vrl
+            source: |
+              assert_eq!(.severity, "critical")
+              assert_eq!(.pattern, "order_reject_10016")
+              assert_eq!(.symbol, "")
+
+  - name: "critical task result nonzero"
+    inputs:
+      - insert_at: classify
+        type: log
+        log_fields:
+          message: "Task Scheduler successfully completed task \"\\TradingLab-F13\" with return code 1."
+          channel: "Microsoft-Windows-TaskScheduler/Operational"
+          source_type: "windows_event_log"
+    outputs:
+      - extract_from: alerts_only
+        conditions:
+          - type: vrl
+            source: |
+              assert_eq!(.severity, "critical")
+              assert_eq!(.pattern, "task_result_nonzero")
+              assert_eq!(.task, "TradingLab-F13")
+              assert_eq!(.source, "task_scheduler")
+
+  - name: "warn requote"
+    inputs:
+      - insert_at: classify
+        type: log
+        log_fields:
+          message: "2026-11-13 10:00:00 requote EURUSD"
+          file: "C:/Users/PC/AppData/Roaming/MetaQuotes/Terminal/81A933A9AFC5DE3C23B15CAB19C63850/logs/20261113.log"
+    outputs:
+      - extract_from: alerts_only
+        conditions:
+          - type: vrl
+            source: |
+              assert_eq!(.severity, "warn")
+              assert_eq!(.pattern, "requote")
+              assert_eq!(.symbol, "EURUSD")
+
+  - name: "warn reconnect"
+    inputs:
+      - insert_at: classify
+        type: log
+        log_fields:
+          message: "2026-11-13 10:00:00 reconnected to FTMO-Demo"
+          file: "C:/Users/PC/AppData/Roaming/MetaQuotes/Terminal/81A933A9AFC5DE3C23B15CAB19C63850/logs/20261113.log"
+    outputs:
+      - extract_from: alerts_only
+        conditions:
+          - type: vrl
+            source: |
+              assert_eq!(.severity, "warn")
+              assert_eq!(.pattern, "reconnect")
+
+  - name: "normal line does not alert"
+    no_outputs_from:
+      - alerts_only
+    inputs:
+      - insert_at: classify
+        type: log
+        log_fields:
+          message: "2026-11-13 10:00:00 todo correcto"
+          file: "E:/trading-lab/logs/f13/f13_20261113.log"
+    outputs: []

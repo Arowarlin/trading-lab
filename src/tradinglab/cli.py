@@ -693,6 +693,20 @@ def doctor(network: bool = typer.Option(False, "--network", help="Probar descarg
     except Exception as exc:
         table.add_row("Latidos", WARN, str(exc)[:160])
 
+    # Vector: observabilidad opcional; avisa si está instalado y no corre o
+    # si all-*.jsonl se quedó viejo con el mercado abierto.
+    try:
+        from .vector_health import doctor_status as vector_status
+
+        vector = vector_status()
+        table.add_row(
+            "Vector",
+            WARN if vector["warn"] else OK,
+            vector["detail"][:180],
+        )
+    except Exception as exc:
+        table.add_row("Vector", WARN, str(exc)[:160])
+
     # IA sesiones: una sesión cerrada sin ninguna fila en ai_decisions.
     try:
         from .ai_trader import session_activity
@@ -2670,6 +2684,18 @@ def alerts_check_cmd() -> None:
     console.print(t)
     if any(not ok for _, ok, _ in checks):
         raise typer.Exit(1)
+
+
+@alerts_app.command("relay")
+def alerts_relay_cmd(
+    path: str = typer.Option(None, "--path", help="Ruta de alerts.jsonl"),
+    window: int = typer.Option(30, "--window", help="Minutos de deduplicación"),
+) -> None:
+    """Releva las líneas nuevas de alerts.jsonl; si no existe, no hace nada."""
+    from .vector_relay import relay
+
+    payload = relay(DEFAULT_DB, path=path, window_minutes=window)
+    typer.echo(json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
 
 
 @app.command("reconcile")

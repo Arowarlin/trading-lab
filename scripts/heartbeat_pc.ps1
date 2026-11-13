@@ -61,6 +61,14 @@ if (-not $mt5Ok) {
     $reasons += "MT5: $mt5Reason"
 }
 
+# Relevo de Vector y retención de sus JSONL. Si no existe alerts.jsonl, el
+# relevo no hace nada; nunca bloquea el latido.
+try { & $lab alerts relay 2>$null | Out-Null } catch {}
+$cleanup = Join-Path $PSScriptRoot "vector_cleanup.ps1"
+if (Test-Path $cleanup) {
+    try { & $cleanup -Root $root -Days 14 2>$null | Out-Null } catch {}
+}
+
 if ($dbOk -and $mt5Ok) {
     Send-TaskHeartbeat -Root $root -Check "pc" -Status "ok" -Message "db=ok mt5=ok"
     exit 0

@@ -72,6 +72,12 @@ uv pip install --python .venv-vbt "git+https://github.com/Makeph/prop-ev"
   entorno del laboratorio.
 - `.venv-vbt` está en `.gitignore` (`.venv-*/`).
 
+## Herramientas externas de observabilidad (no dependencias)
+
+| Herramienta | Versión fijada | Licencia | Uso |
+|---|---|---|---|
+| **Vector** | **0.61.0** | **MPL-2.0** | Observabilidad local: lee logs del lab y de MT5, clasifica y escribe JSONL. Se instala aparte con `scripts/vector_install.ps1`; **no** está en `pyproject.toml` ni en `uv.lock` y el laboratorio no lo importa. Detalle en `docs/vector.md`. |
+
 ## TradingAgents (venv `.venv-ta`, herramienta externa)
 
 Fecha de verificación: 2026-11-11.
