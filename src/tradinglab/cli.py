@@ -2565,12 +2565,13 @@ def heartbeat_setup_cmd(
 def heartbeat_ping_cmd(
     check: str = typer.Argument(..., help="Nombre del check"),
     status: str = typer.Option("ok", "--status", help="ok, start o fail"),
+    message: str = typer.Option("", "--message", help="Motivo que se envía con el latido"),
 ) -> None:
     """Envía un latido; si falta la URL se omite sin fallar la tarea."""
     from .heartbeat import HeartbeatError, ping
 
     try:
-        result = ping(check, status)
+        result = ping(check, status, message=message)
     except HeartbeatError as exc:
         console.print(f"[red]{exc}[/red]")
         raise typer.Exit(2) from exc
@@ -2584,6 +2585,32 @@ def heartbeat_status_cmd() -> None:
 
     payload = status()
     typer.echo(json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
+
+
+@heartbeat_app.command("setup-api")
+def heartbeat_setup_api_cmd(
+    key: str = typer.Option(
+        None, "--key", help="API key de Healthchecks; si falta, se pide oculta"
+    ),
+) -> None:
+    """Guarda la API key de gestión en keyring; nunca la imprime."""
+    from .heartbeat import HeartbeatError, setup_api
+
+    value = key or typer.prompt("API key de Healthchecks", hide_input=True)
+    try:
+        setup_api(value)
+    except HeartbeatError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2) from exc
+    console.print("[green]API key guardada en keyring[/green]")
+
+
+@heartbeat_app.command("schedule")
+def heartbeat_schedule_cmd() -> None:
+    """Muestra la tabla objetivo de cron/zona/gracia (sin tocar la API)."""
+    from .heartbeat import schedule_summary
+
+    typer.echo(json.dumps(schedule_summary(), ensure_ascii=False, separators=(",", ":")))
 
 
 @alerts_app.command("check")

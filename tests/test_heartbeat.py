@@ -16,6 +16,27 @@ def test_ping_omitido_sin_url(monkeypatch):
     assert "no configurada" in result["reason"]
 
 
+def test_ping_fail_con_motivo_usa_post(monkeypatch):
+    seen = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append((request.method, str(request.url), request.content.decode("utf-8")))
+        return httpx.Response(200)
+
+    monkeypatch.setattr(
+        heartbeat, "url_for", lambda check: "https://hc.example/abc"
+    )
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    result = heartbeat.ping(
+        "pc", "fail", message="MT5: timeout 60s", client=client
+    )
+    client.close()
+    assert result["ok"] is True
+    assert seen == [
+        ("POST", "https://hc.example/abc/fail", "MT5: timeout 60s")
+    ]
+
+
 def test_ping_start_y_fail_usan_sufijo(monkeypatch):
     seen = []
 
@@ -58,6 +79,41 @@ def test_setup_no_imprime_url(monkeypatch):
 def test_check_desconocido():
     with pytest.raises(heartbeat.HeartbeatError):
         heartbeat.ping("no-existe")
+
+def test_cron_desde_disparadores():
+    assert heartbeat.mask_to_days(62) == [1, 2, 3, 4, 5]
+    assert heartbeat.cron_from_weekly(62, ["22:20"]) == ["20 22 * * 1-5"]
+    assert heartbeat.cron_from_weekly(62, ["09:35", "10:35"]) == [
+        "35 9,10 * * 1-5"
+    ]
+    assert heartbeat.cron_from_weekly(1, ["03:00"]) == ["0 3 * * 0"]
+    assert heartbeat.cron_from_daily(["13:00", "19:00"]) == ["0 13,19 * * *"]
+    assert heartbeat.cron_from_times(["09:25", "09:30", "10:00"]) == [
+        "0 10 * * *",
+        "25 9 * * *",
+        "30 9 * * *",
+    ]
+
+
+def test_tabla_de_12_checks_y_pc_por_periodo():
+    assert len(heartbeat.CHECK_SCHEDULES) == 12
+    assert heartbeat.CHECK_SCHEDULES["pc"]["mode"] == "period"
+    assert heartbeat.CHECK_SCHEDULES["pc"]["period_min"] == 10
+    assert heartbeat.CHECK_SCHEDULES["pc"]["grace_min"] == 10
+    assert heartbeat.CHECK_SCHEDULES["ai-manage"]["cron"] == "*/15 0-17 * * 1-5"
+    assert heartbeat.CHECK_SCHEDULES["ai-manage"]["grace_min"] == 30
+
+
+def test_heartbeat_pc_siempre_hace_ping_y_tiene_timeout():
+    text = (
+        Path(__file__).resolve().parents[1] / "scripts" / "heartbeat_pc.ps1"
+    ).read_text(encoding="utf-8")
+    assert 'Send-TaskHeartbeat -Root $root -Check "pc" -Status "start"' in text
+    assert 'Send-TaskHeartbeat -Root $root -Check "pc" -Status "fail"' in text
+    assert 'Send-TaskHeartbeat -Root $root -Check "pc" -Status "ok"' in text
+    assert "WaitForExit(60000)" in text
+    assert "-Message $message" in text
+
 
 def test_tareas_programadas_tienen_latido():
     root = Path(__file__).resolve().parents[1] / "scripts"
