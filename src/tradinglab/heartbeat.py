@@ -155,6 +155,142 @@ def api_key_configured() -> bool:
         return False
 
 
+def _api_key() -> str | None:
+    try:
+        return _keyring().get_password(KEYRING_SERVICE, API_KEY_NAME) or None
+    except Exception:
+        return None
+
+
+def _schedule_payload(spec: dict) -> dict:
+    if spec["mode"] == "period":
+        return {
+            "schedule": "",
+            "timeout": int(spec["period_min"]) * 60,
+            "grace": int(spec["grace_min"]) * 60,
+            "tz": spec["tz"],
+        }
+    return {
+        "schedule": spec["cron"],
+        "grace": int(spec["grace_min"]) * 60,
+        "tz": spec["tz"],
+    }
+
+
+def _find_check(checks: list[dict], name: str) -> dict | None:
+    wanted = name.lower()
+    aliases = {
+        wanted,
+        f"tradinglab-{wanted}",
+        f"tradinglab_{wanted}",
+        f"tradinglab {wanted}",
+    }
+    for check in checks:
+        labels = {
+            str(check.get("name") or "").lower(),
+            str(check.get("slug") or "").lower(),
+        }
+        if labels & aliases:
+            return check
+    for check in checks:
+        label = str(check.get("name") or check.get("slug") or "").lower()
+        if label.endswith(wanted):
+            return check
+    return None
+
+
+def apply_schedules(
+    *,
+    apply: bool = False,
+    client: httpx.Client | None = None,
+    api_key: str | None = None,
+) -> dict:
+    """Aplica `CHECK_SCHEDULES` a Healthchecks.io (dry-run por defecto).
+
+    Requiere la API key de gestión en keyring (`lab heartbeat setup-api`).
+    Sin clave no toca nada y devuelve el motivo.
+    """
+    key = api_key or _api_key()
+    if not key:
+        return {
+            "ok": False,
+            "error": "API key no configurada: usa `lab heartbeat setup-api`",
+            "dry_run": not apply,
+            "matched": 0,
+            "applied": 0,
+            "checks": [],
+        }
+    own = client is None
+    http = client or httpx.Client(timeout=15)
+    headers = {"X-Api-Key": key}
+    try:
+        response = http.get("https://healthchecks.io/api/v3/checks/", headers=headers)
+        response.raise_for_status()
+        checks = (response.json() or {}).get("checks") or []
+    except Exception as exc:
+        return {
+            "ok": False,
+            "error": f"no se pudo listar los checks: {type(exc).__name__}",
+            "dry_run": not apply,
+            "matched": 0,
+            "applied": 0,
+            "checks": [],
+        }
+    finally:
+        if own:
+            http.close()
+
+    own = client is None
+    http = client or httpx.Client(timeout=15)
+    results = []
+    matched = 0
+    applied = 0
+    try:
+        for name, spec in CHECK_SCHEDULES.items():
+            check = _find_check(checks, name)
+            payload = _schedule_payload(spec)
+            if check is None:
+                results.append(
+                    {"check": name, "matched": False, "payload": payload}
+                )
+                continue
+            matched += 1
+            item = {
+                "check": name,
+                "matched": True,
+                "uuid": check.get("uuid"),
+                "name": check.get("name"),
+                "slug": check.get("slug"),
+                "payload": payload,
+            }
+            if apply:
+                try:
+                    update = http.post(
+                        f"https://healthchecks.io/api/v3/checks/{check.get('uuid')}",
+                        headers=headers,
+                        json=payload,
+                    )
+                    update.raise_for_status()
+                    applied += 1
+                    item["applied"] = True
+                except Exception as exc:
+                    item["applied"] = False
+                    item["error"] = type(exc).__name__
+            results.append(item)
+    finally:
+        if own:
+            http.close()
+
+    return {
+        "ok": True,
+        "dry_run": not apply,
+        "api_key_configured": True,
+        "matched": matched,
+        "applied": applied,
+        "checks": results,
+    }
+
+
 def url_for(check: str) -> str | None:
     key = _url_key(check)
     try:
@@ -243,6 +379,7 @@ __all__ = [
     "CHECK_SCHEDULES",
     "HeartbeatError",
     "api_key_configured",
+    "apply_schedules",
     "cron_days",
     "cron_from_daily",
     "cron_from_times",

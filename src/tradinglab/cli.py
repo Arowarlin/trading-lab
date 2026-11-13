@@ -2627,6 +2627,21 @@ def heartbeat_schedule_cmd() -> None:
     typer.echo(json.dumps(schedule_summary(), ensure_ascii=False, separators=(",", ":")))
 
 
+@heartbeat_app.command("apply-schedule")
+def heartbeat_apply_schedule_cmd(
+    apply: bool = typer.Option(
+        False, "--apply", help="Escribir en Healthchecks; sin esto es dry-run"
+    ),
+) -> None:
+    """Aplica la tabla de cron por la Management API. Requiere API key."""
+    from .heartbeat import apply_schedules
+
+    payload = apply_schedules(apply=apply)
+    typer.echo(json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
+    if not payload.get("ok"):
+        raise typer.Exit(2)
+
+
 @alerts_app.command("check")
 def alerts_check_cmd() -> None:
     """Comprueba LM Studio, broker y MT5; alerta solo de los fallos."""

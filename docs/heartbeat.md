@@ -9,6 +9,8 @@ lab heartbeat setup backup
 lab heartbeat setup-api      # API key de gestión, oculta
 lab heartbeat status
 lab heartbeat schedule       # tabla objetivo, sin tocar la API
+lab heartbeat apply-schedule # dry-run: muestra qué cambiaría
+lab heartbeat apply-schedule --apply  # escribe en Healthchecks
 ```
 
 `lab heartbeat ping <check> --status start|ok|fail [--message "..."]` no falla
@@ -39,8 +41,9 @@ es el margen de Healthchecks; no es el período.
 La API de gestión **no está configurada** (`HEALTHCHECKS_API_KEY` ausente en
 keyring), así que esta tabla es la referencia y **no se cambiaron los checks por
 API**. Para aplicarla a mano: Healthchecks → check → *Schedule* → cron, zona
-`America/Santo_Domingo` y *Grace*. Si más adelante se guarda la API key con
-`lab heartbeat setup-api`, se puede automatizar la actualización.
+`America/Santo_Domingo` y *Grace*. Si se guarda la API key con
+`lab heartbeat setup-api`, `lab heartbeat apply-schedule --apply` actualiza los
+12 checks por la Management API; sin `--apply` solo muestra el dry-run.
 
 Notas de los disparadores reales: `TradingLab-AI-Manage` conserva además un
 disparador dominical 17:00 y otro diario 18:00; la tabla aplica la regla L-V
