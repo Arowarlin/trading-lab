@@ -207,3 +207,17 @@ def test_session_activity_avisa_sesion_sin_filas(tmp_path):
     )
     assert any("Nueva York sin filas" in warning for warning in late["warnings"])
     assert any("swing/daily sin filas" in warning for warning in late["warnings"])
+
+def test_sombra_con_una_sola_vela_no_es_sin_datos():
+    index = pd.DatetimeIndex(["2026-11-13T14:49:00Z"])
+    bars = pd.DataFrame(
+        {"open": [100.0], "high": [101.0], "low": [99.0], "close": [100.5]},
+        index=index,
+    )
+    row = {
+        "shadow_side": "buy", "shadow_entry": 100.0,
+        "shadow_sl": 98.0, "shadow_tp": 102.0, "setup": "orb_5m",
+    }
+    result = _shadow_sim(row, bars)
+    assert result["r"] is not None
+    assert result["status"] in {"open", "closed"}

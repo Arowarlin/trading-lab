@@ -168,6 +168,11 @@ def test_cierres_forzados_de_sesion():
     after = datetime(2026, 11, 12, 21, 0, tzinfo=timezone.utc)   # 16:00 NY
     assert _forced_close_reason("orb_ny", opened, after) is not None
     assert _forced_close_reason("orb_ny", opened, opened) is None
+    noon = datetime(2026, 11, 12, 17, 0, tzinfo=timezone.utc)  # 12:00 NY
+    assert _forced_close_reason("orb_5m", opened, noon) is not None
+    assert _forced_close_reason(
+        "orb_5m", opened, datetime(2026, 11, 12, 16, 59, tzinfo=timezone.utc)
+    ) is None
     london_after = datetime(2026, 11, 12, 16, 1, tzinfo=timezone.utc)
     assert _forced_close_reason("london_breakout", opened, london_after) is not None
     assert _forced_close_reason("donchian_turtle", opened, after) is None

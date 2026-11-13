@@ -2585,13 +2585,38 @@ def scalp(*, broker=None, config: dict | None = None,
 # -------------------------------------------------------- manage / cierres
 
 
+SHADOW_RATE_COUNTS = {
+    "M1": 20_000,
+    "M5": 6_000,
+    "M15": 2_000,
+    "H1": 1_000,
+    "H4": 3_000,
+}
+
+
+def _shadow_rates(broker, symbol: str, timeframe: str) -> pd.DataFrame:
+    """Barras suficientes para inferir el offset semanal también en M1."""
+    key = str(timeframe or "H1").upper()
+    return broker.rates(symbol, key, SHADOW_RATE_COUNTS.get(key, 800))
+
+
+def _shadow_window(
+    bars: pd.DataFrame, start, end, timeframe: str
+) -> pd.DataFrame:
+    """Incluye la vela que contiene la entrada y la que contiene la salida."""
+    minutes = max(1, int(TF_MINUTES.get(str(timeframe).upper(), 60)))
+    first = pd.Timestamp(start).floor(f"{minutes}min")
+    last = pd.Timestamp(end).ceil(f"{minutes}min")
+    return bars[(bars.index >= first) & (bars.index <= last)]
+
+
 def _shadow_sim(row: dict, bars: pd.DataFrame, prefix: str = "shadow",
                 strategy: str | None = None) -> dict:
     side = str(row.get(f"{prefix}_side") or "")
     entry = float(row.get(f"{prefix}_entry") or row.get("entry") or 0)
     sl = float(row.get(f"{prefix}_sl") or row.get("sl") or 0)
     tp = float(row.get(f"{prefix}_tp") or row.get("tp") or 0)
-    if not side or bars is None or len(bars) < 2:
+    if not side or bars is None or len(bars) < 1:
         return {"status": "Sin datos", "r": None}
     short = side == "sell"
     risk = abs(entry - sl)
@@ -2653,9 +2678,19 @@ def _shadow_sim(row: dict, bars: pd.DataFrame, prefix: str = "shadow",
     return {"status": "open", "r": round(r, 4)}
 
 
+SCALPING_SETUPS = {
+    "ema_ribbon_pullback",
+    "vwap_bounce",
+    "orb_5m",
+    "momentum_burst",
+}
+
+
 def _forced_close_reason(setup: str, opened: datetime, now: datetime) -> str | None:
-    """Cierre obligatorio de las estrategias intradía con hora de salida."""
-    if setup == "orb_ny":
+    """Cierre obligatorio de las estrategias con hora de salida."""
+    if setup in SCALPING_SETUPS:
+        zone, close_at = NEW_YORK, dtime(12, 0)
+    elif setup == "orb_ny":
         zone, close_at = NEW_YORK, dtime(16, 0)
     elif setup == "london_breakout":
         zone, close_at = LONDON, dtime(16, 0)
@@ -2849,10 +2884,14 @@ def sync_closed(broker, *, magic: int, db_path: str | Path = DEFAULT_DB,
         shadow_r = None
         shadow2_r = None
         try:
-            bars = broker.rates(row["symbol"], str(row.get("timeframe") or "H1"), 800)
+            bars = _shadow_rates(
+                broker, row["symbol"], str(row.get("timeframe") or "H1")
+            )
             start = pd.Timestamp(row["ts"])
             end = pd.Timestamp(str(rel[-1].get("ts_utc") or moment.isoformat()))
-            since = bars[(bars.index >= start) & (bars.index <= end)]
+            since = _shadow_window(
+                bars, start, end, str(row.get("timeframe") or "H1")
+            )
             if len(since) and row.get("shadow_entry"):
                 shadow_r = _shadow_sim(
                     row, since, prefix="shadow", strategy=row.get("setup")
@@ -3073,14 +3112,17 @@ def scoreboard(*, broker, config: dict | None = None,
                 return {"status": "Sin datos", "r": None}
             key = (row["symbol"], timeframe)
             if key not in bars_cache:
-                bars_cache[key] = broker.rates(row["symbol"], timeframe, 800)
+                bars_cache[key] = _shadow_rates(
+                    broker, row["symbol"], timeframe
+                )
             bars = bars_cache[key]
-            start = pd.Timestamp(row["ts"])
             end = (
                 pd.Timestamp(row["exit_ts"]) if row.get("exit_ts")
                 else pd.Timestamp.now(tz="UTC")
             )
-            since = bars[(bars.index >= start) & (bars.index <= end)]
+            since = _shadow_window(
+                bars, row["ts"], end, timeframe
+            )
             if len(since) == 0:
                 return {"status": "Sin datos", "r": None}
             return _shadow_sim(
