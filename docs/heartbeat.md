@@ -42,6 +42,14 @@ API**. Para aplicarla a mano: Healthchecks → check → *Schedule* → cron, zo
 `America/Santo_Domingo` y *Grace*. Si más adelante se guarda la API key con
 `lab heartbeat setup-api`, se puede automatizar la actualización.
 
+Notas de los disparadores reales: `TradingLab-AI-Manage` conserva además un
+disparador dominical 17:00 y otro diario 18:00; la tabla aplica la regla L-V
+00:00-17:59 indicada. `TradingLab-IntradayForward` despierta cada 5 min todos
+los días, pero el script solo opera L-V; la tabla lo restringe a L-V.
+`TradingLab-Backup` tiene dos pasadas diarias; la tabla las restringe a L-V.
+`AI-Scalp` corre cada minuto de 09:25 a 13:05; el cron 09-13 con 1 h de gracia
+cubre el cierre.
+
 ## El check `pc`
 
 El 2026-11-13 el check llevaba ~7 h sin ping. La tarea `TradingLab-Heartbeat`
