@@ -99,4 +99,4 @@ learning:
 # Backup cifrado fuera de casa. La contraseña vive en keyring como
 # BACKUP_PASSWORD; esta carpeta puede ser la local de Google Drive/OneDrive.
 backup:
-  offsite_dir: null
+  offsite_dir: "C:/Users/PC/OneDrive/TradingLabBackups"

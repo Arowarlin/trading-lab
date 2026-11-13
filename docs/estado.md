@@ -141,9 +141,10 @@ Notas de lectura:
   Las tareas F13, Agents, LLMCompare, IntradayForward, AI-London/NY/Daily/
   Scalp/Manage, Drill y backup hacen `start` + `ok|fail`; sin URL se omiten y
   `lab doctor` avisa. `TradingLab-Heartbeat` (cada 5 min, solo si MT5 y SQLite
-  abren) está preparada en `register_heartbeat_task.ps1`, sin registrar.
+  abren) está registrada como `TradingLab-Heartbeat` (cada 5 min).
 - **Backup offsite**: `backup.ps1 -Offsite` cifra AES-256-CBC con contraseña
-  de keyring (`BACKUP_PASSWORD`), copia al `backup.offsite_dir` configurado,
+  de keyring (`BACKUP_PASSWORD`), copia al `backup.offsite_dir` configurado
+  (`C:/Users/PC/OneDrive/TradingLabBackups`),
   comprueba el 50 % de espacio libre, verifica descifrado y retiene 14 diarias
   + 8 semanales. `restore_test.ps1` descifra y prueba el zip.
 - **Lease**: `execution_lease` con host/hora y caducidad de 2 minutos. `ai_trader`
@@ -161,7 +162,7 @@ Notas de lectura:
   posteriores al `2026-11-12` o activos fuera del universo consumido. En este
   bloque no se ejecutó ninguna campaña ni barrido.
 - **F13**: re-congelado por cambios ajenos al bot en `config/lab.yaml`
-  (`heartbeat`, `backup.offsite_dir`): hash `1ac90c80be916202…`, baseline
+  (`heartbeat`, `backup.offsite_dir`): hash `9c183b780e6849e4…`, baseline
   `f13_config`; `f13 config-check` OK.
 
 ## No construir hasta

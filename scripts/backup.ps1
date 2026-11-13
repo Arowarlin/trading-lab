@@ -117,13 +117,14 @@ Remove-OldBackups $Dest
 
 if ($Offsite) {
     $python = Join-Path $root ".venv\Scripts\python.exe"
-    $offsite = (& $python -c "import yaml; d=yaml.safe_load(open(r'config/lab.yaml',encoding='utf-8')) or {}; print(((d.get('backup') or {}).get('offsite_dir') or ''))" 2>$null | Out-String).Trim()
-    if (-not $offsite) { throw "backup.offsite_dir no está configurado en config/lab.yaml" }
-    $offsite = [Environment]::ExpandEnvironmentVariables($offsite)
-    New-Item -ItemType Directory -Force -Path $offsite | Out-Null
-    $password = (& $python -c "import keyring; print(keyring.get_password('tradinglab','BACKUP_PASSWORD') or '')" 2>$null | Out-String).Trim()
+    $helper = Join-Path $root "scripts\backup_config.py"
+    $offsiteDir = (& $python $helper "dir" 2>$null | Out-String).Trim()
+    if (-not $offsiteDir) { throw "backup.offsite_dir no está configurado en config/lab.yaml" }
+    $offsiteDir = [Environment]::ExpandEnvironmentVariables($offsiteDir)
+    New-Item -ItemType Directory -Force -Path $offsiteDir | Out-Null
+    $password = (& $python $helper "password" 2>$null | Out-String).Trim()
     if (-not $password) { throw "Falta BACKUP_PASSWORD en keyring" }
-    $qualifier = Split-Path -Qualifier $offsite
+    $qualifier = Split-Path -Qualifier $offsiteDir
     $drive = Get-PSDrive -Name $qualifier.TrimEnd(":") -ErrorAction SilentlyContinue
     $sizeLocal = (Get-Item $zip).Length
     if ($drive -and $drive.Free -gt 0 -and $sizeLocal -gt (0.5 * $drive.Free)) {
@@ -134,12 +135,12 @@ if ($Offsite) {
     try {
         & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root "scripts\backup_crypto.ps1") -Mode encrypt -Path $zip -Out $enc
         if ($LASTEXITCODE -ne 0) { throw "backup_crypto.ps1 encrypt falló" }
-        Copy-Item $enc (Join-Path $offsite (Split-Path $enc -Leaf)) -Force
-        Write-Host "Offsite cifrado: $(Join-Path $offsite (Split-Path $enc -Leaf))"
+        Copy-Item $enc (Join-Path $offsiteDir (Split-Path $enc -Leaf)) -Force
+        Write-Host "Offsite cifrado: $(Join-Path $offsiteDir (Split-Path $enc -Leaf))"
     } finally {
         Remove-Item Env:\TRADINGLAB_BACKUP_PASSWORD -ErrorAction SilentlyContinue
     }
-    Remove-OldBackups $offsite
+    Remove-OldBackups $offsiteDir
 }
 
 # Verificación de restauración y de que no haya secretos en claro.
