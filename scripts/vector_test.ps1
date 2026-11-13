@@ -5,7 +5,7 @@ $root = "E:\trading-lab"
 $config = Join-Path $root "config\vector\vector.yaml"
 
 $candidates = @(
-    "C:\Program Files\Vector\vector.exe",
+    "C:\Program Files\Vector\bin\vector.exe",
     (Join-Path $root "data\vector\bin\vector.exe")
 )
 $vector = $null

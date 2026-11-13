@@ -11,7 +11,7 @@ from zoneinfo import ZoneInfo
 from .config import ROOT
 
 VECTOR_PATHS = (
-    Path("C:/Program Files/Vector/vector.exe"),
+    Path("C:/Program Files/Vector/bin/vector.exe"),
     ROOT / "data" / "vector" / "bin" / "vector.exe",
 )
 MARKET = ZoneInfo("America/New_York")
@@ -28,17 +28,18 @@ def vector_binary() -> Path | None:
     return None
 
 
-def service_running() -> bool:
+def process_running() -> bool:
+    """Vector en Windows corre como proceso; el MSI no crea un servicio."""
     try:
         result = subprocess.run(
-            ["sc", "query", "vector"],
+            ["tasklist", "/FI", "IMAGENAME eq vector.exe", "/FO", "CSV", "/NH"],
             capture_output=True,
             text=True,
             timeout=5,
         )
     except Exception:
         return False
-    return result.returncode == 0 and "RUNNING" in result.stdout.upper()
+    return "vector.exe" in result.stdout.lower()
 
 
 def latest_all_file() -> Path | None:
@@ -63,7 +64,7 @@ def doctor_status(now: datetime | None = None) -> dict:
     moment = now or datetime.now(timezone.utc)
     binary = vector_binary()
     installed = binary is not None
-    running = service_running() if installed else False
+    running = process_running() if installed else False
     latest = latest_all_file()
     age_min = (
         (moment.timestamp() - latest.stat().st_mtime) / 60.0 if latest else None
@@ -74,16 +75,16 @@ def doctor_status(now: datetime | None = None) -> dict:
     if not installed:
         detail = "no instalado (observabilidad opcional)"
     elif not running:
-        detail = "instalado pero el servicio no corre"
+        detail = "instalado pero el proceso no corre"
     elif latest is None:
-        detail = "servicio activo; sin all-*.jsonl" if open_now else "servicio activo"
+        detail = "proceso activo; sin all-*.jsonl" if open_now else "proceso activo"
     elif age_min is not None and age_min > STALE_MINUTES:
         detail = (
-            f"servicio activo; último all-*.jsonl hace {age_min:.0f} min"
+            f"proceso activo; último all-*.jsonl hace {age_min:.0f} min"
             f"{' (mercado abierto)' if open_now else ' (mercado cerrado)'}"
         )
     else:
-        detail = f"servicio activo; último all-*.jsonl hace {age_min:.0f} min"
+        detail = f"proceso activo; último all-*.jsonl hace {age_min:.0f} min"
     return {
         "installed": installed,
         "running": running,
@@ -102,6 +103,6 @@ __all__ = [
     "doctor_status",
     "latest_all_file",
     "market_open",
-    "service_running",
+    "process_running",
     "vector_binary",
 ]

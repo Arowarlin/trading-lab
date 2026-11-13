@@ -10,6 +10,7 @@ data/guardian.json
 data/agent_runs/
 data/tradingagents/
 data/dryrun/
+data/vector/
 logs/
 reports/
 .pytest_cache/

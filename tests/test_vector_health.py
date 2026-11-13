@@ -24,7 +24,7 @@ def test_mercado_abierto_y_cerrado():
 
 def test_vector_no_instalado_no_avisa(monkeypatch):
     monkeypatch.setattr(vector_health, "vector_binary", lambda: None)
-    monkeypatch.setattr(vector_health, "service_running", lambda: False)
+    monkeypatch.setattr(vector_health, "process_running", lambda: False)
     monkeypatch.setattr(vector_health, "latest_all_file", lambda: None)
 
     result = vector_health.doctor_status(now=_market_time())
@@ -35,7 +35,7 @@ def test_vector_no_instalado_no_avisa(monkeypatch):
 
 def test_vector_instalado_sin_servicio_avisa(monkeypatch):
     monkeypatch.setattr(vector_health, "vector_binary", lambda: Path("vector.exe"))
-    monkeypatch.setattr(vector_health, "service_running", lambda: False)
+    monkeypatch.setattr(vector_health, "process_running", lambda: False)
     monkeypatch.setattr(vector_health, "latest_all_file", lambda: None)
 
     result = vector_health.doctor_status(now=_market_time())
@@ -43,7 +43,7 @@ def test_vector_instalado_sin_servicio_avisa(monkeypatch):
     assert result["installed"] is True
     assert result["running"] is False
     assert result["warn"] is True
-    assert "servicio no corre" in result["detail"]
+    assert "proceso no corre" in result["detail"]
 
 
 def test_vector_all_viejo_en_mercado_avisa(tmp_path, monkeypatch):
@@ -53,7 +53,7 @@ def test_vector_all_viejo_en_mercado_avisa(tmp_path, monkeypatch):
     os.utime(path, (old, old))
 
     monkeypatch.setattr(vector_health, "vector_binary", lambda: Path("vector.exe"))
-    monkeypatch.setattr(vector_health, "service_running", lambda: True)
+    monkeypatch.setattr(vector_health, "process_running", lambda: True)
     monkeypatch.setattr(vector_health, "latest_all_file", lambda: path)
 
     result = vector_health.doctor_status(now=_market_time())
@@ -70,7 +70,7 @@ def test_vector_all_viejo_fuera_de_mercado_no_avisa(tmp_path, monkeypatch):
     os.utime(path, (old, old))
 
     monkeypatch.setattr(vector_health, "vector_binary", lambda: Path("vector.exe"))
-    monkeypatch.setattr(vector_health, "service_running", lambda: True)
+    monkeypatch.setattr(vector_health, "process_running", lambda: True)
     monkeypatch.setattr(vector_health, "latest_all_file", lambda: path)
     after_close = datetime(2026, 11, 13, 22, 0, tzinfo=timezone.utc)
 

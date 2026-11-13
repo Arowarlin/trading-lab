@@ -59,17 +59,17 @@ if ($Portable) {
     if ($proc.ExitCode -ne 0) {
         throw "msiexec terminó con código $($proc.ExitCode)"
     }
-    $vector = "C:\Program Files\Vector\vector.exe"
-    $configTarget = "C:\ProgramData\vector\vector.yaml"
+    $vector = "C:\Program Files\Vector\bin\vector.exe"
+    $configTarget = "C:\Program Files\Vector\config\vector.yaml"
     New-Item -ItemType Directory -Force -Path (Split-Path $configTarget) | Out-Null
     Copy-Item $configSource $configTarget -Force
     & $vector validate $configTarget
     Write-Output "MSI instalado. Configuración copiada a $configTarget"
     if ($StartService) {
-        Start-Service -Name vector
-        Write-Output "Servicio vector iniciado."
+        Start-Process -FilePath $vector -ArgumentList "--config `"$configTarget`"" -WindowStyle Hidden
+        Write-Output "Proceso Vector iniciado en segundo plano."
     } else {
-        Write-Output "Para arrancar el servicio: Start-Service -Name vector"
+        Write-Output "Para arrancarlo: `"$vector`" --config `"$configTarget`""
     }
 }
 Write-Output "Siguiente: .\scripts\vector_test.ps1"

@@ -1,5 +1,5 @@
 # Vector solo observa. No toca MT5, SQLite ni las órdenes.
-# Versión fijada: 0.49.0 (ver docs/vector.md).
+# Versión fijada: 0.61.0 (ver docs/vector.md).
 # Las rutas son las de esta máquina; si cambia el hash del terminal MT5,
 # actualiza MT5_TERMINAL_DATA.
 data_dir: E:/trading-lab/data/vector
@@ -105,9 +105,9 @@ transforms:
         .timestamp = now()
       } else {
         if starts_with(message, "[") {
-          .timestamp = parse_timestamp(substring(message, 1, 20), format: "%Y-%m-%d %H:%M:%S", timezone: "America/Santo_Domingo") ?? now()
+          .timestamp = parse_timestamp(slice!(message, 1, 20), format: "%Y-%m-%d %H:%M:%S", timezone: "America/Santo_Domingo") ?? now()
         } else {
-          .timestamp = parse_timestamp(substring(message, 0, 19), format: "%Y-%m-%d %H:%M:%S", timezone: "America/Santo_Domingo") ?? now()
+          .timestamp = parse_timestamp(slice!(message, 0, 19), format: "%Y-%m-%d %H:%M:%S", timezone: "America/Santo_Domingo") ?? now()
         }
       }
 
@@ -115,7 +115,7 @@ transforms:
       if .source == "task_scheduler" {
         parsed_task = parse_regex(message, r'(?P<task>TradingLab-[A-Za-z0-9-]+)') ?? {}
         if exists(parsed_task.task) {
-          .task = to_string(parsed_task.task) ?? ""
+          .task = to_string(parsed_task.task)
         }
       }
 

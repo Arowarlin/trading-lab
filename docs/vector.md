@@ -22,7 +22,7 @@ Versión fija: **0.61.0**. Assets oficiales del release
 | `vector-0.61.0-x64.msi` | `3ac167f226204e141d164c6218ae54a2df77dda1b3322bef4b565d4066c4cfad` |
 | `vector-0.61.0-x86_64-pc-windows-msvc.zip` | `6a04e833f9a91f874688e8087d768f5cb35d40e3271c87df6258e271915d0f49` |
 
-### Opción A · MSI (servicio de Windows, recomendada)
+### Opción A · MSI + servicio de Windows (recomendada)
 
 1. Abre una consola **elevada**.
 2. Ejecuta:
@@ -33,14 +33,21 @@ Versión fija: **0.61.0**. Assets oficiales del release
    ```
 
    El script descarga el MSI, comprueba el SHA-256, instala con `msiexec /qn`,
-   copia `config/vector/vector.yaml` a `C:\ProgramData\vector\vector.yaml` y
-   valida la configuración. No arranca el servicio salvo `-StartService`.
-3. Arranca el servicio:
+   copia `config/vector/vector.yaml` a `C:\Program Files\Vector\config\vector.yaml`
+   y valida la configuración.
+3. Registra el servicio (el MSI no lo crea solo):
 
    ```powershell
-   Start-Service -Name vector
-   Get-Service -Name vector
+   & 'C:\Program Files\Vector\bin\vector.exe' service install `
+       --name Vector `
+       --display-name 'Vector Observability' `
+       --config 'C:\Program Files\Vector\config\vector.yaml'
+   & 'C:\Program Files\Vector\bin\vector.exe' service start
+   Set-Service -Name Vector -StartupType Automatic
    ```
+
+   El servicio corre como `LocalSystem`, que puede leer el diario del Programador
+   y los logs de MT5. `Get-Service Vector` debe mostrar `Running`.
 
 ### Opción B · zip oficial (portable, sin servicio)
 
@@ -60,7 +67,8 @@ El zip se extrae en `data/vector/bin/` y la configuración se copia a
 .\data\vector\bin\vector.exe validate .\config\vector\vector.yaml   # portable
 ```
 
-El MSI instala el binario en `C:\Program Files\Vector\vector.exe`.
+El MSI instala el binario en `C:\Program Files\Vector\bin\vector.exe`; el
+servicio se registra aparte con `vector service install` (ver Opción A).
 
 ## Rutas de MT5
 
