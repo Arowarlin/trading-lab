@@ -51,3 +51,21 @@ def test_settings_mezcla_ops_y_lab(tmp_path):
     assert settings.daytrader.enabled is True
     assert settings.mt5.default_symbol == "EURUSD"
     assert settings.risk.per_trade_risk_pct == 0.01
+
+def test_hash_usa_la_cuenta_real_del_bot(tmp_path):
+    root = _copy_config(tmp_path)
+    before = config_hash(root)
+    path = root / "config" / "accounts.yaml"
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    data["accounts"]["alpaca_paper"]["limits"]["daily_loss_pct"] = 0.99
+    path.write_text(
+        yaml.safe_dump(data, sort_keys=False, allow_unicode=True),
+        encoding="utf-8",
+    )
+    assert config_hash(root) == before
+    data["accounts"]["paper_main"]["limits"]["daily_loss_pct"] = 0.99
+    path.write_text(
+        yaml.safe_dump(data, sort_keys=False, allow_unicode=True),
+        encoding="utf-8",
+    )
+    assert config_hash(root) != before

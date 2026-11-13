@@ -52,7 +52,7 @@ def config_files(root: Path = ROOT) -> list[Path]:
 
 
 F13_LAB_KEYS = ("mode", "risk", "data", "execution")
-F13_ACCOUNT = "alpaca_paper"
+F13_DEFAULT_ACCOUNT = "paper_main"
 
 
 def _yaml_doc(path: Path) -> dict:
@@ -79,7 +79,10 @@ def config_payload(root: Path = ROOT) -> dict:
         ),
         None,
     )
-    account = (accounts.get("accounts") or {}).get(F13_ACCOUNT)
+    account_id = str(
+        (bot or {}).get("account") or F13_DEFAULT_ACCOUNT
+    )
+    account = (accounts.get("accounts") or {}).get(account_id)
     return {
         "lab": {key: lab.get(key) for key in F13_LAB_KEYS if key in lab},
         "bot": bot,
