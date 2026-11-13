@@ -202,5 +202,7 @@ class PaperBroker:
             return pd.Series(dtype=float)
         return pd.Series(
             [float(r["equity"]) for r in rows],
-            index=pd.to_datetime([r["ts"] for r in rows]),
+            index=pd.to_datetime(
+                [r["ts"] for r in rows], utc=True, format="mixed"
+            ),
         )

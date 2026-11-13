@@ -63,3 +63,19 @@ def test_bots_catalog_loads():
     assert bots
     assert any(b.id == "trend-spy" for b in bots)
     assert all(b.strategy for b in bots)
+
+def test_paper_equity_series_acepta_timestamps_mixtos(tmp_path):
+    db = tmp_path / "lab.db"
+    init_db(db)
+    with connect(db) as con:
+        con.execute(
+            "INSERT INTO equity(ts, cash, positions_value, equity) VALUES(?,?,?,?)",
+            ("2026-11-12T14:35:13.396+00:00", 100000, 0, 100000),
+        )
+        con.execute(
+            "INSERT INTO equity(ts, cash, positions_value, equity) VALUES(?,?,?,?)",
+            ("2026-11-12T15:00:00+00:00", 99990, 0, 99990),
+        )
+    series = PaperBroker(db, starting_cash=100_000).equity_series()
+    assert len(series) == 2
+    assert series.index.tz is not None
