@@ -94,6 +94,26 @@ Resultado de la base **v3 challenge** (2021-09-15 → 2026-11-13):
 **Veredicto: PASA** los filtros. El punto más justo es el PBO (24,1 % frente al
 30 % máximo); no es un margen enorme.
 
+### Comprobación independiente en MT5
+
+El operador ya había corrido el EA en el Strategy Tester con **ticks reales**,
+US100.cash M5, 2022-01-01 → 2026-11-14, depósito 100.000 USD y el setfile v3
+(`US100_EA.US100.cash.M5.20220101_20261114.400.ini`):
+
+| Métrica MT5 | Valor |
+|---|---|
+| Operaciones | 445 |
+| Profit factor | 1,50 |
+| Beneficio neto | +50.845 USD (+50,8 %) |
+| DD de equity máximo | 4,74 % (5,43 % relativo) |
+| Sharpe | 1,08 |
+| Recovery factor | 7,26 |
+
+Coincide con el motor Python (480 operaciones en 2021-2026; 446 en 2022-2026)
+y con la expectativa positiva. Esa prueba usó el riesgo fijo del 0,35 %, no la
+escalera dinámica; el setfile v3 ya trae `InpDynRisk=true` para el EA
+recompilado.
+
 ### Por año (base v3, 0,35 % de riesgo)
 
 | Año | Retorno | Sharpe | DD |
