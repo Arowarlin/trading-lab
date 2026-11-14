@@ -32,6 +32,17 @@ El laboratorio no adjunta EAs a gráficos. En el terminal:
 5. Si el EA estaba puesto antes de recompilar, quítalo y vuelve a arrastrarlo
    para que MT5 cargue el `.ex5` nuevo.
 
+También queda una plantilla con el EA y el setfile v3 ya cargados:
+
+```text
+MQL5/Profiles/Templates/TradingLab_US100_v3.tpl
+```
+
+En MT5: clic derecho en el gráfico → **Plantillas** → `TradingLab_US100_v3`.
+La plantilla abre US100.cash M5, adjunta `US100_EA` y carga los inputs de v3;
+solo falta activar **Algo Trading**. La copia versionada está en
+`integrations/mt5/us100_ftmo1/TradingLab_US100_v3.tpl`.
+
 ## Consola y Diario
 
 ```powershell
