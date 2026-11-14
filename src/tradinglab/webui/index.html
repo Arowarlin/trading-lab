@@ -4777,9 +4777,11 @@ function renderBots() {
   const proposed = bots.filter((b) => b.proposed).length;
   const archived = bots.filter((b) => b.archived).length;
   const evaluated = bots.filter((b) => b.evaluation?.status).length;
+  const external = bots.filter((b) => b.external).length;
   $("#bots-summary").innerHTML = [
     { label: "Bots", value: bots.length },
     { label: "Activos", value: active, cls: active ? "pos" : "" },
+    { label: "Externos MT5", value: external, cls: external ? "warn" : "" },
     { label: "Propuestos", value: proposed, cls: proposed ? "warn" : "" },
     { label: "Archivados", value: archived, cls: archived ? "neg" : "" },
     { label: "Evaluados", value: evaluated },
@@ -4798,20 +4800,22 @@ function renderBots() {
           <span>MaxDD <b class="neg">${pct(ev.max_drawdown, 1)}</b></span>
         </div>`
       : "";
-    const stateTag = bot.archived ? `<span class="tag red">archivado</span>` : bot.proposed ? `<span class="tag blue">propuesto</span>` : `<span class="tag ${bot.enabled ? "green" : ""}">${bot.enabled ? "enabled" : "disabled"}</span>`;
+    const stateTag = bot.external
+      ? `<span class="tag blue">externo MT5</span>`
+      : bot.archived ? `<span class="tag red">archivado</span>` : bot.proposed ? `<span class="tag blue">propuesto</span>` : `<span class="tag ${bot.enabled ? "green" : ""}">${bot.enabled ? "enabled" : "disabled"}</span>`;
     return `
       <div class="bot-card ${bot.enabled && !bot.archived ? "on" : "off"}">
         <div class="bot-top">
           <span class="bot-id">${esc(bot.id)}</span>
           <span style="display:flex;gap:5px;flex-wrap:wrap">${stateTag}${evalTag(evalLabel)}</span>
         </div>
-        <div class="bot-meta"><span>tipo: <b>${esc(bot.type)}</b></span><span>estrategia: <b>${esc(bot.strategy)}</b></span><span>exp: <b>${num(bot.exposure, 2)}×</b></span></div>
+        <div class="bot-meta"><span>tipo: <b>${esc(bot.type)}</b></span><span>estrategia: <b>${esc(bot.strategy)}</b></span>${bot.external ? `<span>magic: <b>${esc(bot.magic)}</b></span>` : `<span>exp: <b>${num(bot.exposure, 2)}×</b></span>`}</div>
         <div class="chips">${(bot.universe || []).map((t) => `<span class="chip">${esc(t)}</span>`).join("")}</div>
         <div class="bot-desc">${esc(bot.description || "Sin descripción.")}</div>
         ${metrics}
-        <div class="bot-actions">${actions || `<span class="muted tiny">Sin acciones en el último dry-run.</span>`}</div>
+        <div class="bot-actions">${actions || `<span class="muted tiny">${bot.external ? "Sin fills registrados." : "Sin acciones en el último dry-run."}</span>`}</div>
         <div class="bot-buttons">
-          ${bot.archived
+          ${bot.external ? `<span class="muted tiny">Solo lectura: lo ejecuta MT5.</span>` : bot.archived
             ? `<button class="btn small" data-bot-restore="${esc(bot.id)}">Restaurar</button>`
             : `<button class="btn small ghost" data-bot-archive="${esc(bot.id)}">Archivar</button>`}
         </div>

@@ -167,6 +167,12 @@ def lab_magic_map(
             out[int(bot.magic)] = f"{FORWARD_BOT_PREFIX}{bot.id}"
     except Exception:
         pass
+    try:
+        from .ea_registry import ea_magic_map
+
+        out.update(ea_magic_map())
+    except Exception:
+        pass
     return out
 
 

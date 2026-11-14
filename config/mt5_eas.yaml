@@ -1,0 +1,21 @@
+# EAs externos de MT5 que el laboratorio observa, no ejecuta.
+#
+# El EA corre dentro del terminal; TradingLab solo lo registra para el Diario,
+# el TCA, la consola y los filtros de validación. Ningún comando de este archivo
+# envía órdenes: el EA tiene su propio motor y su propio riesgo compartido.
+version: 1
+eas:
+  - id: us100-ftmo1
+    name: "US100 FTMO1"
+    platform: mt5
+    account: ftmo_demo
+    symbol: US100.cash
+    magic: 93010001
+    managed_magics: [93010001, 93020001]
+    strategy: us100_ftmo_confluence
+    timeframe: M5
+    enabled: true
+    status: demo
+    setfile: "C:/Users/PC/AppData/Roaming/MetaQuotes/Terminal/81A933A9AFC5DE3C23B15CAB19C63850/MQL5/Experts/TradingLab/US100_FTMO1/US100_FTMO_v3_challenge.set"
+    experts_dir: "C:/Users/PC/AppData/Roaming/MetaQuotes/Terminal/81A933A9AFC5DE3C23B15CAB19C63850/MQL5/Experts/TradingLab/US100_FTMO1"
+    notes: "EA del operador; v3 challenge con riesgo dinámico 1.0/0.6/0.35/0.25% y DD interno 8%. El laboratorio lo mide, no lo opera."

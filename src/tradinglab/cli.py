@@ -181,6 +181,8 @@ app.add_typer(llm_app, name="llm")
 app.add_typer(ticks_app, name="ticks")
 app.add_typer(slippage_app, name="slippage")
 app.add_typer(intraday_app, name="intraday")
+ea_app = typer.Typer(no_args_is_help=True, help="EAs externos MT5: registro, estado y filtros.")
+app.add_typer(ea_app, name="ea")
 app.add_typer(daytrader_app, name="daytrader")
 app.add_typer(tradestation_app, name="tradestation")
 app.add_typer(lessons_app, name="lessons")
@@ -706,6 +708,31 @@ def doctor(network: bool = typer.Option(False, "--network", help="Probar descarg
         )
     except Exception as exc:
         table.add_row("Vector", WARN, str(exc)[:160])
+
+    # EAs externos: archivos y setfile, sin ejecutar nada.
+    try:
+        from .ea_registry import load_eas
+
+        eas = load_eas()
+        if not eas:
+            table.add_row("EA externos", OK, "sin EAs registrados")
+        else:
+            pending = [
+                ea.id
+                for ea in eas
+                if not ea.files()["setfile"] or not ea.files()["ex5"]
+            ]
+            table.add_row(
+                "EA externos",
+                WARN if pending else OK,
+                (
+                    f"{len(eas)} registrados; faltan archivos: {', '.join(pending)}"
+                    if pending
+                    else f"{len(eas)} registrados · {', '.join(ea.id for ea in eas)}"
+                )[:180],
+            )
+    except Exception as exc:
+        table.add_row("EA externos", WARN, str(exc)[:160])
 
     # IA sesiones: una sesión cerrada sin ninguna fila en ai_decisions.
     try:
@@ -2645,6 +2672,176 @@ def heartbeat_apply_schedule_cmd(
         or payload.get("applied") != len(CHECK_SCHEDULES)
     ):
         raise typer.Exit(2)
+
+
+@ea_app.command("list")
+def ea_list_cmd() -> None:
+    """Lista los EAs externos registrados y sus archivos."""
+    from .ea_registry import load_eas
+
+    eas = load_eas()
+    if not eas:
+        console.print("[yellow]No hay EAs en config/mt5_eas.yaml.[/yellow]")
+        return
+    table = Table(title="EAs externos MT5")
+    for column in ("ID", "Símbolo", "Magic", "Estrategia", "Setfile", "MQ5", "EX5", "Enabled"):
+        table.add_column(column)
+    for ea in eas:
+        files = ea.files()
+        table.add_row(
+            ea.id,
+            ea.symbol,
+            str(ea.magic),
+            ea.strategy,
+            "OK" if files["setfile"] else "FALTA",
+            "OK" if files["mq5"] else "FALTA",
+            "OK" if files["ex5"] else "FALTA",
+            "sí" if ea.enabled else "no",
+        )
+    console.print(table)
+
+
+@ea_app.command("status")
+def ea_status_cmd(
+    ea_id: str = typer.Argument("us100-ftmo1", help="ID del EA"),
+) -> None:
+    """Estado del EA, sus archivos y posiciones de su magic."""
+    from .ea_registry import EAError, get_ea, status
+
+    try:
+        ea = get_ea(ea_id)
+    except EAError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2) from exc
+    if ea is None:
+        console.print(f"[red]EA no registrado:[/red] {ea_id}")
+        raise typer.Exit(2)
+    broker = None
+    try:
+        from .execution import get_mt5_broker
+
+        settings = get_settings()
+        broker = get_mt5_broker(settings, DEFAULT_DB, dry_run=True)
+        broker.connect()
+    except Exception:
+        broker = None
+    try:
+        payload = status(ea, broker=broker)
+    finally:
+        if broker is not None:
+            try:
+                broker.shutdown()
+            except Exception:
+                pass
+    table = Table(title=f"EA externo · {payload['id']}")
+    table.add_column("Campo", style="bold")
+    table.add_column("Valor", overflow="fold")
+    table.add_row("Nombre", payload["name"])
+    table.add_row("Símbolo", payload["symbol"])
+    table.add_row("Magic", str(payload["magic"]))
+    table.add_row("Estrategia", payload["strategy"])
+    table.add_row("Timeframe", payload["timeframe"])
+    table.add_row("Setfile", payload["setfile"])
+    table.add_row("Archivos", json.dumps(payload["files"], ensure_ascii=False))
+    table.add_row("Posiciones abiertas", str(payload["open_positions"]))
+    table.add_row("Últimos fills", str(len(payload["last_fills"])))
+    table.add_row("Notas", payload["notes"] or "—")
+    console.print(table)
+    if payload["last_fills"]:
+        fills = Table(title="Últimos fills del EA")
+        for column in ("Fecha", "Símbolo", "Lado", "Qty", "Precio", "Deal"):
+            fills.add_column(column)
+        for item in payload["last_fills"]:
+            fills.add_row(
+                str(item.get("ts") or "")[:19],
+                str(item.get("symbol") or ""),
+                str(item.get("side") or ""),
+                f"{float(item.get('qty') or 0):g}",
+                f"{float(item.get('price') or 0):.2f}",
+                str(item.get("deal_id") or ""),
+            )
+        console.print(fills)
+
+
+@ea_app.command("validate")
+def ea_validate_cmd(
+    ea_id: str = typer.Argument("us100-ftmo1", help="ID del EA"),
+    refresh: bool = typer.Option(False, "--refresh", help="Volver a descargar las velas M5"),
+    record: bool = typer.Option(False, "--record", help="Registrar el barrido en strategy_trials"),
+) -> None:
+    """Pasa el setfile por DSR, PBO, WF, regímenes, Monte Carlo y costes."""
+    from .ea_registry import EAError, get_ea
+    from .ea_us100 import load_bars, load_setfile, validate, write_report
+
+    try:
+        ea = get_ea(ea_id)
+    except EAError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2) from exc
+    if ea is None:
+        console.print(f"[red]EA no registrado:[/red] {ea_id}")
+        raise typer.Exit(2)
+    if not ea.setfile.exists():
+        console.print(f"[red]Falta el setfile:[/red] {ea.setfile}")
+        raise typer.Exit(2)
+    console.print(f"[dim]Cargando velas M5 de {ea.symbol}…[/dim]")
+    df = load_bars(refresh=refresh)
+    values = load_setfile(ea.setfile)
+    with console.status("Ejecutando barrido y filtros…"):
+        payload = validate(df, values, ea=ea, record=record)
+    files = write_report(payload)
+    table = Table(title=f"Filtros · {ea.id}")
+    table.add_column("Filtro", style="bold")
+    table.add_column("Valor")
+    table.add_column("Estado")
+    for name, item in payload["filters"].items():
+        table.add_row(
+            name,
+            str(item["value"]),
+            "[green]OK[/green]" if item["ok"] else "[red]FALLO[/red]",
+        )
+    console.print(table)
+    console.print(
+        f"[bold]{'PASA' if payload['passed'] else 'NO PASA'}[/bold] · "
+        f"PBO={payload['pbo']} · DSR={payload['dsr']} · "
+        f"WF={payload['walk_forward'].get('verdict')}"
+    )
+    console.print(f"[dim]JSON: {files['json']} · MD: {files['markdown']}[/dim]")
+
+
+@ea_app.command("optimize")
+def ea_optimize_cmd(
+    ea_id: str = typer.Argument("us100-ftmo1", help="ID del EA"),
+    refresh: bool = typer.Option(False, "--refresh", help="Volver a descargar las velas M5"),
+) -> None:
+    """Barrido acotado alrededor del setfile v3 y registro de los intentos."""
+    from .ea_registry import EAError, get_ea
+    from .ea_us100 import load_bars, load_setfile, validate, write_report
+
+    try:
+        ea = get_ea(ea_id)
+    except EAError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2) from exc
+    if ea is None:
+        console.print(f"[red]EA no registrado:[/red] {ea_id}")
+        raise typer.Exit(2)
+    df = load_bars(refresh=refresh)
+    values = load_setfile(ea.setfile)
+    with console.status("Optimizando la vecindad del setfile v3…"):
+        payload = validate(df, values, ea=ea, record=True)
+    files = write_report(payload)
+    best = max(payload["rows"], key=lambda row: float(row.get("totR") or 0))
+    console.print(
+        f"[bold]Mejor variante:[/bold] score={best['min_score']} rr={best['rr']} "
+        f"gap={best['gap_min']} consec={best['max_consec']} · "
+        f"exp={best['expR']:+.3f}R · PF={best['pf']:.2f} · total={best['totR']:+.1f}R"
+    )
+    console.print(
+        f"Veredicto: {'PASA' if payload['passed'] else 'NO PASA'} · "
+        f"PBO={payload['pbo']} · DSR={payload['dsr']}"
+    )
+    console.print(f"[dim]JSON: {files['json']} · MD: {files['markdown']}[/dim]")
 
 
 @alerts_app.command("check")

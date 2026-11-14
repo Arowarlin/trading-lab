@@ -11,6 +11,7 @@ data/agent_runs/
 data/tradingagents/
 data/dryrun/
 data/vector/
+data/ea_backups/
 logs/
 reports/
 .pytest_cache/

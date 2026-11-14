@@ -2287,6 +2287,13 @@ class LabData:
             data["evaluation"] = evaluations.get(spec.id)
             data["proposed"] = True
             out.append(data)
+        try:
+            from .ea_registry import as_bot_row, load_eas
+
+            for ea in load_eas():
+                out.append(as_bot_row(ea, db_path=self.db_path))
+        except Exception:
+            pass
         return out
 
     # ------------------------------------------------------------------ logs
