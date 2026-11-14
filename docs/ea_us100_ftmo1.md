@@ -21,6 +21,17 @@ corre dentro del terminal con su propio motor, su riesgo compartido y su magic.
 Registro: `config/mt5_eas.yaml`. El EA no está en `bots.yaml` para que el
 orquestador no intente ejecutarlo como si fuera un bot Python.
 
+### Cómo activarlo en MT5
+
+El laboratorio no adjunta EAs a gráficos. En el terminal:
+
+1. Abre `US100.cash` en M5.
+2. Arrastra `US100_EA` desde `MQL5/Experts/TradingLab/US100_FTMO1`.
+3. Entradas → Cargar → `US100_FTMO_v3_challenge.set`.
+4. Activa **Algo Trading**. El setfile ya trae `InpDynRisk=true`.
+5. Si el EA estaba puesto antes de recompilar, quítalo y vuelve a arrastrarlo
+   para que MT5 cargue el `.ex5` nuevo.
+
 ## Consola y Diario
 
 ```powershell
