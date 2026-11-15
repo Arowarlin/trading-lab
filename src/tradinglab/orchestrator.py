@@ -509,6 +509,14 @@ def run_bot(
 
         if delta > 0:
             proposed_risk = abs(delta) * risk_per_share
+            from .symbol_risk import open_risk_by_symbol, symbol_cap_usd
+
+            symbol_risk = open_risk_by_symbol(
+                snap.get("positions") or [],
+                broker,
+                account_id=account.id if account is not None else "paper_main",
+            ).get(ticker.upper(), 0.0)
+            symbol_cap = symbol_cap_usd(account, ticker)
             account_guard = evaluate_account(
                 prop_rules,
                 AccountSnapshot(
@@ -527,6 +535,9 @@ def run_bot(
                 proposed_risk_usd=proposed_risk,
                 cluster_open_risk_usd=cluster_open_risk_usd,
                 max_cluster_risk_pct=max_cluster_risk_pct,
+                symbol_open_risk_usd=symbol_risk,
+                symbol_risk_cap_usd=symbol_cap,
+                symbol=ticker,
             )
             if not account_guard.allowed:
                 action.status = "bloqueado"

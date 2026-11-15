@@ -56,6 +56,10 @@ def load_config(path: str | Path | None = None) -> dict:
     }
 
 
+def criteria_hash(payload: dict) -> str:
+    return _hash(payload)
+
+
 def _hash(payload: dict) -> str:
     raw = json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
@@ -195,6 +199,133 @@ def start_incubation(
     return dict(updated)
 
 
+def pre_register_external(
+    db_path: str | Path,
+    *,
+    bot: str,
+    asset: str,
+    criteria: dict,
+    note: str = "",
+) -> dict:
+    """Pre-registra un forward externo con criterios y hash antes de contar.
+
+    El estado queda en `incubando` sin fecha de inicio: el reloj arranca con el
+    primer fill real (`start_external_forward`). El hash cubre solo criterios,
+    no la fecha, para que pueda congelarse antes de operar.
+    """
+    init_db(db_path)
+    payload = dict(criteria)
+    digest = criteria_hash(payload)
+    now = utcnow()
+    with connect(db_path) as con:
+        row = con.execute(
+            "SELECT * FROM lifecycle_bots WHERE bot = ?", (bot,)
+        ).fetchone()
+        if row is not None:
+            stored = row["criteria_hash"]
+            if stored and str(stored) != digest:
+                raise LifecycleError(
+                    f"{bot}: criterios ya congelados con hash {stored}; "
+                    f"no se puede pre-registrar otro hash"
+                )
+            if not row["start_date"]:
+                con.execute(
+                    "UPDATE lifecycle_bots SET updated_at=?, criteria=?, "
+                    "criteria_hash=?, frozen_at=COALESCE(frozen_at, ?) WHERE bot=?",
+                    (
+                        now,
+                        json.dumps(payload, ensure_ascii=False, sort_keys=True),
+                        digest,
+                        now,
+                        bot,
+                    ),
+                )
+        else:
+            con.execute(
+                "INSERT INTO lifecycle_bots"
+                "(bot, asset, state, created_at, updated_at, start_date, end_date, "
+                "criteria, criteria_hash, frozen_at, evidence, note) "
+                "VALUES(?,?,?,?,?,NULL,NULL,?,?,?,?,?)",
+                (
+                    bot,
+                    asset,
+                    "incubando",
+                    now,
+                    now,
+                    json.dumps(payload, ensure_ascii=False, sort_keys=True),
+                    digest,
+                    now,
+                    "{}",
+                    str(note or "pre-registro forward externo; inicio al primer fill")[:1000],
+                ),
+            )
+            con.execute(
+                "INSERT INTO lifecycle_events"
+                "(ts, bot, from_state, to_state, actor, reason, criteria_hash) "
+                "VALUES(?,?,?,?,?,?,?)",
+                (
+                    now,
+                    bot,
+                    None,
+                    "incubando",
+                    "sistema",
+                    "pre-registro forward externo; inicio al primer fill",
+                    digest,
+                ),
+            )
+        updated = con.execute(
+            "SELECT * FROM lifecycle_bots WHERE bot = ?", (bot,)
+        ).fetchone()
+    return dict(updated)
+
+
+def start_external_forward(
+    db_path: str | Path,
+    *,
+    bot: str,
+    first_date: str,
+    actor: str = "sistema",
+) -> dict:
+    """Fija el inicio del forward externo en el primer fill y conserva el hash."""
+    init_db(db_path)
+    start = date.fromisoformat(str(first_date))
+    with connect(db_path) as con:
+        row = con.execute(
+            "SELECT * FROM lifecycle_bots WHERE bot = ?", (bot,)
+        ).fetchone()
+        if row is None:
+            raise LifecycleError(f"bot no registrado: {bot}")
+        if row["start_date"]:
+            return dict(row)
+        criteria = json.loads(row["criteria"] or "{}")
+        window_days = int(criteria.get("window_days", 60) or 60)
+        end = start + timedelta(days=window_days)
+        now = utcnow()
+        con.execute(
+            "UPDATE lifecycle_bots SET start_date=?, end_date=?, updated_at=? "
+            "WHERE bot=?",
+            (start.isoformat(), end.isoformat(), now, bot),
+        )
+        con.execute(
+            "INSERT INTO lifecycle_events"
+            "(ts, bot, from_state, to_state, actor, reason, criteria_hash) "
+            "VALUES(?,?,?,?,?,?,?)",
+            (
+                now,
+                bot,
+                "incubando",
+                "incubando",
+                actor,
+                f"primer fill {start.isoformat()}; ventana {window_days} días",
+                row["criteria_hash"],
+            ),
+        )
+        updated = con.execute(
+            "SELECT * FROM lifecycle_bots WHERE bot = ?", (bot,)
+        ).fetchone()
+    return dict(updated)
+
+
 def _drift_for(db_path: str | Path, bot: str, settings: Settings) -> dict:
     try:
         from .drift import build_drift
@@ -273,6 +404,45 @@ def report_bot(
     total_days = max(1, (end_day - start_day).days)
     elapsed = min(total_days, max(0, (current - start_day).days))
     criteria = json.loads(data.get("criteria") or "{}")
+    if bot.startswith("ea:"):
+        from .ea_forward import forward_metrics
+
+        metrics = forward_metrics(
+            db_path,
+            bot,
+            start_date=start,
+            account_size=float(data.get("account_size") or 100_000),
+            settings=settings,
+        )
+        failures = evaluate_criteria(metrics, criteria)
+        min_trades_after = int(
+            criteria.get("min_trades_after_window", criteria.get("min_trades", 40))
+        )
+        enough_time = current >= end_day
+        enough_trades = int(metrics.get("n_trades") or 0) >= min_trades_after
+        proposal = (
+            None
+            if not (enough_time and enough_trades)
+            else ("rechazado" if failures else "promovible")
+        )
+        return {
+            **data,
+            "progress_pct": round(elapsed / total_days * 100, 1),
+            "days_left": max(0, (end_day - current).days),
+            "metrics": metrics,
+            "slippage_p95_bps": None,
+            "drift": {"status": "sin datos", "reason": "EA externo"},
+            "guard_breaches": int(metrics.get("guard_breaches") or 0),
+            "tick_confirmation": None,
+            "proposal": proposal,
+            "failures": failures,
+            "criteria": criteria,
+            "waiting_trades": (
+                max(0, min_trades_after - int(metrics.get("n_trades") or 0))
+                if not enough_trades
+                else 0
+            ),
+        }
     tick_confirmation = None
     if criteria.get("require_tick_confirmation"):
         try:
@@ -319,26 +489,66 @@ def evaluate_criteria(metrics: dict, criteria: dict) -> list[str]:
         failures.append(
             f"trades {int(metrics.get('n_trades') or 0)} < {criteria.get('min_trades')}"
         )
-    sharpe = metrics.get("sharpe")
-    if sharpe is None or float(sharpe) < float(criteria.get("min_forward_sharpe", 0.5)):
-        failures.append(
-            f"Sharpe forward {sharpe if sharpe is not None else 'sin datos'} "
-            f"< {criteria.get('min_forward_sharpe')}"
-        )
-    slippage = metrics.get("slippage_p95_bps")
-    if slippage is None or float(slippage) > float(
-        criteria.get("max_slippage_bps", 10.0)
-    ):
-        failures.append(
-            f"slippage p95 {slippage if slippage is not None else 'sin datos'} "
-            f"> {criteria.get('max_slippage_bps')}"
-        )
-    drift = str(metrics.get("drift_status") or "sin datos")
-    max_drift = str(criteria.get("max_drift_status", "ok"))
-    if drift == "sin datos":
-        failures.append("deriva sin datos")
-    elif DRIFT_ORDER.get(drift, 9) > DRIFT_ORDER.get(max_drift, 0):
-        failures.append(f"deriva {drift} > {max_drift}")
+    min_sharpe = criteria.get("min_forward_sharpe", 0.5)
+    if min_sharpe is not None:
+        sharpe = metrics.get("sharpe")
+        if sharpe is None or float(sharpe) < float(min_sharpe):
+            failures.append(
+                f"Sharpe forward {sharpe if sharpe is not None else 'sin datos'} "
+                f"< {min_sharpe}"
+            )
+    if criteria.get("max_slippage_mean_points") is not None:
+        slip_points = metrics.get("slippage_mean_points")
+        limit_points = float(criteria["max_slippage_mean_points"])
+        if slip_points is None or float(slip_points) > limit_points:
+            failures.append(
+                f"slippage medio {slip_points if slip_points is not None else 'sin datos'} "
+                f"> {limit_points:g} puntos"
+            )
+    else:
+        slippage = metrics.get("slippage_p95_bps")
+        if slippage is None or float(slippage) > float(
+            criteria.get("max_slippage_bps", 10.0)
+        ):
+            failures.append(
+                f"slippage p95 {slippage if slippage is not None else 'sin datos'} "
+                f"> {criteria.get('max_slippage_bps')}"
+            )
+    if criteria.get("min_forward_pf") is not None:
+        pf = metrics.get("pf")
+        if pf is None or float(pf) < float(criteria["min_forward_pf"]):
+            failures.append(
+                f"PF forward {pf if pf is not None else 'sin datos'} "
+                f"< {criteria['min_forward_pf']}"
+            )
+    if criteria.get("min_expectancy_r") is not None:
+        exp = metrics.get("expectancy")
+        if exp is None or float(exp) < float(criteria["min_expectancy_r"]):
+            failures.append(
+                f"expectativa {exp if exp is not None else 'sin datos'} "
+                f"< {criteria['min_expectancy_r']}"
+            )
+    if criteria.get("max_forward_dd_pct") is not None:
+        dd = metrics.get("max_dd_pct")
+        if dd is None or float(dd) > float(criteria["max_forward_dd_pct"]):
+            failures.append(
+                f"DD forward {dd if dd is not None else 'sin datos'} "
+                f"> {criteria['max_forward_dd_pct']}"
+            )
+    if criteria.get("min_entry_match_pct") is not None:
+        match = metrics.get("entry_match_pct")
+        if match is None or float(match) < float(criteria["min_entry_match_pct"]):
+            failures.append(
+                f"coincidencia de entradas {match if match is not None else 'sin datos'} "
+                f"< {criteria['min_entry_match_pct']}"
+            )
+    if criteria.get("require_drift", True):
+        drift = str(metrics.get("drift_status") or "sin datos")
+        max_drift = str(criteria.get("max_drift_status", "ok"))
+        if drift == "sin datos":
+            failures.append("deriva sin datos")
+        elif DRIFT_ORDER.get(drift, 9) > DRIFT_ORDER.get(max_drift, 0):
+            failures.append(f"deriva {drift} > {max_drift}")
     if int(metrics.get("guard_breaches") or 0) > int(
         criteria.get("max_guard_breaches", 0)
     ):
@@ -470,6 +680,8 @@ __all__ = [
     "STATES",
     "evaluate_criteria",
     "evaluate_incubation",
+    "pre_register_external",
+    "start_external_forward",
     "events",
     "gate_eligible",
     "load_config",

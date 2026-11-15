@@ -1004,6 +1004,10 @@ def run_forward_bot(
     atr_value = _atr_value(df)
     tick = _tick(broker, symbol)
     positions = _positions(broker, symbol)
+    from .symbol_risk import open_risk_by_symbol, symbol_cap_usd
+
+    symbol_risk = open_risk_by_symbol(positions, broker, account_id=account.id)
+    symbol_cap = symbol_cap_usd(account, symbol)
     ours, foreign = _split_positions(positions, symbol, bot.magic)
     if len(ours) > 1:
         raise ForwardError(
@@ -1381,6 +1385,9 @@ def run_forward_bot(
             max_risk_pct=profile.max_risk_pct,
             max_trades_per_day=max_trades,
             proposed_risk_usd=risk_usd,
+            symbol_open_risk_usd=symbol_risk.get(symbol.upper(), 0.0),
+            symbol_risk_cap_usd=symbol_cap,
+            symbol=symbol,
         )
     except Exception as exc:
         raise ForwardError(f"{bot.id}: guard de cuenta no disponible: {exc}") from exc

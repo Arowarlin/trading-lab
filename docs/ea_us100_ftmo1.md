@@ -9,7 +9,8 @@ corre dentro del terminal con su propio motor, su riesgo compartido y su magic.
 | Campo | Valor |
 |---|---|
 | ID | `us100-ftmo1` |
-| Cuenta | `ftmo_demo` |
+| Cuenta actual | `ftmo_demo` (demo) |
+| Cuenta dedicada | `ftmo_trial_ea` (registrada y `blocked` hasta abrir el trial) |
 | Símbolo | `US100.cash` |
 | Magic | `93010001` |
 | Magics gestionados | `93010001`, `93020001` |
@@ -56,6 +57,108 @@ lab ea status us100-ftmo1
   (`lab_magic_map`), así que sus deals no se confunden con `manual`.
 - En la consola web aparece como tarjeta **externo MT5**, solo lectura, sin
   botones de archivar ni evaluar.
+
+## Cuenta dedicada y FTMO Free Trial
+
+El EA sigue en `ftmo_demo` con los controles compartidos. Para separarlo se
+reservó `ftmo_trial_ea` en `config/accounts.yaml` con las reglas del challenge
+FTMO 100k, pero **`status: blocked`**: mientras esté bloqueada, el guardián no
+exporta esa cuenta y `PropGuard`, el forward y `ai_trader` rechazan operarla.
+No se inventó una cuenta que todavía no existe.
+
+Pasos para abrir el trial y mover el EA:
+
+1. Abre un **FTMO Free Trial** nuevo de 100.000 USD y anota login, servidor y
+   terminal. No uses una cuenta real.
+2. Instala el segundo terminal en una ruta distinta (por ejemplo
+   `C:\Program Files\FTMO MetaTrader 5 Trial`).
+3. Copia la plantilla `TradingLab_US100_v3.tpl` a
+   `MQL5/Profiles/Templates/` de ese terminal y el EA/setfile a
+   `MQL5/Experts/TradingLab/US100_FTMO1/`.
+4. Abre `US100.cash` M5, aplica **Plantillas → TradingLab_US100_v3**, carga
+   `US100_FTMO_v3_challenge.set` y activa **Algo Trading**.
+5. En `config/accounts.yaml` cambia `ftmo_trial_ea.status` de `blocked` a
+   `demo` y revisa que `account_size` sea 100.000.
+6. En `config/mt5_eas.yaml` cambia `account: ftmo_demo` por
+   `account: ftmo_trial_ea` en `us100-ftmo1`. El guardián y el stop de cuenta
+   empiezan a usar los magics de esa cuenta en la siguiente exportación.
+7. En `config/ops.yaml` apunta `mt5.terminal_path` al terminal del trial y
+   reinicia los procesos del lab que hablan con MT5.
+
+**Dos terminales a la vez:** el paquete `MetaTrader5` inicializa un solo
+terminal por proceso (`mt5.initialize(path=...)`); no mantiene dos conexiones
+simultáneas. El laboratorio usa un broker por proceso, así que hay dos rutas:
+
+- **Recomendada:** un proceso por terminal (por ejemplo, el forward del EA en
+  el trial y los bots del lab en `ftmo_demo`), cada uno con su
+  `mt5.terminal_path`.
+- **Alternar:** si solo hay un proceso, cambia `terminal_path`, reinicia y
+  asume que durante la ventana de cambio el otro terminal no se lee. El EA
+  sigue operando dentro de su terminal; el lab solo deja de observarlo.
+
+Mientras el trial no exista, no se toca `status`: la cuenta queda `blocked`.
+El EA puede seguir en `ftmo_demo` porque el stop de cuenta y el tope por
+símbolo ya incluyen sus magics.
+
+## Controles de riesgo compartidos
+
+- **Guardián:** `tradinglab_guardian.json` incluye los `managed_magics` de todos
+  los EAs de `config/mt5_eas.yaml` cuya `account` sea la del guardián. Hoy son
+  `93010001` y `93020001`, además de los magics del forward y de `ai_trader`.
+  Una cuenta `blocked` no se exporta.
+- **Stop diario de cuenta:** `account_daily_report` suma la pérdida realizada y
+  el flotante de los magics del lab **y** de los EAs. Si el stop se toca por el
+  EA, el lab no cierra sus posiciones (no son suyas): bloquea las aperturas de
+  sus carriles, escribe una acción `account_stop` en `console_actions`, alerta
+  con severidad `critical` una sola vez al día y deja `stop_cause=ea`.
+- **Tope por símbolo:** `ftmo_demo.symbol_risk_caps["US100.cash"] = 0.02`
+  (2.000 USD sobre 100.000). El riesgo abierto se mide como
+  `|entrada − SL| × volumen × (tick_value / tick_size)` para todos los magics
+  del lab y del EA en ese símbolo. `PropGuard`, el forward y `ai_trader` rechazan una
+  apertura que supere el tope; `lab doctor` muestra el riesgo abierto por
+  símbolo y marca WARN si está por encima.
+
+## Forward pre-registrado
+
+El forward del EA está congelado en `lifecycle` **antes** de contar, con hash
+`2bfad45ca4ba36fc`. El reloj no arranca hoy: arranca el primer día con un fill
+real del EA (`start_date` queda `NULL` hasta entonces).
+
+| Criterio | Umbral |
+|---|---|
+| Ventana | 60 días o 40 operaciones (lo que llegue después) |
+| Profit factor | ≥ 1,15 |
+| Expectativa | ≥ +0,10 R |
+| Drawdown | ≤ 6 % |
+| Slippage medio | ≤ 2 puntos |
+| Breaches del guardián | 0 |
+| Coincidencia de entradas con el motor | ≥ 90 % |
+
+La coincidencia compara cada operación forward con la que predice
+`ea_us100_engine` para la misma vela M5 (misma dirección y entrada a ±5 min).
+`lab ea forward us100-ftmo1` muestra el estado, el hash y las métricas; no
+ejecuta el EA ni envía órdenes.
+
+## Horizonte del challenge
+
+`lab ea horizon us100-ftmo1` simula FTMO 100k con los retornos diarios del
+motor v3, sin optimizar ni probar variantes nuevas. El horizonte “sin límite”
+se corta a 750 días, el máximo práctico de `exposure_sweep`. Informe completo
+en `reports/research/ea_us100_ftmo1/horizon.md`:
+
+| Riesgo | Horizonte | P(pasar) | P(breach) | Mediana días | EV neto |
+|---|---|---:|---:|---:|---:|
+| 0,35 % fijo | 21 d | 1,98 % | 0,00 % | 18 | −490 EUR |
+| 0,35 % fijo | 60 d | 34,46 % | 0,08 % | 42 | +326 EUR |
+| 0,35 % fijo | 120 d | 75,72 % | 0,44 % | 64 | +1.364 EUR |
+| 0,35 % fijo | sin límite | 99,28 % | 0,72 % | 77 | +1.956 EUR |
+| Dinámico v3 | 21 d | 21,92 % | 0,42 % | 15 | +369 EUR |
+| Dinámico v3 | 60 d | 68,00 % | 3,08 % | 29 | +2.279 EUR |
+| Dinámico v3 | 120 d | 89,46 % | 4,54 % | 37 | +3.168 EUR |
+| Dinámico v3 | sin límite | 95,06 % | 4,94 % | 39 | +3.400 EUR |
+
+El riesgo dinámico sube la probabilidad de pasar y también el breach; no se
+cambió el setfile ni se activó nada por este informe.
 
 ## Validación con el laboratorio
 

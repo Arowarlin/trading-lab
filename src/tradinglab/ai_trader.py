@@ -1807,13 +1807,25 @@ def _propose(item: dict, *, broker, cfg: dict, settings: Settings,
     rules = _prop_rules(settings)
     guard = PropGuard(rules)
     try:
+        from .accounts import load_accounts
+        from .symbol_risk import open_risk_by_symbol, symbol_cap_usd
+
+        account_cfg = load_accounts().get(cfg["account"])
+        live_positions = broker.positions()
+        symbol_open_risk = open_risk_by_symbol(
+            live_positions, broker, account_id=cfg["account"]
+        ).get(str(item["symbol"]).upper(), 0.0)
+        symbol_cap = symbol_cap_usd(account_cfg, item["symbol"])
         state = PropGuard.state_from_equity(
             rules, broker.equity_series(), initial_balance=rules.account_size,
-            open_positions=len(broker.positions()),
+            open_positions=len(live_positions),
         )
         report = guard.evaluate(
             state, proposed_lots=lots, risk_per_lot=risk_per_lot,
             open_risk_usd=_open_risk(db_path, style["magic"]), new_position=True,
+            symbol_open_risk_usd=symbol_open_risk,
+            symbol_risk_cap_usd=symbol_cap,
+            symbol=item["symbol"],
         )
     except Exception as exc:
         raise _Reject(f"PropGuard no disponible: {exc}", decision="skip",

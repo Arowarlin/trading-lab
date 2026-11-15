@@ -180,6 +180,8 @@ def build_config(
         raise GuardianError(f"cuenta {account_id!r} no cargable desde accounts.yaml")
     if account.account_size <= 0:
         raise GuardianError(f"{account_id}: account_size debe ser > 0")
+    if str(account.status).lower() == "blocked":
+        raise GuardianError(f"{account_id}: cuenta bloqueada; no se exporta el guardián")
 
     if account.type == "fondeo":
         if not account.firm or not account.phase:
@@ -244,6 +246,19 @@ def build_config(
     magics = sorted({int(bot.magic) for bot in bots})
     if not magics:
         raise GuardianError("intraday_forward.yaml no tiene magics que proteger")
+    ea_magics: set[int] = set()
+    ea_ids: list[str] = []
+    try:
+        from .ea_registry import load_eas
+
+        for ea in load_eas():
+            if ea.account != account_id:
+                continue
+            ea_ids.append(ea.id)
+            ea_magics.add(int(ea.magic))
+            ea_magics.update(int(item) for item in ea.managed_magics)
+    except Exception as exc:
+        raise GuardianError(f"no se pudieron cargar los EAs de {account_id}: {exc}") from exc
     try:
         ai_lane = _load_ai_lane(ai_path)
     except GuardianError:
@@ -262,8 +277,10 @@ def build_config(
         "reset_tz": reset_tz,
         "reset_time": reset_time,
         "reset_utc_offset_minutes": offset_minutes,
-        "magics": sorted(set(magics) | set(ai_lane["magics"])),
+        "magics": sorted(set(magics) | set(ai_lane["magics"]) | ea_magics),
         "bots": [bot.id for bot in bots],
+        "eas": ea_ids,
+        "ea_magics": sorted(ea_magics),
         "ai_styles": ai_lane["styles"],
         "ai_magics": ai_lane["magics"],
         "ai_daily_stop": ai_lane["daily_stop_global"],

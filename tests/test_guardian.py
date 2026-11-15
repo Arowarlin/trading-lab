@@ -92,7 +92,12 @@ def test_build_config_ftmo_demo():
     assert cfg["account_size"] == pytest.approx(100_000)
     assert cfg["daily_loss_pct"] == pytest.approx(0.04)
     assert cfg["account_daily_stop"] == pytest.approx(0.04)
-    assert set(cfg["magics"]) == {20261151, 20261152, 20261153, 20261191, 20261192, 20261193}
+    assert set(cfg["magics"]) == {
+        20261151, 20261152, 20261153, 20261191, 20261192, 20261193,
+        93010001, 93020001,
+    }
+    assert cfg["eas"] == ["us100-ftmo1"]
+    assert cfg["ea_magics"] == [93010001, 93020001]
     assert cfg["max_drawdown_pct"] == pytest.approx(0.09)
     assert cfg["reset_tz"] == "Europe/Prague"
     expected = int(
@@ -100,7 +105,8 @@ def test_build_config_ftmo_demo():
     )
     assert cfg["reset_utc_offset_minutes"] == expected
     assert cfg["magics"] == [20261151, 20261152, 20261153,
-                             20261191, 20261192, 20261193]
+                             20261191, 20261192, 20261193,
+                             93010001, 93020001]
     assert cfg["ai_magics"] == [20261191, 20261192, 20261193]
     assert cfg["daily_stop_global"] == pytest.approx(0.03)
     assert set(cfg["ai_styles"]) == {"scalping", "intraday", "swing"}
@@ -112,8 +118,11 @@ def test_build_config_usa_magics_del_forward(tmp_path):
     accounts = _accounts_file(tmp_path, {"ftmo_demo": _ftmo_account()})
     forward = _forward_file(tmp_path, magics=(111, 222))
     cfg = build_config("ftmo_demo", accounts_path=accounts, forward_path=forward)
-    assert cfg["magics"] == [111, 222, 20261191, 20261192, 20261193]
+    assert cfg["magics"] == [
+        111, 222, 20261191, 20261192, 20261193, 93010001, 93020001,
+    ]
     assert cfg["bots"] == ["forward-0", "forward-1"]
+    assert cfg["ea_magics"] == [93010001, 93020001]
 
 
 def test_cuenta_propia_usa_limits_del_yaml(tmp_path):
@@ -137,6 +146,18 @@ def test_cuenta_propia_usa_limits_del_yaml(tmp_path):
 def test_cuenta_desconocida_aborta():
     with pytest.raises(GuardianError, match="no existe"):
         build_config("no_existe")
+
+
+def test_cuenta_bloqueada_no_exporta_guardian():
+    with pytest.raises(GuardianError, match="bloqueada"):
+        build_config("ftmo_trial_ea")
+
+
+def test_los_magics_del_ea_no_se_cuelan_en_otra_cuenta():
+    cfg = build_config("paper_main")
+    assert 93010001 not in cfg["magics"]
+    assert 93020001 not in cfg["magics"]
+    assert cfg["ea_magics"] == []
 
 
 def test_fondeo_sin_firm_aborta(tmp_path):
@@ -226,7 +247,8 @@ def test_export_escribe_json_atomico(tmp_path):
     payload = json.loads(target.read_text(encoding="utf-8"))
     assert payload["account"] == "ftmo_demo"
     assert payload["magics"] == [20261151, 20261152, 20261153,
-                                 20261191, 20261192, 20261193]
+                                 20261191, 20261192, 20261193,
+                                 93010001, 93020001]
     assert payload["daily_stop_global"] == pytest.approx(0.03)
 
 

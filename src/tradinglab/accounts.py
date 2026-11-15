@@ -8,6 +8,7 @@ lectura) y el propio.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from dataclasses import field as dc_field
 from datetime import datetime, time, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -51,6 +52,7 @@ class AccountDefinition:
     phase: str | None
     defaults: AccountLimits
     account_daily_stop: float | None = None
+    symbol_risk_caps: dict[str, float] = dc_field(default_factory=dict)
 
 
 def _limits_from_dict(data: dict[str, Any]) -> AccountLimits:
@@ -89,6 +91,10 @@ def load_accounts(path: str | Path | None = None) -> dict[str, AccountDefinition
                 if daily_stop_raw not in (None, "")
                 else None
             ),
+            symbol_risk_caps={
+                str(symbol).strip().upper(): float(value)
+                for symbol, value in (data.get("symbol_risk_caps") or {}).items()
+            },
         )
     return out
 

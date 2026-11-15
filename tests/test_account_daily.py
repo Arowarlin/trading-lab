@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pandas as pd
+import pytest
 
 from tradinglab.account_daily import account_daily_report
-from tradinglab.db import init_db
+from tradinglab.db import connect, init_db
 
 
 class _Broker:
@@ -32,6 +34,55 @@ class _Broker:
         )
 
 
+class _BrokerEa(_Broker):
+    """El EA empuja la cuenta al límite; el carril del lab no."""
+
+    def positions(self):
+        return [
+            {"ticket": 1, "symbol": "US100.cash", "magic": 93010001,
+             "profit": -3_900.0, "swap": 0.0, "commission": 0.0},
+            {"ticket": 2, "symbol": "EURUSD", "magic": 20261151,
+             "profit": -100.0, "swap": 0.0, "commission": 0.0},
+        ]
+
+
+def _account_stops(db: Path) -> list[dict]:
+    with connect(db) as con:
+        rows = con.execute(
+            "SELECT action, params, result FROM console_actions "
+            "WHERE action = 'account_stop'"
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def test_stop_cuenta_por_flotante_del_ea(tmp_path: Path):
+    db = tmp_path / "lab.db"
+    init_db(db)
+    now = pd.Timestamp("2026-11-12T20:00:00Z").to_pydatetime()
+    report = account_daily_report(
+        db, broker=_BrokerEa(96_000.0), now=now, alert=False,
+    )
+    assert report["allowed"] is False
+    assert report["stop_cause"] == "ea"
+    assert report["ea_floating_usd"] == pytest.approx(-3_900.0)
+    assert report["lab_floating_usd"] == pytest.approx(-100.0)
+    assert report["alerted"] is True
+
+    stops = _account_stops(db)
+    assert len(stops) == 1
+    payload = json.loads(stops[0]["params"])
+    assert payload["cause"] == "ea"
+    assert payload["ea_floating"] == pytest.approx(-3_900.0)
+
+    # Una segunda lectura no duplica la alerta ni la acción.
+    again = account_daily_report(
+        db, broker=_BrokerEa(96_000.0), now=now, alert=False,
+    )
+    assert again["allowed"] is False
+    assert again["alerted"] is False
+    assert len(_account_stops(db)) == 1
+
+
 def test_stop_cuenta_suma_flotante_de_varios_carriles(tmp_path: Path):
     db = tmp_path / "lab.db"
     init_db(db)
@@ -43,7 +94,7 @@ def test_stop_cuenta_suma_flotante_de_varios_carriles(tmp_path: Path):
         "20261151": -2_000.0, "20261191": -1_500.0,
     }
 
-    blocked = account_daily_report(db, broker=_Broker(96_000.0))
+    blocked = account_daily_report(db, broker=_Broker(96_000.0), alert=False)
     assert blocked["allowed"] is False
     assert blocked["loss_used_usd"] == 4_000.0
     assert "fuera de límite" in blocked["reason"] or "stop" in blocked["reason"].lower()

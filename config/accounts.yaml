@@ -42,6 +42,30 @@ accounts:
     account_size: 100000
     account_daily_stop: 0.04
     pocket: intraday_fx
+    symbol_risk_caps:
+      US100.cash: 0.02
+    limits:
+      daily_loss_pct: 0.05
+      max_drawdown_pct: 0.10
+      per_trade_risk_pct: 0.005
+      max_open_risk_pct: 0.02
+      max_trades_per_day: 4
+
+  # Cuenta dedicada al EA externo cuando exista un FTMO Free Trial nuevo.
+  # `blocked` hace que el laboratorio rechace abrir/operar esta cuenta.
+  ftmo_trial_ea:
+    name: "FTMO Free Trial EA (pendiente)"
+    type: fondeo
+    broker: mt5
+    platform: mt5
+    firm: ftmo
+    phase: challenge
+    status: blocked
+    account_size: 100000
+    account_daily_stop: 0.04
+    pocket: intraday_fx
+    symbol_risk_caps:
+      US100.cash: 0.02
     limits:
       daily_loss_pct: 0.05
       max_drawdown_pct: 0.10

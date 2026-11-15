@@ -89,8 +89,10 @@ def test_fund_limites_bolsillos_y_clusters(tmp_path: Path) -> None:
         "paper_main",
         "alpaca_paper",
         "ftmo_demo",
+        "ftmo_trial_ea",
         "topstep_template",
     }
+    assert accounts["ftmo_trial_ea"]["status"] == "blocked"
 
     ftmo = accounts["ftmo_demo"]
     assert ftmo["type"] == "fondeo"
@@ -102,7 +104,8 @@ def test_fund_limites_bolsillos_y_clusters(tmp_path: Path) -> None:
     pockets = {row["pocket"]: row for row in payload["pockets"]}
     assert set(pockets) == {"swing_equity", "intraday_fx", "intraday_futures"}
     assert pockets["swing_equity"]["capital"] == pytest.approx(200_000.0)
-    assert sum(row["capital"] for row in payload["pockets"]) == pytest.approx(350_000.0)
+    # La cuenta del trial está reservada (blocked) pero suma capital del bolsillo.
+    assert sum(row["capital"] for row in payload["pockets"]) == pytest.approx(450_000.0)
 
     trend_rows = [
         row for row in payload["clusters"] if row["cluster"] == "trend_equity"

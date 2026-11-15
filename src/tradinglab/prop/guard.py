@@ -125,6 +125,9 @@ class PropGuard:
         calendar_reason: str = "",
         blocked_by_session: bool = False,
         session_reason: str = "",
+        symbol_open_risk_usd: float = 0.0,
+        symbol_risk_cap_usd: float | None = None,
+        symbol: str | None = None,
     ) -> GuardReport:
         rules = self.rules
         daily_floor, max_floor = self.floors(state)
@@ -240,6 +243,16 @@ class PropGuard:
                     f"la orden usa {proposed_risk / remaining:.0%} del colchón restante"
                 )
 
+        if symbol_risk_cap_usd is not None and proposed_risk > 0:
+            symbol_risk = max(0.0, float(symbol_open_risk_usd)) + proposed_risk
+            if symbol_risk > float(symbol_risk_cap_usd) + 1e-9:
+                return report(
+                    False,
+                    "block",
+                    f"riesgo del símbolo {symbol or '?'} {symbol_risk:,.2f} > "
+                    f"{float(symbol_risk_cap_usd):,.2f}",
+                )
+
         if rules.max_open_risk_pct is not None and risk_per_lot > 0:
             if open_risk_usd is not None:
                 # Riesgo real por posición (cada símbolo tiene su $/lote); no se
@@ -353,6 +366,8 @@ class AccountGuardReport:
     remaining_usd: float
     cluster_risk_usd: float = 0.0
     cluster_cap_usd: float | None = None
+    symbol_risk_usd: float = 0.0
+    symbol_cap_usd: float | None = None
 
 
 def evaluate_account(
@@ -366,6 +381,9 @@ def evaluate_account(
     closing: bool = False,
     cluster_open_risk_usd: float = 0.0,
     max_cluster_risk_pct: float | None = None,
+    symbol_open_risk_usd: float = 0.0,
+    symbol_risk_cap_usd: float | None = None,
+    symbol: str | None = None,
 ) -> AccountGuardReport:
     """Guard agregado para una cuenta compartida.
 
@@ -450,6 +468,24 @@ def evaluate_account(
             base.remaining_usd,
         )
 
+    symbol_risk = max(0.0, float(symbol_open_risk_usd)) + proposed
+    if (
+        symbol_risk_cap_usd is not None
+        and symbol_risk > float(symbol_risk_cap_usd) + 1e-9
+    ):
+        return AccountGuardReport(
+            False,
+            f"riesgo del símbolo {symbol or '?'} {symbol_risk:,.2f} > "
+            f"{float(symbol_risk_cap_usd):,.2f}",
+            "block",
+            total_risk,
+            open_risk,
+            proposed,
+            base.remaining_usd,
+            symbol_risk_usd=symbol_risk,
+            symbol_cap_usd=float(symbol_risk_cap_usd),
+        )
+
     cap = base.remaining_usd
     if rules.max_open_risk_pct is not None:
         cap = min(cap, rules.account_size * rules.max_open_risk_pct)
@@ -493,6 +529,8 @@ def evaluate_account(
         base.remaining_usd,
         cluster_risk,
         cluster_cap,
+        symbol_risk,
+        float(symbol_risk_cap_usd) if symbol_risk_cap_usd is not None else None,
     )
 
 

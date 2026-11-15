@@ -64,6 +64,12 @@ def load_eas(path: str | Path | None = None) -> list[ExternalEA]:
     out: list[ExternalEA] = []
     ids: set[str] = set()
     magics: set[int] = set()
+    from .accounts import load_accounts
+
+    try:
+        known_accounts = load_accounts()
+    except Exception as exc:
+        raise EAError(f"no se pudo leer accounts.yaml: {exc}") from exc
     for item in items:
         if not isinstance(item, dict):
             raise EAError("EA inválido")
@@ -75,8 +81,10 @@ def load_eas(path: str | Path | None = None) -> list[ExternalEA]:
         if platform != "mt5":
             raise EAError(f"{ea_id}: solo se admite platform=mt5")
         account = str(item.get("account") or "").strip()
-        if account != "ftmo_demo":
-            raise EAError(f"{ea_id}: solo se admite account=ftmo_demo")
+        if not account:
+            raise EAError(f"{ea_id}: falta account")
+        if account not in known_accounts:
+            raise EAError(f"{ea_id}: cuenta desconocida: {account}")
         magic = int(item.get("magic") or 0)
         if magic <= 0 or magic in magics:
             raise EAError(f"{ea_id}: magic inválido o duplicado")

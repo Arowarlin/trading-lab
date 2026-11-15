@@ -644,6 +644,44 @@ def doctor(network: bool = typer.Option(False, "--network", help="Probar descarg
         except Exception as exc:
             table.add_row("MetaTrader 5", WARN, str(exc)[:160])
 
+    # Riesgo abierto por símbolo frente al tope de accounts.yaml.
+    if settings:
+        try:
+            from .accounts import load_accounts
+            from .execution import get_mt5_broker
+            from .symbol_risk import open_risk_report
+
+            account = load_accounts().get("ftmo_demo")
+            if account is not None and account.symbol_risk_caps:
+                broker = get_mt5_broker(settings, DEFAULT_DB, dry_run=True)
+                broker.connect()
+                try:
+                    risk = open_risk_report(DEFAULT_DB, account, broker=broker)
+                finally:
+                    try:
+                        broker.shutdown()
+                    except Exception:
+                        pass
+                parts = []
+                over = False
+                for symbol, item in risk["symbols"].items():
+                    cap = item.get("cap_usd")
+                    if cap is None:
+                        parts.append(f"{symbol} {item['open_risk_usd']:,.0f}/sin tope")
+                        continue
+                    parts.append(
+                        f"{symbol} {item['open_risk_usd']:,.0f}/{cap:,.0f}"
+                    )
+                    if item["open_risk_usd"] > cap + 1e-9:
+                        over = True
+                table.add_row(
+                    "Riesgo símbolo",
+                    WARN if over else OK,
+                    "; ".join(parts)[:180] if parts else "sin riesgo abierto",
+                )
+        except Exception as exc:
+            table.add_row("Riesgo símbolo", WARN, str(exc)[:160])
+
     # Reglas de fondeo
     if settings:
         try:
@@ -2761,6 +2799,73 @@ def ea_status_cmd(
                 str(item.get("deal_id") or ""),
             )
         console.print(fills)
+
+
+@ea_app.command("forward")
+def ea_forward_cmd(
+    ea_id: str = typer.Argument("us100-ftmo1", help="ID del EA"),
+) -> None:
+    """Pre-registra el forward y muestra sus métricas y criterios congelados."""
+    from .ea_forward import criteria_preview, forward_report
+
+    bot = f"ea:{ea_id}"
+    payload = forward_report(DEFAULT_DB, bot=bot)
+    criteria = criteria_preview(bot)
+    table = Table(title=f"Forward EA · {ea_id}")
+    table.add_column("Campo", style="bold")
+    table.add_column("Valor")
+    table.add_row("Estado", str(payload.get("state") or "—"))
+    table.add_row("Inicio", str(payload.get("start_date") or "pendiente del primer fill"))
+    table.add_row("Fin ventana", str(payload.get("end_date") or "—"))
+    table.add_row("Hash criterios", str(criteria["hash"]))
+    metrics = payload.get("metrics") or {}
+    for key in (
+        "n_trades",
+        "pf",
+        "expectancy",
+        "max_dd_pct",
+        "slippage_mean_points",
+        "entry_match_pct",
+    ):
+        table.add_row(key, str(metrics.get(key)))
+    table.add_row("Propuesta", str(payload.get("proposal") or "en curso"))
+    failures = payload.get("failures") or []
+    if failures:
+        table.add_row("Filtros", "; ".join(str(item) for item in failures)[:300])
+    console.print(table)
+
+
+@ea_app.command("horizon")
+def ea_horizon_cmd(
+    ea_id: str = typer.Argument("us100-ftmo1", help="ID del EA"),
+    paths: int = typer.Option(5_000, "--paths", help="Paths de Monte Carlo"),
+) -> None:
+    """Simula 21/60/120/750 días con riesgo fijo y dinámico."""
+    from .ea_horizon import run as run_horizon
+    from .ea_horizon import write_report
+
+    with console.status("Simulando horizontes…"):
+        payload = run_horizon(ea_id=ea_id, paths=paths)
+    files = write_report(payload)
+    table = Table(title=f"Horizonte · {ea_id}")
+    table.add_column("Riesgo")
+    table.add_column("Horizonte")
+    table.add_column("P(pasar)", justify="right")
+    table.add_column("P(breach)", justify="right")
+    table.add_column("Mediana días", justify="right")
+    table.add_column("EV EUR", justify="right")
+    for mode, label in (("fixed_0.35", "0,35 % fijo"), ("dynamic_v3", "dinámico v3")):
+        for key, row in payload["modes"][mode].items():
+            table.add_row(
+                label,
+                "sin límite" if key == "sin_limite" else f"{key} d",
+                f"{row['pass_rate']:.2%}",
+                f"{row['breach_rate']:.2%}",
+                str(row["median_days_to_pass"] or "—"),
+                f"{row['ev_eur']:+.0f}" if row["ev_eur"] is not None else "Sin datos",
+            )
+    console.print(table)
+    console.print(f"[dim]JSON: {files['json']} · MD: {files['markdown']}[/dim]")
 
 
 @ea_app.command("validate")
