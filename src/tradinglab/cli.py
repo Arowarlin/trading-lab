@@ -9405,7 +9405,8 @@ def campaign_ntotal_cmd() -> None:
 
 
 def _campaign_config(universe: dict, campaign: str, *,
-                     skip_adjacent_if_empty: bool = False) -> dict:
+                     skip_adjacent_if_empty: bool = False,
+                     pbo_gate: bool = False) -> dict:
     """Configuración de la campaña a partir del universo y su plan.
 
     No registra nada: es la misma función la que escribe el yaml y la que
@@ -9416,6 +9417,7 @@ def _campaign_config(universe: dict, campaign: str, *,
     return campaign_config(
         universe, campaign,
         skip_adjacent_if_empty=skip_adjacent_if_empty,
+        pbo_gate=pbo_gate,
     )
 
 
@@ -9521,6 +9523,10 @@ def campaign_plan_cmd(
         False, "--skip-adjacent-if-empty",
         help="Exime (c) si el timeframe adyacente no tiene celdas",
     ),
+    pbo_gate: bool = typer.Option(
+        False, "--pbo-gate",
+        help="El PBO de descubrimiento ser? gate (solo campa?as nuevas)",
+    ),
 ) -> None:
     """Escribe config/campaigns/<id>.yaml con el corte y N_total. No registra."""
     from .campaign import CAMPAIGNS_DIR, CampaignError
@@ -9530,6 +9536,7 @@ def campaign_plan_cmd(
         config = _campaign_config(
             universe, campaign,
             skip_adjacent_if_empty=skip_adjacent_if_empty,
+            pbo_gate=pbo_gate,
         )
     except CampaignError as exc:
         console.print(f"[red]{exc}[/red]")
@@ -9574,6 +9581,10 @@ def campaign_plan_cmd(
 def campaign_register_cmd(
     campaign: str = typer.Option("2026-11-A", "--campaign", help="Identificador"),
     confirm: bool = typer.Option(False, "--confirm", help="Sella la campaña de verdad"),
+    pbo_gate: bool = typer.Option(
+        False, "--pbo-gate",
+        help="El PBO de descubrimiento será gate (solo si no hay YAML previo)",
+    ),
 ) -> None:
     """Sella la campaña una sola vez con el corte común ya fijado. No corre."""
     from .campaign import (
@@ -9593,12 +9604,14 @@ def campaign_register_cmd(
     path = CAMPAIGNS_DIR / f"{campaign}.yaml"
     stored = None
     skip_adjacent = False
+    gate = bool(pbo_gate)
     if path.exists():
         try:
             stored = load_campaign_yaml(path)
             skip_adjacent = bool(
                 (stored.get("plateau") or {}).get("skip_adjacent_if_empty")
             )
+            gate = bool(stored.get("pbo_gate", False))
         except CampaignError as exc:
             console.print(f"[red]{exc}[/red]")
             raise typer.Exit(2) from exc
@@ -9607,6 +9620,7 @@ def campaign_register_cmd(
         config = _campaign_config(
             universe, campaign,
             skip_adjacent_if_empty=skip_adjacent,
+            pbo_gate=gate,
         )
     except CampaignError as exc:
         console.print(f"[red]{exc}[/red]")
@@ -9682,6 +9696,7 @@ def campaign_status_cmd() -> None:
         "holdout_hash",
         "run_id",
         "started_at",
+        "pbo_gate",
         "estado",
     ):
         table.add_column(column, overflow="fold")
@@ -9694,6 +9709,7 @@ def campaign_status_cmd() -> None:
             (str(row["holdout_hash"])[:12] + "…") if row["holdout_hash"] else "Sin datos",
             str(row["run_id"] or "Sin datos"),
             str(row["started_at"] or "no ejecutada"),
+            "sí" if row["pbo_gate"] else "no",
             (
                 "contaminada: " + str(row["contamination_reason"] or "")
                 if row["contaminated_at"] else "ok"
@@ -9817,6 +9833,8 @@ def campaign_run_cmd(
     trial_srs = [
         period_sharpe(series) for series in discovery["returns_by_id"].values()
     ]
+    discovery_pbo_payload = discovery.get("pbo") or {}
+    pbo_gate = bool(config.get("pbo_gate", False))
     confirmed = run_holdout(
         DEFAULT_DB,
         config,
@@ -9826,12 +9844,16 @@ def campaign_run_cmd(
         prior_tests=prior,
         paths=int(paths),
         trial_srs_per_period=trial_srs,
+        discovery_pbo_payload=discovery_pbo_payload,
+        pbo_gate=pbo_gate,
     )
     paths_out = write_report(
         campaign,
         plateau,
         confirmed,
         n_total=int(record["n_total"]),
+        discovery_pbo=discovery_pbo_payload,
+        pbo_gate=pbo_gate,
     )
     try:
         finish_campaign(DEFAULT_DB, campaign)

@@ -18,6 +18,7 @@ from tradinglab.campaign import (
     common_cutoff,
     compute_n_total,
     correlation_clusters,
+    discovery_pbo,
     finish_campaign,
     holdout_hash,
     holdout_rows,
@@ -310,8 +311,18 @@ def test_second_registration_is_refused(tmp_path: Path) -> None:
     record = register_campaign(db, _config(5))
     assert record["n_total"] == 5
     assert record["holdout_hash"] == "abc123"
+    assert record["pbo_gate"] == 0
     with pytest.raises(CampaignError):
         register_campaign(db, _config(5))
+
+
+def test_registro_guarda_pbo_gate(tmp_path: Path) -> None:
+    db = tmp_path / "lab.db"
+    init_campaigns(db)
+    record = register_campaign(
+        db, {**_config(5), "pbo_gate": True}
+    )
+    assert record["pbo_gate"] == 1
 
 
 # --------------------------------------------------- migración del contador
@@ -531,6 +542,47 @@ def test_prepare_campaign_n_total_and_yaml_match(tmp_path: Path) -> None:
     assert stored["cutoff_utc"] == config["cutoff_utc"]
     assert stored["holdout_hash"] == config["holdout_hash"]
     assert campaign_hash(stored) == config["config_hash"]
+
+
+def test_pbo_gate_es_false_por_defecto_y_no_cambia_el_hash(tmp_path: Path) -> None:
+    names = ("AAA", "BBB")
+    universe = {
+        "campaign": "TEST-GATE",
+        "symbols": [
+            {"symbol": name, "asset_class": "forex", "mt5_name": name}
+            for name in names
+        ],
+        "eligible_by_timeframe": {"H1": [], "H4": [], "D1": list(names)},
+        "counts": {},
+    }
+    frames = {
+        (name, "D1"): _frame(3_653, start="2016-01-01") for name in names
+    }
+    prepared = prepare_campaign(universe, frames, reassess=False)
+    default = campaign_config(prepared, "TEST-GATE")
+    assert default["pbo_gate"] is False
+    gated = campaign_config(prepared, "TEST-GATE", pbo_gate=True)
+    assert gated["pbo_gate"] is True
+    assert gated["config_hash"] != default["config_hash"]
+    assert default["config_hash"] == campaign_hash(default)
+    without = {key: value for key, value in default.items() if key != "pbo_gate"}
+    assert campaign_hash(without) == default["config_hash"]
+
+
+def test_discovery_pbo_una_variante_y_diez_variantes() -> None:
+    one = discovery_pbo({"AAA": pd.Series(np.arange(100, dtype=float))})
+    assert one["pbo"] is None
+    assert one["pbo_reason"] == "no_aplica_1_variante"
+
+    rng = np.random.default_rng(4)
+    series = {
+        f"v{index}": pd.Series(rng.normal(0.0, 0.01, 200))
+        for index in range(10)
+    }
+    payload = discovery_pbo(series)
+    assert payload["pbo"] is not None
+    assert 0.0 <= payload["pbo"] <= 1.0
+    assert payload["n_variants"] == 10
 
 
 def test_run_discovery_only_passes_pre_cutoff_frames(

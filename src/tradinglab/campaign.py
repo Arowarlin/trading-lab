@@ -1172,6 +1172,7 @@ def init_campaigns(db_path: str | Path) -> None:
                 started_at TEXT,
                 finished_at TEXT,
                 note TEXT,
+                pbo_gate INTEGER NOT NULL DEFAULT 0,
                 contaminated_at TEXT,
                 contamination_reason TEXT
             )
@@ -1182,6 +1183,7 @@ def init_campaigns(db_path: str | Path) -> None:
             for row in con.execute("PRAGMA table_info(campaign_registry)").fetchall()
         }
         for column, kind in (
+            ("pbo_gate", "INTEGER NOT NULL DEFAULT 0"),
             ("contaminated_at", "TEXT"),
             ("contamination_reason", "TEXT"),
         ):
@@ -1258,7 +1260,8 @@ def compute_n_total(universe: dict) -> dict:
 
 
 def campaign_config(universe: dict, campaign: str, *,
-                    skip_adjacent_if_empty: bool = False) -> dict:
+                    skip_adjacent_if_empty: bool = False,
+                    pbo_gate: bool = False) -> dict:
     """Configuración de la campaña a partir del universo final y su plan.
 
     No registra nada: la misma función alimenta `lab campaign plan` (escribe el
@@ -1321,6 +1324,7 @@ def campaign_config(universe: dict, campaign: str, *,
         "holdout_hash": plan.get("holdout_hash"),
         "holdout_series": list(plan.get("holdout_series") or []),
         "excluded_cells": len(plan.get("excluded") or []),
+        "pbo_gate": bool(pbo_gate),
         "plateau": (
             {"skip_adjacent_if_empty": True}
             if skip_adjacent_if_empty else {}
@@ -1358,6 +1362,8 @@ def campaign_hash(config: dict) -> str:
     }
     if config.get("plateau"):
         payload["plateau"] = config["plateau"]
+    if config.get("pbo_gate"):
+        payload["pbo_gate"] = True
     raw = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
@@ -1525,8 +1531,8 @@ def register_campaign(
         con.execute(
             "INSERT INTO campaign_registry"
             "(campaign_id, registered_at, n_total, discovery_pct, config_hash,"
-            " holdout_hash, note) "
-            "VALUES(?,?,?,?,?,?,?)",
+            " holdout_hash, note, pbo_gate) "
+            "VALUES(?,?,?,?,?,?,?,?)",
             (
                 campaign_id,
                 _now(),
@@ -1535,6 +1541,7 @@ def register_campaign(
                 digest,
                 config.get("holdout_hash"),
                 str(note or "")[:2000],
+                1 if config.get("pbo_gate") else 0,
             ),
         )
         con.commit()
@@ -2183,6 +2190,60 @@ def _annualization(timeframe: str) -> float:
     return float(BARS_PER_YEAR.get(str(timeframe).upper(), 252))
 
 
+def discovery_pbo(returns_by_id: dict[str, pd.Series]) -> dict:
+    """PBO de la matriz completa de descubrimiento, una vez por campaña.
+
+    No decide nada por sí solo: es un diagnóstico. El gate solo lo usa una
+    campaña cuyo pre-registro tenga ``pbo_gate: true``.
+    """
+    from .validation import cscv_pbo
+
+    series = {
+        str(key): value
+        for key, value in (returns_by_id or {}).items()
+        if value is not None and len(value) > 0
+    }
+    if len(series) < 2:
+        return {
+            "pbo": None,
+            "pbo_reason": "no_aplica_1_variante",
+            "n_variants": len(series),
+            "n_obs": 0,
+        }
+    frame = pd.concat(series, axis=1, join="inner")
+    frame = frame.replace([np.inf, -np.inf], np.nan).dropna()
+    if frame.shape[1] < 2 or len(frame) < 80:
+        return {
+            "pbo": None,
+            "pbo_reason": (
+                f"series_incompletas ({frame.shape[1]} variantes, "
+                f"{len(frame)} filas)"
+            ),
+            "n_variants": int(frame.shape[1]),
+            "n_obs": int(len(frame)),
+        }
+    try:
+        result = cscv_pbo(
+            frame.to_numpy(dtype=float),
+            n_slices=16,
+            max_combinations=2_000,
+            seed=0,
+        )
+    except Exception as exc:
+        return {
+            "pbo": None,
+            "pbo_reason": f"error: {type(exc).__name__}: {str(exc)[:160]}",
+            "n_variants": int(frame.shape[1]),
+            "n_obs": int(len(frame)),
+        }
+    return {
+        "pbo": float(result.pbo),
+        "pbo_reason": "",
+        "n_variants": int(frame.shape[1]),
+        "n_obs": int(len(frame)),
+    }
+
+
 def run_discovery(
     db_path: str | Path,
     config: dict,
@@ -2348,6 +2409,7 @@ def run_discovery(
         "cutoff_utc": None if cutoff is None else str(cutoff),
         "cells": cells,
         "returns_by_id": returns_by_id,
+        "pbo": discovery_pbo(returns_by_id),
         "n_cells": len(cells),
         "n_skipped": skipped,
     }
@@ -2496,13 +2558,14 @@ def run_holdout(
     paths: int = 5_000,
     seed: int = 42,
     trial_srs_per_period: list[float] | None = None,
+    discovery_pbo_payload: dict | None = None,
+    pbo_gate: bool = False,
 ) -> list[dict]:
     """Abre el holdout **solo** para las candidatas y aplica los cuatro filtros."""
     from .prop.rules import from_yaml
     from .prop.simulator import monte_carlo
     from .stats import dsr_local_global
     from .swing import daily_returns
-    from .validation import cscv_pbo, returns_matrix
 
     record = load_campaign(db_path, str(config["id"]))
     n_total = int(record["n_total"])
@@ -2550,13 +2613,14 @@ def run_holdout(
         dsr_global = dsr_pair["global"]["dsr"]
         dsr = dsr_global if dsr_global is not None else dsr_local
         dsr_gate = "global" if dsr_global is not None else "local"
-        matrix = returns_matrix({"cell": returns})
-        pbo = None
-        if matrix is not None:
-            try:
-                pbo = float(cscv_pbo(matrix).pbo)
-            except Exception:
-                pbo = None
+        campaign_pbo = (discovery_pbo_payload or {}).get("pbo")
+        pbo_reason = (discovery_pbo_payload or {}).get(
+            "pbo_reason", "Sin datos"
+        )
+        pbo_gate_ok = (
+            not pbo_gate
+            or (campaign_pbo is not None and float(campaign_pbo) < PBO_MAX)
+        )
         daily = daily_returns(returns)
         simulations = {}
         for kelly in MC_KELLY:
@@ -2579,8 +2643,7 @@ def run_holdout(
             sharpe > 0.0
             and dsr is not None
             and float(dsr) >= DSR_MIN
-            and pbo is not None
-            and float(pbo) < PBO_MAX
+            and pbo_gate_ok
         )
         cell.update(
             {
@@ -2595,7 +2658,14 @@ def run_holdout(
                 "dsr_local_meta": dsr_pair["local"],
                 "dsr_global_meta": dsr_pair["global"],
                 "dsr_n_trials": n_trials,
-                "pbo": pbo,
+                "pbo": None,
+                "pbo_reason": "no_aplica_1_variante",
+                "pbo_campaign": (
+                    None if campaign_pbo is None else float(campaign_pbo)
+                ),
+                "pbo_campaign_reason": pbo_reason,
+                "pbo_gate": bool(pbo_gate),
+                "pbo_gate_ok": bool(pbo_gate_ok),
                 "monte_carlo": simulations,
                 "confirmed": bool(passed),
                 "verdict": "confirmada" if passed else "no confirmada",
@@ -2679,10 +2749,23 @@ def write_report(
     *,
     n_total: int,
     out_dir: str | Path | None = None,
+    discovery_pbo: dict | None = None,
+    pbo_gate: bool = False,
 ) -> dict:
     """Informe con mapas de calor por familia, tabla de candidatas y confirmadas."""
     target = Path(out_dir) if out_dir else REPORT_DIR
     target.mkdir(parents=True, exist_ok=True)
+    pbo_payload = discovery_pbo or {
+        "pbo": None,
+        "pbo_reason": "Sin datos",
+        "n_variants": 0,
+        "n_obs": 0,
+    }
+    pbo_text = (
+        f"{float(pbo_payload['pbo']):.3f}"
+        if pbo_payload.get("pbo") is not None
+        else f"Sin datos ({pbo_payload.get('pbo_reason') or 'sin series'})"
+    )
     symbols = sorted({cell["symbol"] for cell in plateau_cells})
     charts: list[str] = []
     for family in FAMILIES:
@@ -2710,6 +2793,9 @@ def write_report(
         f"- Celdas evaluadas en descubrimiento: {len(plateau_cells)}",
         f"- Candidatas tras la meseta: {len(candidates(plateau_cells))}",
         f"- Confirmadas en el holdout: **{len(confirmed)}**",
+        f"- PBO de descubrimiento: {pbo_text} "
+        f"({int(pbo_payload.get('n_variants') or 0)} variantes)",
+        f"- Gate PBO: {'activo' if pbo_gate else 'solo informe'}",
         "",
         "## Mapas de calor",
         "",
@@ -2739,7 +2825,7 @@ def write_report(
                 clus="sí" if cell["cluster_ok"] else "no",
                 ho=_fmt(cell.get("holdout_sharpe"), 2),
                 dsr=_fmt(cell.get("dsr"), 3),
-                pbo=_fmt(cell.get("pbo"), 3),
+                pbo=_fmt(cell.get("pbo_campaign"), 3),
                 verdict=cell.get("verdict", "Sin datos"),
             )
         )
@@ -2750,7 +2836,7 @@ def write_report(
                 f"- **{cell['symbol']} · {cell['timeframe']} · {cell['family']} · "
                 f"{cell['variant']}** — Sharpe holdout {cell['holdout_sharpe']:.2f}, "
                 f"DSR {cell['dsr']:.3f} (n_trials {cell['dsr_n_trials']}), "
-                f"PBO {cell['pbo']:.3f}"
+                f"PBO {_fmt(cell.get('pbo_campaign'), 3)}"
             )
     else:
         lines.append(

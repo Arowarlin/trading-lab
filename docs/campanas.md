@@ -44,6 +44,12 @@ activa: las confirmadas solo pueden entrar en el ciclo de vida como candidatas.
   no entraron en `N_total` (p. ej. H1/H4 sin elegibles), el DSR quedaría
   desalineado. La condición de meseta y los clústeres de correlación se
   calculan **solo** con barras anteriores al corte.
+- **PBO de descubrimiento.** Se calcula una vez por campaña sobre la matriz
+  completa de retornos de las celdas. Se guarda en el informe y en
+  `campaign_registry`; con una sola variante queda **Sin datos**
+  (`no_aplica_1_variante`). Por defecto `pbo_gate: false`: es solo informe.
+  Solo una campaña nueva puede declarar `pbo_gate: true` en su pre-registro y
+  usarlo como gate. Las campañas A y B ya ejecutadas no cambian de criterio.
 
 ## Comandos
 
@@ -51,8 +57,8 @@ activa: las confirmadas solo pueden entrar en el ciclo de vida como candidatas.
 lab campaign universe        # mide coste y escribe universe.md/.json
 lab campaign fetch           # H1/H4 máximos de todos, elegibilidad, corte ≥2 años, celdas y sello
 lab campaign n-total         # N_total y celdas excluidas
-lab campaign plan            # escribe el yaml, sin registrar
-lab campaign register --confirm
+lab campaign plan            # escribe el yaml, sin registrar; --pbo-gate opcional
+lab campaign register --confirm   # lee pbo_gate del yaml; --pbo-gate solo si no hay yaml
 lab campaign run --confirm --approved-by-operator "operador"  # una vez; --resume solo tras un fallo de código
 lab campaign status
 ```
