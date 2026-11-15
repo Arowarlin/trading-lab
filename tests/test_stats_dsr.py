@@ -10,6 +10,7 @@ from tradinglab.stats import (
     StatsError,
     deflated_sharpe,
     dsr_from_returns,
+    dsr_local_global,
     period_sharpe,
 )
 
@@ -52,6 +53,32 @@ def test_sharpe_por_periodo_mayor_que_uno_es_error_de_unidades():
     assert period_sharpe(returns) > 1.0
     with pytest.raises(StatsError, match="anualizada"):
         dsr_from_returns(returns, [0.1, 0.2], 10)
+
+
+def test_local_y_global_no_mezclan_n_con_dispersion():
+    rng = np.random.default_rng(19)
+    returns = rng.normal(0.008, 0.01, 500)
+    payload = dsr_local_global(
+        returns,
+        [0.0, 0.5],
+        list(np.linspace(-0.9, 0.9, 60)),
+        2,
+        1_000,
+    )
+    assert payload["local"]["dsr"] is not None
+    assert payload["local"]["dsr"] > 0.95
+    assert payload["local"]["n_trials"] == 2
+    assert payload["global"]["dsr"] is not None
+    assert payload["global"]["dsr"] < 0.95
+    assert payload["global"]["n_trials"] == 1_000
+    assert payload["global"]["n_series"] == 60
+
+    missing = dsr_local_global(
+        returns, [0.0, 0.5], [0.1] * 29, 2, 1_000
+    )
+    assert missing["global"]["dsr"] is None
+    assert missing["global"]["status"] == "Sin datos"
+    assert "29" in missing["global"]["reason"]
 
 
 def test_periods_per_year_solo_anualiza_para_el_informe():

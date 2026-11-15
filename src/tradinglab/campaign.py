@@ -2500,7 +2500,7 @@ def run_holdout(
     """Abre el holdout **solo** para las candidatas y aplica los cuatro filtros."""
     from .prop.rules import from_yaml
     from .prop.simulator import monte_carlo
-    from .stats import dsr_from_returns
+    from .stats import dsr_local_global
     from .swing import daily_returns
     from .validation import cscv_pbo, returns_matrix
 
@@ -2537,13 +2537,19 @@ def run_holdout(
         metrics = outcome["metrics"]
         returns = outcome["returns"]
         sharpe = float(metrics.get("sharpe") or 0.0)
-        dsr_payload = dsr_from_returns(
+        trial_srs = list(trial_srs_per_period or [])
+        dsr_pair = dsr_local_global(
             returns,
-            trial_srs_per_period or [],
+            trial_srs,
+            trial_srs,
+            len(trial_srs),
             n_trials,
             periods_per_year=_annualization(timeframe),
         )
-        dsr = dsr_payload["dsr"]
+        dsr_local = dsr_pair["local"]["dsr"]
+        dsr_global = dsr_pair["global"]["dsr"]
+        dsr = dsr_global if dsr_global is not None else dsr_local
+        dsr_gate = "global" if dsr_global is not None else "local"
         matrix = returns_matrix({"cell": returns})
         pbo = None
         if matrix is not None:
@@ -2582,15 +2588,12 @@ def run_holdout(
                 "holdout_trades": int(metrics.get("num_trades") or 0),
                 "holdout_max_drawdown": float(metrics.get("max_drawdown") or 0.0),
                 "dsr": None if dsr is None else float(dsr),
-                "dsr_v2": None if dsr is None else float(dsr),
-                "metric_version": dsr_payload["metric_version"],
-                "dsr_meta": {
-                    "sr_period": dsr_payload["sr_period"],
-                    "sr0_period": dsr_payload["sr0_period"],
-                    "skew": dsr_payload["skew"],
-                    "kurt": dsr_payload["kurt"],
-                    "annualized_sr": dsr_payload["annualized_sr"],
-                },
+                "dsr_local": None if dsr_local is None else float(dsr_local),
+                "dsr_global": None if dsr_global is None else float(dsr_global),
+                "dsr_gate": dsr_gate,
+                "metric_version": dsr_pair["local"]["metric_version"],
+                "dsr_local_meta": dsr_pair["local"],
+                "dsr_global_meta": dsr_pair["global"],
                 "dsr_n_trials": n_trials,
                 "pbo": pbo,
                 "monte_carlo": simulations,

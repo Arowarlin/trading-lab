@@ -835,7 +835,7 @@ def _validation_payload(
 ) -> dict:
     from .prop.rules import from_yaml
     from .prop.simulator import monte_carlo
-    from .stats import dsr_from_returns, period_sharpe
+    from .stats import dsr_local_global, period_sharpe
     from .validation import cscv_pbo, returns_matrix
     from .walkforward import regime_gate, regime_report, walk_forward
 
@@ -861,12 +861,28 @@ def _validation_payload(
     for name, item in variants.items():
         metrics = item["metrics"]
         metrics["sharpe"] = float(metrics.get("sharpe") or 0.0)
-        payload = dsr_from_returns(
-            item["returns"], trial_srs, n_trials
+        pair = dsr_local_global(
+            item["returns"],
+            trial_srs,
+            trial_srs,
+            len(trial_srs),
+            n_trials,
         )
-        metrics["dsr"] = payload["dsr"]
-        metrics["dsr_v2"] = payload["dsr"]
-        metrics["metric_version"] = payload["metric_version"]
+        local = pair["local"]
+        global_payload = pair["global"]
+        metrics["dsr_local"] = local["dsr"]
+        metrics["dsr_global"] = global_payload["dsr"]
+        metrics["dsr"] = (
+            global_payload["dsr"]
+            if global_payload["dsr"] is not None
+            else local["dsr"]
+        )
+        metrics["dsr_gate"] = (
+            "global" if global_payload["dsr"] is not None else "local"
+        )
+        metrics["metric_version"] = local["metric_version"]
+        metrics["dsr_local_meta"] = local
+        metrics["dsr_global_meta"] = global_payload
         returns = item["returns"]
         daily = returns.resample("1D").sum()
         try:

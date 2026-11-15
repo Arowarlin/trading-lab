@@ -2900,15 +2900,20 @@ def ea_validate_cmd(
     table.add_column("Valor")
     table.add_column("Estado")
     for name, item in payload["filters"].items():
-        table.add_row(
-            name,
-            str(item["value"]),
-            "[green]OK[/green]" if item["ok"] else "[red]FALLO[/red]",
-        )
+        status = str(item.get("status") or ("ok" if item["ok"] else "falla"))
+        label = {
+            "ok": "[green]OK[/green]",
+            "pendiente": "[yellow]PENDIENTE[/yellow]",
+            "informativo": "[cyan]INFO[/cyan]",
+            "Sin datos": "[yellow]SIN DATOS[/yellow]",
+        }.get(status, "[red]FALLO[/red]")
+        table.add_row(name, str(item["value"]), label)
     console.print(table)
     console.print(
         f"[bold]{'PASA' if payload['passed'] else 'NO PASA'}[/bold] · "
-        f"PBO={payload['pbo']} · DSR={payload['dsr']} · "
+        f"PBO={payload['pbo']} · DSR local={payload.get('dsr_local')} · "
+        f"DSR global={payload.get('dsr_global')} · "
+        f"gate={payload.get('dsr_gate')} · "
         f"WF={payload['walk_forward'].get('verdict')}"
     )
     console.print(f"[dim]JSON: {files['json']} · MD: {files['markdown']}[/dim]")

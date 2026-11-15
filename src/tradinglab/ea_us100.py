@@ -26,7 +26,7 @@ from .learning import count_tests
 from .profiles import get_profile
 from .prop.rules import from_yaml
 from .prop.simulator import monte_carlo
-from .stats import dsr_from_returns, period_sharpe
+from .stats import dsr_local_global, period_sharpe
 from .trials import record_trial
 from .validation import cscv_pbo
 from .walkforward import regime_gate, regime_report, walk_forward
@@ -367,12 +367,20 @@ def validate(
         if int(row["index"]) == baseline_index
     )
     sharpe = _sharpe(base_returns)
-    trial_srs = [period_sharpe(matrix[index]) for index in matrix.columns]
-    n_trials = len(rows) + count_tests(db_path)
-    dsr_payload = dsr_from_returns(
-        base_returns, trial_srs, n_trials, periods_per_year=252
+    series_list = [matrix[index] for index in matrix.columns]
+    local_srs = [period_sharpe(series) for series in series_list]
+    local_n = len(series_list)
+    global_n = count_tests(db_path)
+    dsr_pair = dsr_local_global(
+        base_returns,
+        local_srs,
+        local_srs,
+        local_n,
+        global_n,
+        periods_per_year=252,
     )
-    dsr = dsr_payload["dsr"]
+    dsr_local = dsr_pair["local"]["dsr"]
+    dsr_global = dsr_pair["global"]["dsr"]
     pbo = None
     try:
         pbo = float(cscv_pbo(matrix.to_numpy(dtype=float), 16, seed=0).pbo)
@@ -441,12 +449,29 @@ def validate(
     min_dsr = float(profile.validation.min_dsr) if profile else 0.90
     max_pbo = float(profile.validation.max_pbo) if profile else 0.30
     spread_median = float(pd.to_numeric(df["spread"], errors="coerce").median())
+    def _dsr_status(value):
+        if value is None:
+            return "pendiente"
+        return "ok" if value >= min_dsr else "falla"
+
     filters = {
         "trades": {
             "value": int(baseline_stats["n"]),
             "ok": int(baseline_stats["n"]) >= min_trades,
+            "status": "ok" if int(baseline_stats["n"]) >= min_trades else "falla",
         },
-        "dsr": {"value": dsr, "ok": dsr is not None and dsr >= min_dsr},
+        "dsr": {
+            "value": dsr_global,
+            "ok": dsr_global is not None and dsr_global >= min_dsr,
+            "status": _dsr_status(dsr_global),
+            "gate": True,
+        },
+        "dsr_local": {
+            "value": dsr_local,
+            "ok": dsr_local is not None and dsr_local >= min_dsr,
+            "status": "informativo" if dsr_local is not None else "Sin datos",
+            "gate": False,
+        },
         "pbo": {"value": pbo, "ok": pbo is not None and pbo <= max_pbo},
         "walk_forward": {"value": wf.get("verdict"), "ok": wf.get("verdict") == "ok"},
         "regimen": {"value": regime.get("passed"), "ok": bool(regime.get("passed"))},
@@ -456,7 +481,9 @@ def validate(
             "ok": float(costs.get("2.0", {}).get("expR") or 0) > 0,
         },
     }
-    passed = all(item["ok"] for item in filters.values())
+    passed = all(
+        item["ok"] for item in filters.values() if item.get("gate", True)
+    )
     base_daily_r = base_returns / (RISK_PCT / 100.0)
     dynamic = _dynamic_risk(base_daily_r, values)
     payload = {
@@ -474,19 +501,17 @@ def validate(
         "baseline_index": baseline_index,
         "rows": rows,
         "sharpe": sharpe,
-        "n_trials": n_trials,
+        "n_trials": global_n,
+        "n_trials_local": local_n,
         "filters": filters,
         "passed": passed,
-        "dsr": dsr,
-        "dsr_v2": dsr,
-        "metric_version": dsr_payload["metric_version"],
-        "dsr_meta": {
-            "sr_period": dsr_payload["sr_period"],
-            "sr0_period": dsr_payload["sr0_period"],
-            "skew": dsr_payload["skew"],
-            "kurt": dsr_payload["kurt"],
-            "annualized_sr": dsr_payload["annualized_sr"],
-        },
+        "dsr": dsr_global,
+        "dsr_local": dsr_local,
+        "dsr_global": dsr_global,
+        "dsr_gate": filters["dsr"]["status"],
+        "metric_version": dsr_pair["local"]["metric_version"],
+        "dsr_local_meta": dsr_pair["local"],
+        "dsr_global_meta": dsr_pair["global"],
         "pbo": pbo,
         "walk_forward": wf,
         "regime": regime,

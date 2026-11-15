@@ -16,6 +16,7 @@ import pandas as pd
 
 EULER_GAMMA = 0.5772156649015329
 METRIC_VERSION = "dsr_v2"
+MIN_GLOBAL_SERIES = 30
 
 
 class StatsError(ValueError):
@@ -137,6 +138,9 @@ def dsr_from_returns(
         annualized = sr_period * math.sqrt(float(periods_per_year))
     return {
         "dsr": dsr,
+        "status": "ok" if dsr is not None else "Sin datos",
+        "n_trials": int(n_trials),
+        "n_series": int(trial_values.size),
         "sr_period": sr_period,
         "sr0_period": (
             trial_std
@@ -159,10 +163,67 @@ def dsr_from_returns(
     }
 
 
+def trial_srs(series_list) -> list[float]:
+    """Sharpes por periodo de una colección de series de retorno."""
+    return [period_sharpe(series) for series in series_list]
+
+
+def dsr_local_global(
+    returns,
+    local_srs_per_period,
+    global_srs_per_period,
+    local_n: int,
+    global_n: int,
+    periods_per_year: float | None = None,
+    min_global_series: int = MIN_GLOBAL_SERIES,
+) -> dict:
+    """Calcula el DSR local y el global con N y dispersión coherentes.
+
+    `local_n` es el número de variantes de la rejilla (o de la pasada actual) y
+    su dispersión son esas mismas variantes. `global_n` es el contador global
+    de pruebas, pero la dispersión solo se usa si hay al menos
+    `min_global_series` series con retorno; si no, el global queda Sin datos.
+    """
+    local_values = list(local_srs_per_period or [])
+    global_values = list(global_srs_per_period or [])
+    local = dsr_from_returns(
+        returns,
+        local_values,
+        local_n,
+        periods_per_year=periods_per_year,
+    )
+    local["scope"] = "local"
+    if len(global_values) < int(min_global_series):
+        global_payload = {
+            "dsr": None,
+            "status": "Sin datos",
+            "reason": (
+                f"menos de {int(min_global_series)} series con retorno "
+                f"({len(global_values)})"
+            ),
+            "metric_version": METRIC_VERSION,
+            "scope": "global",
+            "n_trials": int(global_n),
+            "n_series": len(global_values),
+        }
+    else:
+        global_payload = dsr_from_returns(
+            returns,
+            global_values,
+            global_n,
+            periods_per_year=periods_per_year,
+        )
+        global_payload["scope"] = "global"
+    return {"local": local, "global": global_payload}
+
+
 __all__ = [
     "METRIC_VERSION",
+    "MIN_GLOBAL_SERIES",
     "StatsError",
     "deflated_sharpe",
     "dsr_from_returns",
+    "dsr_local_global",
     "period_sharpe",
+    "trial_srs",
 ]

@@ -17,7 +17,7 @@ from .backtest import run as run_backtest
 from .datacheck import check_frame
 from .prop.rules import PropRules
 from .prop.simulator import monte_carlo
-from .stats import dsr_from_returns, period_sharpe
+from .stats import dsr_local_global, period_sharpe
 from .strategies import STRATEGIES
 from .validation import cscv_pbo, returns_matrix
 from .walkforward import regime_gate, regime_report, walk_forward
@@ -481,23 +481,35 @@ def run_research(
 
     trial_srs = [period_sharpe(series) for series in daily_returns.values()]
     sr_std = statistics.pstdev(trial_srs) if len(trial_srs) > 1 else 0.0
-    n_trials = len(results) + max(0, int(extra_trials))
+    local_n = len(trial_srs)
+    global_n = len(results) + max(0, int(extra_trials))
+    n_trials = global_n
     for r, returns in zip(results, result_returns):
-        payload = dsr_from_returns(
-            returns, trial_srs, n_trials, periods_per_year=252
+        pair = dsr_local_global(
+            returns,
+            trial_srs,
+            trial_srs,
+            local_n,
+            global_n,
+            periods_per_year=252,
         )
-        r["dsr"] = payload["dsr"]
-        r["dsr_v2"] = payload["dsr"]
-        r["metric_version"] = payload["metric_version"]
-        r["dsr_n_trials"] = n_trials
-        r["dsr_trial_sr_std"] = payload["trial_sr_std_period"]
-        r["dsr_meta"] = {
-            "sr_period": payload["sr_period"],
-            "sr0_period": payload["sr0_period"],
-            "skew": payload["skew"],
-            "kurt": payload["kurt"],
-            "annualized_sr": payload["annualized_sr"],
-        }
+        local = pair["local"]
+        global_payload = pair["global"]
+        r["dsr_local"] = local["dsr"]
+        r["dsr_global"] = global_payload["dsr"]
+        r["dsr"] = (
+            global_payload["dsr"]
+            if global_payload["dsr"] is not None
+            else local["dsr"]
+        )
+        r["dsr_gate"] = (
+            "global" if global_payload["dsr"] is not None else "local"
+        )
+        r["metric_version"] = local["metric_version"]
+        r["dsr_n_trials"] = global_n
+        r["dsr_trial_sr_std"] = local["trial_sr_std_period"]
+        r["dsr_local_meta"] = local
+        r["dsr_global_meta"] = global_payload
 
     pbo_by_symbol: dict[str, dict] = {}
     for symbol, series_by_variant in daily_returns_by_symbol.items():

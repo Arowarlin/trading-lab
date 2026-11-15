@@ -32,7 +32,7 @@ from .learning import count_tests
 from .profiles import get_profile
 from .prop.rules import from_yaml
 from .prop.simulator import monte_carlo
-from .stats import dsr_from_returns, period_sharpe
+from .stats import dsr_local_global, period_sharpe
 from .trials import record_trial
 from .validation import cscv_pbo, returns_matrix
 from .walkforward import regime_gate, regime_report, walk_forward
@@ -406,12 +406,29 @@ def run_caja_ny(
         row["pbo"] = None if pbo is None else float(pbo["pbo"])
         row["wf_verdict"] = wf_verdict
         net = daily_net[str(row["params"]["stop_rule"])]
-        payload = dsr_from_returns(
-            net, trial_srs, n_trials_dsr, periods_per_year=252
+        pair = dsr_local_global(
+            net,
+            trial_srs,
+            trial_srs,
+            len(trial_srs),
+            n_trials_dsr,
+            periods_per_year=252,
         )
-        row["dsr"] = payload["dsr"]
-        row["dsr_v2"] = payload["dsr"]
-        row["metric_version"] = payload["metric_version"]
+        local = pair["local"]
+        global_payload = pair["global"]
+        row["dsr_local"] = local["dsr"]
+        row["dsr_global"] = global_payload["dsr"]
+        row["dsr"] = (
+            global_payload["dsr"]
+            if global_payload["dsr"] is not None
+            else local["dsr"]
+        )
+        row["dsr_gate"] = (
+            "global" if global_payload["dsr"] is not None else "local"
+        )
+        row["metric_version"] = local["metric_version"]
+        row["dsr_local_meta"] = local
+        row["dsr_global_meta"] = global_payload
         regime = regime_report(net)
         gate = regime_gate(regime)
         row["regime"] = regime.to_dict()

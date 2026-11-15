@@ -25,7 +25,7 @@ from .profiles import get_profile
 from .prop.rules import PropRules, from_yaml
 from .prop.simulator import monte_carlo
 from .session import session_block
-from .stats import dsr_from_returns, period_sharpe
+from .stats import dsr_local_global, period_sharpe
 from .strategies.base import StrategyResult
 from .strategies.swing import trend_daily_atr
 from .trials import record_trial
@@ -1387,10 +1387,28 @@ def run_intraday(
     series_list = list(returns_by_id.values())
     trial_srs = [period_sharpe(series) for series in series_list]
     for row, series in zip(outcomes, series_list):
-        payload = dsr_from_returns(series, trial_srs, n_trials_dsr)
-        row["dsr"] = payload["dsr"]
-        row["dsr_v2"] = payload["dsr"]
-        row["metric_version"] = payload["metric_version"]
+        pair = dsr_local_global(
+            series,
+            trial_srs,
+            trial_srs,
+            len(series_list),
+            n_trials_dsr,
+        )
+        local = pair["local"]
+        global_payload = pair["global"]
+        row["dsr_local"] = local["dsr"]
+        row["dsr_global"] = global_payload["dsr"]
+        row["dsr"] = (
+            global_payload["dsr"]
+            if global_payload["dsr"] is not None
+            else local["dsr"]
+        )
+        row["dsr_gate"] = (
+            "global" if global_payload["dsr"] is not None else "local"
+        )
+        row["metric_version"] = local["metric_version"]
+        row["dsr_local_meta"] = local
+        row["dsr_global_meta"] = global_payload
         row["dsr_n_trials"] = n_trials_dsr
 
     aligned = _aligned(returns_by_id)

@@ -222,7 +222,9 @@ def test_run_research_edge_passes_pbo_walkforward_and_regime(monkeypatch, tmp_pa
     assert report["walk_forward"] is not None
     assert report["walk_forward"]["verdict"] == "ok"
     assert report["dsr_n_trials"] == len(report["results"])
-    assert report["results"][0]["dsr_v2"] == report["results"][0]["dsr"]
+    assert report["results"][0]["dsr"] == report["results"][0]["dsr_local"]
+    assert report["results"][0]["dsr_global"] is None
+    assert report["results"][0]["dsr_gate"] == "local"
     assert report["results"][0]["metric_version"] == "dsr_v2"
     assert len(report["proposals"]) == 1
     proposal = report["proposals"][0]

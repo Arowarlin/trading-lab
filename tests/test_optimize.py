@@ -61,7 +61,8 @@ def test_run_optuna_sintetico_suma_trials_y_no_toca_holdout(
     assert count_tests(db) >= 3
     assert report["holdout"]["status"] == "Sin datos"
     assert "dsr" in report["gates"]
-    assert report["gates"]["dsr_v2"] == report["gates"]["dsr"]
+    assert report["gates"]["dsr"] == report["gates"]["dsr_local"]
+    assert report["gates"]["dsr_global"] is None
     assert report["gates"]["metric_version"] == "dsr_v2"
     assert "pbo" in report["gates"]
     assert report["config"]["dev_end"] < report["config"]["sealed_start"]

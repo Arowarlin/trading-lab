@@ -32,7 +32,7 @@ from .intraday import cache_file, load_bars
 from .intraday_costs import asset_costs
 from .prop.rules import PropRules
 from .prop.simulator import monte_carlo
-from .stats import dsr_from_returns, period_sharpe
+from .stats import dsr_local_global, period_sharpe
 from .strategies import STRATEGIES
 from .strategies.swing import daily_bars, trading_day
 from .trials import budget_status, record_trial
@@ -560,14 +560,31 @@ def run_swing(
     trial_srs = [period_sharpe(series) for series in series_list]
     sr_std = float(np.std(trial_srs, ddof=0)) if len(trial_srs) > 1 else 0.0
     for row, series in zip(results, series_list):
-        payload = dsr_from_returns(
-            series, trial_srs, n_trials, periods_per_year=252
+        pair = dsr_local_global(
+            series,
+            trial_srs,
+            trial_srs,
+            len(series_list),
+            n_trials,
+            periods_per_year=252,
         )
-        row["dsr"] = payload["dsr"]
-        row["dsr_v2"] = payload["dsr"]
-        row["metric_version"] = payload["metric_version"]
+        local = pair["local"]
+        global_payload = pair["global"]
+        row["dsr_local"] = local["dsr"]
+        row["dsr_global"] = global_payload["dsr"]
+        row["dsr"] = (
+            global_payload["dsr"]
+            if global_payload["dsr"] is not None
+            else local["dsr"]
+        )
+        row["dsr_gate"] = (
+            "global" if global_payload["dsr"] is not None else "local"
+        )
+        row["metric_version"] = local["metric_version"]
+        row["dsr_local_meta"] = local
+        row["dsr_global_meta"] = global_payload
         row["dsr_n_trials"] = n_trials
-        row["dsr_trial_sr_std"] = payload["trial_sr_std_period"]
+        row["dsr_trial_sr_std"] = local["trial_sr_std_period"]
 
     pbo_global = _pbo(_aligned(daily_by_variant))
     pbo_ok = bool(pbo_global and pbo_global["pbo"] <= MAX_PBO)
