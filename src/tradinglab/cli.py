@@ -155,6 +155,10 @@ library_app = typer.Typer(
     no_args_is_help=True,
     help="Biblioteca de conocimiento: fichas de herramientas y metodologías.",
 )
+stats_app = typer.Typer(
+    no_args_is_help=True,
+    help="Estadística y DSR: recálculo v2 de solo lectura.",
+)
 app.add_typer(mt5_app, name="mt5")
 app.add_typer(prop_app, name="prop")
 app.add_typer(futures_app, name="futures")
@@ -171,6 +175,7 @@ app.add_typer(operator_app, name="operator")
 app.add_typer(campaign_app, name="campaign")
 app.add_typer(data_app, name="data")
 app.add_typer(risk_budget_app, name="risk-budget")
+app.add_typer(stats_app, name="stats")
 app.add_typer(lifecycle_app, name="lifecycle")
 ai_trader_app = typer.Typer(
     no_args_is_help=True,
@@ -10368,6 +10373,49 @@ def ai_trader_no_trade_cmd(
 
 def main() -> None:
     app()
+
+
+@stats_app.command("recompute-dsr")
+def stats_recompute_dsr_cmd(
+    dry_run: bool = typer.Option(
+        True, "--dry-run", help="Solo informe; no escribe en SQLite"
+    ),
+) -> None:
+    """Recalcula el DSR v2 del historial sin ejecutar backtests."""
+    if not dry_run:
+        console.print(
+            "[yellow]--write no está implementado en este bloque; "
+            "solo se permite --dry-run.[/yellow]"
+        )
+        raise typer.Exit(2)
+    from .dsr_recompute import build_report, write_report
+
+    payload = build_report(DEFAULT_DB)
+    files = write_report(payload)
+    table = Table(title="DSR v2 · historial")
+    table.add_column("Entidad")
+    table.add_column("V1", justify="right")
+    table.add_column("Local", justify="right")
+    table.add_column("Global", justify="right")
+    table.add_column("N", justify="right")
+    table.add_column("Sharpes", justify="right")
+    for row in payload["rows"]:
+        def _fmt(value):
+            return "Sin datos" if value is None else f"{float(value):.4f}"
+
+        table.add_row(
+            row["entity"],
+            _fmt(row["dsr_v1"]),
+            _fmt(row["dsr_local"]),
+            _fmt(row["dsr_global"]),
+            str(row["n_trials"]),
+            str(row["n_sharpes"]),
+        )
+    console.print(table)
+    console.print(
+        f"[dim]JSON: {files['json']} · MD: {files['markdown']} · "
+        f"N={payload['n_trials']} · {payload['n_sharpes']} Sharpes[/dim]"
+    )
 
 
 if __name__ == "__main__":
