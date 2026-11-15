@@ -1,0 +1,38 @@
+# Propuesta, no cambio aplicado.
+#
+# No existe `lab proposals apply` en este repositorio. La aplicación es manual:
+# 1. Abrir `config/intraday_forward.yaml`.
+# 2. Cambiar `enabled: true` a `enabled: false` SOLO en los dos bots con magic
+#    20261151 y 20261152.
+# 3. No tocar el bot `us100-trend-d1` (magic 20261153).
+# 4. Reiniciar `TradingLab-IntradayForward` para que relea el YAML.
+# 5. Ejecutar `lab doctor` y `lab f13 config-check`; este último no debe cambiar.
+#
+# El forward sigue en demo. Esta propuesta no envía órdenes ni activa nada.
+version: 1
+id: disable_fx_forward
+created_at: "2026-11-15"
+status: proposed
+requires_confirmation: true
+target: config/intraday_forward.yaml
+reason: >-
+  Los dos forwards de FX tienen Sharpe negativo en backtest y no pasaron la
+  puerta de incubación; se mantuvieron como excepción forward documentada.
+  Desactivarlos reduce el riesgo operativo sin tocar el forward swing de US100.
+changes:
+  - bot: eurusd-london-pullback-forward
+    magic: 20261151
+    path: bots[0].enabled
+    from: true
+    to: false
+    evidence: "Sharpe -4.42; MaxDD -30.4%"
+  - bot: usdjpy-tokyo-breakout-forward
+    magic: 20261152
+    path: bots[1].enabled
+    from: true
+    to: false
+    evidence: "Sharpe -4.63; MaxDD -8.1%"
+not_changed:
+  - bot: us100-trend-d1
+    magic: 20261153
+    reason: "No forma parte de esta propuesta"
