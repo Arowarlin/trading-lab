@@ -22,6 +22,7 @@ import pandas as pd
 from . import ea_us100_engine as engine
 from .config import DEFAULT_DB, ROOT, Settings, get_settings
 from .ea_registry import ExternalEA
+from .global_dsr import global_srs
 from .learning import count_tests
 from .profiles import get_profile
 from .prop.rules import from_yaml
@@ -324,8 +325,10 @@ def _record_trials(
     baseline_index: int,
     run_id: str,
     symbol: str,
+    srs: list[float] | None = None,
 ) -> None:
-    for row in rows:
+    srs = list(srs or [])
+    for position, row in enumerate(rows):
         is_base = int(row["index"]) == baseline_index
         try:
             record_trial(
@@ -344,6 +347,8 @@ def _record_trials(
                 source="sweep",
                 run_id=run_id,
                 counted=True,
+                sr_period=srs[position] if position < len(srs) else None,
+                periods_per_year=252.0,
             )
         except Exception:
             pass
@@ -371,13 +376,16 @@ def validate(
     local_srs = [period_sharpe(series) for series in series_list]
     local_n = len(series_list)
     global_n = count_tests(db_path)
+    global_info = global_srs(db_path, "daily")
     dsr_pair = dsr_local_global(
         base_returns,
         local_srs,
-        local_srs,
+        global_info["srs"],
         local_n,
         global_n,
         periods_per_year=252,
+        global_sources=global_info["sources"],
+        frequency="daily",
     )
     dsr_local = dsr_pair["local"]["dsr"]
     dsr_global = dsr_pair["global"]["dsr"]
@@ -526,6 +534,7 @@ def validate(
             baseline_index=baseline_index,
             run_id=uuid.uuid4().hex[:12],
             symbol=ea.symbol if ea else "US100.cash",
+            srs=local_srs,
         )
     return payload
 

@@ -10,6 +10,8 @@ import pytest
 
 import tradinglab.research as research
 from tradinglab.backtest import BacktestResult
+from tradinglab.config import DEFAULT_DB
+from tradinglab.learning import count_tests
 from tradinglab.prop.rules import ftmo
 
 
@@ -76,7 +78,7 @@ def test_regimenes_incluyen_drawdown_buy_hold():
     assert enriched["years"]["2018"]["buy_hold_total_return"] == pytest.approx(0.05)
 
 
-def test_dsr_n_trials_crece_con_activos(monkeypatch):
+def test_dsr_global_usa_el_contador_unico(monkeypatch):
     _fake_research_world(monkeypatch, with_edge=True)
     base = dict(
         strategies=["trend"],
@@ -92,9 +94,9 @@ def test_dsr_n_trials_crece_con_activos(monkeypatch):
     two = research.run_research(
         research.ResearchConfig(symbols=["A", "B"], **base), ftmo(100_000), cache_dir="unused"
     )
-    assert one["dsr_n_trials"] == len(one["results"]) == 4
-    assert two["dsr_n_trials"] == len(two["results"]) == 8
-    assert two["dsr_n_trials"] == 2 * one["dsr_n_trials"]
+    assert one["dsr_n_trials"] == count_tests(DEFAULT_DB)
+    assert two["dsr_n_trials"] == one["dsr_n_trials"]
+    assert one["results"][0]["dsr_gate"] in {"global", "pendiente"}
 
 
 def _frame(n: int = 400, seed: int = 3) -> pd.DataFrame:
@@ -185,6 +187,7 @@ def test_run_research_noise_has_no_proposals(monkeypatch):
         pbo_max_combinations=1_000,
         wf_train_len=504,
         wf_test_len=126,
+        min_dsr=0.0,
         exposures=[1.0],
     )
     report = research.run_research(cfg, ftmo(100_000), cache_dir="unused")
@@ -221,10 +224,10 @@ def test_run_research_edge_passes_pbo_walkforward_and_regime(monkeypatch, tmp_pa
     assert report["pbo"] is not None and report["pbo"]["pbo"] <= 0.30
     assert report["walk_forward"] is not None
     assert report["walk_forward"]["verdict"] == "ok"
-    assert report["dsr_n_trials"] == len(report["results"])
-    assert report["results"][0]["dsr"] == report["results"][0]["dsr_local"]
-    assert report["results"][0]["dsr_global"] is None
-    assert report["results"][0]["dsr_gate"] == "local"
+    assert report["dsr_n_trials"] == count_tests(DEFAULT_DB)
+    assert report["results"][0]["dsr"] == report["results"][0]["dsr_global"]
+    assert report["results"][0]["dsr_global"] is not None
+    assert report["results"][0]["dsr_gate"] == "global"
     assert report["results"][0]["metric_version"] == "dsr_v2"
     assert len(report["proposals"]) == 1
     proposal = report["proposals"][0]

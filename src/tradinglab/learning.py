@@ -357,6 +357,8 @@ def record_optimization_trial(
     period_end: str,
     notes: str = "",
     settings: Settings | None = None,
+    sr_period: float | None = None,
+    periods_per_year: float | None = None,
 ) -> dict:
     """Suma un trial de Optuna al contador DSR, sin pisar el holdout sellado."""
     init_learning(db_path, settings)
@@ -376,7 +378,8 @@ def record_optimization_trial(
         cursor = con.execute(
             "INSERT INTO optimization_trials"
             "(ts, study, trial, symbol, strategy, params, value, "
-            "period_start, period_end, notes) VALUES(?,?,?,?,?,?,?,?,?,?)",
+            "period_start, period_end, notes, sr_period, periods_per_year) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 utcnow(),
                 study[:100],
@@ -388,6 +391,8 @@ def record_optimization_trial(
                 start.isoformat(),
                 end.isoformat(),
                 notes[:1000],
+                sr_period,
+                periods_per_year,
             ),
         )
         row_id = int(cursor.lastrowid)

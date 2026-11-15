@@ -832,7 +832,9 @@ def _validation_payload(
     *,
     n_trials: int,
     profile,
+    db_path: str | Path = DEFAULT_DB,
 ) -> dict:
+    from .global_dsr import global_srs
     from .prop.rules import from_yaml
     from .prop.simulator import monte_carlo
     from .stats import dsr_local_global, period_sharpe
@@ -843,6 +845,7 @@ def _validation_payload(
         period_sharpe(item["returns"]) for item in variants.values()
     ]
     sr_std = float(np.std(trial_srs, ddof=0)) if len(trial_srs) > 1 else 0.0
+    global_info = global_srs(db_path, "daily")
     series = {name: item["returns"].to_numpy(dtype=float) for name, item in variants.items()}
     matrix, _ = returns_matrix(series)
     pbo = None
@@ -864,21 +867,19 @@ def _validation_payload(
         pair = dsr_local_global(
             item["returns"],
             trial_srs,
-            trial_srs,
+            global_info["srs"],
             len(trial_srs),
             n_trials,
+            global_sources=global_info["sources"],
+            frequency="daily",
         )
         local = pair["local"]
         global_payload = pair["global"]
         metrics["dsr_local"] = local["dsr"]
         metrics["dsr_global"] = global_payload["dsr"]
-        metrics["dsr"] = (
-            global_payload["dsr"]
-            if global_payload["dsr"] is not None
-            else local["dsr"]
-        )
+        metrics["dsr"] = global_payload["dsr"]
         metrics["dsr_gate"] = (
-            "global" if global_payload["dsr"] is not None else "local"
+            "global" if global_payload["dsr"] is not None else "pendiente"
         )
         metrics["metric_version"] = local["metric_version"]
         metrics["dsr_local_meta"] = local
@@ -976,7 +977,9 @@ def validate_candidate(
     except Exception as exc:
         return {"ok": False, "reason": str(exc)[:300]}
     n_trials = count_tests(db_path) + 2
-    payload = _validation_payload(variants, n_trials=n_trials, profile=profile)
+    payload = _validation_payload(
+        variants, n_trials=n_trials, profile=profile, db_path=db_path
+    )
     unfiltered = payload["variants"]["sin_filtro"]
     filtered = payload["variants"]["con_filtro"]
     filtered_wins = bool(
@@ -1158,9 +1161,16 @@ def _record_trials(
     filter_payload: dict,
     validation: dict | None,
 ) -> None:
+    from .global_dsr import periods_for_timeframe
+
     outcome = "passed" if (validation or {}).get("winner") else "failed"
     reason = (validation or {}).get("reason") or "sin validación"
+    periods = periods_for_timeframe(cell.get("timeframe"))
     for variant in ("sin_filtro", "con_filtro"):
+        variant_payload = ((validation or {}).get("variants") or {}).get(
+            variant, {}
+        )
+        sharpe = (variant_payload.get("metrics") or {}).get("sharpe")
         record_trial(
             db_path,
             family=f"ai-distill-{cell['strategy']}",
@@ -1180,6 +1190,12 @@ def _record_trials(
             outcome=outcome,
             reason=reason,
             source="lesson",
+            sr_period=(
+                float(sharpe) / np.sqrt(periods)
+                if sharpe is not None and periods
+                else None
+            ),
+            periods_per_year=periods,
         )
 
 

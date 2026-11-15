@@ -188,19 +188,19 @@ Resultado de la base **v3 challenge** (2021-09-15 → 2026-11-13):
 |---|---|---|
 | Trades ≥ 100 | 480 | OK |
 | DSR local (N=8) ≥ 0,90 | 0,9994 | OK informativo |
-| DSR global (N=1042) | Sin datos: menos de 30 series con retorno | PENDIENTE |
+| DSR global (N=1042) ≥ 0,90 | 0,634 (653 Sharpes diarios) | FALLO |
 | PBO ≤ 0,30 | 0,241 | OK |
 | Walk-forward | `ok` (Sharpe OOS 1,31; eficiencia 0,97) | OK |
 | Regímenes 2021-2026 | todos positivos | OK |
 | Spread observado | 145 points de mediana | OK |
 | Coste con 2 puntos de slippage | +0,246 R | OK |
 
-**Veredicto: NO PASA todavía.** El resto de filtros está OK, pero el DSR global
-queda **PENDIENTE**: el gate exige dispersión de al menos 30 series registradas
-con retorno y hoy solo hay las 8 variantes de la rejilla. No se inventa la
-dispersión. El DSR local (0,9994, N=8) es informativo y no sustituye al global.
-El punto más justo es el PBO (24,1 % frente al 30 % máximo); no es un margen
-enorme.
+**Veredicto: NO PASA.** El resto de filtros está OK, pero el DSR global es
+**0,634 < 0,90**: usa N = `count_tests` (1042) y la dispersión de 653 Sharpes
+diarios registrados (460 celdas de campaña, 192 resultados de research y el
+informe del EA). El DSR local (0,9994, N=8) es solo informativo y no sustituye
+al global. El punto más justo es el PBO (24,1 % frente al 30 % máximo); no es un
+margen enorme.
 
 El DSR v2 usa `dsr_from_returns` con Sharpe, dispersión, asimetría y curtosis
 **por periodo**. El 1,0 anterior era `dsr_v1_invalid_units` (Sharpe anualizado

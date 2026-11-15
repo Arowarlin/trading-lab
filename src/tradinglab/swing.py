@@ -28,6 +28,7 @@ import pandas as pd
 from .backtest import run as run_backtest
 from .config import ROOT
 from .datacheck import check_frame
+from .global_dsr import global_srs
 from .intraday import cache_file, load_bars
 from .intraday_costs import asset_costs
 from .prop.rules import PropRules
@@ -559,26 +560,25 @@ def run_swing(
     series_list = list(daily_by_variant.values())
     trial_srs = [period_sharpe(series) for series in series_list]
     sr_std = float(np.std(trial_srs, ddof=0)) if len(trial_srs) > 1 else 0.0
+    global_info = global_srs(db_path, "daily")
     for row, series in zip(results, series_list):
         pair = dsr_local_global(
             series,
             trial_srs,
-            trial_srs,
+            global_info["srs"],
             len(series_list),
             n_trials,
             periods_per_year=252,
+            global_sources=global_info["sources"],
+            frequency="daily",
         )
         local = pair["local"]
         global_payload = pair["global"]
         row["dsr_local"] = local["dsr"]
         row["dsr_global"] = global_payload["dsr"]
-        row["dsr"] = (
-            global_payload["dsr"]
-            if global_payload["dsr"] is not None
-            else local["dsr"]
-        )
+        row["dsr"] = global_payload["dsr"]
         row["dsr_gate"] = (
-            "global" if global_payload["dsr"] is not None else "local"
+            "global" if global_payload["dsr"] is not None else "pendiente"
         )
         row["metric_version"] = local["metric_version"]
         row["dsr_local_meta"] = local
@@ -644,6 +644,8 @@ def run_swing(
                 reason=row["failure_reason"][:800],
                 source="sweep",
                 run_id=run,
+                sr_period=row["sharpe"] / np.sqrt(252.0),
+                periods_per_year=252.0,
             )
 
     candidates: list[dict] = []

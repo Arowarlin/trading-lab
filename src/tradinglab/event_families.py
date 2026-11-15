@@ -20,6 +20,7 @@ import pandas as pd
 from .broker_costs import broker_spread_summary
 from .config import DEFAULT_DB, ROOT
 from .db import connect
+from .global_dsr import global_srs
 from .indicators import atr
 from .intraday import (
     FAMILY_HYPOTHESES,
@@ -402,6 +403,7 @@ def run_caja_ny(
         wf = None
     wf_verdict = wf.verdict() if wf is not None else "sin datos"
     trial_srs = [period_sharpe(series) for series in daily_net.values()]
+    global_info = global_srs(db_path, "daily")
     for row in results:
         row["pbo"] = None if pbo is None else float(pbo["pbo"])
         row["wf_verdict"] = wf_verdict
@@ -409,22 +411,20 @@ def run_caja_ny(
         pair = dsr_local_global(
             net,
             trial_srs,
-            trial_srs,
+            global_info["srs"],
             len(trial_srs),
             n_trials_dsr,
             periods_per_year=252,
+            global_sources=global_info["sources"],
+            frequency="daily",
         )
         local = pair["local"]
         global_payload = pair["global"]
         row["dsr_local"] = local["dsr"]
         row["dsr_global"] = global_payload["dsr"]
-        row["dsr"] = (
-            global_payload["dsr"]
-            if global_payload["dsr"] is not None
-            else local["dsr"]
-        )
+        row["dsr"] = global_payload["dsr"]
         row["dsr_gate"] = (
-            "global" if global_payload["dsr"] is not None else "local"
+            "global" if global_payload["dsr"] is not None else "pendiente"
         )
         row["metric_version"] = local["metric_version"]
         row["dsr_local_meta"] = local
@@ -508,6 +508,8 @@ def run_caja_ny(
             reason="; ".join(row["reasons"]),
             source="sweep",
             run_id=run_id,
+            sr_period=row["net_sharpe"] / np.sqrt(252.0),
+            periods_per_year=252.0,
         )
     after_count = count_tests(db_path)
     after_trials = _strategy_trials_count(db_path)

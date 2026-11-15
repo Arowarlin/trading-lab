@@ -19,6 +19,7 @@ import pandas as pd
 from . import data as data_mod
 from .backtest import run as run_backtest
 from .config import DEFAULT_DB, Settings, get_settings
+from .global_dsr import global_srs
 from .learning import (
     count_tests,
     evaluate_holdout_once,
@@ -193,6 +194,8 @@ def run_optuna(
             period_end=str(frame.index[-1].date()),
             notes="Optuna walk-forward; desarrollo",
             settings=settings,
+            sr_period=value / math.sqrt(252.0),
+            periods_per_year=252.0,
         )
         return value
 
@@ -212,18 +215,21 @@ def run_optuna(
     n_trials = count_tests(db_path, settings)
     trial_srs = [period_sharpe(trial_returns[item.number]) for item in completed]
     local_n = len(trial_srs)
+    global_info = global_srs(db_path, "daily")
     pair = dsr_local_global(
         best_returns,
         trial_srs,
-        trial_srs,
+        global_info["srs"],
         local_n,
         n_trials,
         periods_per_year=252,
+        global_sources=global_info["sources"],
+        frequency="daily",
     )
     dsr_local = pair["local"]["dsr"]
     dsr_global = pair["global"]["dsr"]
-    dsr = dsr_global if dsr_global is not None else dsr_local
-    dsr_gate = "global" if dsr_global is not None else "local"
+    dsr = dsr_global
+    dsr_gate = "global" if dsr_global is not None else "pendiente"
     dsr_ok = dsr is not None and dsr >= MIN_DSR
 
     matrix = _trial_matrix(trial_returns)
@@ -307,18 +313,21 @@ def run_optuna(
 
     # La lectura del holdout suma una prueba; recalcula el DSR con el contador final.
     n_trials = count_tests(db_path, settings)
+    global_info = global_srs(db_path, "daily")
     pair = dsr_local_global(
         best_returns,
         trial_srs,
-        trial_srs,
+        global_info["srs"],
         local_n,
         n_trials,
         periods_per_year=252,
+        global_sources=global_info["sources"],
+        frequency="daily",
     )
     dsr_local = pair["local"]["dsr"]
     dsr_global = pair["global"]["dsr"]
-    dsr = dsr_global if dsr_global is not None else dsr_local
-    dsr_gate = "global" if dsr_global is not None else "local"
+    dsr = dsr_global
+    dsr_gate = "global" if dsr_global is not None else "pendiente"
     dsr_ok = dsr is not None and dsr >= MIN_DSR
 
     gates = {

@@ -176,6 +176,8 @@ def dsr_local_global(
     global_n: int,
     periods_per_year: float | None = None,
     min_global_series: int = MIN_GLOBAL_SERIES,
+    global_sources: dict | None = None,
+    frequency: str | None = None,
 ) -> dict:
     """Calcula el DSR local y el global con N y dispersión coherentes.
 
@@ -203,6 +205,8 @@ def dsr_local_global(
             ),
             "metric_version": METRIC_VERSION,
             "scope": "global",
+            "frequency": frequency,
+            "sources": dict(global_sources or {}),
             "n_trials": int(global_n),
             "n_series": len(global_values),
         }
@@ -214,6 +218,8 @@ def dsr_local_global(
             periods_per_year=periods_per_year,
         )
         global_payload["scope"] = "global"
+        global_payload["frequency"] = frequency
+        global_payload["sources"] = dict(global_sources or {})
     return {"local": local, "global": global_payload}
 
 

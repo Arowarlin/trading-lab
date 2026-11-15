@@ -15,6 +15,7 @@ import pandas as pd
 from . import data as data_mod
 from .backtest import run as run_backtest
 from .datacheck import check_frame
+from .global_dsr import global_srs
 from .prop.rules import PropRules
 from .prop.simulator import monte_carlo
 from .stats import dsr_local_global, period_sharpe
@@ -248,6 +249,7 @@ def run_research(
     *,
     artifacts_dir: str | Path | None = None,
     extra_trials: int = 0,
+    db_path: str | Path | None = None,
 ) -> dict:
     """Escanea activos × estrategias × parámetros y puntúa contra las reglas.
 
@@ -482,28 +484,29 @@ def run_research(
     trial_srs = [period_sharpe(series) for series in daily_returns.values()]
     sr_std = statistics.pstdev(trial_srs) if len(trial_srs) > 1 else 0.0
     local_n = len(trial_srs)
-    global_n = len(results) + max(0, int(extra_trials))
+    from .config import DEFAULT_DB
+
+    global_info = global_srs(db_path or DEFAULT_DB, "daily")
+    global_n = int(global_info["n_trials"])
     n_trials = global_n
     for r, returns in zip(results, result_returns):
         pair = dsr_local_global(
             returns,
             trial_srs,
-            trial_srs,
+            global_info["srs"],
             local_n,
             global_n,
             periods_per_year=252,
+            global_sources=global_info["sources"],
+            frequency="daily",
         )
         local = pair["local"]
         global_payload = pair["global"]
         r["dsr_local"] = local["dsr"]
         r["dsr_global"] = global_payload["dsr"]
-        r["dsr"] = (
-            global_payload["dsr"]
-            if global_payload["dsr"] is not None
-            else local["dsr"]
-        )
+        r["dsr"] = global_payload["dsr"]
         r["dsr_gate"] = (
-            "global" if global_payload["dsr"] is not None else "local"
+            "global" if global_payload["dsr"] is not None else "pendiente"
         )
         r["metric_version"] = local["metric_version"]
         r["dsr_n_trials"] = global_n

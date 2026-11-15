@@ -2401,6 +2401,10 @@ def run_discovery(
                         source="campaign",
                         run_id=run_id,
                         counted=False,
+                        sr_period=(
+                            cell["sharpe"] / np.sqrt(_annualization(timeframe))
+                        ),
+                        periods_per_year=_annualization(timeframe),
                     )
                 cells.append(cell)
     return {
@@ -2562,6 +2566,7 @@ def run_holdout(
     pbo_gate: bool = False,
 ) -> list[dict]:
     """Abre el holdout **solo** para las candidatas y aplica los cuatro filtros."""
+    from .global_dsr import global_srs
     from .prop.rules import from_yaml
     from .prop.simulator import monte_carlo
     from .stats import dsr_local_global
@@ -2572,6 +2577,10 @@ def run_holdout(
     n_trials = n_total + int(prior_tests)
     tick = dict(points or {})
     rules = from_yaml("ftmo", "challenge", 100_000.0)
+    global_by_frequency = {
+        "daily": global_srs(db_path, "daily"),
+        "intraday": global_srs(db_path, "intraday"),
+    }
     cutoff = _cutoff_for(config, frames)
     ends = seal_ends(config)
     confirmed: list[dict] = []
@@ -2601,18 +2610,24 @@ def run_holdout(
         returns = outcome["returns"]
         sharpe = float(metrics.get("sharpe") or 0.0)
         trial_srs = list(trial_srs_per_period or [])
+        from .global_dsr import frequency_for_timeframe
+
+        frequency = frequency_for_timeframe(timeframe) or "daily"
+        global_info = global_by_frequency[frequency]
         dsr_pair = dsr_local_global(
             returns,
             trial_srs,
-            trial_srs,
+            global_info["srs"],
             len(trial_srs),
             n_trials,
             periods_per_year=_annualization(timeframe),
+            global_sources=global_info["sources"],
+            frequency=frequency,
         )
         dsr_local = dsr_pair["local"]["dsr"]
         dsr_global = dsr_pair["global"]["dsr"]
-        dsr = dsr_global if dsr_global is not None else dsr_local
-        dsr_gate = "global" if dsr_global is not None else "local"
+        dsr = dsr_global
+        dsr_gate = "global" if dsr_global is not None else "pendiente"
         campaign_pbo = (discovery_pbo_payload or {}).get("pbo")
         pbo_reason = (discovery_pbo_payload or {}).get(
             "pbo_reason", "Sin datos"

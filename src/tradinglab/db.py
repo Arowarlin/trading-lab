@@ -458,7 +458,9 @@ CREATE TABLE IF NOT EXISTS optimization_trials (
     value REAL,
     period_start TEXT NOT NULL,
     period_end TEXT NOT NULL,
-    notes TEXT
+    notes TEXT,
+    sr_period REAL,
+    periods_per_year REAL
 );
 CREATE INDEX IF NOT EXISTS idx_optimization_trials_study
     ON optimization_trials(study);
@@ -502,7 +504,9 @@ CREATE TABLE IF NOT EXISTS strategy_trials (
     fingerprint TEXT,
     counted INTEGER NOT NULL DEFAULT 1,
     dsr_v2 REAL,
-    metric_version TEXT
+    metric_version TEXT,
+    sr_period REAL,
+    periods_per_year REAL
 );
 CREATE INDEX IF NOT EXISTS idx_strategy_trials_family
     ON strategy_trials(family, symbol, fingerprint);
@@ -699,6 +703,7 @@ def init_db(path: str | Path) -> None:
         _migrate_audit_chain(con)
         _migrate_f13(con)
         _migrate_strategy_trials(con)
+        _migrate_optimization_trials(con)
         _migrate_fills_mt5(con)
         _migrate_forward_state(con)
         _migrate_chain_orders(con)
@@ -723,12 +728,32 @@ def _migrate_strategy_trials(con: sqlite3.Connection) -> None:
             "ALTER TABLE strategy_trials "
             "ADD COLUMN counted INTEGER NOT NULL DEFAULT 1"
         )
-    for column, kind in (("dsr_v2", "REAL"), ("metric_version", "TEXT")):
+    for column, kind in (
+        ("dsr_v2", "REAL"),
+        ("metric_version", "TEXT"),
+        ("sr_period", "REAL"),
+        ("periods_per_year", "REAL"),
+    ):
         if column not in columns:
             con.execute(
                 f"ALTER TABLE strategy_trials ADD COLUMN {column} {kind}"
             )
     con.execute("UPDATE strategy_trials SET counted = 1 WHERE counted IS NULL")
+
+
+def _migrate_optimization_trials(con: sqlite3.Connection) -> None:
+    """Añade el Sharpe por periodo de cada trial; solo columnas nuevas."""
+    columns = [
+        row["name"]
+        for row in con.execute("PRAGMA table_info(optimization_trials)").fetchall()
+    ]
+    if not columns:
+        return
+    for column, kind in (("sr_period", "REAL"), ("periods_per_year", "REAL")):
+        if column not in columns:
+            con.execute(
+                f"ALTER TABLE optimization_trials ADD COLUMN {column} {kind}"
+            )
 
 
 def _migrate_f13(con: sqlite3.Connection) -> None:

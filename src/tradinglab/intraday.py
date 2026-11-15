@@ -18,6 +18,7 @@ import numpy as np
 import pandas as pd
 
 from .config import DEFAULT_DB, ROOT
+from .global_dsr import frequency_for_timeframe, global_srs
 from .indicators import atr, ema
 from .intraday_costs import asset_costs
 from .learning import count_tests, get_lesson
@@ -1386,25 +1387,25 @@ def run_intraday(
     )
     series_list = list(returns_by_id.values())
     trial_srs = [period_sharpe(series) for series in series_list]
+    frequency = frequency_for_timeframe(timeframe) or "intraday"
+    global_info = global_srs(db_path or DEFAULT_DB, frequency)
     for row, series in zip(outcomes, series_list):
         pair = dsr_local_global(
             series,
             trial_srs,
-            trial_srs,
+            global_info["srs"],
             len(series_list),
             n_trials_dsr,
+            global_sources=global_info["sources"],
+            frequency=frequency,
         )
         local = pair["local"]
         global_payload = pair["global"]
         row["dsr_local"] = local["dsr"]
         row["dsr_global"] = global_payload["dsr"]
-        row["dsr"] = (
-            global_payload["dsr"]
-            if global_payload["dsr"] is not None
-            else local["dsr"]
-        )
+        row["dsr"] = global_payload["dsr"]
         row["dsr_gate"] = (
-            "global" if global_payload["dsr"] is not None else "local"
+            "global" if global_payload["dsr"] is not None else "pendiente"
         )
         row["metric_version"] = local["metric_version"]
         row["dsr_local_meta"] = local
@@ -1501,7 +1502,9 @@ def run_intraday(
         lesson_hypothesis = str(lesson.get("hypothesis") or "")
     recorded = 0
     if record and db_path is not None:
+        periods_year = _bars_per_year(timeframe)
         for row in outcomes:
+            row_sharpe = float(row["metrics"].get("sharpe") or 0.0)
             record_trial(
                 db_path,
                 family=row["strategy"],
@@ -1529,6 +1532,8 @@ def run_intraday(
                 source="lesson" if lesson_id is not None else "sweep",
                 run_id=run,
                 lesson_id=lesson_id,
+                sr_period=row_sharpe / np.sqrt(periods_year),
+                periods_per_year=periods_year,
             )
             recorded += 1
 
