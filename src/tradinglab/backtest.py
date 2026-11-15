@@ -124,6 +124,9 @@ def run(
     last_date = None
     last_close = 0.0
     costs_status = carry.status if carry else "Sin datos: swap no disponible"
+    trip_entry_fee = 0.0
+    trip_pnl = 0.0
+    trip_return = 0.0
 
     for dt, bar in df.iterrows():
         px_open = float(bar["open"])
@@ -163,32 +166,74 @@ def run(
                 fill_px = px_open * (1 - slippage_bps / 10_000)
                 side = "sell"
 
-            notional = abs(delta) * fill_px
-            fee = notional * commission_bps / 10_000
-
-            # PnL realizado al reducir o cerrar la posición existente.
-            if shares != 0 and (shares > 0) != (delta > 0):
-                closing = min(abs(delta), abs(shares))
-                if shares > 0:
-                    pnl = (fill_px - avg_cost) * closing
-                    trade_return = (fill_px - avg_cost) / avg_cost if avg_cost > 0 else 0.0
-                else:
-                    pnl = (avg_cost - fill_px) * closing
-                    trade_return = (avg_cost - fill_px) / avg_cost if avg_cost > 0 else 0.0
-                realized.append(pnl - fee)
-                realized_returns.append(trade_return)
-                realized_days.append(dt.date().isoformat())
-
-            new_shares = shares + delta
+            shares_before = shares
+            new_shares = shares_before + delta
             if abs(new_shares) < 1e-9:
                 new_shares = 0.0
+            closing = 0.0
+            if shares_before != 0 and (shares_before > 0) != (delta > 0):
+                closing = min(abs(delta), abs(shares_before))
+            opening = abs(delta) - closing
+            close_fee = closing * fill_px * commission_bps / 10_000.0
+            open_fee = opening * fill_px * commission_bps / 10_000.0
+            fee = close_fee + open_fee
+            flip = (
+                shares_before != 0
+                and new_shares != 0
+                and (shares_before > 0) != (new_shares > 0)
+            )
+            closed_trip = False
+
+            # PnL de la parte cerrada; la comisión de entrada se asigna
+            # proporcionalmente a esa parte.
+            if closing:
+                if shares_before > 0:
+                    pnl = (fill_px - avg_cost) * closing
+                    trade_return = (
+                        (fill_px - avg_cost) / avg_cost if avg_cost > 0 else 0.0
+                    )
+                else:
+                    pnl = (avg_cost - fill_px) * closing
+                    trade_return = (
+                        (avg_cost - fill_px) / avg_cost if avg_cost > 0 else 0.0
+                    )
+                fraction = closing / abs(shares_before)
+                entry_fee_part = trip_entry_fee * fraction
+                trip_entry_fee -= entry_fee_part
+                trip_pnl += pnl - entry_fee_part - close_fee
+                trip_return += trade_return * fraction
+                if new_shares == 0 or flip:
+                    realized.append(trip_pnl)
+                    realized_returns.append(trip_return)
+                    realized_days.append(dt.date().isoformat())
+                    closed_trip = True
+
+            if new_shares == 0:
                 avg_cost = 0.0
-            elif shares == 0 or (shares > 0) == (delta > 0):
+            elif shares_before == 0:
+                avg_cost = fill_px
+            elif (
+                (shares_before > 0) == (new_shares > 0)
+                and (shares_before > 0) == (delta > 0)
+            ):
                 # Aumento en la misma dirección: coste medio ponderado.
-                avg_cost = (abs(shares) * avg_cost + abs(delta) * fill_px) / abs(new_shares)
-            elif (shares > 0) != (new_shares > 0):
+                avg_cost = (
+                    abs(shares_before) * avg_cost + abs(delta) * fill_px
+                ) / abs(new_shares)
+            elif flip:
                 # Giro: la parte restante abre al precio de ejecución.
                 avg_cost = fill_px
+
+            if flip:
+                trip_entry_fee = open_fee
+                trip_pnl = 0.0
+                trip_return = 0.0
+            elif closed_trip:
+                trip_entry_fee = 0.0
+                trip_pnl = 0.0
+                trip_return = 0.0
+            elif opening:
+                trip_entry_fee += open_fee
             shares = new_shares
 
             cash -= delta * fill_px + fee
