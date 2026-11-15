@@ -2422,7 +2422,7 @@ $rows = foreach ($n in $names) {
             if self._action and self._action.get("status") == "running":
                 return None, "Ya hay una acción en curso. Espera a que termine."
 
-            stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            stamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
             if kind == "dryrun":
                 cmd = self._lab_command() + ["orchestrate", "--dry-run"]
                 log_rel = f"dryrun/manual_{stamp}.log"

@@ -11,7 +11,7 @@ desde 1999, con los costes de US100.cash en FTMO (comisión 0, spread mediano
 from __future__ import annotations
 
 import sys
-from datetime import date
+from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -43,7 +43,7 @@ START = "1999-01-01"
 
 def main() -> int:
     settings = get_settings()
-    end = date.today().isoformat()
+    end = datetime.now(timezone.utc).date().isoformat()
     frame = data_mod.fetch(SYMBOL, START, end, settings.data.cache_dir)
     if len(frame) < 260:
         print(f"Sin datos suficientes: {len(frame)} barras")

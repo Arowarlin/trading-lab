@@ -18,7 +18,7 @@ def readiness(
     today: date | None = None,
 ) -> dict:
     settings = settings or Settings()
-    day = today or date.today()
+    day = today or datetime.now(timezone.utc).date()
     init_db(db_path)
     with connect(db_path) as con:
         rows = con.execute(

@@ -6,7 +6,7 @@ criterios de propuesta ni enviar órdenes.
 from __future__ import annotations
 
 import json
-from datetime import date
+from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
@@ -53,7 +53,7 @@ def run_costs(
     results = list(latest.get("results") or [])[: max(1, top)]
     cfg = latest.get("config") or {}
     start = str(cfg.get("start") or "2015-01-01")
-    end = str(cfg.get("end") or date.today().isoformat())
+    end = str(cfg.get("end") or datetime.now(timezone.utc).date().isoformat())
     selected_source = str(source or "none").strip().lower()
     if selected_source not in {"none", "broker", "dukascopy"}:
         raise ValueError("source debe ser broker, dukascopy o none")

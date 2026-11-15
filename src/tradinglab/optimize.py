@@ -143,7 +143,7 @@ def run_optuna(
         raise OptunaError("trials debe ser >= 1")
     settings = settings or get_settings()
     cache = Path(cache_dir or settings.data.cache_dir)
-    end_date = date.fromisoformat(end) if end else date.today()
+    end_date = date.fromisoformat(end) if end else datetime.now(timezone.utc).date()
     sealed = holdout_info(db_path, settings)
     sealed_start = date.fromisoformat(sealed["start_date"])
     dev_end = min(end_date, sealed_start - timedelta(days=1))

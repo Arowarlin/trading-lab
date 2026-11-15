@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import html
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pandas as pd
@@ -114,7 +114,7 @@ def build_dashboard(settings: Settings, broker, db_path: Path, out_path: Path | 
   h2 {{ font-size: 16px; margin: 32px 0 12px; }}
 </style></head><body>
 <h1>TradingLab</h1>
-<p class="muted">modo {settings.mode} · broker {settings.execution.broker} · {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
+<p class="muted">modo {settings.mode} · broker {settings.execution.broker} · {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}</p>
 
 <div class="grid">
   <div class="card"><div class="label">Equity</div><div class="value">{_fmt(snap['equity'])}</div></div>
