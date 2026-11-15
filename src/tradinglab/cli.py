@@ -159,6 +159,10 @@ stats_app = typer.Typer(
     no_args_is_help=True,
     help="Estadística y DSR: recálculo v2 de solo lectura.",
 )
+costs_app = typer.Typer(
+    no_args_is_help=True,
+    help="Costes: sincronización de swap desde MT5 (solo lectura).",
+)
 app.add_typer(mt5_app, name="mt5")
 app.add_typer(prop_app, name="prop")
 app.add_typer(futures_app, name="futures")
@@ -176,6 +180,7 @@ app.add_typer(campaign_app, name="campaign")
 app.add_typer(data_app, name="data")
 app.add_typer(risk_budget_app, name="risk-budget")
 app.add_typer(stats_app, name="stats")
+app.add_typer(costs_app, name="costs")
 app.add_typer(lifecycle_app, name="lifecycle")
 ai_trader_app = typer.Typer(
     no_args_is_help=True,
@@ -10373,6 +10378,72 @@ def ai_trader_no_trade_cmd(
 
 def main() -> None:
     app()
+
+
+@costs_app.command("swap-sync")
+def costs_swap_sync_cmd(
+    write: bool = typer.Option(
+        False, "--write", help="Actualiza solo el bloque swap de costs.yaml"
+    ),
+    symbols: str = typer.Option(
+        None, "--symbols", help="Lista separada por comas; por defecto, costs.yaml"
+    ),
+) -> None:
+    """Lee swap_long/swap_short de MT5; dry-run por defecto. No envía órdenes."""
+    from .lease import acquire, release
+    from .swap_sync import sync_swaps
+
+    requested = (
+        [item.strip().upper() for item in symbols.split(",") if item.strip()]
+        if symbols
+        else None
+    )
+    lease = acquire(
+        DEFAULT_DB, session="costs:swap-sync", ttl_seconds=60
+    )
+    if not lease["ok"]:
+        console.print(f"[red]Lease ocupado:[/red] {lease['reason']}")
+        raise typer.Exit(2)
+    try:
+        try:
+            payload = sync_swaps(
+                db_path=DEFAULT_DB,
+                write=write,
+                symbols=requested,
+            )
+        except Exception as exc:
+            console.print(
+                f"[yellow]Sin datos:[/yellow] MT5 no respondió ({exc}); "
+                "no se escribió costs.yaml."
+            )
+            raise typer.Exit(2) from exc
+    finally:
+        release(DEFAULT_DB)
+
+    table = Table(title="Swap · MT5 → costs.yaml")
+    for column in ("Símbolo", "Long", "Short", "Unidad", "Modo", "Estado"):
+        table.add_column(column)
+    for symbol, item in sorted(payload["symbols"].items()):
+        table.add_row(
+            symbol,
+            f"{item['long']:+.4f}",
+            f"{item['short']:+.4f}",
+            item["unit"],
+            str(item["swap_mode"]),
+            item["mode_label"],
+        )
+    for symbol, item in sorted(payload["skipped"].items()):
+        table.add_row(
+            symbol, "Sin datos", "Sin datos", "—", str(item.get("swap_mode", "—")),
+            item.get("reason", item.get("status", "no_soportado")),
+        )
+    console.print(table)
+    console.print(
+        f"Leídos: {payload['n_read']} · omitidos: {payload['n_skipped']} · "
+        f"{'escrito' if payload['written'] else 'dry-run'}"
+    )
+    if write and not payload["written"]:
+        console.print("[yellow]Nada que escribir: no hay símbolos soportados.[/yellow]")
 
 
 @stats_app.command("recompute-dsr")

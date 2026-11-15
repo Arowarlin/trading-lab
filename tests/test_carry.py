@@ -55,6 +55,29 @@ def test_costs_yaml_no_inventa_swap_si_falta_mt5():
     assert model.status == "costes provisionales"
 
 
+def test_us100_triple_viernes_y_puntos_de_indice():
+    model = CostModel(
+        swap_long=-676.55,
+        swap_short=1.75,
+        swap_unit="points",
+        triple_weekday=4,  # viernes
+        point=0.01,
+        contract_size=1.0,
+    )
+    thursday = date(2026, 11, 12)
+    assert model.daily_cash(
+        "long", notional=0.0, shares=1.0, day=thursday
+    ) == pytest.approx(-6.7655)
+    total = model.carry_for_nights(
+        "long",
+        notional=0.0,
+        shares=1.0,
+        start_day=thursday,
+        end_day=date(2026, 11, 15),
+    )
+    assert total == pytest.approx(5.0 * -6.7655)
+
+
 def test_sin_swap_queda_provisional_y_no_cobra():
     model = CostModel()
     assert model.provisional is True

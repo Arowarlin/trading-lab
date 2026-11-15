@@ -20,6 +20,7 @@ class CostModel:
     swap_unit: str = "percent_annual"
     triple_weekday: int = 2
     point: float = 0.01
+    contract_size: float = 1.0
     source: str = "Sin datos"
 
     @property
@@ -48,7 +49,12 @@ class CostModel:
         if unit in {"percent_annual", "percent", "annual_percent"}:
             cash = float(notional) * float(value) / 100.0 / 365.0
         elif unit in {"points", "point"}:
-            cash = float(value) * float(self.point) * abs(float(shares))
+            cash = (
+                float(value)
+                * float(self.point)
+                * float(self.contract_size)
+                * abs(float(shares))
+            )
         else:
             raise ValueError(f"unidad de swap desconocida: {self.swap_unit!r}")
         multiplier = 3.0 if int(day.weekday()) == int(self.triple_weekday) else 1.0
@@ -87,6 +93,7 @@ def cost_model_from_asset(asset: AssetCost, *, point: float = 0.01) -> CostModel
         swap_unit=asset.swap_unit,
         triple_weekday=asset.swap_triple_weekday,
         point=point,
+        contract_size=float(asset.contract_size or 1.0),
         source=asset.swap_source,
     )
 
