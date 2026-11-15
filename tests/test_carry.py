@@ -55,7 +55,7 @@ def test_costs_yaml_no_inventa_swap_si_falta_mt5():
     assert model.status == "costes provisionales"
 
 
-def test_us100_triple_viernes_y_puntos_de_indice():
+def test_us100_semana_completa_triple_viernes():
     model = CostModel(
         swap_long=-676.55,
         swap_short=1.75,
@@ -64,18 +64,56 @@ def test_us100_triple_viernes_y_puntos_de_indice():
         point=0.01,
         contract_size=1.0,
     )
-    thursday = date(2026, 11, 12)
+    monday = date(2026, 11, 9)
     assert model.daily_cash(
-        "long", notional=0.0, shares=1.0, day=thursday
+        "long", notional=0.0, shares=1.0, day=monday
     ) == pytest.approx(-6.7655)
     total = model.carry_for_nights(
         "long",
         notional=0.0,
         shares=1.0,
-        start_day=thursday,
-        end_day=date(2026, 11, 15),
+        start_day=monday,
+        end_day=date(2026, 11, 16),
     )
-    assert total == pytest.approx(5.0 * -6.7655)
+    assert total == pytest.approx(7.0 * -6.7655)
+
+
+def test_fin_de_semana_no_cobra_y_triple_solo_en_su_dia():
+    model = CostModel(
+        swap_long=-8.59,
+        swap_short=0.33,
+        swap_unit="percent_annual",
+        triple_weekday=2,  # miércoles
+    )
+    friday = date(2026, 11, 13)
+    assert model.carry_for_nights(
+        "long",
+        notional=100_000.0,
+        shares=1.0,
+        start_day=friday,
+        end_day=date(2026, 11, 16),
+    ) == pytest.approx(model.daily_cash(
+        "long", notional=100_000.0, shares=1.0, day=friday
+    ))
+
+    tuesday = date(2026, 11, 10)
+    assert model.carry_for_nights(
+        "long",
+        notional=100_000.0,
+        shares=1.0,
+        start_day=tuesday,
+        end_day=date(2026, 11, 12),
+    ) == pytest.approx(4.0 * model.daily_cash(
+        "long", notional=100_000.0, shares=1.0, day=tuesday
+    ))
+
+    assert model.carry_for_nights(
+        "long",
+        notional=100_000.0,
+        shares=1.0,
+        start_day=tuesday,
+        end_day=tuesday,
+    ) == 0.0
 
 
 def test_sin_swap_queda_provisional_y_no_cobra():

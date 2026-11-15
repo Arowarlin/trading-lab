@@ -75,12 +75,15 @@ class CostModel:
         total = 0.0
         current = start_day
         while current < end_day:
-            total += self.daily_cash(
-                side,
-                notional=notional,
-                shares=shares,
-                day=current,
-            )
+            # Los brókers no hacen rollover sábado/domingo: el triple del día
+            # configurado ya cubre el fin de semana.
+            if current.weekday() < 5:
+                total += self.daily_cash(
+                    side,
+                    notional=notional,
+                    shares=shares,
+                    day=current,
+                )
             current += timedelta(days=1)
         return total
 
