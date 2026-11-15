@@ -41,7 +41,7 @@ from .config import ROOT
 from .db import connect, init_db
 from .indicators import atr
 from .intraday import BAR_MINUTES, BARS_PER_YEAR, backtest_intraday, cache_file
-from .intraday_costs import asset_costs
+from .intraday_costs import asset_costs, spread_by_hour
 from .strategies.swing import daily_bars, trading_day
 from .trials import record_trial
 
@@ -489,23 +489,6 @@ def classify_symbol(group: str, name: str) -> str | None:
     if any(hint in upper for hint in ENERGY_HINTS):
         return "energy"
     return GROUP_ASSET_CLASS.get(str(group))
-
-
-def spread_by_hour(frame: pd.DataFrame, point: float) -> pd.Series:
-    """Spread mediano por hora en bps del precio (índice 0..23)."""
-    if "spread" not in frame.columns:
-        return pd.Series(dtype=float)
-    close = pd.to_numeric(frame["close"], errors="coerce")
-    raw = pd.to_numeric(frame["spread"], errors="coerce").fillna(0.0)
-    bps = (
-        (raw * float(point) / close * 10_000.0)
-        .replace([np.inf, -np.inf], np.nan)
-        .dropna()
-    )
-    bps = bps[bps >= 0.0]
-    if bps.empty:
-        return pd.Series(dtype=float)
-    return bps.groupby(bps.index.hour).median().sort_index()
 
 
 def atr_stats(frame: pd.DataFrame, window: int = 14) -> dict:

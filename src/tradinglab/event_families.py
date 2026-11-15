@@ -202,6 +202,7 @@ def _variant_returns(
     commission_bps: float,
     slippage_bps: float,
     carry=None,
+    hourly_spread=None,
 ) -> tuple[pd.Series, pd.Series, pd.Series, list[dict]]:
     ny_dates = bars.index.tz_convert(NY).date
     daily_dates = sorted(set(ny_dates))
@@ -233,6 +234,7 @@ def _variant_returns(
             session_weekdays=(0, 1, 2, 3, 4),
             asset_class="cfd",
             carry=carry,
+            spread_by_hour=hourly_spread,
         )
         if not result["trades"]:
             continue
@@ -352,9 +354,10 @@ def run_caja_ny(
     spread_bps = float(spread_bps)
     atr_series = atr(bars, window=ATR_WINDOW)
     from .carry import cost_model_from_asset
-    from .intraday_costs import asset_costs
+    from .intraday_costs import asset_costs, spread_by_hour
 
     carry = cost_model_from_asset(asset_costs(symbol))
+    hourly = spread_by_hour(bars, 0.01)
     variants = _combos(INTRADAY_GRIDS["caja_ny"])
     before_count = count_tests(db_path)
     before_trials = _strategy_trials_count(db_path)
@@ -373,6 +376,7 @@ def run_caja_ny(
             commission_bps=0.0,
             slippage_bps=2.0,
             carry=carry,
+            hourly_spread=hourly,
         )
         label = str(params["stop_rule"])
         daily_gross[label] = gross

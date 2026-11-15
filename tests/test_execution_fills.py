@@ -108,7 +108,8 @@ def _run(bars: pd.DataFrame, orders: list[dict], **kwargs):
         "session_tz": "UTC",
         "session_weekdays": (0, 1, 2, 3, 4),
         "session_rules": None,
-        "asset_class": "cfd",
+        # Los tests históricos describen acciones; T07 solo cambia cfd/fx.
+        "asset_class": "equity",
         "symbol": None,
     }
     defaults.update(kwargs)
@@ -151,6 +152,68 @@ def test_sell_limit_no_fill_si_high_igual_que_level():
     result = _run(bars, [order])
     assert result["trades"] == []
     assert result["expired"] == 1
+
+
+# --------------------------------------------------- T07: spread en CFD/FX
+
+
+def test_buy_limit_cfd_no_fill_si_el_ask_no_toca_el_nivel():
+    bars = _bars(("2026-11-09 09:15", 100.0, 100.5, 99.95, 100.2))
+    order = _order("buy", 100.0, 98.0, 102.0)
+    result = _run(
+        bars, [order], asset_class="cfd", spread_bps=10.0
+    )
+    assert result["trades"] == []
+    assert result["expired"] == 1
+
+
+def test_buy_limit_cfd_fill_si_el_ask_toca_el_nivel():
+    bars = _bars(("2026-11-09 09:15", 100.0, 100.5, 99.9, 100.2))
+    order = _order("buy", 100.0, 98.0, 100.2)
+    result = _run(
+        bars, [order], asset_class="cfd", spread_bps=10.0
+    )
+    assert len(result["trades"]) == 1
+    assert result["trades"][0]["entry_price"] == pytest.approx(100.0)
+
+
+def test_buy_limit_cfd_usa_el_spread_de_la_hora():
+    bars = _bars(("2026-11-09 09:15", 100.0, 100.5, 99.9, 100.2))
+    order = _order("buy", 100.0, 98.0, 100.2)
+    result = _run(
+        bars,
+        [order],
+        asset_class="cfd",
+        spread_bps=0.0,
+        spread_by_hour={9: 50.0},
+    )
+    assert result["trades"] == []
+
+    fallback = _run(
+        bars,
+        [order],
+        asset_class="cfd",
+        spread_bps=10.0,
+        spread_by_hour={10: 50.0},
+    )
+    assert len(fallback["trades"]) == 1
+
+
+def test_target_corto_cfd_exige_ask_en_el_objetivo():
+    bars = _bars(
+        ("2026-11-09 09:15", 100.0, 100.05, 99.95, 100.0),
+        ("2026-11-09 09:30", 99.5, 99.5, 99.0, 99.4),
+        ("2026-11-09 09:45", 99.2, 99.4, 98.9, 99.0),
+    )
+    order = _order(
+        "sell", 100.0, 101.0, 99.0, expires="2026-11-09 09:50"
+    )
+    result = _run(
+        bars, [order], asset_class="cfd", spread_bps=10.0
+    )
+    assert len(result["trades"]) == 1
+    assert result["trades"][0]["exit_reason"] == "target"
+    assert result["trades"][0]["exit_price"] == pytest.approx(99.0)
 
 
 # ------------------------------------------------------------------- regla 3

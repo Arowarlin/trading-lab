@@ -36,6 +36,7 @@ class AssetCost:
     swap_triple_weekday: int = 2
     swap_source: str = "Sin datos"
     swap_provisional: bool = True
+    spread_bps: float | None = None
 
     def commission_bps(self, close: pd.Series) -> pd.Series:
         """Comisión por lado en bps para una serie de precios."""
@@ -72,6 +73,23 @@ class AssetCost:
                 )
             return float(self.commission_per_lot_usd) / notional_usd * 10_000.0
         raise ValueError(f"tipo de comisión desconocido para {self.symbol}")
+
+
+def spread_by_hour(frame: pd.DataFrame, point: float) -> pd.Series:
+    """Spread mediano por hora en bps del precio (?ndice 0..23)."""
+    if "spread" not in frame.columns:
+        return pd.Series(dtype=float)
+    close = pd.to_numeric(frame["close"], errors="coerce")
+    raw = pd.to_numeric(frame["spread"], errors="coerce").fillna(0.0)
+    bps = (
+        (raw * float(point) / close * 10_000.0)
+        .replace([float("inf"), float("-inf")], pd.NA)
+        .dropna()
+    )
+    bps = bps[bps >= 0.0]
+    if bps.empty:
+        return pd.Series(dtype=float)
+    return bps.groupby(bps.index.hour).median().sort_index()
 
 
 def _load(path: Path | None = None) -> dict:
@@ -155,7 +173,12 @@ def asset_costs(symbol: str, path: Path | None = None) -> AssetCost:
             swap_item.get("source") or swap.get("source") or "Sin datos"
         ),
         swap_provisional=swap_long is None or swap_short is None,
+        spread_bps=(
+            float(item["spread_bps"])
+            if item.get("spread_bps") is not None
+            else None
+        ),
     )
 
 
-__all__ = ["AssetCost", "asset_costs"]
+__all__ = ["AssetCost", "asset_costs", "spread_by_hour"]

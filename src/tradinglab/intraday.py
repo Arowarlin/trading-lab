@@ -483,6 +483,7 @@ def run_event_backtest(
     session_rules: PropRules | None = None,
     asset_class: str = "cfd",
     carry: CostModel | None = None,
+    spread_by_hour: pd.Series | dict[int, float] | None = None,
 ) -> dict:
     """Ejecuta órdenes limitadas con el modo de eventos (opt-in).
 
@@ -640,6 +641,28 @@ def run_event_backtest(
             "slippage_bps": slippage if add_spread else 0.0,
         }
 
+    symbol_spread = None
+    if symbol:
+        try:
+            symbol_spread = asset_costs(symbol).spread_bps
+        except Exception:
+            symbol_spread = None
+
+    def spread_bps_at(ts: pd.Timestamp) -> float:
+        """Spread de la hora UTC; si falta, el del símbolo o el de la llamada."""
+        hour = ts.tz_convert("UTC").hour
+        if spread_by_hour is not None:
+            try:
+                value = spread_by_hour.get(hour)
+            except AttributeError:
+                value = None
+            if value is not None and np.isfinite(float(value)):
+                return float(value)
+        return float(symbol_spread) if symbol_spread is not None else spread
+
+    def spread_price(ts: pd.Timestamp, price: float) -> float:
+        return float(price) * spread_bps_at(ts) / 10_000.0
+
     def force_deadline(ts: pd.Timestamp) -> pd.Timestamp | None:
         if force_exit_time is None:
             return None
@@ -677,6 +700,13 @@ def run_event_backtest(
         else:
             stop_hit = float(bar["high"]) >= position["stop"]
             target_hit = target is not None and float(bar["low"]) <= target
+            if (
+                target_hit
+                and asset_class in {"cfd", "fx"}
+                and target is not None
+                and float(bar["low"]) + spread_price(ts, float(bar["low"])) > target
+            ):
+                target_hit = False
         if stop_hit:
             if side == "buy":
                 price = min(position["stop"], float(bar["open"]))
@@ -708,10 +738,13 @@ def run_event_backtest(
             "carry_pct": position.get("carry_pct", 0.0),
         }
 
-    def limit_touched(order: dict, bar: pd.Series) -> bool:
+    def limit_touched(order: dict, bar: pd.Series, ts: pd.Timestamp) -> bool:
         if order["entry_type"] == "market":
             return True
         if order["side"] == "buy":
+            ask_proxy = float(bar["low"]) + spread_price(ts, float(bar["low"]))
+            if asset_class in {"cfd", "fx"}:
+                return ask_proxy <= order["level"] - pessimism
             return float(bar["low"]) < order["level"] - pessimism
         return float(bar["high"]) > order["level"] + pessimism
 
@@ -766,7 +799,7 @@ def run_event_backtest(
             if trades_by_day.get(day, 0) >= max_trades_per_day:
                 ignored += 1
                 continue
-            if not limit_touched(order, bar):
+            if not limit_touched(order, bar, ts):
                 remaining.append(order)
                 continue
             if order["entry_type"] == "market":
