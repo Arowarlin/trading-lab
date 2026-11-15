@@ -17,6 +17,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from .carry import CostModel
 from .config import DEFAULT_DB, ROOT
 from .global_dsr import frequency_for_timeframe, global_srs
 from .indicators import atr, ema
@@ -481,6 +482,7 @@ def run_event_backtest(
     session_weekdays: tuple[int, ...] | None = None,
     session_rules: PropRules | None = None,
     asset_class: str = "cfd",
+    carry: CostModel | None = None,
 ) -> dict:
     """Ejecuta órdenes limitadas con el modo de eventos (opt-in).
 
@@ -703,6 +705,7 @@ def run_event_backtest(
             "exit_reason": reason,
             "entry_costs": position["entry_costs"],
             "exit_costs": exit_costs,
+            "carry_pct": position.get("carry_pct", 0.0),
         }
 
     def limit_touched(order: dict, bar: pd.Series) -> bool:
@@ -725,6 +728,26 @@ def run_event_backtest(
         if not bar_allowed(ts):
             session_skipped += 1
             continue
+
+        # Carry por cada noche que la posición haya cruzado.
+        if carry is not None:
+            for position in open_positions:
+                last_day = position.get(
+                    "last_carry_day", position["entry_time"].date()
+                )
+                if ts.date() > last_day:
+                    amount = carry.carry_for_nights(
+                        "long" if position["side"] == "buy" else "short",
+                        notional=position["entry_price"],
+                        shares=1.0,
+                        start_day=last_day,
+                        end_day=ts.date(),
+                    )
+                    position["carry_pct"] = (
+                        position.get("carry_pct", 0.0)
+                        + amount / position["entry_price"]
+                    )
+                    position["last_carry_day"] = ts.date()
 
         # Posiciones abiertas: stop, objetivo o salida forzosa.
         for position in list(open_positions):
@@ -784,6 +807,9 @@ def run_event_backtest(
         "ignored": ignored,
         "session_error": None,
         "session_skipped": session_skipped,
+        "costs_status": (
+            carry.status if carry else "Sin datos: swap no disponible"
+        ),
     }
 
 

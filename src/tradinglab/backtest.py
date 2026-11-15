@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 import numpy as np
 import pandas as pd
 
+from .carry import CostModel
 from .metrics import metrics_warning, recovery_factor, risk_of_ruin, system_quality_number
 
 TRADING_DAYS = 252
@@ -61,6 +62,7 @@ class BacktestResult:
     trade_pnls: list[float] = field(default_factory=list)
     trade_days: list[str] = field(default_factory=list)
     trade_returns: list[float] = field(default_factory=list)
+    costs_status: str = "Sin datos: swap no disponible"
 
 
 def run(
@@ -74,6 +76,7 @@ def run(
     session_tz: str = "UTC",
     flat_dates: Iterable[str] | None = None,
     vol_target: dict | None = None,
+    carry: CostModel | None = None,
 ) -> BacktestResult:
     """Backtest long/short, sin apalancamiento, ejecución en la apertura siguiente.
 
@@ -118,11 +121,27 @@ def run(
     realized_days: list[str] = []
     realized_returns: list[float] = []
     effective_exposure: list[float] = []
+    last_date = None
+    last_close = 0.0
+    costs_status = carry.status if carry else "Sin datos: swap no disponible"
 
     for dt, bar in df.iterrows():
         px_open = float(bar["open"])
         if px_open <= 0 or not np.isfinite(px_open):
             continue
+        if (
+            last_date is not None
+            and dt.date() > last_date
+            and shares != 0
+            and carry is not None
+        ):
+            cash += carry.carry_for_nights(
+                "long" if shares > 0 else "short",
+                notional=abs(shares) * last_close,
+                shares=shares,
+                start_day=last_date,
+                end_day=dt.date(),
+            )
 
         local = _local_stamp(dt, session_tz)
         force_flat = local.date().isoformat() in flat
@@ -185,6 +204,8 @@ def run(
 
         equity_close = cash + shares * float(bar["close"])
         rows.append({"ts": dt, "cash": cash, "shares": shares, "equity": equity_close})
+        last_date = dt.date()
+        last_close = float(bar["close"])
 
     if not rows:
         raise RuntimeError("Backtest sin barras válidas")
@@ -197,6 +218,7 @@ def run(
         else float(pos_target.abs().mean())
     )
     metrics = compute_metrics(eq, rets, realized, exposure, realized_returns)
+    metrics["costs_status"] = costs_status
 
     return BacktestResult(
         equity=eq,
@@ -207,6 +229,7 @@ def run(
         trade_pnls=realized,
         trade_days=realized_days,
         trade_returns=realized_returns,
+        costs_status=costs_status,
     )
 
 

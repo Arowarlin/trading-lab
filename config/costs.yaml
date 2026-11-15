@@ -596,6 +596,24 @@ assets:
     effective_from: "2025-08-01"
     source_url: "https://ftmo.com/en/blog/zero-commissions-on-indices/"
 
+# Swap/financiación. Los valores reales se leen de `mt5.symbol_info`
+# (`swap_long`, `swap_short`, `swap_mode`). Si no hay terminal o el símbolo no
+# los expone, quedan en null = "Sin datos" y el backtest marca costes
+# provisionales; no se inventa una cifra.
+swap:
+  unit: percent_annual
+  triple_swap_weekday: 2  # miércoles: 3x el swap diario
+  source: "MT5 symbol_info; Sin datos si no está disponible"
+  defaults:
+    long: null
+    short: null
+  # Overrides por símbolo, si el operador los verifica:
+  # assets:
+  #   US100.CASH:
+  #     long: -2.5
+  #     short: -1.2
+  #     unit: percent_annual
+
 # Supuesto explícito de slippage por lado, en bps (global y por activo).
 slippage:
   optimistic_bps: 0.5

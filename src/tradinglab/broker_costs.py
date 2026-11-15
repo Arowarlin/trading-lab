@@ -39,6 +39,37 @@ def _normalize_symbol(symbol: str) -> str:
     return str(symbol or "").strip().upper()
 
 
+def mt5_swap(symbol: str) -> dict:
+    """Swap bruto del símbolo desde `mt5.symbol_info`; nunca inventa.
+
+    No inicializa MT5: usa la conexión que ya exista. Si el paquete o el
+    terminal no están disponibles, devuelve ``status="Sin datos"``.
+    """
+    try:
+        import MetaTrader5 as mt5
+    except Exception as exc:
+        return {
+            "status": "Sin datos",
+            "reason": f"MT5 no disponible: {type(exc).__name__}",
+            "symbol": str(symbol).upper(),
+        }
+    info = mt5.symbol_info(str(symbol))
+    if info is None:
+        return {
+            "status": "Sin datos",
+            "reason": "symbol_info sin datos o terminal no inicializado",
+            "symbol": str(symbol).upper(),
+        }
+    return {
+        "status": "ok",
+        "symbol": str(symbol).upper(),
+        "swap_long": float(info.swap_long),
+        "swap_short": float(info.swap_short),
+        "swap_mode": int(info.swap_mode),
+        "source": "mt5.symbol_info",
+    }
+
+
 def _empty_ticks() -> pd.DataFrame:
     return pd.DataFrame(columns=["ts", "bid", "ask", "spread", "spread_bps"])
 
@@ -807,6 +838,7 @@ __all__ = [
     "load_spreads",
     "merge_broker_report",
     "merge_comparison_into_broker_report",
+    "mt5_swap",
     "persist_spreads",
     "recalculate_stage3",
     "render_broker_report",

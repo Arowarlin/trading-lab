@@ -26,6 +26,7 @@ import numpy as np
 import pandas as pd
 
 from .backtest import run as run_backtest
+from .carry import cost_model_from_asset
 from .config import ROOT
 from .datacheck import check_frame
 from .global_dsr import global_srs
@@ -432,10 +433,16 @@ def run_swing(
             "slippage_bps_optimistic": float(cost.slippage_optimistic_bps),
             "slippage_bps_conservative": float(cost.slippage_conservative_bps),
             "source": cost.source,
+            "swap_long": cost.swap_long,
+            "swap_short": cost.swap_short,
+            "swap_unit": cost.swap_unit,
+            "swap_source": cost.swap_source,
+            "swap_provisional": cost.swap_provisional,
             "session": list(session),
             "session_tz": tz,
         }
         cost_bps = commission + spread_recent
+        carry = cost_model_from_asset(cost)
         strategy = STRATEGIES["trend_daily_atr"]
         for params in grid:
             variant_id = (
@@ -459,6 +466,7 @@ def run_swing(
                     session=session,
                     session_tz=tz,
                     flat_dates=[],
+                    carry=carry,
                 )
             except Exception as exc:
                 errors.append(
@@ -696,6 +704,11 @@ def run_swing(
         "data": data,
         "datachecks": datachecks,
         "costs": costs_by_symbol,
+        "costs_status": (
+            "costes provisionales"
+            if any(item.get("swap_provisional", True) for item in costs_by_symbol.values())
+            else "swap incluido"
+        ),
         "dsr_n_trials": n_trials,
         "dsr_trial_sr_std": sr_std,
         "pbo": pbo_global,

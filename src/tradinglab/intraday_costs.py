@@ -30,6 +30,12 @@ class AssetCost:
     slippage_optimistic_bps: float
     slippage_conservative_bps: float
     slippage_assumption: str
+    swap_long: float | None = None
+    swap_short: float | None = None
+    swap_unit: str = "percent_annual"
+    swap_triple_weekday: int = 2
+    swap_source: str = "Sin datos"
+    swap_provisional: bool = True
 
     def commission_bps(self, close: pd.Series) -> pd.Series:
         """Comisión por lado en bps para una serie de precios."""
@@ -81,7 +87,21 @@ def asset_costs(symbol: str, path: Path | None = None) -> AssetCost:
     assets = data.get("assets") or {}
     item = assets.get(str(symbol).upper()) or {}
     slippage = data.get("slippage") or {}
+    swap = data.get("swap") or {}
+    swap_assets = swap.get("assets") or {}
+    swap_item = swap_assets.get(str(symbol).upper()) or item.get("swap") or {}
+    defaults = swap.get("defaults") or {}
     verified = bool(item.get("verified"))
+    swap_long = (
+        float(swap_item["long"])
+        if swap_item.get("long") is not None
+        else (float(defaults["long"]) if defaults.get("long") is not None else None)
+    )
+    swap_short = (
+        float(swap_item["short"])
+        if swap_item.get("short") is not None
+        else (float(defaults["short"]) if defaults.get("short") is not None else None)
+    )
     return AssetCost(
         symbol=str(symbol).upper(),
         verified=verified,
@@ -125,6 +145,16 @@ def asset_costs(symbol: str, path: Path | None = None) -> AssetCost:
                 ),
             )
         ).strip(),
+        swap_long=swap_long,
+        swap_short=swap_short,
+        swap_unit=str(swap_item.get("unit") or swap.get("unit") or "percent_annual"),
+        swap_triple_weekday=int(
+            swap_item.get("triple_swap_weekday", swap.get("triple_swap_weekday", 2))
+        ),
+        swap_source=str(
+            swap_item.get("source") or swap.get("source") or "Sin datos"
+        ),
+        swap_provisional=swap_long is None or swap_short is None,
     )
 
 

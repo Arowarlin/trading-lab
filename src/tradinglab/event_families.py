@@ -188,7 +188,8 @@ def _trade_result(trade: dict) -> tuple[float, float, float]:
     entry_cost = sum(float(value) for value in trade["entry_costs"].values())
     exit_cost = sum(float(value) for value in trade["exit_costs"].values())
     total_cost = entry_cost + exit_cost
-    return gross, gross - total_cost / 10_000.0, total_cost
+    carry = float(trade.get("carry_pct", 0.0))
+    return gross + carry, gross + carry - total_cost / 10_000.0, total_cost
 
 
 def _variant_returns(
@@ -200,6 +201,7 @@ def _variant_returns(
     spread_bps: float,
     commission_bps: float,
     slippage_bps: float,
+    carry=None,
 ) -> tuple[pd.Series, pd.Series, pd.Series, list[dict]]:
     ny_dates = bars.index.tz_convert(NY).date
     daily_dates = sorted(set(ny_dates))
@@ -230,6 +232,7 @@ def _variant_returns(
             session_tz="America/New_York",
             session_weekdays=(0, 1, 2, 3, 4),
             asset_class="cfd",
+            carry=carry,
         )
         if not result["trades"]:
             continue
@@ -348,6 +351,10 @@ def run_caja_ny(
         raise RuntimeError(f"sin spread bróker p75 para {symbol}")
     spread_bps = float(spread_bps)
     atr_series = atr(bars, window=ATR_WINDOW)
+    from .carry import cost_model_from_asset
+    from .intraday_costs import asset_costs
+
+    carry = cost_model_from_asset(asset_costs(symbol))
     variants = _combos(INTRADAY_GRIDS["caja_ny"])
     before_count = count_tests(db_path)
     before_trials = _strategy_trials_count(db_path)
@@ -365,6 +372,7 @@ def run_caja_ny(
             spread_bps=spread_bps,
             commission_bps=0.0,
             slippage_bps=2.0,
+            carry=carry,
         )
         label = str(params["stop_rule"])
         daily_gross[label] = gross
