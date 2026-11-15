@@ -13,7 +13,10 @@ from tradinglab.learning import count_tests
 
 def _frame(rows: int = 420) -> pd.DataFrame:
     x = np.arange(rows, dtype=float)
-    close = 100.0 + 0.15 * x + 2.0 * np.sin(x / 20.0)
+    # Ruido fijo: sin él el Sharpe por periodo supera 1 y el guard de
+    # unidades del DSR rechaza la serie sintética (no es un dato realista).
+    noise = np.random.default_rng(7).normal(0.0, 0.5, rows)
+    close = 100.0 + 0.15 * x + 2.0 * np.sin(x / 20.0) + noise
     return pd.DataFrame(
         {
             "open": close,
@@ -58,6 +61,8 @@ def test_run_optuna_sintetico_suma_trials_y_no_toca_holdout(
     assert count_tests(db) >= 3
     assert report["holdout"]["status"] == "Sin datos"
     assert "dsr" in report["gates"]
+    assert report["gates"]["dsr_v2"] == report["gates"]["dsr"]
+    assert report["gates"]["metric_version"] == "dsr_v2"
     assert "pbo" in report["gates"]
     assert report["config"]["dev_end"] < report["config"]["sealed_start"]
     assert isinstance(report["proposals"], list)

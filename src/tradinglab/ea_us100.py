@@ -26,7 +26,7 @@ from .learning import count_tests
 from .profiles import get_profile
 from .prop.rules import from_yaml
 from .prop.simulator import monte_carlo
-from .research import deflated_sharpe
+from .stats import dsr_from_returns, period_sharpe
 from .trials import record_trial
 from .validation import cscv_pbo
 from .walkforward import regime_gate, regime_report, walk_forward
@@ -367,12 +367,12 @@ def validate(
         if int(row["index"]) == baseline_index
     )
     sharpe = _sharpe(base_returns)
-    skew = float(base_returns.skew())
-    kurt = float(base_returns.kurt()) + 3.0
-    trial_srs = [_sharpe(matrix[index]) for index in matrix.columns]
-    sr_std = float(pd.Series(trial_srs).std(ddof=1))
+    trial_srs = [period_sharpe(matrix[index]) for index in matrix.columns]
     n_trials = len(rows) + count_tests(db_path)
-    dsr = deflated_sharpe(sharpe, len(base_returns), skew, kurt, sr_std, n_trials)
+    dsr_payload = dsr_from_returns(
+        base_returns, trial_srs, n_trials, periods_per_year=252
+    )
+    dsr = dsr_payload["dsr"]
     pbo = None
     try:
         pbo = float(cscv_pbo(matrix.to_numpy(dtype=float), 16, seed=0).pbo)
@@ -478,6 +478,15 @@ def validate(
         "filters": filters,
         "passed": passed,
         "dsr": dsr,
+        "dsr_v2": dsr,
+        "metric_version": dsr_payload["metric_version"],
+        "dsr_meta": {
+            "sr_period": dsr_payload["sr_period"],
+            "sr0_period": dsr_payload["sr0_period"],
+            "skew": dsr_payload["skew"],
+            "kurt": dsr_payload["kurt"],
+            "annualized_sr": dsr_payload["annualized_sr"],
+        },
         "pbo": pbo,
         "walk_forward": wf,
         "regime": regime,

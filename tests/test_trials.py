@@ -35,6 +35,20 @@ def _trial(db, **kwargs):
     return record_trial(db, **base)
 
 
+def test_columnas_dsr_v2_son_aditivas_y_no_cuentan(tmp_path):
+    db = tmp_path / "lab.db"
+    init_db(db)
+    before = count_tests(db)
+    old = _trial(db, counted=False)
+    assert old["dsr_v2"] is None
+    assert old["metric_version"] is None
+
+    new = _trial(db, counted=False, dsr_v2=0.83, metric_version="dsr_v2")
+    assert new["dsr_v2"] == pytest.approx(0.83)
+    assert new["metric_version"] == "dsr_v2"
+    assert count_tests(db) == before
+
+
 def test_registra_tambien_las_fallidas(tmp_path):
     db = tmp_path / "lab.db"
     init_db(db)

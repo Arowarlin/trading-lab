@@ -14,7 +14,7 @@ from tradinglab.prop.rules import ftmo
 
 
 def test_deflated_sharpe_penaliza_mas_variantes():
-    from tradinglab.research import deflated_sharpe
+    from tradinglab.stats import deflated_sharpe
 
     bajo = deflated_sharpe(1.0, 1000, 0.0, 3.0, 0.5, 10)
     alto = deflated_sharpe(1.0, 1000, 0.0, 3.0, 0.5, 300)
@@ -222,6 +222,8 @@ def test_run_research_edge_passes_pbo_walkforward_and_regime(monkeypatch, tmp_pa
     assert report["walk_forward"] is not None
     assert report["walk_forward"]["verdict"] == "ok"
     assert report["dsr_n_trials"] == len(report["results"])
+    assert report["results"][0]["dsr_v2"] == report["results"][0]["dsr"]
+    assert report["results"][0]["metric_version"] == "dsr_v2"
     assert len(report["proposals"]) == 1
     proposal = report["proposals"][0]
     assert proposal["params"] == edge_params

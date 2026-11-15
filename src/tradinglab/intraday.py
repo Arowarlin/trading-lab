@@ -24,8 +24,8 @@ from .learning import count_tests, get_lesson
 from .profiles import get_profile
 from .prop.rules import PropRules, from_yaml
 from .prop.simulator import monte_carlo
-from .research import deflated_sharpe
 from .session import session_block
+from .stats import dsr_from_returns, period_sharpe
 from .strategies.base import StrategyResult
 from .strategies.swing import trend_daily_atr
 from .trials import record_trial
@@ -1379,22 +1379,18 @@ def run_intraday(
                 }
             )
 
-    sr_values = [row["metrics"]["sharpe"] for row in outcomes]
-    sr_std = float(np.std(sr_values, ddof=1)) if len(sr_values) > 1 else 0.0
     n_trials_dsr = (
         int(dsr_n_trials)
         if dsr_n_trials is not None
         else len(outcomes) + (count_tests(db_path) if db_path is not None else 0)
     )
-    for row in outcomes:
-        row["dsr"] = deflated_sharpe(
-            row["metrics"]["sharpe"],
-            int(row["metrics"]["bars"]),
-            0.0,
-            3.0,
-            sr_std,
-            n_trials_dsr,
-        )
+    series_list = list(returns_by_id.values())
+    trial_srs = [period_sharpe(series) for series in series_list]
+    for row, series in zip(outcomes, series_list):
+        payload = dsr_from_returns(series, trial_srs, n_trials_dsr)
+        row["dsr"] = payload["dsr"]
+        row["dsr_v2"] = payload["dsr"]
+        row["metric_version"] = payload["metric_version"]
         row["dsr_n_trials"] = n_trials_dsr
 
     aligned = _aligned(returns_by_id)

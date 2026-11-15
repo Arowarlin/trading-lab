@@ -32,7 +32,7 @@ from .intraday import cache_file, load_bars
 from .intraday_costs import asset_costs
 from .prop.rules import PropRules
 from .prop.simulator import monte_carlo
-from .research import deflated_sharpe
+from .stats import dsr_from_returns, period_sharpe
 from .strategies import STRATEGIES
 from .strategies.swing import daily_bars, trading_day
 from .trials import budget_status, record_trial
@@ -555,20 +555,19 @@ def run_swing(
             ] = daily_ret
 
     # DSR: cuenta todas las variantes de esta pasada más los intentos previos.
-    sr_values = [row["sharpe"] for row in results if row["sample_days"] >= 3]
-    sr_std = float(np.std(sr_values, ddof=1)) if len(sr_values) > 1 else 0.0
     n_trials = len(results) + max(0, int(trials_before))
-    for row in results:
-        row["dsr"] = deflated_sharpe(
-            row["sharpe"],
-            int(row["sample_days"]),
-            0.0,
-            3.0,
-            sr_std,
-            n_trials,
+    series_list = list(daily_by_variant.values())
+    trial_srs = [period_sharpe(series) for series in series_list]
+    sr_std = float(np.std(trial_srs, ddof=0)) if len(trial_srs) > 1 else 0.0
+    for row, series in zip(results, series_list):
+        payload = dsr_from_returns(
+            series, trial_srs, n_trials, periods_per_year=252
         )
+        row["dsr"] = payload["dsr"]
+        row["dsr_v2"] = payload["dsr"]
+        row["metric_version"] = payload["metric_version"]
         row["dsr_n_trials"] = n_trials
-        row["dsr_trial_sr_std"] = sr_std
+        row["dsr_trial_sr_std"] = payload["trial_sr_std_period"]
 
     pbo_global = _pbo(_aligned(daily_by_variant))
     pbo_ok = bool(pbo_global and pbo_global["pbo"] <= MAX_PBO)

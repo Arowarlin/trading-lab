@@ -9807,6 +9807,11 @@ def campaign_run_cmd(
     console.print(
         f"[green]Meseta[/green] · {len(selected)} candidatas de {len(plateau)} celdas"
     )
+    from .stats import period_sharpe
+
+    trial_srs = [
+        period_sharpe(series) for series in discovery["returns_by_id"].values()
+    ]
     confirmed = run_holdout(
         DEFAULT_DB,
         config,
@@ -9815,6 +9820,7 @@ def campaign_run_cmd(
         points=points,
         prior_tests=prior,
         paths=int(paths),
+        trial_srs_per_period=trial_srs,
     )
     paths_out = write_report(
         campaign,

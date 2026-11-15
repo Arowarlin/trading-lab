@@ -187,7 +187,7 @@ Resultado de la base **v3 challenge** (2021-09-15 → 2026-11-13):
 | Filtro | Valor | Estado |
 |---|---|---|
 | Trades ≥ 100 | 480 | OK |
-| DSR ≥ 0,90 | 1,00 | OK |
+| DSR ≥ 0,90 | 0,995 (v2) | OK |
 | PBO ≤ 0,30 | 0,241 | OK |
 | Walk-forward | `ok` (Sharpe OOS 1,31; eficiencia 0,97) | OK |
 | Regímenes 2021-2026 | todos positivos | OK |
@@ -196,6 +196,10 @@ Resultado de la base **v3 challenge** (2021-09-15 → 2026-11-13):
 
 **Veredicto: PASA** los filtros. El punto más justo es el PBO (24,1 % frente al
 30 % máximo); no es un margen enorme.
+
+El DSR de esta tabla es **v2** (`dsr_from_returns`, Sharpe por periodo). El 1,0
+anterior era `dsr_v1_invalid_units` (Sharpe anualizado con `n_obs` diario) y se
+conserva en los informes históricos, pero no debe usarse como evidencia.
 
 ### Comprobación independiente en MT5
 

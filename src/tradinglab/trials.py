@@ -61,6 +61,8 @@ def record_trial(
     run_id: str | None = None,
     lesson_id: int | None = None,
     counted: bool = True,
+    dsr_v2: float | None = None,
+    metric_version: str | None = None,
 ) -> dict:
     """Guarda un intento. Las fallidas también se registran y cuentan."""
     if outcome not in OUTCOMES:
@@ -81,8 +83,8 @@ def record_trial(
         cursor = con.execute(
             "INSERT INTO strategy_trials"
             "(ts, family, hypothesis, symbol, params, window_start, window_end, "
-            "result, outcome, reason, source, run_id, lesson_id, fingerprint, counted) "
-            "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "result, outcome, reason, source, run_id, lesson_id, fingerprint, counted, "
+            "dsr_v2, metric_version) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 now,
                 str(family).strip().upper(),
@@ -99,6 +101,8 @@ def record_trial(
                 lesson_id,
                 mark,
                 1 if counted else 0,
+                dsr_v2,
+                metric_version,
             ),
         )
         row = con.execute(

@@ -83,6 +83,28 @@ def test_stop_cuenta_por_flotante_del_ea(tmp_path: Path):
     assert len(_account_stops(db)) == 1
 
 
+def test_stop_del_ea_alerta_critical_y_bloquea_aperturas(
+    tmp_path: Path, monkeypatch
+):
+    db = tmp_path / "lab.db"
+    init_db(db)
+    calls = []
+
+    def fake_send(event, message, *, severity="warning", **kwargs):
+        calls.append({"event": event, "message": message, "severity": severity})
+
+    monkeypatch.setattr("tradinglab.account_daily.send_alert", fake_send)
+    now = pd.Timestamp("2026-11-12T20:00:00Z").to_pydatetime()
+    report = account_daily_report(db, broker=_BrokerEa(96_000.0), now=now)
+    assert report["allowed"] is False
+    assert report["stop_cause"] == "ea"
+    assert report["alerted"] is True
+    assert calls
+    assert calls[0]["event"] == "account_stop:ftmo_demo"
+    assert calls[0]["severity"] == "critical"
+    assert "EA flotante" in calls[0]["message"]
+
+
 def test_stop_cuenta_suma_flotante_de_varios_carriles(tmp_path: Path):
     db = tmp_path / "lab.db"
     init_db(db)

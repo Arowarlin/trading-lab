@@ -3,13 +3,11 @@ from __future__ import annotations
 import hashlib
 import itertools
 import json
-import math
 import statistics
 from collections import defaultdict
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from statistics import NormalDist
 
 import numpy as np
 import pandas as pd
@@ -19,6 +17,7 @@ from .backtest import run as run_backtest
 from .datacheck import check_frame
 from .prop.rules import PropRules
 from .prop.simulator import monte_carlo
+from .stats import dsr_from_returns, period_sharpe
 from .strategies import STRATEGIES
 from .validation import cscv_pbo, returns_matrix
 from .walkforward import regime_gate, regime_report, walk_forward
@@ -96,7 +95,6 @@ def _score(pass_rate: float, breach_rate: float, sharpe: float) -> float:
     return (pass_rate - breach_rate) + 0.01 * max(min(sharpe, 3.0), -3.0)
 
 
-EULER_GAMMA = 0.5772156649015329
 
 
 def _block_metrics(returns, blocks: int) -> list[dict]:
@@ -243,33 +241,6 @@ def _walk_forward_payload(
     return payload
 
 
-def deflated_sharpe(
-    sharpe: float,
-    n_obs: int,
-    skew: float,
-    kurtosis: float,
-    trial_sr_std: float,
-    n_trials: int,
-) -> float | None:
-    """Deflated Sharpe Ratio (Bailey & López de Prado).
-
-    Descuenta que se probaron muchas variantes y que el Sharpe ganador está
-    sesgado al alza. Devuelve una probabilidad; None si no hay muestra.
-    """
-    if n_trials < 2 or n_obs < 3 or trial_sr_std <= 0:
-        return None
-    nd = NormalDist()
-    sr0 = trial_sr_std * (
-        (1.0 - EULER_GAMMA) * nd.inv_cdf(1.0 - 1.0 / n_trials)
-        + EULER_GAMMA * nd.inv_cdf(1.0 - 1.0 / (n_trials * math.e))
-    )
-    denom = 1.0 - skew * sharpe + ((kurtosis - 1.0) / 4.0) * sharpe * sharpe
-    if denom <= 0:
-        return None
-    z = (sharpe - sr0) * math.sqrt(n_obs - 1) / math.sqrt(denom)
-    return float(nd.cdf(z))
-
-
 def run_research(
     cfg: ResearchConfig,
     rules: PropRules,
@@ -285,6 +256,7 @@ def run_research(
     """
     end = cfg.end or datetime.now(timezone.utc).date().isoformat()
     results: list[dict] = []
+    result_returns: list[pd.Series] = []
     errors: list[dict] = []
     datachecks: dict[str, dict] = {}
     artifact_root = Path(artifacts_dir) if artifacts_dir is not None else None
@@ -492,6 +464,7 @@ def run_research(
                             "score": _score(pass_rate, breach_rate, sharpe),
                         }
                     )
+                    result_returns.append(returns)
 
     results.sort(key=lambda r: r["score"], reverse=True)
 
@@ -506,20 +479,25 @@ def run_research(
         r["family_size"] = len(values)
         r["family_median_pass"] = statistics.median(values)
 
-    sr_values = [r["sharpe"] for r in results if r.get("sample_days", 0) >= 3]
-    sr_std = statistics.pstdev(sr_values) if len(sr_values) > 1 else 0.0
+    trial_srs = [period_sharpe(series) for series in daily_returns.values()]
+    sr_std = statistics.pstdev(trial_srs) if len(trial_srs) > 1 else 0.0
     n_trials = len(results) + max(0, int(extra_trials))
-    for r in results:
-        r["dsr"] = deflated_sharpe(
-            r["sharpe"],
-            int(r.get("sample_days", 0)),
-            float(r.get("skew", 0.0)),
-            float(r.get("kurtosis", 3.0)),
-            sr_std,
-            n_trials,
+    for r, returns in zip(results, result_returns):
+        payload = dsr_from_returns(
+            returns, trial_srs, n_trials, periods_per_year=252
         )
+        r["dsr"] = payload["dsr"]
+        r["dsr_v2"] = payload["dsr"]
+        r["metric_version"] = payload["metric_version"]
         r["dsr_n_trials"] = n_trials
-        r["dsr_trial_sr_std"] = sr_std
+        r["dsr_trial_sr_std"] = payload["trial_sr_std_period"]
+        r["dsr_meta"] = {
+            "sr_period": payload["sr_period"],
+            "sr0_period": payload["sr0_period"],
+            "skew": payload["skew"],
+            "kurt": payload["kurt"],
+            "annualized_sr": payload["annualized_sr"],
+        }
 
     pbo_by_symbol: dict[str, dict] = {}
     for symbol, series_by_variant in daily_returns_by_symbol.items():

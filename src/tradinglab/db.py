@@ -500,7 +500,9 @@ CREATE TABLE IF NOT EXISTS strategy_trials (
     run_id TEXT,
     lesson_id INTEGER,
     fingerprint TEXT,
-    counted INTEGER NOT NULL DEFAULT 1
+    counted INTEGER NOT NULL DEFAULT 1,
+    dsr_v2 REAL,
+    metric_version TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_strategy_trials_family
     ON strategy_trials(family, symbol, fingerprint);
@@ -721,6 +723,11 @@ def _migrate_strategy_trials(con: sqlite3.Connection) -> None:
             "ALTER TABLE strategy_trials "
             "ADD COLUMN counted INTEGER NOT NULL DEFAULT 1"
         )
+    for column, kind in (("dsr_v2", "REAL"), ("metric_version", "TEXT")):
+        if column not in columns:
+            con.execute(
+                f"ALTER TABLE strategy_trials ADD COLUMN {column} {kind}"
+            )
     con.execute("UPDATE strategy_trials SET counted = 1 WHERE counted IS NULL")
 
 

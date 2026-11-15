@@ -13,7 +13,6 @@ import hashlib
 import json
 import math
 import re
-import statistics
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -836,12 +835,14 @@ def _validation_payload(
 ) -> dict:
     from .prop.rules import from_yaml
     from .prop.simulator import monte_carlo
-    from .research import deflated_sharpe
+    from .stats import dsr_from_returns, period_sharpe
     from .validation import cscv_pbo, returns_matrix
     from .walkforward import regime_gate, regime_report, walk_forward
 
-    sharpes = [float(item["metrics"].get("sharpe") or 0.0) for item in variants.values()]
-    sr_std = statistics.pstdev(sharpes) if len(sharpes) > 1 else 0.0
+    trial_srs = [
+        period_sharpe(item["returns"]) for item in variants.values()
+    ]
+    sr_std = float(np.std(trial_srs, ddof=0)) if len(trial_srs) > 1 else 0.0
     series = {name: item["returns"].to_numpy(dtype=float) for name, item in variants.items()}
     matrix, _ = returns_matrix(series)
     pbo = None
@@ -860,10 +861,12 @@ def _validation_payload(
     for name, item in variants.items():
         metrics = item["metrics"]
         metrics["sharpe"] = float(metrics.get("sharpe") or 0.0)
-        metrics["dsr"] = deflated_sharpe(
-            metrics["sharpe"], int(metrics.get("bars") or 0),
-            0.0, 3.0, sr_std, n_trials,
+        payload = dsr_from_returns(
+            item["returns"], trial_srs, n_trials
         )
+        metrics["dsr"] = payload["dsr"]
+        metrics["dsr_v2"] = payload["dsr"]
+        metrics["metric_version"] = payload["metric_version"]
         returns = item["returns"]
         daily = returns.resample("1D").sum()
         try:

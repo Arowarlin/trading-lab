@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import json
 import math
-import statistics
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
@@ -27,7 +26,7 @@ from .learning import (
     holdout_usage,
     record_optimization_trial,
 )
-from .research import deflated_sharpe
+from .stats import dsr_from_returns, period_sharpe
 from .strategies import STRATEGIES
 from .validation import cscv_pbo
 from .walkforward import walk_forward
@@ -211,19 +210,11 @@ def run_optuna(
     best_returns = trial_returns[best.number]
     best_sharpe = _sharpe(best_returns)
     n_trials = count_tests(db_path, settings)
-    values = [float(trial.value) for trial in completed]
-    trial_sr_std = statistics.pstdev(values) if len(values) > 1 else 0.0
-    series = pd.Series(best_returns)
-    skew = float(series.skew()) if len(series) > 2 else 0.0
-    kurtosis = float(series.kurt()) + 3.0 if len(series) > 3 else 3.0
-    dsr = deflated_sharpe(
-        best_sharpe,
-        len(best_returns),
-        skew,
-        kurtosis,
-        trial_sr_std,
-        n_trials,
+    trial_srs = [period_sharpe(trial_returns[item.number]) for item in completed]
+    payload = dsr_from_returns(
+        best_returns, trial_srs, n_trials, periods_per_year=252
     )
+    dsr = payload["dsr"]
     dsr_ok = dsr is not None and dsr >= MIN_DSR
 
     matrix = _trial_matrix(trial_returns)
@@ -307,18 +298,23 @@ def run_optuna(
 
     # La lectura del holdout suma una prueba; recalcula el DSR con el contador final.
     n_trials = count_tests(db_path, settings)
-    dsr = deflated_sharpe(
-        best_sharpe,
-        len(best_returns),
-        skew,
-        kurtosis,
-        trial_sr_std,
-        n_trials,
+    payload = dsr_from_returns(
+        best_returns, trial_srs, n_trials, periods_per_year=252
     )
+    dsr = payload["dsr"]
     dsr_ok = dsr is not None and dsr >= MIN_DSR
 
     gates = {
         "dsr": dsr,
+        "dsr_v2": dsr,
+        "metric_version": payload["metric_version"],
+        "dsr_meta": {
+            "sr_period": payload["sr_period"],
+            "sr0_period": payload["sr0_period"],
+            "skew": payload["skew"],
+            "kurt": payload["kurt"],
+            "annualized_sr": payload["annualized_sr"],
+        },
         "dsr_ok": dsr_ok,
         "pbo": pbo.pbo if pbo is not None else None,
         "pbo_ok": pbo_ok,
@@ -345,6 +341,8 @@ def run_optuna(
                 "score": best.value,
                 "sharpe": best_sharpe,
                 "dsr": dsr,
+                "dsr_v2": dsr,
+                "metric_version": payload["metric_version"],
                 "pbo": pbo.pbo if pbo is not None else None,
                 "walk_forward_verdict": wf.verdict() if wf is not None else None,
                 "holdout": holdout_payload,

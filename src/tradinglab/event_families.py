@@ -32,7 +32,7 @@ from .learning import count_tests
 from .profiles import get_profile
 from .prop.rules import from_yaml
 from .prop.simulator import monte_carlo
-from .research import deflated_sharpe
+from .stats import dsr_from_returns, period_sharpe
 from .trials import record_trial
 from .validation import cscv_pbo, returns_matrix
 from .walkforward import regime_gate, regime_report, walk_forward
@@ -401,22 +401,17 @@ def run_caja_ny(
     except ValueError:
         wf = None
     wf_verdict = wf.verdict() if wf is not None else "sin datos"
-    net_sharpes = [row["net_sharpe"] for row in results]
-    sr_std = float(np.std(net_sharpes, ddof=1)) if len(net_sharpes) > 1 else 0.0
+    trial_srs = [period_sharpe(series) for series in daily_net.values()]
     for row in results:
         row["pbo"] = None if pbo is None else float(pbo["pbo"])
         row["wf_verdict"] = wf_verdict
-        row["dsr"] = float(
-            deflated_sharpe(
-                row["net_sharpe"],
-                len(matrix),
-                0.0,
-                3.0,
-                sr_std,
-                n_trials_dsr,
-            )
-        )
         net = daily_net[str(row["params"]["stop_rule"])]
+        payload = dsr_from_returns(
+            net, trial_srs, n_trials_dsr, periods_per_year=252
+        )
+        row["dsr"] = payload["dsr"]
+        row["dsr_v2"] = payload["dsr"]
+        row["metric_version"] = payload["metric_version"]
         regime = regime_report(net)
         gate = regime_gate(regime)
         row["regime"] = regime.to_dict()
@@ -426,9 +421,10 @@ def run_caja_ny(
             reasons.append(
                 f"trades {row['trades']} < {profile.validation.min_trades}"
             )
-        if row["dsr"] < profile.validation.min_dsr:
+        if row["dsr"] is None or row["dsr"] < profile.validation.min_dsr:
+            value = "Sin datos" if row["dsr"] is None else f"{row['dsr']:.2f}"
             reasons.append(
-                f"DSR {row['dsr']:.2f} < {profile.validation.min_dsr:.2f}"
+                f"DSR {value} < {profile.validation.min_dsr:.2f}"
             )
         if row["pbo"] is None:
             reasons.append("PBO sin datos")
