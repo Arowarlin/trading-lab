@@ -13,9 +13,16 @@ $log = Get-AiLogPath -Root $root -Session $session
 $lockPath = Join-Path $root "logs\ai_trader\ai_trader.lock"
 
 Write-AiLog -Log $log -Message "inicio scalp"
-$lockRaw = & $python -m tradinglab.ai_session lock-acquire --path $lockPath --session $session --pid $PID 2>$null
+$lockRaw = $null
 $lock = $null
-try { $lock = $lockRaw | ConvertFrom-Json } catch { $lock = $null }
+$lockDeadline = (Get-Date).AddSeconds(20)
+do {
+    $lockRaw = & $python -m tradinglab.ai_session lock-acquire --path $lockPath --session $session --pid $PID 2>$null
+    try { $lock = $lockRaw | ConvertFrom-Json } catch { $lock = $null }
+    if ($lock -and $lock.ok) { break }
+    if ((Get-Date) -ge $lockDeadline) { break }
+    Start-Sleep -Milliseconds 500
+} while ($true)
 if (-not $lock -or -not $lock.ok) {
     $reason = if ($lock) { $lock.reason } else { "candado no disponible" }
     Write-AiLog -Log $log -Message "salida temprana: $reason"

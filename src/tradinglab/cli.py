@@ -809,6 +809,19 @@ def doctor(network: bool = typer.Option(False, "--network", help="Probar descarg
     except Exception as exc:
         table.add_row("Tareas perdidas", WARN, str(exc)[:160])
 
+    # Horario NY: compara las tareas con config/schedule.yaml para hoy.
+    try:
+        from .schedule_ny import doctor_status as schedule_status
+
+        schedule = schedule_status()
+        table.add_row(
+            "Horario desfasado",
+            FAIL if schedule["status"] == "falla" else WARN if schedule["status"] == "aviso" else OK,
+            str(schedule["detail"])[:180],
+        )
+    except Exception as exc:
+        table.add_row("Horario desfasado", WARN, str(exc)[:160])
+
     # Datos
     if network:
         try:

@@ -40,8 +40,19 @@ Get-ScheduledTask | Where-Object { $_.TaskName -like 'TradingLab*' } | ForEach-O
     next_run = $next
     missed = [int]$info.NumberOfMissedRuns
     result = [long]$info.LastTaskResult
+    triggers = @($_.Triggers | ForEach-Object {
+      $start = $null
+      if ($_.StartBoundary) {
+        try { $start = ([datetime]$_.StartBoundary).ToString('HH:mm') } catch { $start = $null }
+      }
+      [pscustomobject]@{
+        start = $start
+        days = [int]$_.DaysOfWeek
+        type = $_.CimClass.CimClassName
+      }
+    })
   }
-} | ConvertTo-Json -Compress
+} | ConvertTo-Json -Compress -Depth 5
 """
 
 
@@ -94,6 +105,9 @@ def collect_tradinglab_tasks(timeout: float = 20.0) -> list[dict]:
     for item in payload:
         if not isinstance(item, dict):
             continue
+        triggers = item.get("triggers") or []
+        if isinstance(triggers, dict):
+            triggers = [triggers]
         rows.append(
             {
                 "name": str(item.get("name") or ""),
@@ -102,6 +116,15 @@ def collect_tradinglab_tasks(timeout: float = 20.0) -> list[dict]:
                 "next_run": item.get("next_run"),
                 "missed": int(item.get("missed") or 0),
                 "result": int(item.get("result") or 0),
+                "triggers": [
+                    {
+                        "start": str(trigger.get("start") or ""),
+                        "days": int(trigger.get("days") or 0),
+                        "type": str(trigger.get("type") or ""),
+                    }
+                    for trigger in triggers
+                    if isinstance(trigger, dict)
+                ],
             }
         )
     return rows

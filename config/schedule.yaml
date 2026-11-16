@@ -1,0 +1,81 @@
+version: 1
+# Fuente única de las horas ancladas a la sesión de Nueva York.
+# Las horas `at` están en America/New_York; register_tasks_ny.ps1 las
+# convierte a la hora local del PC en la fecha de registro.
+timezone: America/New_York
+
+# Tareas que deben despertar el PC. No cambia sus horas.
+wake_to_run:
+  - TradingLab-Heartbeat
+  - TradingLab-IntradayForward
+  - TradingLab-AI-London
+  - TradingLab-AI-NY
+  - TradingLab-AI-Scalp
+  - TradingLab-AI-Manage
+  - TradingLab-Premarket
+
+tasks:
+  - name: TradingLab-Premarket
+    script: scripts/premarket_daily.ps1
+    args: ""
+    wake_to_run: true
+    triggers:
+      - days: [Monday, Tuesday, Wednesday, Thursday, Friday]
+        at: "07:45"
+
+  - name: TradingLab-AI-NY
+    script: scripts/ai_trader_session.ps1
+    args: "-Session ny"
+    wake_to_run: true
+    triggers:
+      - days: [Monday, Tuesday, Wednesday, Thursday, Friday]
+        at: "09:35"
+      - days: [Monday, Tuesday, Wednesday, Thursday, Friday]
+        at: "10:35"
+
+  - name: TradingLab-OrchestrateSPY
+    script: scripts/orchestrate_spy_daily.ps1
+    args: ""
+    wake_to_run: false
+    triggers:
+      - days: [Monday, Tuesday, Wednesday, Thursday, Friday]
+        at: "09:35"
+      - days: [Monday, Tuesday, Wednesday, Thursday, Friday]
+        at: "10:35"
+
+  - name: TradingLab-AI-Scalp
+    script: scripts/ai_trader_scalp.ps1
+    args: ""
+    wake_to_run: true
+    multiple_instances: IgnoreNew
+    execution_limit_minutes: 2
+    triggers:
+      - type: repetition
+        days: [Monday, Tuesday, Wednesday, Thursday, Friday]
+        at: "09:25"
+        end: "12:05"
+        interval_minutes: 1
+
+  - name: TradingLab-AI-Manage
+    script: scripts/ai_trader_manage.ps1
+    args: ""
+    wake_to_run: true
+    multiple_instances: IgnoreNew
+    execution_limit_minutes: 5
+    triggers:
+      - type: repetition
+        days: [Sunday]
+        at: "17:00"
+        duration_days: 5
+        duration_hours: 1
+        interval_minutes: 15
+
+# Re-registro semanal: domingo 18:00 hora local. Si el desfase NY-local no
+# cambió, el script no toca ninguna tarea.
+maintenance:
+  name: TradingLab-ScheduleNY
+  script: scripts/register_tasks_ny.ps1
+  args: "-Apply -IfChanged"
+  days: [Sunday]
+  at: "18:00"
+  description: "TradingLab: re-registra las tareas NY si cambió el desfase NY-local; no activa bots."
