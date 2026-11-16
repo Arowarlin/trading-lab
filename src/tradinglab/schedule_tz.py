@@ -8,7 +8,8 @@ corresponde. ``local`` se deja tal cual.
 
 from __future__ import annotations
 
-from datetime import date, datetime, time, timezone
+import re
+from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -175,6 +176,163 @@ def check_schedule(
     return problems
 
 
+# Acciones que suspenden, hibernan, reinician o apagan el PC.
+_POWER_RE = re.compile(
+    r"(?i)(?:"
+    r"shutdown(?:\.exe)?\s+(?:/r|/s|/h|/hybrid|/fw)|"
+    r"restart-computer|stop-computer|"
+    r"set-?suspendstate|psshutdown|"
+    r"rundll32(?:\.exe)?\s+\S*powrprof|"
+    r"poweroff|"
+    r"systemctl\s+(?:reboot|poweroff|suspend|hibernate)"
+    r")"
+)
+_POWER_NAME_RE = re.compile(r"(?i)(suspend|reboot|shutdown|hibernate|poweroff)")
+_SCRIPT_RE = re.compile(r"(?i)([a-z]:\\[^\"']+?\.(?:ps1|bat|cmd))")
+
+
+def _action_text(record: dict) -> str:
+    return " ".join(
+        str(record.get(key) or "") for key in ("action", "execute", "arguments")
+    ).strip()
+
+
+def _is_power_task(record: dict) -> bool:
+    name = str(record.get("name") or "")
+    if _POWER_NAME_RE.search(name):
+        return True
+    text = _action_text(record)
+    if _POWER_RE.search(text):
+        return True
+    for match in _SCRIPT_RE.finditer(text):
+        try:
+            script = Path(match.group(1))
+            if not script.is_file() or script.stat().st_size > 2_000_000:
+                continue
+            if _POWER_RE.search(script.read_text(encoding="utf-8", errors="replace")):
+                return True
+        except OSError:
+            continue
+    return False
+
+
+def _in_trading_week(moment: datetime) -> bool:
+    """True si la hora NY cae entre domingo 17:00 y viernes 17:00."""
+    weekday = moment.weekday()  # lunes=0 ... domingo=6
+    if weekday <= 3:  # lunes a jueves
+        return True
+    if weekday == 4:  # viernes, antes del cierre
+        return moment.time() < time(17, 0)
+    if weekday == 6:  # domingo, desde la apertura
+        return moment.time() >= time(17, 0)
+    return False
+
+
+def _trigger_in_week(trigger: dict, day: date, local_tz: Any | None = None) -> bool:
+    start_text = str(trigger.get("start") or "").strip()
+    if not start_text:
+        return False
+    try:
+        hour, minute = (int(part) for part in start_text[:5].split(":", 1))
+    except ValueError:
+        return False
+    days = int(trigger.get("days") or 0)
+    zone = _local_tz(local_tz)
+    for offset in range(7):
+        candidate = day + timedelta(days=offset)
+        windows_day = (candidate.weekday() + 1) % 7  # domingo=0 ... sabado=6
+        if days and not (days & (1 << windows_day)):
+            continue
+        local = datetime.combine(candidate, time(hour, minute), tzinfo=zone)
+        if _in_trading_week(local.astimezone(NY)):
+            return True
+    return False
+
+
+def power_problems(
+    records: list[dict] | None,
+    day: date | None = None,
+    local_tz: Any | None = None,
+) -> list[dict]:
+    """Tareas de energía habilitadas que caen en la semana de trading."""
+    moment = day or datetime.now().astimezone().date()
+    problems: list[dict] = []
+    for record in records or []:
+        if not isinstance(record, dict):
+            continue
+        name = str(record.get("name") or "")
+        if not name.startswith("TradingLab"):
+            continue
+        if str(record.get("state") or "").lower() == "disabled":
+            continue
+        if not _is_power_task(record):
+            continue
+        triggers = [
+            trigger
+            for trigger in record.get("triggers") or []
+            if isinstance(trigger, dict) and _trigger_in_week(trigger, moment, local_tz)
+        ]
+        if not triggers:
+            continue
+        problems.append(
+            {
+                "task": name,
+                "action": _action_text(record)[:180],
+                "triggers": [
+                    {
+                        "start": str(trigger.get("start") or ""),
+                        "days": int(trigger.get("days") or 0),
+                        "type": str(trigger.get("type") or ""),
+                    }
+                    for trigger in triggers
+                ],
+            }
+        )
+    problems.sort(key=lambda item: item["task"])
+    return problems
+
+
+def energy_status(
+    day: date | None = None,
+    *,
+    local_tz: Any | None = None,
+    records: list[dict] | None = None,
+) -> dict:
+    """Estado para `lab doctor`: FAIL si hay energía habilitada en la semana."""
+    if records is None:
+        try:
+            from .task_health import collect_tradinglab_tasks
+
+            records = collect_tradinglab_tasks()
+        except Exception as exc:
+            return {
+                "status": "aviso",
+                "problems": [],
+                "detail": f"sin datos del Programador: {exc}"[:180],
+            }
+    problems = power_problems(records, day, local_tz)
+    if not problems:
+        return {
+            "status": "ok",
+            "problems": [],
+            "detail": "sin tareas de energía habilitadas en la semana",
+        }
+    sample = []
+    for item in problems[:4]:
+        starts = ",".join(
+            trigger["start"] or "?"
+            for trigger in item["triggers"]
+        )
+        sample.append(f"{item['task'].replace('TradingLab-', '')} {starts}")
+    if len(problems) > 4:
+        sample.append(f"+{len(problems) - 4} más")
+    return {
+        "status": "falla",
+        "problems": problems,
+        "detail": f"{len(problems)} tareas de energía: " + "; ".join(sample),
+    }
+
+
 def doctor_status(
     day: date | None = None,
     *,
@@ -234,7 +392,9 @@ __all__ = [
     "anchor_to_local",
     "check_schedule",
     "doctor_status",
+    "energy_status",
     "expected_times",
     "load_schedule",
     "ny_to_local",
+    "power_problems",
 ]

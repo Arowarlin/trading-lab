@@ -40,6 +40,9 @@ Get-ScheduledTask | Where-Object { $_.TaskName -like 'TradingLab*' } | ForEach-O
     next_run = $next
     missed = [int]$info.NumberOfMissedRuns
     result = [long]$info.LastTaskResult
+    action = (@($_.Actions | ForEach-Object {
+      ([string]$_.Execute + " " + [string]$_.Arguments).Trim()
+    }) -join " ; ")
     triggers = @($_.Triggers | ForEach-Object {
       $start = $null
       if ($_.StartBoundary) {
@@ -116,6 +119,7 @@ def collect_tradinglab_tasks(timeout: float = 20.0) -> list[dict]:
                 "next_run": item.get("next_run"),
                 "missed": int(item.get("missed") or 0),
                 "result": int(item.get("result") or 0),
+                "action": str(item.get("action") or ""),
                 "triggers": [
                     {
                         "start": str(trigger.get("start") or ""),

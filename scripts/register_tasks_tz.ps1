@@ -168,9 +168,10 @@ function Merge-WeeklyTriggers($Triggers) {
     return @($groups.Values)
 }
 
-function Get-TriggerSignatures($Triggers) {
+function Get-TriggerSignatures($Triggers, [bool]$WeeklyOnly = $false) {
     $sigs = @()
     foreach ($t in @($Triggers)) {
+        if ($WeeklyOnly -and -not $t.weekly) { continue }
         $startText = "-"
         if ($null -ne $t.start) { $startText = $t.start.ToString("HH:mm") }
         $intervalMin = 0
@@ -186,7 +187,19 @@ function Format-CurrentTrigger($T) {
     $startText = "-"
     if ($null -ne $T.start) { $startText = $T.start.ToString("HH:mm") }
     $daysText = "diario"
-    if ($T.weekly) { $daysText = Format-DayMask $T.mask }
+    if ($T.weekly) {
+        $daysText = Format-DayMask $T.mask
+    } elseif ($T.kind -like "*Daily*") {
+        $daysText = "diario"
+    } elseif ($T.kind -like "*Time*") {
+        if ($null -eq $T.interval -and $null -eq $T.duration) {
+            $daysText = "unico"
+        } elseif ($null -ne $T.duration -and $T.duration.TotalDays -lt 30) {
+            $daysText = "temporal"
+        } else {
+            $daysText = "continuo"
+        }
+    }
     $text = "$startText $daysText"
     if ($null -ne $T.interval -and $T.interval.TotalMinutes -gt 0) {
         $text = "$text cada $([int]$T.interval.TotalMinutes)m"
@@ -278,9 +291,18 @@ foreach ($cfg in $config.tasks) {
     $currentTask = Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue
     $currentTriggers = @(Get-CurrentTriggers $name)
     $currentWeekly = @(Merge-WeeklyTriggers $currentTriggers)
-    $currentSigs = @(Get-TriggerSignatures $currentTriggers)
+    $currentSigs = @(Get-TriggerSignatures $currentTriggers ([bool]$cfg.catch_up))
     $currentWake = $false
     if ($currentTask) { $currentWake = [bool]$currentTask.Settings.WakeToRun }
+    $hasEnabled = $cfg.PSObject.Properties.Name -contains "enabled"
+    $desiredEnabled = $null
+    if ($hasEnabled) { $desiredEnabled = [bool]$cfg.enabled }
+    $stateChanged = $false
+    if ($hasEnabled -and -not $desiredEnabled -and $currentTask) {
+        if ($currentTask.State -ne "Disabled") { $stateChanged = $true }
+    }
+    $disabledReason = ""
+    if ($hasEnabled -and $cfg.disabled_reason) { $disabledReason = [string]$cfg.disabled_reason }
 
     $desiredWake = $currentWake
     $hasTaskWake = $cfg.PSObject.Properties.Name -contains "wake_to_run"
@@ -351,11 +373,16 @@ foreach ($cfg in $config.tasks) {
     } else {
         $corregida = $actual
     }
+    if ($hasEnabled -and -not $desiredEnabled -and -not ($currentTask -and $currentTask.State -eq "Disabled")) {
+        $corregida = "$corregida (Disabled)"
+    }
 
     $wakeChanged = ($currentWake -ne $desiredWake)
     $cambia = "no"
     if (-not $currentTask) {
         $cambia = "nueva"
+    } elseif ($stateChanged) {
+        $cambia = "deshabilitar"
     } elseif ($managed -and $triggerChanged) {
         $cambia = "si"
     } elseif ($wakeChanged) {
@@ -384,11 +411,16 @@ foreach ($cfg in $config.tasks) {
         desiredWake = $desiredWake
         triggerChanged = $triggerChanged
         wakeChanged = $wakeChanged
+        stateChanged = $stateChanged
+        disabledReason = $disabledReason
         expectedTriggers = $expectedTriggers
     }
 }
 
 $declared = @($config.tasks | ForEach-Object { [string]$_.name })
+if ($config.maintenance -and $config.maintenance.name) {
+    $declared += [string]$config.maintenance.name
+}
 $extras = @(Get-ScheduledTask -TaskName "TradingLab-*" -ErrorAction SilentlyContinue | Where-Object { $declared -notcontains $_.TaskName })
 foreach ($extra in $extras) {
     $currentTriggers = @(Get-CurrentTriggers $extra.TaskName)
@@ -431,6 +463,7 @@ if ($maintenance) {
             }
         }
         if (-not $mOk) { $mChanged = $true }
+        if ([string]$mTask.Principal.RunLevel -ne "Highest") { $mChanged = $true }
     } else {
         $mChanged = $true
     }
@@ -455,6 +488,9 @@ if ($manageTask) {
         if ($t.StartBoundary) { $start = ([datetime]$t.StartBoundary).ToString("HH:mm") }
         $mask = [int]$t.DaysOfWeek
         $days = Format-DayMask $mask
+        if ($t.CimClass.CimClassName -like "*Time*" -and -not ($t.CimClass.CimClassName -like "*Daily*")) {
+            $days = "temporal"
+        }
         $interval = Convert-IsoDuration ([string]$t.Repetition.Interval)
         $duration = Convert-IsoDuration ([string]$t.Repetition.Duration)
         $intervalText = "sin repeticion"
@@ -480,11 +516,26 @@ if ($manageCfg) {
     Write-Output "AI-Manage: propuesto"
     Write-Output "  inicio $manageStart local ($($manageTrig.at) $($manageCfg.anchor)) | intervalo $intervalMin min | duracion $durDays d $durHours h | $intervals intervalos"
     Write-Output "  cobertura: domingo $($manageTrig.at) NY -> viernes $($manageTrig.at) NY; 0 huecos"
-    $catch = Get-CatchUpTrigger $manageCfg $manageTrig
-    if ($catch) {
-        $catchStart = "$($catch.start.ToString('HH:mm')) $(Format-DayName $catch.start)"
-        $catchEnd = "$($catch.end.ToString('HH:mm')) $(Format-DayName $catch.end)"
-        Write-Output "  ventana activa ahora: se anadira un trigger temporal $catchStart -> $catchEnd"
+    $temporal = @()
+    if ($manageTask) {
+        $temporal = @($manageTask.Triggers | Where-Object {
+            ($_.CimClass.CimClassName -like "*Time*") -and
+            -not ($_.CimClass.CimClassName -like "*Daily*")
+        })
+    }
+    $longTemporal = @($temporal | Where-Object {
+        $duration = Convert-IsoDuration ([string]$_.Repetition.Duration)
+        $null -ne $duration -and $duration.TotalDays -ge 2
+    })
+    if ($longTemporal.Count -gt 0) {
+        Write-Output "  trigger temporal de recuperacion ya presente"
+    } else {
+        $catch = Get-CatchUpTrigger $manageCfg $manageTrig
+        if ($catch) {
+            $catchStart = "$($catch.start.ToString('HH:mm')) $(Format-DayName $catch.start)"
+            $catchEnd = "$($catch.end.ToString('HH:mm')) $(Format-DayName $catch.end)"
+            Write-Output "  ventana activa ahora: se anadira un trigger temporal $catchStart -> $catchEnd"
+        }
     }
 }
 
@@ -493,7 +544,8 @@ $rows | Sort-Object Tarea | Format-Table -AutoSize -Wrap | Out-String -Width 320
 Write-Output "TradingLab-ScheduleNY: no existe en el Programador; se sustituye por TradingLab-ScheduleTZ."
 $managedChanges = @($plans | Where-Object { $_.managed -and $_.triggerChanged }).Count
 $wakeChanges = @($plans | Where-Object { $_.wakeChanged -and -not $_.triggerChanged }).Count
-$summary = "Cambian: $managedChanges gestionadas, $wakeChanges solo WakeToRun"
+$stateChanges = @($plans | Where-Object { $_.stateChanged }).Count
+$summary = "Cambian: $managedChanges gestionadas, $wakeChanges solo WakeToRun, $stateChanges estado"
 if ($maintenance) {
     if ($mChanged) { $summary = "$summary, mantenimiento nuevo/actualizado" }
     else { $summary = "$summary, mantenimiento sin cambios" }
@@ -508,10 +560,10 @@ $needApply = $false
 if (-not $IfChanged) {
     $needApply = $true
 } else {
-    if ($managedChanges -gt 0 -or $wakeChanges -gt 0 -or $mChanged) { $needApply = $true }
+    if ($managedChanges -gt 0 -or $wakeChanges -gt 0 -or $stateChanges -gt 0 -or $mChanged) { $needApply = $true }
 }
 if (-not $needApply) {
-    Write-Output "Sin cambios: horas, triggers y WakeToRun ya coinciden."
+    Write-Output "Sin cambios: horas, triggers, WakeToRun y estado ya coinciden."
     exit 0
 }
 
@@ -607,6 +659,14 @@ foreach ($plan in $plans) {
             Write-Output "WakeToRun=$($plan.desiredWake): $name"
         }
     }
+    if ($plan.stateChanged) {
+        Disable-ScheduledTask -TaskName $name | Out-Null
+        if ($plan.disabledReason) {
+            Write-Output "Deshabilitada: $name ($($plan.disabledReason))"
+        } else {
+            Write-Output "Deshabilitada: $name"
+        }
+    }
 }
 
 if ($maintenance -and $mChanged) {
@@ -616,13 +676,16 @@ if ($maintenance -and $mChanged) {
         -WorkingDirectory $root
     $mAt = [datetime]::ParseExact([string]$maintenance.at, "HH:mm", $null)
     $mTrigger = New-ScheduledTaskTrigger -Daily -At $mAt
+    $mUserId = "$env:USERDOMAIN\$env:USERNAME"
+    $mLogon = "Interactive"
     if ($mTask) {
         $mSettings = $mTask.Settings
-        $mPrincipal = $mTask.Principal
+        if ($mTask.Principal.UserId) { $mUserId = [string]$mTask.Principal.UserId }
+        if ($mTask.Principal.LogonType) { $mLogon = [string]$mTask.Principal.LogonType }
     } else {
         $mSettings = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
-        $mPrincipal = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType Interactive
     }
+    $mPrincipal = New-ScheduledTaskPrincipal -UserId $mUserId -LogonType $mLogon -RunLevel Highest
     $mSettings.WakeToRun = [bool]$maintenance.wake_to_run
     Register-ScheduledTask -TaskName $maintenance.name -Action $mAction -Trigger $mTrigger `
         -Settings $mSettings -Principal $mPrincipal -Description $maintenance.description -Force | Out-Null

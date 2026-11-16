@@ -116,10 +116,16 @@ tasks:
   - {name: TradingLab-IntradayForward, anchor: local, manage: false, wake_to_run: true}
   - {name: TradingLab-LLMCompare, anchor: local, manage: false}
   - {name: TradingLab-LMStudio, anchor: local, manage: false}
-  - {name: TradingLab-RebootAfterDownload, anchor: local, manage: false}
+  # TradingLab-RebootAfterDownload reinicia el PC (shutdown /r) en plena
+  # sesion. Se deshabilita, no se borra. Pendiente moverla a sabado 12:00
+  # local; no se aplica ese cambio de hora.
+  - name: TradingLab-RebootAfterDownload
+    anchor: local
+    manage: false
+    enabled: false
+    disabled_reason: "Reinicia el PC (shutdown /r) en plena sesion; pendiente sabado 12:00 local."
+    proposed_at: "Saturday 12:00 local"
   - {name: TradingLab-Resume, anchor: local, manage: false}
-  - {name: TradingLab-Suspend, anchor: local, manage: false}
-  - {name: TradingLab-Suspend-20min, anchor: local, manage: false}
   - {name: TradingLab-Telegram, anchor: local, manage: false}
   - {name: TradingLab-WakeDeepCompare, anchor: local, manage: false}
   - {name: TradingLab-WakeTokyo, anchor: local, manage: false}

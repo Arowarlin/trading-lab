@@ -9,9 +9,11 @@ from tradinglab.schedule_tz import (
     NY,
     anchor_to_local,
     check_schedule,
+    energy_status,
     expected_times,
     load_schedule,
     ny_to_local,
+    power_problems,
 )
 
 LOCAL = timezone(timedelta(hours=-4))  # zona del PC: UTC-4 fijo
@@ -249,8 +251,6 @@ def test_calendario_real_inventario_completo():
         "TradingLab-Premarket",
         "TradingLab-RebootAfterDownload",
         "TradingLab-Resume",
-        "TradingLab-Suspend",
-        "TradingLab-Suspend-20min",
         "TradingLab-Telegram",
         "TradingLab-WakeDeepCompare",
         "TradingLab-WakeLondon",
@@ -274,6 +274,9 @@ def test_calendario_real_inventario_completo():
     assert by_name["TradingLab-Heartbeat"]["wake_to_run"] is True
     assert by_name["TradingLab-IntradayForward"]["wake_to_run"] is True
     assert by_name["TradingLab-Heartbeat"]["manage"] is False
+    assert by_name["TradingLab-RebootAfterDownload"]["manage"] is False
+    assert by_name["TradingLab-RebootAfterDownload"]["enabled"] is False
+    assert "Reinicia" in by_name["TradingLab-RebootAfterDownload"]["disabled_reason"]
 
     maintenance = schedule["maintenance"]
     assert maintenance["name"] == "TradingLab-ScheduleTZ"
@@ -285,3 +288,111 @@ def test_calendario_real_inventario_completo():
 def test_london_constantes_del_calendario():
     assert str(NY) == "America/New_York"
     assert str(LONDON) == "Europe/London"
+
+
+def _power_record(
+    name: str,
+    action: str,
+    *,
+    state: str = "Ready",
+    start: str = "13:05",
+    days: int = 0,
+    kind: str = "MSFT_TaskDailyTrigger",
+) -> dict:
+    return {
+        "name": name,
+        "state": state,
+        "action": action,
+        "triggers": [{"start": start, "days": days, "type": kind}],
+    }
+
+
+def test_energy_check_falla_con_reboot_en_la_semana():
+    records = [
+        _power_record(
+            "TradingLab-RebootAfterDownload",
+            'powershell.exe -File "E:\\trading-lab\\scripts\\reboot_after_download.ps1"',
+        )
+    ]
+    problems = power_problems(records, US_WINTER, LOCAL)
+    assert [item["task"] for item in problems] == ["TradingLab-RebootAfterDownload"]
+
+
+def test_energy_check_ignora_deshabilitada():
+    records = [
+        _power_record(
+            "TradingLab-RebootAfterDownload",
+            "shutdown.exe /r /t 60",
+            state="Disabled",
+        )
+    ]
+    assert power_problems(records, US_WINTER, LOCAL) == []
+
+
+def test_energy_check_ignora_fuera_de_la_ventana():
+    records = [
+        _power_record(
+            "TradingLab-Suspend",
+            "shutdown.exe /h",
+            start="12:00",
+            days=64,
+            kind="MSFT_TaskWeeklyTrigger",
+        )
+    ]
+    assert power_problems(records, US_WINTER, LOCAL) == []
+
+    records = [
+        _power_record(
+            "TradingLab-Suspend",
+            "shutdown.exe /h",
+            start="12:00",
+            days=1,
+            kind="MSFT_TaskWeeklyTrigger",
+        )
+    ]
+    assert power_problems(records, US_WINTER, LOCAL) == []
+
+    records = [
+        _power_record(
+            "TradingLab-Suspend",
+            "shutdown.exe /h",
+            start="18:00",
+            days=32,
+            kind="MSFT_TaskWeeklyTrigger",
+        )
+    ]
+    assert power_problems(records, US_WINTER, LOCAL) == []
+
+
+def test_energy_check_detecta_domingo_desde_las_1700_ny():
+    records = [
+        _power_record(
+            "TradingLab-Suspend",
+            "shutdown.exe /h",
+            start="18:00",
+            days=1,
+            kind="MSFT_TaskWeeklyTrigger",
+        )
+    ]
+    problems = power_problems(records, US_WINTER, LOCAL)
+    assert len(problems) == 1
+    assert problems[0]["task"] == "TradingLab-Suspend"
+
+
+def test_energy_check_ignora_tarea_normal():
+    records = [
+        _power_record(
+            "TradingLab-AI-NY",
+            'powershell.exe -File "E:\\trading-lab\\scripts\\ai_trader_session.ps1" -Session ny',
+            start="10:35",
+            days=62,
+            kind="MSFT_TaskWeeklyTrigger",
+        )
+    ]
+    assert power_problems(records, US_WINTER, LOCAL) == []
+
+
+def test_energy_status_ok_sin_tareas():
+    result = energy_status(US_WINTER, local_tz=LOCAL, records=[])
+    assert result["status"] == "ok"
+    assert "sin tareas de energía" in result["detail"]

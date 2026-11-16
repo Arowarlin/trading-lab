@@ -822,6 +822,19 @@ def doctor(network: bool = typer.Option(False, "--network", help="Probar descarg
     except Exception as exc:
         table.add_row("Horario desfasado", WARN, str(exc)[:160])
 
+    # Tareas de energía: ningún suspend/reboot/shutdown en la semana de trading.
+    try:
+        from .schedule_tz import energy_status
+
+        energy = energy_status()
+        table.add_row(
+            "Tareas de energía",
+            FAIL if energy["status"] == "falla" else WARN if energy["status"] == "aviso" else OK,
+            str(energy["detail"])[:180],
+        )
+    except Exception as exc:
+        table.add_row("Tareas de energía", WARN, str(exc)[:160])
+
     # Datos
     if network:
         try:
