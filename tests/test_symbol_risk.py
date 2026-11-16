@@ -70,8 +70,9 @@ def test_magics_de_cuenta_incluyen_lab_y_ea():
 def test_riesgo_por_simbolo_suma_carriles_y_eas():
     broker = _Broker()
     risk = open_risk_by_symbol(broker.positions(), broker, account_id="ftmo_demo")
-    # (50 × 1) + (50 × 2) + (100 × 0,5) = 200 USD; el magic 777 no cuenta.
-    assert risk["US100.CASH"] == pytest.approx(200.0)
+    # (50 × 1) + (50 × 2) + (100 × 0,5) = 200 USD; el magic 777/desconocido
+    # tambien cuenta a nivel de cuenta: 1.000 × 5 = 5.000 USD.
+    assert risk["US100.CASH"] == pytest.approx(5_200.0)
     assert position_risk_usd(broker.positions()[1], broker) == pytest.approx(100.0)
 
 
@@ -149,12 +150,100 @@ def test_informe_de_riesgo_usa_el_tope_de_la_cuenta():
     account = load_accounts()["ftmo_demo"]
     payload = open_risk_report("unused.db", account, broker=_Broker())
     item = payload["symbols"]["US100.CASH"]
-    assert item["open_risk_usd"] == pytest.approx(200.0)
+    assert item["open_risk_usd"] == pytest.approx(5_200.0)
     assert item["cap_usd"] == pytest.approx(2_000.0)
-    assert item["remaining_usd"] == pytest.approx(1_800.0)
+    assert item["remaining_usd"] == pytest.approx(0.0)
     assert payload["groups"]["indices_us"]["cap_usd"] == pytest.approx(3_000.0)
     assert payload["total"]["cap_usd"] == pytest.approx(2_000.0)
     assert "accounts.yaml" in payload["total"]["source"]
+
+
+def test_riesgo_largo_desde_precio_actual_con_sl_en_beneficio():
+    broker = _Broker()
+    position = {
+        "symbol": "US100.cash",
+        "side": "buy",
+        "volume": 1.0,
+        "price_open": 20_000.0,
+        "price_current": 20_010.0,
+        "sl": 20_005.0,
+    }
+    assert position_risk_usd(position, broker) == pytest.approx(5.0)
+
+    pegado = dict(position, price_current=20_005.0)
+    assert position_risk_usd(pegado, broker) == pytest.approx(0.0)
+
+
+def test_riesgo_corto_simetrico():
+    broker = _Broker()
+    position = {
+        "symbol": "US100.cash",
+        "side": "sell",
+        "volume": 1.0,
+        "price_open": 20_000.0,
+        "price_current": 19_990.0,
+        "sl": 19_995.0,
+    }
+    assert position_risk_usd(position, broker) == pytest.approx(5.0)
+
+    pegado = dict(position, price_current=19_995.0)
+    assert position_risk_usd(pegado, broker) == pytest.approx(0.0)
+
+
+def test_magic_manual_cuenta_en_total_y_alerta_warning(monkeypatch):
+    import tradinglab.alerts as alerts_mod
+
+    monkeypatch.setattr(
+        "tradinglab.symbol_risk.account_magics", lambda account_id: [1]
+    )
+    monkeypatch.setattr("tradinglab.symbol_risk.ea_magics", lambda account_id: [])
+    account = load_accounts()["ftmo_demo"]
+    positions = [
+        {
+            "ticket": 10,
+            "symbol": "US100.cash",
+            "side": "buy",
+            "magic": 1,
+            "volume": 70.0,
+            "price_open": 20_000.0,
+            "price_current": 20_000.0,
+            "sl": 19_990.0,
+        },
+        {
+            "ticket": 11,
+            "symbol": "US100.cash",
+            "side": "buy",
+            "magic": 0,
+            "volume": 10.0,
+            "price_open": 20_000.0,
+            "price_current": 20_000.0,
+            "sl": 19_990.0,
+        },
+    ]
+    risk = risk_snapshot(
+        positions,
+        _Broker(),
+        account_id="ftmo_demo",
+        account=account,
+        balance=100_000,
+    )
+    assert risk["total_usd"] == pytest.approx(800.0)
+    assert risk["by_symbol"]["US100.CASH"] == pytest.approx(800.0)
+    assert risk["unknown_total_usd"] == pytest.approx(100.0)
+    assert len(risk["unknown_magic"]) == 1
+    assert risk["unknown_magic"][0]["ticket"] == 11
+
+    sent: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        alerts_mod,
+        "send_once",
+        lambda event, message, **kwargs: sent.append(
+            (event, str(kwargs.get("severity")))
+        ),
+    )
+    alert_risk_events("ftmo_demo", risk, db_path="unused.db")
+    assert any(event.startswith("unknown_magic:") for event, _ in sent)
+    assert any(severity == "warning" for _, severity in sent)
 
 
 def test_limite_nuevo_no_afloja_el_existente():

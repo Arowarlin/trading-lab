@@ -1,9 +1,15 @@
 """Riesgo abierto agregado por símbolo, grupo y total.
 
-El riesgo se mide desde el precio de entrada hasta el SL actual:
-``distancia × volumen × valor_por_precio``. Una posición sin SL se marca como
-bloqueo total y se cuenta como el límite total de la cuenta. Solo se cuentan
-los magics del laboratorio y los ``managed_magics`` de los EAs de la cuenta.
+El riesgo se mide desde el **precio actual** hasta el SL:
+``max(0, actual - SL)`` en largo y ``max(0, SL - actual)`` en corto, por
+volumen y valor del tick. Así incluye el beneficio flotante que puede
+devolverse y cuenta en el límite diario de FTMO. Si no hay precio actual se
+usa la entrada con la misma fórmula direccional. Una posición sin SL se marca
+como bloqueo total y se cuenta como el límite total de la cuenta.
+
+Se cuentan **todas** las posiciones de la cuenta: magics del laboratorio,
+``managed_magics`` de los EAs de ``mt5_eas.yaml`` y magics desconocidos
+(incluido 0/manual), que se marcan y alertan.
 """
 
 from __future__ import annotations
@@ -110,8 +116,29 @@ def position_has_sl(position: dict) -> bool:
     return entry > 0 and stop > 0
 
 
+def position_side(position: dict) -> str:
+    """Lado de la posición: buy/long o sell/short; por defecto largo."""
+    side = str(position.get("side") or "").strip().lower()
+    if side in {"buy", "long"}:
+        return "buy"
+    if side in {"sell", "short"}:
+        return "sell"
+    kind = position.get("type")
+    if kind is not None:
+        try:
+            return "buy" if int(kind) == 0 else "sell"
+        except (TypeError, ValueError):
+            pass
+    return "buy"
+
+
 def position_risk_usd(position: dict, broker) -> float:
-    """Pérdida estimada hasta el SL de una posición, en USD de la cuenta."""
+    """Riesgo direccional desde el precio actual hasta el SL, en USD.
+
+    Largo: ``max(0, actual - SL)``. Corto: ``max(0, SL - actual)``. Si no hay
+    precio actual se usa la entrada. Incluye el beneficio flotante que puede
+    devolverse; por eso cuenta en el límite diario de FTMO.
+    """
     symbol = str(position.get("symbol") or position.get("ticker") or "")
     volume = abs(float(position.get("volume") or position.get("qty") or 0.0))
     if not symbol or volume <= 0:
@@ -128,6 +155,13 @@ def position_risk_usd(position: dict, broker) -> float:
         or position.get("stop_loss")
         or 0.0
     )
+    current = float(
+        position.get("price_current")
+        or position.get("last")
+        or position.get("current")
+        or entry
+        or 0.0
+    )
     try:
         spec = broker.symbol_spec(symbol)
     except Exception:
@@ -135,17 +169,16 @@ def position_risk_usd(position: dict, broker) -> float:
     tick_size = float(spec.get("tick_size") or spec.get("point") or 0.0)
     tick_value = float(spec.get("tick_value") or 0.0)
     contract = float(spec.get("contract_size") or 1.0)
-    if stop > 0 and entry > 0:
+    if stop > 0 and current > 0:
+        if position_side(position) == "buy":
+            distance = max(0.0, current - stop)
+        else:
+            distance = max(0.0, stop - current)
         if tick_size > 0 and tick_value > 0:
             value_per_price = tick_value / tick_size
-            return abs(entry - stop) * volume * value_per_price
-        return abs(entry - stop) * volume * contract
-    price = float(
-        position.get("price_current")
-        or position.get("last")
-        or entry
-        or 0.0
-    )
+            return distance * volume * value_per_price
+        return distance * volume * contract
+    price = current if current > 0 else entry
     if price <= 0:
         return 0.0
     return volume * contract * price * 0.02
@@ -157,18 +190,9 @@ def open_risk_by_symbol(
     *,
     account_id: str,
 ) -> dict[str, float]:
-    """Riesgo abierto por símbolo de los magics permitidos."""
-    allowed = set(account_magics(account_id))
-    if not allowed:
-        return {}
+    """Riesgo abierto por símbolo de **todas** las posiciones de la cuenta."""
     out: dict[str, float] = {}
     for position in positions or []:
-        try:
-            magic = int(position.get("magic") or 0)
-        except (TypeError, ValueError):
-            magic = 0
-        if magic not in allowed:
-            continue
         symbol = str(position.get("symbol") or position.get("ticker") or "").upper()
         if not symbol:
             continue
@@ -335,9 +359,11 @@ def risk_snapshot(
 ) -> dict:
     """Riesgo agregado por símbolo, grupo y total para una cuenta.
 
-    Incluye los magics del laboratorio y los EAs de ``mt5_eas.yaml``. Una
-    posición sin SL se cuenta como el límite total y se marca en
-    ``missing_sl``; el guard la bloquea aunque el resto esté dentro.
+    Cuenta **todas** las posiciones: magics del laboratorio, EAs de
+    ``mt5_eas.yaml`` y magics desconocidos (incluido 0/manual). Los
+    desconocidos se marcan en ``unknown_magic`` y alertan. Una posición sin
+    SL se cuenta como el límite total y se marca en ``missing_sl``; el guard
+    la bloquea aunque el resto esté dentro.
     """
     allowed = set(account_magics(account_id))
     ea = set(ea_magics(account_id))
@@ -351,15 +377,15 @@ def risk_snapshot(
     total = 0.0
     ea_total = 0.0
     lab_total = 0.0
+    unknown_total = 0.0
     missing: list[dict] = []
+    unknown: list[dict] = []
 
     for position in positions or []:
         try:
             magic = int(position.get("magic") or 0)
         except (TypeError, ValueError):
             magic = 0
-        if magic not in allowed:
-            continue
         symbol = str(position.get("symbol") or position.get("ticker") or "").upper()
         if not symbol:
             continue
@@ -387,6 +413,17 @@ def risk_snapshot(
             ea_by_group[group] = ea_by_group.get(group, 0.0) + risk
         elif magic in lab:
             lab_total += risk
+        else:
+            unknown_total += risk
+            unknown.append(
+                {
+                    "ticket": position.get("ticket"),
+                    "symbol": symbol,
+                    "magic": magic,
+                    "volume": round(abs(float(position.get("volume") or 0.0)), 4),
+                    "risk_usd": round(float(risk), 2),
+                }
+            )
 
     ea_over: list[dict] = []
     for symbol, risk in sorted(ea_by_symbol.items()):
@@ -430,6 +467,8 @@ def risk_snapshot(
         "missing_sl": missing,
         "ea_total_usd": round(ea_total, 2),
         "lab_total_usd": round(lab_total, 2),
+        "unknown_total_usd": round(unknown_total, 2),
+        "unknown_magic": unknown,
         "ea_over": ea_over,
         "ea_magics": sorted(ea),
         "lab_magics": sorted(lab),
@@ -470,6 +509,20 @@ def alert_risk_events(
                 f"{account_id}: EA supera límite {item.get('kind')} "
                 f"{item.get('name')} ({item.get('risk_usd'):,.2f} > "
                 f"{item.get('cap_usd'):,.2f}); aperturas del lab bloqueadas",
+                severity="warning",
+                db_path=db_path,
+                now=now,
+            )
+        except Exception:
+            pass
+    for item in risk.get("unknown_magic") or []:
+        ticket = item.get("ticket")
+        event = f"unknown_magic:{account_id}:{ticket}:{day}"
+        try:
+            send_once(
+                event,
+                f"{account_id}: posición {item.get('symbol')} ticket {ticket} "
+                f"magic {item.get('magic')} desconocido; cuenta en riesgo agregado",
                 severity="warning",
                 db_path=db_path,
                 now=now,
@@ -545,6 +598,8 @@ def open_risk_report(
         "groups": groups,
         "total": total,
         "missing_sl": risk["missing_sl"],
+        "unknown_magic": risk["unknown_magic"],
+        "unknown_total_usd": risk["unknown_total_usd"],
         "ea_over": risk["ea_over"],
         "ea_total_usd": risk["ea_total_usd"],
         "lab_total_usd": risk["lab_total_usd"],
@@ -564,6 +619,7 @@ __all__ = [
     "open_risk_report",
     "position_has_sl",
     "position_risk_usd",
+    "position_side",
     "risk_group",
     "risk_snapshot",
     "symbol_cap_usd",

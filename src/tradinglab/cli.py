@@ -763,6 +763,8 @@ def doctor(network: bool = typer.Option(False, "--network", help="Probar descarg
                         over = True
                 if risk["ea_over"]:
                     parts.append("EA sobre límite")
+                if risk["unknown_magic"]:
+                    parts.append(f"desconocido: {len(risk['unknown_magic'])}")
                 if risk["missing_sl"]:
                     symbols = ",".join(
                         str(item.get("symbol")) for item in risk["missing_sl"]
@@ -771,7 +773,9 @@ def doctor(network: bool = typer.Option(False, "--network", help="Probar descarg
                 status = (
                     FAIL
                     if risk["missing_sl"]
-                    else WARN if over or risk["ea_over"] else OK
+                    else WARN
+                    if over or risk["ea_over"] or risk["unknown_magic"]
+                    else OK
                 )
                 table.add_row(
                     "Riesgo abierto",
