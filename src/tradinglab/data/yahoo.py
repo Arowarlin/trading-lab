@@ -10,6 +10,24 @@ import yfinance as yf
 from .base import cache_path, normalize
 
 
+def _fetched_at(path: Path) -> datetime:
+    """Hora real de la descarga: sidecar `.meta.json`; mtime como respaldo.
+
+    El mtime del parquet no es fiable: cada rango start/end tiene su propio
+    fichero y una copia/restauración lo cambia. El sidecar lo escribe la
+    descarga y conserva la hora exacta.
+    """
+    meta = path.with_suffix(".meta.json")
+    try:
+        payload = json.loads(meta.read_text(encoding="utf-8"))
+        stamp = datetime.fromisoformat(str(payload["fetched_at"]))
+        if stamp.tzinfo is None:
+            stamp = stamp.replace(tzinfo=timezone.utc)
+        return stamp
+    except Exception:
+        return datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)
+
+
 def _record_freshness(
     ticker: str,
     timeframe: str,
@@ -26,7 +44,7 @@ def _record_freshness(
             last = frame.index[-1]
             if hasattr(last, "to_pydatetime"):
                 last = last.to_pydatetime()
-        fetched = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)
+        fetched = _fetched_at(path)
         record(
             ticker,
             timeframe,

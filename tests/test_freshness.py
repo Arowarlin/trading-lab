@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import os
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
@@ -57,6 +59,49 @@ def test_sin_datos_es_falla(tmp_path):
     result = check("NUNCA", "1d", NOW, db_path=db)
     assert result["status"] == STATUS_FALLA
     assert "sin datos" in result["reason"]
+
+
+def test_un_registro_viejo_no_tapa_el_refresco_mas_reciente(tmp_path):
+    """Leer un caché viejo inserta una fila con fecha antigua; no debe mandar."""
+    db = tmp_path / "lab.db"
+    init_db(db)
+    _record_fresh(db, symbol="SPY", age_s=60.0)
+    record(
+        "SPY",
+        "1d",
+        last_bar_utc=NOW - timedelta(days=5),
+        fetched_at_utc=NOW - timedelta(days=5),
+        source="yahoo",
+        db_path=db,
+    )
+    latest = freshness.latest("SPY", "1d", db_path=db)
+    assert latest["fetched_at_utc"] == (NOW - timedelta(seconds=60)).isoformat(
+        timespec="seconds"
+    )
+    assert check("SPY", "1d", NOW, db_path=db)["status"] == STATUS_OK
+
+
+def test_yahoo_frescura_usa_la_hora_del_sidecar(tmp_path, monkeypatch):
+    """La fecha de descarga sale del .meta.json, no del mtime del parquet."""
+    from tradinglab.data import yahoo
+
+    captured: dict = {}
+    monkeypatch.setattr(freshness, "record", lambda *a, **k: captured.update(k))
+    path = tmp_path / "SPY__2023-11-16__2026-11-16.parquet"
+    path.write_bytes(b"")
+    old = datetime(2026, 11, 11, 18, 28, tzinfo=timezone.utc)
+    os.utime(path, (old.timestamp(), old.timestamp()))
+    path.with_suffix(".meta.json").write_text(
+        json.dumps({"fetched_at": "2026-11-16T20:53:25+00:00"}),
+        encoding="utf-8",
+    )
+    frame = pd.DataFrame(
+        {"close": [1.0]}, index=pd.DatetimeIndex(["2026-11-13"], tz="UTC")
+    )
+    yahoo._record_freshness("SPY", "1d", frame, path, "yahoo")
+    assert captured["fetched_at_utc"] == datetime(
+        2026, 11, 16, 20, 53, 25, tzinfo=timezone.utc
+    )
 
 
 def test_umbrales_desde_lab_yaml(tmp_path):

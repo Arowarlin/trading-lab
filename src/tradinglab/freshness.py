@@ -250,9 +250,12 @@ def latest(
         return None
     try:
         with connect(path) as con:
+            # Manda la descarga más reciente, no la última fila insertada:
+            # leer un caché viejo (otro rango start/end) no puede tapar un
+            # refresco posterior con una fecha anterior.
             row = con.execute(
                 "SELECT * FROM data_freshness WHERE symbol = ? AND timeframe = ? "
-                "ORDER BY id DESC LIMIT 1",
+                "ORDER BY datetime(fetched_at_utc) DESC, id DESC LIMIT 1",
                 (str(symbol).upper(), str(timeframe)),
             ).fetchone()
     except Exception:

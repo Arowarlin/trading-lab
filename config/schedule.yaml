@@ -127,6 +127,9 @@ tasks:
   - {name: TradingLab-Intel, anchor: local, manage: false}
   - {name: TradingLab-IntradayForward, anchor: local, manage: false, wake_to_run: true}
   - {name: TradingLab-LLMCompare, anchor: local, manage: false}
+  # TradingLab-LMStudio: habilitada el 2026-11-16; trigger AtLogOn.
+  # Arranca scripts/lmstudio_start.ps1 (servidor 1234, qwen3-30b-a3b, 32k).
+  # No la re-registra este script; se gestiona aparte.
   - {name: TradingLab-LMStudio, anchor: local, manage: false}
   # TradingLab-RebootAfterDownload reinicia el PC (shutdown /r) en plena
   # sesion. Se deshabilita, no se borra. Pendiente moverla a sabado 12:00
