@@ -42,8 +42,9 @@ def _normalize_symbol(symbol: str) -> str:
 def mt5_swap(symbol: str) -> dict:
     """Swap bruto del símbolo desde `mt5.symbol_info`; nunca inventa.
 
-    No inicializa MT5: usa la conexión que ya exista. Si el paquete o el
-    terminal no están disponibles, devuelve ``status="Sin datos"``.
+    No inicializa MT5: usa la conexión que ya exista. El nombre del bróker se
+    resuelve sin distinguir mayúsculas (US100.CASH -> US100.cash). Si el
+    paquete o el terminal no están disponibles, devuelve ``status="Sin datos"``.
     """
     try:
         import MetaTrader5 as mt5
@@ -53,16 +54,38 @@ def mt5_swap(symbol: str) -> dict:
             "reason": f"MT5 no disponible: {type(exc).__name__}",
             "symbol": str(symbol).upper(),
         }
-    info = mt5.symbol_info(str(symbol))
+    from .swap_sync import resolve_broker_symbol
+
+    try:
+        names = [
+            str(getattr(item, "name", "") or "")
+            for item in (mt5.symbols_get() or [])
+        ]
+    except Exception:
+        names = []
+    broker_symbol, reason = (
+        resolve_broker_symbol(str(symbol), names)
+        if names
+        else (str(symbol), "")
+    )
+    if broker_symbol is None:
+        return {
+            "status": "Sin datos",
+            "reason": reason or "sin coincidencia en symbols_get",
+            "symbol": str(symbol).upper(),
+        }
+    info = mt5.symbol_info(broker_symbol)
     if info is None:
         return {
             "status": "Sin datos",
             "reason": "symbol_info sin datos o terminal no inicializado",
             "symbol": str(symbol).upper(),
+            "broker_symbol": broker_symbol,
         }
     return {
         "status": "ok",
         "symbol": str(symbol).upper(),
+        "broker_symbol": broker_symbol,
         "swap_long": float(info.swap_long),
         "swap_short": float(info.swap_short),
         "swap_mode": int(info.swap_mode),

@@ -112,6 +112,7 @@ class MT5Broker:
         )
         self.rate_offset_periods: list[dict] = []
         self._connected = False
+        self._symbol_names_cache: list[str] | None = None
 
     # ------------------------------------------------------------- conexión
 
@@ -309,17 +310,48 @@ class MT5Broker:
     def account(self) -> dict:
         return self.health()
 
+    def _resolve_symbol_name(self, mt5, symbol: str) -> str:
+        """Nombre real del bróker, sin distinguir mayúsculas."""
+        from ..swap_sync import resolve_broker_symbol
+
+        names = self._symbol_names_cache
+        if names is None:
+            try:
+                names = [
+                    str(getattr(item, "name", "") or "")
+                    for item in (mt5.symbols_get() or [])
+                ]
+            except Exception:
+                names = []
+            names = [name for name in names if name]
+            self._symbol_names_cache = names
+        if not names:
+            return str(symbol)
+        resolved, _reason = resolve_broker_symbol(str(symbol), names)
+        return resolved or str(symbol)
+
     def symbol_spec(self, symbol: str) -> dict:
         mt5 = self._require()
-        info = mt5.symbol_info(symbol)
+        requested = str(symbol)
+        info = mt5.symbol_info(requested)
         if info is None:
-            if not mt5.symbol_select(symbol, True):
-                raise MT5Error(f"Símbolo no disponible en el terminal: {symbol}")
-            info = mt5.symbol_info(symbol)
+            resolved = self._resolve_symbol_name(mt5, requested)
+            if resolved != requested:
+                if not mt5.symbol_select(resolved, True):
+                    raise MT5Error(
+                        f"Símbolo no disponible en el terminal: {requested} -> {resolved}"
+                    )
+                info = mt5.symbol_info(resolved)
+                if info is not None:
+                    requested = resolved
+            if info is None and not mt5.symbol_select(requested, True):
+                raise MT5Error(f"Símbolo no disponible en el terminal: {requested}")
+            if info is None:
+                info = mt5.symbol_info(requested)
         if info is None:
-            raise MT5Error(f"symbol_info devolvió None para {symbol}")
+            raise MT5Error(f"symbol_info devolvió None para {requested}")
         if not info.visible:
-            mt5.symbol_select(symbol, True)
+            mt5.symbol_select(info.name or requested, True)
         return {
             "symbol": info.name,
             "digits": int(info.digits),

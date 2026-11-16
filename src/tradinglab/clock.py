@@ -72,7 +72,23 @@ def mt5_offset_s(symbol: str = "EURUSD") -> float | None:
             return None
         # OJO: no se hace shutdown: el proceso puede tener la conexión MT5
         # en uso (el broker del forward). Solo se lee un tick.
-        tick = mt5.symbol_info_tick(symbol)
+        from .swap_sync import resolve_broker_symbol
+
+        try:
+            names = [
+                str(getattr(item, "name", "") or "")
+                for item in (mt5.symbols_get() or [])
+            ]
+        except Exception:
+            names = []
+        resolved, _reason = (
+            resolve_broker_symbol(str(symbol), names)
+            if names
+            else (str(symbol), "")
+        )
+        if not resolved:
+            return None
+        tick = mt5.symbol_info_tick(resolved)
     except Exception:
         return None
     if tick is None or not getattr(tick, "time", None):
