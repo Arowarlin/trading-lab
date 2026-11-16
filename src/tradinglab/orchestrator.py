@@ -32,6 +32,7 @@ from .runtime import effective_enabled, record_console_action
 from .session import session_block
 from .strategies import STRATEGIES
 from .strategies.base import exposure_multiplier
+from .time_utils import market_today
 
 BOTS_FILE = ROOT / "config" / "bots.yaml"
 ARCHIVE_FILE = ROOT / "config" / "bots_archive.yaml"
@@ -215,10 +216,10 @@ def run_bot(
             ]
         raise ValueError(f"Estrategia desconocida en bot {spec.id}: {spec.strategy}")
 
-    from datetime import date, timedelta
+    from datetime import timedelta
 
-    start = start or (date.today() - timedelta(days=365 * 8)).isoformat()
-    today = date.today().isoformat()
+    start = start or (market_today() - timedelta(days=365 * 8)).isoformat()
+    today = market_today().isoformat()
     strategy_fn = STRATEGIES[spec.strategy]
     params = _filtered_params(strategy_fn, spec.params)
 

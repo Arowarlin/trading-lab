@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import numpy as np
@@ -233,6 +234,9 @@ def test_el_presupuesto_bloquea_el_activo(tmp_path, monkeypatch):
     _write_cache(cache, "XAUUSD", _h4_frame(days=400))
     db = tmp_path / "lab.db"
     init_db(db)
+    week_start = datetime.now(timezone.utc).date() - timedelta(
+        days=datetime.now(timezone.utc).weekday()
+    )
     with connect(db) as con:
         for index in range(5):
             con.execute(
@@ -241,7 +245,7 @@ def test_el_presupuesto_bloquea_el_activo(tmp_path, monkeypatch):
                 "source, run_id, fingerprint, counted) "
                 "VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
-                    "2026-11-09T00:00:00+00:00",
+                    f"{week_start}T00:00:00+00:00",
                     "TREND",
                     "seed",
                     "XAUUSD",

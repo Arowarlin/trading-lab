@@ -21,15 +21,9 @@ def test_t09a_sin_llamadas_naive():
         assert not NAIVE.search(text), name
 
 
-def test_t09b_sigue_excluido_en_ruff():
+def test_solo_f13_sigue_excluido_en_ruff():
     config = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
     assert "DTZ" in config
-    for name in (
-        "src/tradinglab/f13.py",
-        "src/tradinglab/cli.py",
-        "src/tradinglab/lifecycle.py",
-        "src/tradinglab/orchestrator.py",
-        "src/tradinglab/premarket.py",
-        "src/tradinglab/telegram.py",
-    ):
-        assert f'"{name}" = ["DTZ"]' in config
+    assert '"src/tradinglab/f13.py" = ["DTZ"]' in config
+    assert "hasta 2027-01-08" in config
+    assert '"src/tradinglab/cli.py" = ["DTZ"]' not in config

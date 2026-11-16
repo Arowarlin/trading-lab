@@ -15,7 +15,7 @@ import secrets
 import threading
 import urllib.error
 import urllib.request
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable
 
@@ -40,6 +40,7 @@ from .runtime import (
     set_bot_enabled,
 )
 from .session import session_block
+from .time_utils import market_today
 
 PIN_KEY = "CONSOLE_PIN"
 PIN_RE = re.compile(r"^\d{6,12}$")
@@ -1223,7 +1224,7 @@ class OperatorService:
     def _last_price(self, ticker: str) -> float:
         from .data import fetch
 
-        end = date.today()
+        end = market_today()
         start = end - timedelta(days=90)
         try:
             frame = fetch(

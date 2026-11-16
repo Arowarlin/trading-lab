@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import math
 import time
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pandas as pd
@@ -12,6 +12,7 @@ from ..config import DEFAULT_DB, ROOT, Settings
 from ..data import fetch
 from ..indicators import atr, rsi, sma
 from ..llm import LLMClient
+from ..time_utils import market_today
 from .bridge import RATING_TO_TARGET, AgentError
 
 # Contexto compacto: una sola llamada al LLM con datos objetivos. En un 27B
@@ -148,11 +149,11 @@ def run_lite_agent(
     model: str | None = None,
 ) -> dict:
     """Una llamada al LLM con contexto técnico compacto. Devuelve la decisión."""
-    day = analysis_date or date.today().isoformat()
+    day = analysis_date or market_today().isoformat()
     ticker = ticker.upper()
-    start = start or (date.today().replace(year=date.today().year - 3)).isoformat()
+    start = start or (market_today().replace(year=market_today().year - 3)).isoformat()
 
-    df = fetch(ticker, start, date.today().isoformat(), settings.data.cache_dir)
+    df = fetch(ticker, start, market_today().isoformat(), settings.data.cache_dir)
     context = build_context(df, ticker, day)
 
     messages = [

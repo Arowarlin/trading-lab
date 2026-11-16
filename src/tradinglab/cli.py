@@ -68,6 +68,7 @@ from .reporting import build_dashboard
 from .risk import check_order, size_position
 from .session import flatten_required, session_block
 from .strategies import STRATEGIES
+from .time_utils import market_today, utc_now
 
 app = typer.Typer(
     add_completion=False,
@@ -232,11 +233,11 @@ FAIL = "[red]FAIL[/red]"
 
 
 def _today() -> str:
-    return date.today().isoformat()
+    return market_today().isoformat()
 
 
 def _default_start() -> str:
-    return (date.today() - timedelta(days=365 * 8)).isoformat()
+    return (market_today() - timedelta(days=365 * 8)).isoformat()
 
 
 def _fmt_pct(value: float) -> str:
@@ -812,7 +813,7 @@ def doctor(network: bool = typer.Option(False, "--network", help="Probar descarg
     # Datos
     if network:
         try:
-            df = data_mod.fetch("SPY", (date.today() - timedelta(days=30)).isoformat(), _today(), ROOT / "data" / "cache")
+            df = data_mod.fetch("SPY", (market_today() - timedelta(days=30)).isoformat(), _today(), ROOT / "data" / "cache")
             table.add_row("Datos (yfinance)", OK, f"SPY {len(df)} barras")
         except Exception as exc:
             table.add_row("Datos (yfinance)", FAIL, str(exc)[:160])
@@ -3007,7 +3008,7 @@ def alerts_check_cmd() -> None:
         checks.append(("Dry-run diario", False, "sin registros"))
         send_alert("dryrun_missed", "No hay ningún dry-run registrado", severity="warning")
     else:
-        age_h = round((datetime.now().timestamp() - dryruns[0].stat().st_mtime) / 3600)
+        age_h = round((utc_now().timestamp() - dryruns[0].stat().st_mtime) / 3600)
         checks.append(("Dry-run diario", age_h <= 72, f"último hace {age_h} h"))
         if age_h > 72:
             send_alert("dryrun_missed", f"Último dry-run hace {age_h} h", severity="warning")
@@ -3434,7 +3435,7 @@ def f13_check_cmd() -> None:
         ("Reconciliación", bool(rec and rec.get("status") == "ok"), (rec or {}).get("status", "sin ejecutar"))
     )
     dryruns = sorted((ROOT / "data" / "dryrun").glob("dryrun_*.json"), reverse=True)
-    age_h = round((datetime.now().timestamp() - dryruns[0].stat().st_mtime) / 3600) if dryruns else 999
+    age_h = round((utc_now().timestamp() - dryruns[0].stat().st_mtime) / 3600) if dryruns else 999
     checks.append(("Ciclo diario", age_h <= 72, f"último hace {age_h} h"))
 
     exec_metrics = f13_execution(DEFAULT_DB, bot=row["bot"], start_date=row["start_date"])

@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import re
 import statistics
-from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -20,6 +19,7 @@ from .decisions import (
     record_decision,
     report_by_source,
 )
+from .time_utils import market_today
 
 DEFAULT_ANALYSTS = ("market", "news", "fundamentals", "social")
 MIN_SAMPLE = 30
@@ -98,8 +98,8 @@ def run_comparison(
     deep_timeout: int = 1800,
 ) -> dict:
     settings = settings or Settings()
-    target_day = day or date.today().isoformat()
-    if target_day != date.today().isoformat() and not retrospective:
+    target_day = day or market_today().isoformat()
+    if target_day != market_today().isoformat() and not retrospective:
         raise CompareError(
             "solo se compara la fecha de hoy; usa --retrospective para una pasada histórica"
         )

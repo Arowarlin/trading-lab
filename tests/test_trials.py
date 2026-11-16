@@ -100,7 +100,7 @@ def test_presupuesto_semanal_por_activo(tmp_path):
         "max_attempts_per_week_per_asset: 2\nassets:\n  EURUSD: 2\n",
         encoding="utf-8",
     )
-    now = datetime(2026, 11, 9, 12, tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc)
     assert budget_status(db, "EURUSD", now, budget)["used"] == 0
     _trial(db, run_id="r1")
     _trial(db, run_id="r2")

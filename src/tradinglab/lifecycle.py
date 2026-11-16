@@ -15,6 +15,7 @@ import yaml
 from .accounts import load_accounts
 from .config import ROOT, Settings
 from .db import connect, init_db, utcnow
+from .time_utils import market_today
 
 CONFIG_PATH = ROOT / "config" / "lifecycle.yaml"
 STATES = ("candidato", "incubando", "evaluado", "promovible", "rechazado", "archivado")
@@ -159,7 +160,7 @@ def start_incubation(
                 raise LifecycleError(
                     "no elegible para incubar: " + "; ".join(gate["reasons"])
                 )
-        start = date.fromisoformat(start_date) if start_date else date.today()
+        start = date.fromisoformat(start_date) if start_date else market_today()
         merged = {**cfg["criteria"], **(criteria_override or {})}
         window_days = int(merged.get("window_days", 0) or 0)
         if window_days > 0:
@@ -398,7 +399,7 @@ def report_bot(
     execution = execution_metrics(db_path, bot=bot, start_date=start)
     drift = _drift_for(db_path, bot, settings)
     breaches = _guard_breaches(db_path, bot, start)
-    current = today or date.today()
+    current = today or market_today()
     start_day = date.fromisoformat(start)
     end_day = date.fromisoformat(end)
     total_days = max(1, (end_day - start_day).days)

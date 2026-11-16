@@ -13,6 +13,7 @@ from .config import Settings
 from .decisions import record_decision
 from .intel.calendar import DbCalendarProvider
 from .intel.news_scoring import scoring_config
+from .time_utils import market_today
 
 WATCHLIST = ("SPY", "QQQ", "NVDA")
 
@@ -114,7 +115,7 @@ def build_report(
 ) -> dict:
     """Construye el informe; los fallos se muestran como Sin datos."""
     settings = settings or Settings()
-    today = day or date.today()
+    today = day or market_today()
     symbols = [str(item).strip().upper() for item in tickers if str(item).strip()]
     if not symbols:
         raise ValueError("watchlist vacía")

@@ -45,20 +45,8 @@ target-version = "py312"
 select = ["E4", "E7", "E9", "F", "I", "DTZ"]
 
 [tool.ruff.lint.per-file-ignores]
-# T09b: procesos activos; se corregir?n en un bloque aparte.
-"src/tradinglab/agent_compare.py" = ["DTZ"]
-"src/tradinglab/cli.py" = ["DTZ"]
-"src/tradinglab/decisions.py" = ["DTZ"]
+# f13.py: excluido hasta 2027-01-08 (fin del piloto F13).
 "src/tradinglab/f13.py" = ["DTZ"]
-"src/tradinglab/lifecycle.py" = ["DTZ"]
-"src/tradinglab/model_compare.py" = ["DTZ"]
-"src/tradinglab/operator.py" = ["DTZ"]
-"src/tradinglab/orchestrator.py" = ["DTZ"]
-"src/tradinglab/premarket.py" = ["DTZ"]
-"src/tradinglab/telegram.py" = ["DTZ"]
-"src/tradinglab/agents/bridge.py" = ["DTZ"]
-"src/tradinglab/agents/lite.py" = ["DTZ"]
-"scripts/run_tradingagents.py" = ["DTZ"]
 "tests/**" = ["DTZ"]
 
 [tool.pytest.ini_options]

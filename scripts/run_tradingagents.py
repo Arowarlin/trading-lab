@@ -12,8 +12,9 @@ import sys
 import threading
 import time
 import traceback
-from datetime import date
 from pathlib import Path
+
+from tradinglab.time_utils import market_today
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -77,7 +78,7 @@ def _install_opencode_headers(base_url: str, session_id: str) -> bool:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--ticker", required=True)
-    parser.add_argument("--date", default=date.today().isoformat())
+    parser.add_argument("--date", default=market_today().isoformat())
     parser.add_argument("--analysts", default="market,news")
     parser.add_argument("--debate-rounds", type=int, default=1)
     parser.add_argument("--risk-rounds", type=int, default=1)

@@ -3,9 +3,9 @@ from __future__ import annotations
 import json
 import os
 import subprocess
-from datetime import date
 
 from ..config import ROOT
+from ..time_utils import market_today
 
 TA_PYTHON = ROOT / ".venv-ta" / "Scripts" / "python.exe"
 TA_SCRIPT = ROOT / "scripts" / "run_tradingagents.py"
@@ -55,7 +55,7 @@ def run_tradingagents(
     if not TA_SCRIPT.exists():
         raise AgentError(f"No existe el script: {TA_SCRIPT}")
 
-    day = analysis_date or date.today().isoformat()
+    day = analysis_date or market_today().isoformat()
     out_dir = ROOT / "data" / "agent_runs"
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f"ta_{ticker.upper()}_{day}.json"

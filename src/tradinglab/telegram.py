@@ -29,6 +29,7 @@ import httpx
 import yaml
 
 from .config import DEFAULT_DB, KEYRING_SERVICE, ROOT, get_settings, load_secrets
+from .time_utils import utc_now
 
 CONFIG_PATH = ROOT / "config" / "telegram.yaml"
 EXAMPLE_PATH = ROOT / "config" / "telegram.example.yaml"
@@ -445,7 +446,7 @@ def parse_opencode_output(stdout: str) -> tuple[str, str]:
 
 def _agent_log(prompt: str, stdout: str, stderr: str, returncode: int, duration_s: float) -> Path:
     LOG_DIR.mkdir(parents=True, exist_ok=True)
-    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    stamp = utc_now().strftime("%Y%m%d_%H%M%S")
     path = LOG_DIR / f"agent_{stamp}.log"
     with path.open("a", encoding="utf-8") as handle:
         handle.write(f"ts={datetime.now(timezone.utc).isoformat()}\n")
@@ -1037,7 +1038,7 @@ def handle_inbound(
 def _log_event(message: str) -> None:
     try:
         LOG_DIR.mkdir(parents=True, exist_ok=True)
-        path = LOG_DIR / f"bridge_{datetime.now():%Y%m%d}.log"
+        path = LOG_DIR / f"bridge_{utc_now():%Y%m%d}.log"
         line = f"{datetime.now(timezone.utc).isoformat()} {message}\n"
         with path.open("a", encoding="utf-8") as handle:
             handle.write(line)

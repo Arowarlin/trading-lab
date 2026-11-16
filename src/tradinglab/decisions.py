@@ -18,6 +18,7 @@ import pandas as pd
 from . import data as data_mod
 from .config import ROOT
 from .db import connect, init_db, utcnow
+from .time_utils import market_today
 
 
 def lite_prompt_version() -> tuple[str, str]:
@@ -44,7 +45,7 @@ def deep_prompt_hash(
 
 def record_decision(db_path: str | Path, payload: dict, *, mode: str) -> None:
     ticker = str(payload.get("ticker") or "").upper()
-    decision_date = str(payload.get("date") or date.today().isoformat())
+    decision_date = str(payload.get("date") or market_today().isoformat())
     if not ticker:
         return
     rating = str(payload.get("rating") or "REVIEW")
@@ -52,7 +53,7 @@ def record_decision(db_path: str | Path, payload: dict, *, mode: str) -> None:
     ref_price = (payload.get("context") or {}).get("price")
     if ref_price is None:
         try:
-            df = data_mod.fetch(ticker, decision_date, date.today().isoformat(), ROOT / "data" / "cache")
+            df = data_mod.fetch(ticker, decision_date, market_today().isoformat(), ROOT / "data" / "cache")
             ref_price = float(df["close"].iloc[-1])
         except Exception:
             ref_price = None
@@ -111,7 +112,7 @@ def update_outcomes(db_path: str | Path, cache_dir: str | Path) -> int:
             df = data_mod.fetch(
                 row["ticker"],
                 row["decision_date"],
-                date.today().isoformat(),
+                market_today().isoformat(),
                 cache_dir,
             )
             close = df["close"].astype(float)
@@ -244,7 +245,7 @@ def trend_target_at(ticker: str, decision_date: str, cache_dir: str | Path):
     from .strategies import trend_signal
 
     start = (date.fromisoformat(decision_date) - timedelta(days=400)).isoformat()
-    df = data_mod.fetch(ticker, start, date.today().isoformat(), cache_dir)
+    df = data_mod.fetch(ticker, start, market_today().isoformat(), cache_dir)
     if len(df) < 210:
         return None
     result = trend_signal(df)

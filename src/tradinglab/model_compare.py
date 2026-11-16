@@ -7,12 +7,12 @@ insuficiente no se extraen conclusiones.
 from __future__ import annotations
 
 import re
-from datetime import date
 from pathlib import Path
 
 from .config import Settings
 from .db import connect, init_db, utcnow
 from .decisions import lite_prompt_version
+from .time_utils import market_today
 
 MIN_SAMPLE = 30
 
@@ -50,8 +50,8 @@ def run_comparison(
 ) -> dict:
     """Ejecuta los dos modelos con el mismo prompt y guarda la comparación."""
     settings = settings or Settings()
-    target_day = day or date.today().isoformat()
-    if target_day != date.today().isoformat():
+    target_day = day or market_today().isoformat()
+    if target_day != market_today().isoformat():
         raise ModelCompareError(
             "solo se compara la fecha de hoy; no se puede recrear el contexto pasado"
         )
