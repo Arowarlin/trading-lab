@@ -71,6 +71,7 @@ EA_CRITERIA = {
     "calendar_sha256": _sha256(ROOT / "src" / "tradinglab" / "nyse_calendar.py"),
 }
 DEFAULT_BOT = "ea:us100-ftmo1"
+FORWARD_ACCOUNT = "ftmo_trial_ea"
 POINT = 0.01
 
 
@@ -82,6 +83,16 @@ def _ea_for_bot(bot: str) -> ExternalEA:
     return ea
 
 
+def _fill_ids_for_account(
+    db_path: str | Path, account: str = FORWARD_ACCOUNT
+) -> set[int]:
+    with connect(db_path) as con:
+        rows = con.execute(
+            "SELECT id FROM fills WHERE account = ?", (account,)
+        ).fetchall()
+    return {int(row["id"]) for row in rows}
+
+
 def _closed(db_path: str | Path, ea: ExternalEA):
     from .journal import load_closed_trades
 
@@ -90,7 +101,12 @@ def _closed(db_path: str | Path, ea: ExternalEA):
         tz="America/New_York",
         bots={ea.bot_id: {"account": ea.account, "profile": "intraday_fx"}},
     )
-    return [trade for trade in trades if trade.bot == ea.bot_id]
+    allowed = _fill_ids_for_account(db_path)
+    return [
+        trade
+        for trade in trades
+        if trade.bot == ea.bot_id and trade.exit_fill_id in allowed
+    ]
 
 
 def _first_date(trades) -> str | None:
@@ -113,11 +129,13 @@ def _first_fill_date(
     marks = ",".join("?" for _ in magics)
     sql = (
         "SELECT ts FROM fills WHERE (bot = ? OR magic IN ("
-        f"{marks})) AND ts IS NOT NULL"
+        f"{marks})) AND account = ? AND ts IS NOT NULL"
     )
     try:
         with connect(db_path) as con:
-            rows = con.execute(sql, (ea.bot_id, *magics)).fetchall()
+            rows = con.execute(
+                sql, (ea.bot_id, *magics, FORWARD_ACCOUNT)
+            ).fetchall()
     except Exception:
         return None
     stamps = [str(row["ts"]) for row in rows if row["ts"]]
@@ -360,6 +378,7 @@ def criteria_preview(bot: str = DEFAULT_BOT) -> dict:
 __all__ = [
     "DEFAULT_BOT",
     "EA_CRITERIA",
+    "FORWARD_ACCOUNT",
     "POINT",
     "criteria_preview",
     "ensure_forward",

@@ -125,8 +125,12 @@ El forward del EA está congelado en `lifecycle` **antes** de contar, con hash
 **`f490642ba7a1f71b`** (v3.2). El hash anterior era `2bfad45ca4ba36fc`; se
 actualizó **antes de la primera operación forward** (`start_date=NULL`, 0 fills)
 y el cambio quedó registrado en `lifecycle_events`. El reloj no arranca hoy:
-arranca el primer día con un fill
-real del EA (`start_date` queda `NULL` hasta entonces).
+arranca el primer día con un fill real del EA (`start_date` queda `NULL` hasta
+entonces).
+
+El forward solo cuenta fills de la cuenta **`ftmo_trial_ea`** (hoy `blocked`).
+Una operación del EA en `ftmo_demo` **no** fija `start_date` ni entra en las
+métricas: `_first_fill_date` y `_closed` filtran por esa cuenta.
 
 | Criterio | Umbral |
 |---|---|

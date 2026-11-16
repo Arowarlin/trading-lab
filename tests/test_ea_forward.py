@@ -12,6 +12,7 @@ from tradinglab.ea_forward import (
     forward_metrics,
     refresh_forward_preregistration,
 )
+from tradinglab.ea_registry import get_ea
 from tradinglab.journal import ClosedTrade
 from tradinglab.lifecycle import (
     LifecycleError,
@@ -89,8 +90,16 @@ def test_el_reloj_arranca_con_un_fill_abierto(tmp_path):
     fill_ts = (frozen + pd.Timedelta(minutes=5)).isoformat()
     with connect(db) as con:
         con.execute(
-            "INSERT INTO fills(ts, qty, price, bot, magic) VALUES(?,?,?,?,?)",
-            (fill_ts, 1.0, 20_000.0, "ea:us100-ftmo1", 93010001),
+            "INSERT INTO fills(ts, qty, price, bot, account, magic) "
+            "VALUES(?,?,?,?,?,?)",
+            (
+                fill_ts,
+                1.0,
+                20_000.0,
+                "ea:us100-ftmo1",
+                "ftmo_trial_ea",
+                93010001,
+            ),
         )
     started = ensure_forward(db)
     expected = (
@@ -230,3 +239,96 @@ def test_refresh_preregistro_solo_antes_del_primer_fill(tmp_path):
     )
     with pytest.raises(LifecycleError, match="ya empez?"):
         refresh_forward_preregistration(db)
+
+
+
+def _insert_fill(con, *, ts, account, side, price, deal_id, magic=93010001):
+    cur = con.execute(
+        "INSERT INTO fills(ts, qty, price, bot, account, symbol, side, volume, "
+        "deal_id, magic, ts_utc, contract_size) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+        (
+            ts,
+            1.0,
+            price,
+            "ea:us100-ftmo1",
+            account,
+            "US100.CASH",
+            side,
+            1.0,
+            deal_id,
+            magic,
+            ts,
+            1.0,
+        ),
+    )
+    return int(cur.lastrowid)
+
+
+def test_forward_ignora_fills_de_ftmo_demo(tmp_path):
+    db = tmp_path / "lab.db"
+    init_db(db)
+    row = ensure_forward(db)
+    frozen = pd.Timestamp(row["frozen_at"])
+    demo_ts = (frozen + pd.Timedelta(minutes=5)).isoformat()
+    trial_ts = (frozen + pd.Timedelta(minutes=10)).isoformat()
+    with connect(db) as con:
+        _insert_fill(
+            con, ts=demo_ts, account="ftmo_demo", side="buy", price=20_000, deal_id=1
+        )
+    assert ensure_forward(db)["start_date"] is None
+    with connect(db) as con:
+        _insert_fill(
+            con,
+            ts=trial_ts,
+            account="ftmo_trial_ea",
+            side="buy",
+            price=20_000,
+            deal_id=2,
+        )
+    started = ensure_forward(db)
+    expected = pd.Timestamp(trial_ts).tz_convert("America/New_York").date().isoformat()
+    assert started["start_date"] == expected
+
+
+def test_forward_solo_cuenta_trial(tmp_path):
+    db = tmp_path / "lab.db"
+    init_db(db)
+    with connect(db) as con:
+        _insert_fill(
+            con,
+            ts="2026-11-10T15:00:00+00:00",
+            account="ftmo_demo",
+            side="buy",
+            price=20_000,
+            deal_id=10,
+        )
+        _insert_fill(
+            con,
+            ts="2026-11-10T16:00:00+00:00",
+            account="ftmo_demo",
+            side="sell",
+            price=20_100,
+            deal_id=11,
+        )
+        _insert_fill(
+            con,
+            ts="2026-11-11T15:00:00+00:00",
+            account="ftmo_trial_ea",
+            side="buy",
+            price=21_000,
+            deal_id=20,
+        )
+        trial_exit = _insert_fill(
+            con,
+            ts="2026-11-11T16:00:00+00:00",
+            account="ftmo_trial_ea",
+            side="sell",
+            price=21_100,
+            deal_id=21,
+        )
+
+    ea = get_ea("us100-ftmo1")
+    assert ea is not None
+    trades = ea_forward._closed(db, ea)
+    assert len(trades) == 1
+    assert trades[0].exit_fill_id == trial_exit
