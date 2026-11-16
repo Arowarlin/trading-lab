@@ -14,6 +14,7 @@ import yaml
 
 from .config import DEFAULT_DB, Settings, get_settings
 from .intraday_costs import COSTS_PATH
+from .swap_rates import annual_pct_from_points
 
 SWAP_MODES = {
     0: ("percent_annual", "deshabilitado"),
@@ -82,17 +83,40 @@ def convert_symbol(
             "reason": UNSUPPORTED_MODES.get(mode, f"swap_mode {mode}"),
         }
     unit, label = SWAP_MODES[mode]
+    long_points = float(_get(info, "swap_long", 0.0) or 0.0)
+    short_points = float(_get(info, "swap_short", 0.0) or 0.0)
+    point = float(_get(info, "point", 0.01) or 0.01)
+    contract = float(_get(info, "trade_contract_size", 1.0) or 1.0)
+    price = float(
+        _get(info, "bid", 0.0)
+        or _get(info, "last", 0.0)
+        or _get(info, "ask", 0.0)
+        or 0.0
+    )
+    annual_long = annual_short = None
+    if mode == 1 and price > 0:
+        annual_long = annual_pct_from_points(
+            long_points, point=point, contract_size=contract, price=price
+        )
+        annual_short = annual_pct_from_points(
+            short_points, point=point, contract_size=contract, price=price
+        )
     return {
         "symbol": str(symbol).upper(),
         "broker_symbol": broker_symbol or str(symbol),
         "status": "ok",
         "swap_mode": mode,
         "mode_label": label,
-        "long": float(_get(info, "swap_long", 0.0) or 0.0),
-        "short": float(_get(info, "swap_short", 0.0) or 0.0),
+        "long": long_points,
+        "short": short_points,
         "unit": unit,
         "triple_swap_weekday": _triple_weekday(info),
         "triple_name": _triple_name(_triple_weekday(info)),
+        "price_at_read": price or None,
+        "point": point,
+        "swap_annual_pct_long": annual_long,
+        "swap_annual_pct_short": annual_short,
+        "read_at": read_at,
         "source": f"mt5.symbol_info {read_at}",
     }
 
@@ -158,6 +182,11 @@ def render_swap_block(payload: dict) -> str:
             "unit": item["unit"],
             "swap_mode": item["swap_mode"],
             "triple_swap_weekday": item["triple_swap_weekday"],
+            "price_at_read": item.get("price_at_read"),
+            "point": item.get("point"),
+            "swap_annual_pct_long": item.get("swap_annual_pct_long"),
+            "swap_annual_pct_short": item.get("swap_annual_pct_short"),
+            "read_at": item.get("read_at"),
             "source": item["source"],
         }
         for symbol, item in sorted(payload["symbols"].items())

@@ -36,6 +36,11 @@ class AssetCost:
     swap_triple_weekday: int = 2
     swap_source: str = "Sin datos"
     swap_provisional: bool = True
+    swap_annual_pct_long: float | None = None
+    swap_annual_pct_short: float | None = None
+    swap_price_at_read: float | None = None
+    swap_point: float = 0.01
+    swap_read_at: str | None = None
     spread_bps: float | None = None
 
     def commission_bps(self, close: pd.Series) -> pd.Series:
@@ -173,6 +178,26 @@ def asset_costs(symbol: str, path: Path | None = None) -> AssetCost:
             swap_item.get("source") or swap.get("source") or "Sin datos"
         ),
         swap_provisional=swap_long is None or swap_short is None,
+        swap_annual_pct_long=(
+            float(swap_item["swap_annual_pct_long"])
+            if swap_item.get("swap_annual_pct_long") is not None
+            else None
+        ),
+        swap_annual_pct_short=(
+            float(swap_item["swap_annual_pct_short"])
+            if swap_item.get("swap_annual_pct_short") is not None
+            else None
+        ),
+        swap_price_at_read=(
+            float(swap_item["price_at_read"])
+            if swap_item.get("price_at_read") is not None
+            else None
+        ),
+        swap_point=float(swap_item.get("point", 0.01) or 0.01),
+        swap_read_at=(
+            str(swap_item.get("read_at") or swap.get("synced_at") or "")
+            or None
+        ),
         spread_bps=(
             float(item["spread_bps"])
             if item.get("spread_bps") is not None

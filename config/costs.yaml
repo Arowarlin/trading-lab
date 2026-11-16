@@ -603,8 +603,8 @@ assets:
 swap:
   unit: percent_annual
   triple_swap_weekday: 2
-  source: mt5.symbol_info 2026-11-16T00:45:58+00:00
-  synced_at: '2026-11-16T00:45:58+00:00'
+  source: mt5.symbol_info 2026-11-16T01:05:45+00:00
+  synced_at: '2026-11-16T01:05:45+00:00'
   defaults:
     long: null
     short: null
@@ -615,357 +615,612 @@ swap:
       unit: points
       swap_mode: 1
       triple_swap_weekday: 2
-      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+      price_at_read: 0.96615
+      point: 1.0e-05
+      swap_annual_pct_long: 66868.49868032914
+      swap_annual_pct_short: -342653.8322206697
+      read_at: '2026-11-16T01:05:45+00:00'
+      source: mt5.symbol_info 2026-11-16T01:05:45+00:00
     AUDCHF:
       long: 3.02
       short: -10.53
       unit: points
       swap_mode: 1
       triple_swap_weekday: 2
-      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+      price_at_read: 0.56798
+      point: 1.0e-05
+      swap_annual_pct_long: 194073.73499066866
+      swap_annual_pct_short: -676687.5594211062
+      read_at: '2026-11-16T01:05:45+00:00'
+      source: mt5.symbol_info 2026-11-16T01:05:45+00:00
     AUDJPY:
       long: 4.87
       short: -16.87
       unit: points
       swap_mode: 1
       triple_swap_weekday: 2
-      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+      price_at_read: 108.145
+      point: 0.001
+      swap_annual_pct_long: 164367.2846641084
+      swap_annual_pct_short: -569379.0743908642
+      read_at: '2026-11-16T01:05:45+00:00'
+      source: mt5.symbol_info 2026-11-16T01:05:45+00:00
     AUDNZD:
       long: 1.58
       short: -10.94
       unit: points
       swap_mode: 1
       triple_swap_weekday: 2
-      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+      price_at_read: 1.22552
+      point: 1.0e-05
+      swap_annual_pct_long: 47057.575559762394
+      swap_annual_pct_short: -325829.03583784844
+      read_at: '2026-11-16T01:05:45+00:00'
+      source: mt5.symbol_info 2026-11-16T01:05:45+00:00
     AUDUSD:
       long: -2.28
       short: -6.98
       unit: points
       swap_mode: 1
       triple_swap_weekday: 2
-      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+      price_at_read: 0.67693
+      point: 1.0e-05
+      swap_annual_pct_long: -122937.37904953244
+      swap_annual_pct_short: -376360.9235814634
+      read_at: '2026-11-16T01:05:45+00:00'
+      source: mt5.symbol_info 2026-11-16T01:05:45+00:00
     AUS200.CASH:
       long: -259.3
       short: 14.39
       unit: points
       swap_mode: 1
       triple_swap_weekday: 4
-      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+      price_at_read: 9066.5
+      point: 0.01
+      swap_annual_pct_long: -10.438923509623338
+      swap_annual_pct_short: 0.5793139579771687
+      read_at: '2026-11-16T01:05:45+00:00'
+      source: mt5.symbol_info 2026-11-16T01:05:45+00:00
     CADCHF:
       long: 1.16
       short: -7.24
       unit: points
       swap_mode: 1
       triple_swap_weekday: 2
-      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+      price_at_read: 0.58783
+      point: 1.0e-05
+      swap_annual_pct_long: 72027.62703502715
+      swap_annual_pct_short: -449551.7411496522
+      read_at: '2026-11-16T01:05:45+00:00'
+      source: mt5.symbol_info 2026-11-16T01:05:45+00:00
     CADJPY:
       long: 1.27
       short: -7.85
       unit: points
       swap_mode: 1
       triple_swap_weekday: 2
-      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+      price_at_read: 111.925
+      point: 0.001
+      swap_annual_pct_long: 41416.126870672335
+      swap_annual_pct_short: -255997.31963368322
+      read_at: '2026-11-16T01:05:45+00:00'
+      source: mt5.symbol_info 2026-11-16T01:05:45+00:00
     CHFJPY:
       long: -9.98
       short: 1.07
       unit: points
       swap_mode: 1
       triple_swap_weekday: 2
-      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+      price_at_read: 190.384
+      point: 0.001
+      swap_annual_pct_long: -191334.3558282209
+      swap_annual_pct_short: 20513.803680981597
+      read_at: '2026-11-16T01:05:45+00:00'
+      source: mt5.symbol_info 2026-11-16T01:05:45+00:00
     DXY.CASH:
       long: -25.36
       short: 0.76
       unit: points
       swap_mode: 1
       triple_swap_weekday: 4
-      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+      price_at_read: 103.399
+      point: 0.001
+      swap_annual_pct_long: -895.2117525314558
+      swap_annual_pct_short: 26.828112457567286
+      read_at: '2026-11-16T01:05:45+00:00'
+      source: mt5.symbol_info 2026-11-16T01:05:45+00:00
     EU50.CASH:
       long: -125.53
       short: -12.67
       unit: points
       swap_mode: 1
       triple_swap_weekday: 4
-      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+      price_at_read: 6405.97
+      point: 0.01
+      swap_annual_pct_long: -7.152460907559667
+      swap_annual_pct_short: -0.7219125284695369
+      read_at: '2026-11-16T01:05:45+00:00'
+      source: mt5.symbol_info 2026-11-16T01:05:45+00:00
     EURAUD:
       long: -15.2
       short: 2.98
       unit: points
       swap_mode: 1
       triple_swap_weekday: 2
-      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+      price_at_read: 1.62829
+      point: 1.0e-05
+      swap_annual_pct_long: -340725.5464321466
+      swap_annual_pct_short: 66800.14002419716
+      read_at: '2026-11-16T01:05:45+00:00'
+      source: mt5.symbol_info 2026-11-16T01:05:45+00:00
     EURCAD:
       long: -3.43
       short: -3.88
       unit: points
       swap_mode: 1
       triple_swap_weekday: 2
-      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+      price_at_read: 1.57327
+      point: 1.0e-05
+      swap_annual_pct_long: -79576.29650346097
+      swap_annual_pct_short: -90016.33540333192
+      read_at: '2026-11-16T01:05:45+00:00'
+      source: mt5.symbol_info 2026-11-16T01:05:45+00:00
     EURCHF:
       long: 1.7
       short: -11.95
       unit: points
       swap_mode: 1
       triple_swap_weekday: 2
-      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+      price_at_read: 0.92491
+      point: 1.0e-05
+      swap_annual_pct_long: 67087.60852407261
+      swap_annual_pct_short: -471586.4246250987
+      read_at: '2026-11-16T01:05:45+00:00'
+      source: mt5.symbol_info 2026-11-16T01:05:45+00:00
     EURGBP:
       long: -7.6
       short: 0.2
       unit: points
       swap_mode: 1
       triple_swap_weekday: 2
-      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+      price_at_read: 0.83422
+      point: 1.0e-05
+      swap_annual_pct_long: -332526.19213157205
+      swap_annual_pct_short: 8750.689266620318
+      read_at: '2026-11-16T01:05:45+00:00'
+      source: mt5.symbol_info 2026-11-16T01:05:45+00:00
     EURJPY:
       long: 2.2
       short: -12.34
       unit: points
       swap_mode: 1
       triple_swap_weekday: 2
-      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+      price_at_read: 176.099
+      point: 0.001
+      swap_annual_pct_long: 45599.35036541946
+      swap_annual_pct_short: -255770.9015951255
+      read_at: '2026-11-16T01:05:45+00:00'
+      source: mt5.symbol_info 2026-11-16T01:05:45+00:00
     EURNZD:
       long: -5.42
       short: -3.95
       unit: points
       swap_mode: 1
       triple_swap_weekday: 2
-      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+      price_at_read: 1.99561
+      point: 1.0e-05
+      swap_annual_pct_long: -99132.59604832607
+      swap_annual_pct_short: -72246.0801459203
+      read_at: '2026-11-16T01:05:45+00:00'
+      source: mt5.symbol_info 2026-11-16T01:05:45+00:00
     EURUSD:
       long: -8.59
       short: 0.33
       unit: points
       swap_mode: 1
       triple_swap_weekday: 2
-      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+      price_at_read: 1.10232
+      point: 1.0e-05
+      swap_annual_pct_long: -284431.9253937151
+      swap_annual_pct_short: 10926.954060526892
+      read_at: '2026-11-16T01:05:45+00:00'
+      source: mt5.symbol_info 2026-11-16T01:05:45+00:00
     FRA40.CASH:
       long: -164.25
       short: -16.58
       unit: points
       swap_mode: 1
       triple_swap_weekday: 4
-      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+      price_at_read: 8385.52
+      point: 0.01
+      swap_annual_pct_long: -7.149377736860683
+      swap_annual_pct_short: -0.7216845228441406
+      read_at: '2026-11-16T01:05:45+00:00'
+      source: mt5.symbol_info 2026-11-16T01:05:45+00:00
     GBPAUD:
       long: -11.54
       short: -1.19
       unit: points
       swap_mode: 1
       triple_swap_weekday: 2
-      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+      price_at_read: 1.9518
+      point: 1.0e-05
+      swap_annual_pct_long: -215805.92273798544
+      swap_annual_pct_short: -22253.816989445644
+      read_at: '2026-11-16T01:05:45+00:00'
+      source: mt5.symbol_info 2026-11-16T01:05:45+00:00
     GBPCAD:
       long: 0.98
       short: -16.08
       unit: points
       swap_mode: 1
       triple_swap_weekday: 2
-      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+      price_at_read: 1.8858700000000002
+      point: 1.0e-05
+      swap_annual_pct_long: 18967.373148732415
+      swap_annual_pct_short: -311219.75533838494
+      read_at: '2026-11-16T01:05:45+00:00'
+      source: mt5.symbol_info 2026-11-16T01:05:45+00:00
     GBPCHF:
       long: 3.28
       short: -22.16
       unit: points
       swap_mode: 1
       triple_swap_weekday: 2
-      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+      price_at_read: 1.10867
+      point: 1.0e-05
+      swap_annual_pct_long: 107985.24358014556
+      swap_annual_pct_short: -729558.8407731787
+      read_at: '2026-11-16T01:05:45+00:00'
+      source: mt5.symbol_info 2026-11-16T01:05:45+00:00
     GBPJPY:
       long: 6.17
       short: -28.05
       unit: points
       swap_mode: 1
       triple_swap_weekday: 2
-      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+      price_at_read: 211.086
+      point: 0.001
+      swap_annual_pct_long: 106688.74297679617
+      swap_annual_pct_short: -485027.4295784656
+      read_at: '2026-11-16T01:05:45+00:00'
+      source: mt5.symbol_info 2026-11-16T01:05:45+00:00
     GBPNZD:
       long: 0.74
       short: -19.07
       unit: points
       swap_mode: 1
       triple_swap_weekday: 2
-      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+      price_at_read: 2.39216
+      point: 1.0e-05
+      swap_annual_pct_long: 11291.050765835062
+      swap_annual_pct_short: -290973.4298709117
+      read_at: '2026-11-16T01:05:45+00:00'
+      source: mt5.symbol_info 2026-11-16T01:05:45+00:00
     GBPUSD:
       long: -4.43
       short: -5.51
       unit: points
       swap_mode: 1
       triple_swap_weekday: 2
-      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+      price_at_read: 1.32132
+      point: 1.0e-05
+      swap_annual_pct_long: -122373.83828292918
+      swap_annual_pct_short: -152207.6408440045
+      read_at: '2026-11-16T01:05:45+00:00'
+      source: mt5.symbol_info 2026-11-16T01:05:45+00:00
     GER40.CASH:
       long: -525.8
       short: -53.06
       unit: points
       swap_mode: 1
       triple_swap_weekday: 4
-      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+      price_at_read: 26787.84
+      point: 0.01
+      swap_annual_pct_long: -7.164332771884557
+      swap_annual_pct_short: -0.7229735581517585
+      read_at: '2026-11-16T01:05:45+00:00'
+      source: mt5.symbol_info 2026-11-16T01:05:45+00:00
     HK50.CASH:
       long: -480.98
       short: -29.8
       unit: points
       swap_mode: 1
       triple_swap_weekday: 4
-      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+      price_at_read: 23712.58
+      point: 0.01
+      swap_annual_pct_long: -7.403568063871581
+      swap_annual_pct_short: -0.45870166805973867
+      read_at: '2026-11-16T01:05:45+00:00'
+      source: mt5.symbol_info 2026-11-16T01:05:45+00:00
     JP225.CASH:
       long: -939.68
       short: -386.93
       unit: points
       swap_mode: 1
       triple_swap_weekday: 4
-      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+      price_at_read: 60441.5
+      point: 0.01
+      swap_annual_pct_long: -56.7463084139209
+      swap_annual_pct_short: -23.36630460858847
+      read_at: '2026-11-16T01:05:45+00:00'
+      source: mt5.symbol_info 2026-11-16T01:05:45+00:00
     N25.CASH:
       long: -10.7
       short: 1.13
       unit: points
       swap_mode: 1
       triple_swap_weekday: 4
-      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+      price_at_read: 1143.82
+      point: 0.01
+      swap_annual_pct_long: -3.414435837806648
+      swap_annual_pct_short: 0.36058995296462726
+      read_at: '2026-11-16T01:05:45+00:00'
+      source: mt5.symbol_info 2026-11-16T01:05:45+00:00
     NZDCAD:
       long: -1.92
       short: -2.73
       unit: points
       swap_mode: 1
       triple_swap_weekday: 2
-      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+      price_at_read: 0.7883
+      point: 1.0e-05
+      swap_annual_pct_long: -88900.1649118356
+      swap_annual_pct_short: -126404.92198401626
+      read_at: '2026-11-16T01:05:45+00:00'
+      source: mt5.symbol_info 2026-11-16T01:05:45+00:00
     NZDCHF:
       long: 0.9
       short: -6.68
       unit: points
       swap_mode: 1
       triple_swap_weekday: 2
-      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+      price_at_read: 0.46342
+      point: 1.0e-05
+      swap_annual_pct_long: 70886.02131975314
+      swap_annual_pct_short: -526131.8026843899
+      read_at: '2026-11-16T01:05:45+00:00'
+      source: mt5.symbol_info 2026-11-16T01:05:45+00:00
     NZDJPY:
       long: 0.92
       short: -6.97
       unit: points
       swap_mode: 1
       triple_swap_weekday: 2
-      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+      price_at_read: 88.238
+      point: 0.001
+      swap_annual_pct_long: 38056.16627756749
+      swap_annual_pct_short: -288316.8249507015
+      read_at: '2026-11-16T01:05:45+00:00'
+      source: mt5.symbol_info 2026-11-16T01:05:45+00:00
     NZDUSD:
       long: -4.48
       short: 0.02
       unit: points
       swap_mode: 1
       triple_swap_weekday: 2
-      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+      price_at_read: 0.55233
+      point: 1.0e-05
+      swap_annual_pct_long: -296054.89471873705
+      swap_annual_pct_short: 1321.6736371372187
+      read_at: '2026-11-16T01:05:45+00:00'
+      source: mt5.symbol_info 2026-11-16T01:05:45+00:00
     SPN35.CASH:
       long: -392.66
       short: -39.63
       unit: points
       swap_mode: 1
       triple_swap_weekday: 4
-      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+      price_at_read: 20010.5
+      point: 0.01
+      swap_annual_pct_long: -7.16228480047975
+      swap_annual_pct_short: -0.722867994302991
+      read_at: '2026-11-16T01:05:45+00:00'
+      source: mt5.symbol_info 2026-11-16T01:05:45+00:00
     UK100.CASH:
       long: -274.38
       short: 9.05
       unit: points
       swap_mode: 1
       triple_swap_weekday: 4
-      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+      price_at_read: 10908.0
+      point: 0.01
+      swap_annual_pct_long: -9.181215621562156
+      swap_annual_pct_short: 0.3028281994866154
+      read_at: '2026-11-16T01:05:45+00:00'
+      source: mt5.symbol_info 2026-11-16T01:05:45+00:00
     US100.CASH:
       long: -676.55
       short: 1.75
       unit: points
       swap_mode: 1
       triple_swap_weekday: 4
-      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+      price_at_read: 27945.73
+      point: 0.01
+      swap_annual_pct_long: -8.83643941310533
+      swap_annual_pct_short: 0.02285680137895843
+      read_at: '2026-11-16T01:05:45+00:00'
+      source: mt5.symbol_info 2026-11-16T01:05:45+00:00
     US2000.CASH:
       long: -44.79
       short: -21.99
       unit: points
       swap_mode: 1
       triple_swap_weekday: 4
-      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+      price_at_read: 2784.13
+      point: 0.01
+      swap_annual_pct_long: -5.871977960799245
+      swap_annual_pct_short: -2.8828933993743107
+      read_at: '2026-11-16T01:05:45+00:00'
+      source: mt5.symbol_info 2026-11-16T01:05:45+00:00
     US30.CASH:
       long: -1286.21
       short: 38.72
       unit: points
       swap_mode: 1
       triple_swap_weekday: 4
-      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+      price_at_read: 52354.46
+      point: 0.01
+      swap_annual_pct_long: -8.96708035953384
+      swap_annual_pct_short: 0.26994452812616154
+      read_at: '2026-11-16T01:05:45+00:00'
+      source: mt5.symbol_info 2026-11-16T01:05:45+00:00
     US500.CASH:
       long: -149.57
       short: -31.58
       unit: points
       swap_mode: 1
       triple_swap_weekday: 4
-      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+      price_at_read: 7566.45
+      point: 0.01
+      swap_annual_pct_long: -7.215147129763628
+      swap_annual_pct_short: -1.5233960443801253
+      read_at: '2026-11-16T01:05:45+00:00'
+      source: mt5.symbol_info 2026-11-16T01:05:45+00:00
     USDCAD:
       long: 0.62
       short: -10.49
       unit: points
       swap_mode: 1
       triple_swap_weekday: 2
-      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+      price_at_read: 1.42734
+      point: 1.0e-05
+      swap_annual_pct_long: 15854.666722714981
+      swap_annual_pct_short: -268250.73213109706
+      read_at: '2026-11-16T01:05:45+00:00'
+      source: mt5.symbol_info 2026-11-16T01:05:45+00:00
     USDCHF:
       long: 1.96
       short: -13.52
       unit: points
       swap_mode: 1
       triple_swap_weekday: 2
-      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+      price_at_read: 0.83907
+      point: 1.0e-05
+      swap_annual_pct_long: 85261.06284338614
+      swap_annual_pct_short: -588127.3314502961
+      read_at: '2026-11-16T01:05:45+00:00'
+      source: mt5.symbol_info 2026-11-16T01:05:45+00:00
     USDJPY:
       long: 2.71
       short: -21.25
       unit: points
       swap_mode: 1
       triple_swap_weekday: 2
-      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+      price_at_read: 159.755
+      point: 0.001
+      swap_annual_pct_long: 61916.68492378956
+      swap_annual_pct_short: -485509.06074927235
+      read_at: '2026-11-16T01:05:45+00:00'
+      source: mt5.symbol_info 2026-11-16T01:05:45+00:00
     XAGAUD:
       long: -12.13
       short: 4.6
       unit: points
       swap_mode: 1
       triple_swap_weekday: 2
-      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+      price_at_read: 71.188
+      point: 0.001
+      swap_annual_pct_long: -31096.88430634377
+      swap_annual_pct_short: 11792.717873798954
+      read_at: '2026-11-16T01:05:45+00:00'
+      source: mt5.symbol_info 2026-11-16T01:05:45+00:00
     XAGEUR:
       long: -4.68
       short: 1.34
       unit: points
       swap_mode: 1
       triple_swap_weekday: 2
-      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+      price_at_read: 43.717
+      point: 0.001
+      swap_annual_pct_long: -19537.022211039184
+      swap_annual_pct_short: 5593.933709998399
+      read_at: '2026-11-16T01:05:45+00:00'
+      source: mt5.symbol_info 2026-11-16T01:05:45+00:00
     XAGUSD:
       long: -12.9
       short: -0.59
       unit: points
       swap_mode: 1
       triple_swap_weekday: 2
-      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+      price_at_read: 48.19
+      point: 0.001
+      swap_annual_pct_long: -48853.49657605313
+      swap_annual_pct_short: -2234.3847271218096
+      read_at: '2026-11-16T01:05:45+00:00'
+      source: mt5.symbol_info 2026-11-16T01:05:45+00:00
     XAUAUD:
       long: -93.86
       short: -10.3
       unit: points
       swap_mode: 1
       triple_swap_weekday: 2
-      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+      price_at_read: 5710.79
+      point: 0.01
+      swap_annual_pct_long: -599.8977374408795
+      swap_annual_pct_short: -65.8315224338489
+      read_at: '2026-11-16T01:05:45+00:00'
+      source: mt5.symbol_info 2026-11-16T01:05:45+00:00
     XAUEUR:
       long: -35.83
       short: -3.22
       unit: points
       swap_mode: 1
       triple_swap_weekday: 2
-      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+      price_at_read: 3507.0
+      point: 0.01
+      swap_annual_pct_long: -372.9098944967208
+      swap_annual_pct_short: -33.51297405189621
+      read_at: '2026-11-16T01:05:45+00:00'
+      source: mt5.symbol_info 2026-11-16T01:05:45+00:00
     XAUUSD:
       long: -58.74
       short: -4.2
       unit: points
       swap_mode: 1
       triple_swap_weekday: 2
-      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+      price_at_read: 3865.92
+      point: 0.01
+      swap_annual_pct_long: -554.5924385398561
+      swap_annual_pct_short: -39.6542090886516
+      read_at: '2026-11-16T01:05:45+00:00'
+      source: mt5.symbol_info 2026-11-16T01:05:45+00:00
     XCUUSD:
       long: -18.93
       short: 2.34
       unit: points
       swap_mode: 1
       triple_swap_weekday: 2
-      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+      price_at_read: 603.27
+      point: 0.01
+      swap_annual_pct_long: -1145.3329355015167
+      swap_annual_pct_short: 141.57839773235864
+      read_at: '2026-11-16T01:05:45+00:00'
+      source: mt5.symbol_info 2026-11-16T01:05:45+00:00
     XPDUSD:
       long: -43.27
       short: -17.85
       unit: points
       swap_mode: 1
       triple_swap_weekday: 2
-      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+      price_at_read: 993.15
+      point: 0.01
+      swap_annual_pct_long: -1590.2482001711726
+      swap_annual_pct_short: -656.0187282887782
+      read_at: '2026-11-16T01:05:45+00:00'
+      source: mt5.symbol_info 2026-11-16T01:05:45+00:00
     XPTUSD:
       long: -52.32
       short: -27.91
       unit: points
       swap_mode: 1
       triple_swap_weekday: 2
-      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+      price_at_read: 1486.5
+      point: 0.01
+      swap_annual_pct_long: -1284.6821392532795
+      swap_annual_pct_short: -685.3111335351497
+      read_at: '2026-11-16T01:05:45+00:00'
+      source: mt5.symbol_info 2026-11-16T01:05:45+00:00
 slippage:
   optimistic_bps: 0.5
   conservative_bps: 2.0

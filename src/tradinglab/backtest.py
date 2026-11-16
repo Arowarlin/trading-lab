@@ -150,6 +150,7 @@ def run(
             )
             cash += carry_amount
             carry_paid += carry_amount
+            trip_pnl += carry_amount
 
         local = _local_stamp(dt, session_tz)
         force_flat = local.date().isoformat() in flat

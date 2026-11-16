@@ -9,6 +9,7 @@ from tradinglab.backtest import run
 from tradinglab.carry import CostModel, cost_model_from_asset
 from tradinglab.intraday import run_event_backtest
 from tradinglab.intraday_costs import asset_costs
+from tradinglab.swap_rates import annual_pct_from_points
 
 
 def _daily_bars(closes: list[float]) -> pd.DataFrame:
@@ -65,6 +66,44 @@ def test_costs_yaml_no_inventa_swap_si_falta_mt5(tmp_path):
     model = cost_model_from_asset(asset)
     assert model.provisional is True
     assert model.status == "costes provisionales"
+
+
+def test_conversion_puntos_a_tasa_anual_us100():
+    value = annual_pct_from_points(
+        -676.55,
+        point=0.01,
+        contract_size=1.0,
+        price=27_945.73,
+    )
+    assert value == pytest.approx(-8.8364, abs=0.001)
+
+
+def test_swap_historico_con_dff_sintetico():
+    model = CostModel(
+        swap_long=-676.55,
+        swap_short=1.75,
+        swap_unit="points",
+        triple_weekday=4,
+        point=0.01,
+        contract_size=1.0,
+        swap_annual_pct_long=-8.8364,
+        swap_annual_pct_short=0.0229,
+        read_date=date(2026, 11, 16),
+        dff={date(2020, 1, 1): 1.5},
+        markup_long=-12.7164,
+        markup_short=-3.8571,
+        fixed_days=30,
+    )
+    historical = model.daily_cash(
+        "long", notional=100_000.0, shares=1.0, day=date(2020, 1, 1)
+    )
+    assert historical == pytest.approx(
+        100_000.0 * (1.5 - 12.7164) / 100.0 / 365.0
+    )
+    fixed = model.daily_cash(
+        "long", notional=100_000.0, shares=1.0, day=date(2026, 11, 10)
+    )
+    assert fixed == pytest.approx(-6.7655)
 
 
 def test_us100_semana_completa_triple_viernes():
@@ -170,6 +209,44 @@ def test_backtest_aplica_carry_y_marca_estado():
     assert with_carry.metrics["carry_paid"] < 0
     assert with_carry.metrics["time_in_market"] > 0
     assert without.metrics["carry_paid"] == 0.0
+
+
+def test_pf_no_sube_al_añadir_carry():
+    closes = [100, 100, 90, 90, 90, 90, 120]
+    index = pd.bdate_range("2026-11-09", periods=len(closes), tz="UTC")
+    bars = pd.DataFrame(
+        {
+            "open": closes,
+            "high": closes,
+            "low": closes,
+            "close": closes,
+        },
+        index=index,
+    )
+    target = pd.Series([1, 1, 0, 1, 1, 0, 0], index=index, dtype=float)
+    model = CostModel(
+        swap_long=-3.65,
+        swap_short=-1.0,
+        swap_unit="percent_annual",
+    )
+    without = run(
+        bars, target, starting_cash=100_000.0, commission_bps=0, slippage_bps=0
+    )
+    with_carry = run(
+        bars,
+        target,
+        starting_cash=100_000.0,
+        commission_bps=0,
+        slippage_bps=0,
+        carry=model,
+    )
+
+    def pf(pnls):
+        wins = sum(value for value in pnls if value > 0)
+        losses = -sum(value for value in pnls if value < 0)
+        return wins / losses if losses else None
+
+    assert pf(with_carry.trade_pnls) < pf(without.trade_pnls)
 
 
 def test_event_backtest_cobra_carry_al_cruzar_noches():

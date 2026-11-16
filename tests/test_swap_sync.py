@@ -78,6 +78,17 @@ def test_comisiones_del_catalogo_coinciden_con_la_especificacion():
     assert us100.commission_type == "zero"
 
 
+def test_swap_sync_guarda_tasa_anual_y_precio_de_lectura():
+    info = _info(1, -676.55, 1.75, triple=5)
+    info.update(
+        {"point": 0.01, "trade_contract_size": 1.0, "bid": 27_945.73}
+    )
+    converted = convert_symbol("US100.CASH", info, READ_AT)
+    assert converted["price_at_read"] == pytest.approx(27_945.73)
+    assert converted["swap_annual_pct_long"] == pytest.approx(-8.8364, abs=0.001)
+    assert converted["swap_annual_pct_short"] == pytest.approx(0.0229, abs=0.001)
+
+
 def test_resuelve_us100_cash_case_insensitive_y_guarda_canonico():
     names = [
         SimpleNamespace(name="EURUSD"),

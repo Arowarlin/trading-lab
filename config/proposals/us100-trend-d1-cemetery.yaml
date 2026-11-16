@@ -32,12 +32,15 @@ evidence:
     max_drawdown: -0.202875
     trades: 10
   with_swap:
-    cagr: 0.000684
-    sharpe: 0.040907
-    max_drawdown: -0.246595
+    cagr: 0.009395
+    sharpe: 0.190764
+    max_drawdown: -0.206919
     trades: 10
-    swap_total: -71265.40
-    swap_pct_gross: 0.963701
+    swap_total: -49306.41
+    swap_pct_gross: 0.530193
+  buy_hold:
+    final_equity: 246074.32
+    sanity_ok: true
   report: reports/research/us100-trend-d1/cost_reeval.md
 changes:
   - bot: us100-trend-d1
