@@ -339,6 +339,24 @@ def _prop_state_from_mt5(broker, rules: PropRules) -> AccountState:
     )
 
 
+def _mt5_account_for_rules(rules: PropRules):
+    """Cuenta MT5 activa con topes agregados; ftmo_demo tiene prioridad."""
+    from .accounts import load_accounts
+
+    candidates = [
+        account
+        for account in load_accounts().values()
+        if account.broker == "mt5" and account.risk_caps.enabled
+    ]
+    for account in candidates:
+        if account.id == "ftmo_demo":
+            return account
+    for account in candidates:
+        if abs(float(account.account_size) - float(rules.account_size)) < 1e-6:
+            return account
+    return candidates[0] if candidates else None
+
+
 @app.command()
 def version() -> None:
     """Muestra la versión instalada."""
@@ -641,7 +659,7 @@ def doctor(network: bool = typer.Option(False, "--network", help="Probar descarg
         except Exception as exc:
             table.add_row("MetaTrader 5", WARN, str(exc)[:160])
 
-    # Riesgo abierto por símbolo frente al tope de accounts.yaml.
+    # Riesgo abierto por símbolo, grupo y total frente a accounts.yaml.
     if settings:
         try:
             from .accounts import load_accounts
@@ -649,11 +667,28 @@ def doctor(network: bool = typer.Option(False, "--network", help="Probar descarg
             from .symbol_risk import open_risk_report
 
             account = load_accounts().get("ftmo_demo")
-            if account is not None and account.symbol_risk_caps:
+            if account is not None and (
+                account.risk_caps.enabled or account.symbol_risk_caps
+            ):
                 broker = get_mt5_broker(settings, DEFAULT_DB, dry_run=True)
                 broker.connect()
                 try:
-                    risk = open_risk_report(DEFAULT_DB, account, broker=broker)
+                    balance = account.account_size
+                    try:
+                        state = PropGuard.state_from_equity(
+                            _prop_rules(),
+                            broker.equity_series(),
+                            initial_balance=account.account_size,
+                            open_positions=len(broker.positions() or []),
+                        )
+                        balance = float(
+                            state.day_start_balance or state.day_start_equity or balance
+                        )
+                    except Exception:
+                        pass
+                    risk = open_risk_report(
+                        DEFAULT_DB, account, broker=broker, balance=balance
+                    )
                 finally:
                     try:
                         broker.shutdown()
@@ -671,13 +706,41 @@ def doctor(network: bool = typer.Option(False, "--network", help="Probar descarg
                     )
                     if item["open_risk_usd"] > cap + 1e-9:
                         over = True
+                for group, item in risk["groups"].items():
+                    cap = item.get("cap_usd")
+                    if cap is None:
+                        continue
+                    parts.append(
+                        f"{group} {item['open_risk_usd']:,.0f}/{cap:,.0f}"
+                    )
+                    if item["open_risk_usd"] > cap + 1e-9:
+                        over = True
+                total = risk["total"]
+                if total.get("cap_usd") is not None:
+                    parts.append(
+                        f"total {total['open_risk_usd']:,.0f}/{total['cap_usd']:,.0f}"
+                    )
+                    if total["open_risk_usd"] > total["cap_usd"] + 1e-9:
+                        over = True
+                if risk["ea_over"]:
+                    parts.append("EA sobre límite")
+                if risk["missing_sl"]:
+                    symbols = ",".join(
+                        str(item.get("symbol")) for item in risk["missing_sl"]
+                    )
+                    parts.insert(0, f"sin SL: {symbols}")
+                status = (
+                    FAIL
+                    if risk["missing_sl"]
+                    else WARN if over or risk["ea_over"] else OK
+                )
                 table.add_row(
-                    "Riesgo símbolo",
-                    WARN if over else OK,
+                    "Riesgo abierto",
+                    status,
                     "; ".join(parts)[:180] if parts else "sin riesgo abierto",
                 )
         except Exception as exc:
-            table.add_row("Riesgo símbolo", WARN, str(exc)[:160])
+            table.add_row("Riesgo abierto", WARN, str(exc)[:160])
 
     # Reglas de fondeo
     if settings:
@@ -6643,6 +6706,26 @@ def mt5_run(
         positions = broker.positions(inst.symbol)
         signed = sum(p["volume"] if p["side"] == "buy" else -p["volume"] for p in positions)
         state = _prop_state_from_mt5(broker, rules)
+        from .symbol_risk import (
+            alert_risk_events,
+            group_cap_usd,
+            risk_group,
+            risk_snapshot,
+            symbol_cap_usd,
+            total_cap_usd,
+        )
+
+        account = _mt5_account_for_rules(rules)
+        account_id = account.id if account is not None else "ftmo_demo"
+        balance = float(state.day_start_balance or state.day_start_equity or state.equity)
+        risk = risk_snapshot(
+            broker.positions(),
+            broker,
+            account_id=account_id,
+            account=account,
+            balance=balance,
+        )
+        alert_risk_events(account_id, risk, db_path=DEFAULT_DB)
 
         # Protección del capital: si la cuenta ya está fuera del suelo efectivo,
         # lo único seguro es aplanar TODA la cuenta. Cerrar siempre está permitido.
@@ -6762,35 +6845,30 @@ def mt5_run(
         base_report = guard.evaluate(state)
         budget = min(rules.account_size * risk_pct, max(base_report.remaining_usd * 0.5, 0.0))
         lots = inst.lots_for_risk(budget, stop_distance, quote_rate=qr, cap_lots=rules.max_lots)
-        # Riesgo abierto de TODAS las posiciones, cada una con su $/lote.
-        # Sin esto, los lotes de otro símbolo se multiplicaban por este riesgo/lote.
-        open_risk_usd = 0.0
-        for position in broker.positions():
-            volume = float(position["volume"])
-            stop_price = float(position.get("sl") or 0.0)
-            distance = (
-                abs(float(position["price_open"]) - stop_price)
-                if stop_price > 0
-                else 0.0
+        if risk["ea_over"]:
+            first = risk["ea_over"][0]
+            reason = (
+                f"skip: riesgo agregado ({first['kind']}) EA {first['name']} "
+                f"{first['risk_usd']:,.2f} > {first['cap_usd']:,.2f}"
             )
-            try:
-                other = broker.instrument(position["symbol"])
-                other_rate = _quote_rate(broker, other)
-            except Exception:
-                # Sin instrumento/cambio: se usa el riesgo/lote de la orden actual.
-                open_risk_usd += volume * max(risk_per_lot, 0.0)
-                continue
-            if distance > 0:
-                open_risk_usd += volume * other.risk_per_lot(
-                    distance, quote_rate=other_rate
-                )
-            else:
-                open_risk_usd += volume * max(risk_per_lot, 0.0)
+            console.print(f"[red]{reason}[/red]")
+            _record_signal(inst.symbol, strategy, "hold", target, tick["bid"], reason)
+            return
+        group = risk_group(account, inst.symbol)
         report = guard.evaluate(
             state,
             proposed_lots=lots,
             risk_per_lot=risk_per_lot,
-            open_risk_usd=open_risk_usd,
+            open_risk_usd=risk["total_usd"],
+            symbol_open_risk_usd=risk["by_symbol"].get(inst.symbol.upper(), 0.0),
+            symbol_risk_cap_usd=symbol_cap_usd(account, inst.symbol, balance),
+            symbol=inst.symbol,
+            group_open_risk_usd=risk["by_group"].get(group, 0.0),
+            group_risk_cap_usd=group_cap_usd(account, group, balance),
+            group=group,
+            total_open_risk_usd=risk["total_usd"],
+            total_risk_cap_usd=total_cap_usd(account, balance),
+            missing_sl=bool(risk["missing_sl"]),
         )
 
         console.print(
@@ -6803,10 +6881,11 @@ def mt5_run(
             console.print("[yellow]El lote mínimo no cabe en el presupuesto.[/yellow]")
             return
         if not report.allowed:
-            console.print("[red]Orden bloqueada por el guard de fondeo.[/red]")
-            _record_signal(
-                inst.symbol, strategy, "hold", target, tick["bid"], f"blocked: {report.reason}"
-            )
+            reason = str(report.reason)
+            if reason.startswith("riesgo agregado"):
+                reason = f"skip: {reason}"
+            console.print(f"[red]Orden bloqueada: {reason}[/red]")
+            _record_signal(inst.symbol, strategy, "hold", target, tick["bid"], reason)
             return
 
         sign = 1 if desired > 0 else -1

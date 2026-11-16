@@ -61,6 +61,12 @@ class GuardReport:
     effective_daily_limit: float
     effective_max_loss: float
     warnings: list[str] = field(default_factory=list)
+    risk_kind: str = ""
+    group_risk_usd: float = 0.0
+    group_cap_usd: float | None = None
+    total_risk_usd: float = 0.0
+    total_cap_usd: float | None = None
+    missing_sl: bool = False
 
     @property
     def breached(self) -> bool:
@@ -128,6 +134,12 @@ class PropGuard:
         symbol_open_risk_usd: float = 0.0,
         symbol_risk_cap_usd: float | None = None,
         symbol: str | None = None,
+        group_open_risk_usd: float = 0.0,
+        group_risk_cap_usd: float | None = None,
+        group: str | None = None,
+        total_open_risk_usd: float | None = None,
+        total_risk_cap_usd: float | None = None,
+        missing_sl: bool = False,
     ) -> GuardReport:
         rules = self.rules
         daily_floor, max_floor = self.floors(state)
@@ -160,10 +172,23 @@ class PropGuard:
         )
 
         remaining = equity - effective_floor
+        proposed_risk = 0.0
 
         def report(
-            allowed: bool, severity: Severity, reason: str, *, extra: list[str] | None = None
+            allowed: bool,
+            severity: Severity,
+            reason: str,
+            *,
+            extra: list[str] | None = None,
+            risk_kind: str = "",
         ) -> GuardReport:
+            group_value = max(0.0, float(group_open_risk_usd)) + proposed_risk
+            if total_open_risk_usd is not None:
+                total_value = max(0.0, float(total_open_risk_usd)) + proposed_risk
+            elif open_risk_usd is not None:
+                total_value = max(0.0, float(open_risk_usd)) + proposed_risk
+            else:
+                total_value = 0.0
             return GuardReport(
                 allowed=allowed,
                 severity=severity,
@@ -180,6 +205,12 @@ class PropGuard:
                 effective_daily_limit=rules.effective_daily_limit_usd,
                 effective_max_loss=rules.effective_max_loss_usd,
                 warnings=list(warnings) + list(extra or []),
+                risk_kind=risk_kind,
+                group_risk_usd=group_value,
+                group_cap_usd=float(group_risk_cap_usd) if group_risk_cap_usd is not None else None,
+                total_risk_usd=total_value,
+                total_cap_usd=float(total_risk_cap_usd) if total_risk_cap_usd is not None else None,
+                missing_sl=missing_sl,
             )
 
         if closing:
@@ -207,6 +238,14 @@ class PropGuard:
                 False,
                 "block",
                 f"filtro de sesión: {session_reason or 'fuera de ventana'}",
+            )
+
+        if missing_sl:
+            return report(
+                False,
+                "block",
+                "riesgo agregado (total): posición sin SL; riesgo abierto bloqueado",
+                risk_kind="missing_sl",
             )
 
         if remaining <= 0.25 * rules.effective_daily_limit_usd:
@@ -249,23 +288,45 @@ class PropGuard:
                 return report(
                     False,
                     "block",
-                    f"riesgo del símbolo {symbol or '?'} {symbol_risk:,.2f} > "
-                    f"{float(symbol_risk_cap_usd):,.2f}",
+                    f"riesgo agregado (símbolo {symbol or '?'}): riesgo del símbolo "
+                    f"{symbol_risk:,.2f} > {float(symbol_risk_cap_usd):,.2f}",
+                    risk_kind="symbol",
                 )
 
-        if rules.max_open_risk_pct is not None and risk_per_lot > 0:
-            if open_risk_usd is not None:
-                # Riesgo real por posición (cada símbolo tiene su $/lote); no se
-                # multiplican los lotes de otro símbolo por este riesgo/lote.
-                open_risk = max(0.0, float(open_risk_usd)) + proposed_risk
-            else:
-                open_risk = (state.open_lots + proposed_lots) * risk_per_lot
-            cap = rules.account_size * rules.max_open_risk_pct
-            if open_risk > cap:
+        if group_risk_cap_usd is not None and proposed_risk > 0:
+            group_risk = max(0.0, float(group_open_risk_usd)) + proposed_risk
+            if group_risk > float(group_risk_cap_usd) + 1e-9:
                 return report(
                     False,
                     "block",
-                    f"riesgo abierto {open_risk:,.2f} > {cap:,.2f} ({rules.max_open_risk_pct:.1%})",
+                    f"riesgo agregado (grupo {group or '?'}): riesgo del grupo "
+                    f"{group_risk:,.2f} > {float(group_risk_cap_usd):,.2f}",
+                    risk_kind="group",
+                )
+
+        if rules.max_open_risk_pct is not None or total_risk_cap_usd is not None:
+            if total_open_risk_usd is not None:
+                # Riesgo real de toda la cuenta, no solo del carril que abre.
+                open_risk = max(0.0, float(total_open_risk_usd)) + proposed_risk
+            elif open_risk_usd is not None:
+                # Compatibilidad con llamadas que ya pasan el riesgo agregado.
+                open_risk = max(0.0, float(open_risk_usd)) + proposed_risk
+            else:
+                open_risk = (state.open_lots + proposed_lots) * risk_per_lot
+            if total_risk_cap_usd is not None:
+                # El tope agregado aprobado (4 %) sustituye al genérico de
+                # prop.yaml para esta cuenta; el colchón de la cuenta sigue
+                # aplicándose por separado.
+                cap = float(total_risk_cap_usd)
+            else:
+                cap = rules.account_size * float(rules.max_open_risk_pct or 0.0)
+            if open_risk > cap + 1e-9:
+                return report(
+                    False,
+                    "block",
+                    f"riesgo agregado (total): riesgo abierto {open_risk:,.2f} > "
+                    f"{cap:,.2f}",
+                    risk_kind="total",
                 )
 
         severity: Severity = "warn" if warnings else "ok"
@@ -353,6 +414,7 @@ class AccountSnapshot:
     open_positions: int = 0
     open_risk_usd: float = 0.0
     trades_today: int = 0
+    missing_sl: bool = False
 
 
 @dataclass
@@ -368,6 +430,11 @@ class AccountGuardReport:
     cluster_cap_usd: float | None = None
     symbol_risk_usd: float = 0.0
     symbol_cap_usd: float | None = None
+    group_risk_usd: float = 0.0
+    group_cap_usd: float | None = None
+    total_cap_usd: float | None = None
+    missing_sl: bool = False
+    risk_kind: str = ""
 
 
 def evaluate_account(
@@ -384,6 +451,12 @@ def evaluate_account(
     symbol_open_risk_usd: float = 0.0,
     symbol_risk_cap_usd: float | None = None,
     symbol: str | None = None,
+    group_open_risk_usd: float = 0.0,
+    group_risk_cap_usd: float | None = None,
+    group: str | None = None,
+    total_open_risk_usd: float | None = None,
+    total_risk_cap_usd: float | None = None,
+    missing_sl: bool = False,
 ) -> AccountGuardReport:
     """Guard agregado para una cuenta compartida.
 
@@ -408,9 +481,17 @@ def evaluate_account(
             if max_trades_per_day is None
             else min(int(max_trades_per_day), limits.max_trades_per_day)
         )
-    open_risk = max(0.0, float(snapshot.open_risk_usd))
+    open_risk = max(
+        0.0,
+        float(
+            total_open_risk_usd
+            if total_open_risk_usd is not None
+            else snapshot.open_risk_usd
+        ),
+    )
     proposed = max(0.0, float(proposed_risk_usd))
     total_risk = open_risk + proposed
+    missing_sl = bool(missing_sl or snapshot.missing_sl)
     if closing:
         return AccountGuardReport(
             True,
@@ -420,6 +501,19 @@ def evaluate_account(
             open_risk,
             proposed,
             0.0,
+        )
+
+    if missing_sl:
+        return AccountGuardReport(
+            False,
+            "riesgo agregado (total): posición sin SL; riesgo abierto bloqueado",
+            "block",
+            total_risk,
+            open_risk,
+            proposed,
+            0.0,
+            missing_sl=True,
+            risk_kind="missing_sl",
         )
 
     state = AccountState(
@@ -475,8 +569,8 @@ def evaluate_account(
     ):
         return AccountGuardReport(
             False,
-            f"riesgo del símbolo {symbol or '?'} {symbol_risk:,.2f} > "
-            f"{float(symbol_risk_cap_usd):,.2f}",
+            f"riesgo agregado (símbolo {symbol or '?'}): riesgo del símbolo "
+            f"{symbol_risk:,.2f} > {float(symbol_risk_cap_usd):,.2f}",
             "block",
             total_risk,
             open_risk,
@@ -484,20 +578,55 @@ def evaluate_account(
             base.remaining_usd,
             symbol_risk_usd=symbol_risk,
             symbol_cap_usd=float(symbol_risk_cap_usd),
+            risk_kind="symbol",
         )
 
-    cap = base.remaining_usd
-    if rules.max_open_risk_pct is not None:
-        cap = min(cap, rules.account_size * rules.max_open_risk_pct)
-    if total_risk > cap + 1e-9:
+    group_risk = max(0.0, float(group_open_risk_usd)) + proposed
+    if (
+        group_risk_cap_usd is not None
+        and group_risk > float(group_risk_cap_usd) + 1e-9
+    ):
         return AccountGuardReport(
             False,
-            f"riesgo agregado {total_risk:,.2f} > límite {cap:,.2f}",
+            f"riesgo agregado (grupo {group or '?'}): riesgo del grupo "
+            f"{group_risk:,.2f} > {float(group_risk_cap_usd):,.2f}",
             "block",
             total_risk,
             open_risk,
             proposed,
             base.remaining_usd,
+            group_risk_usd=group_risk,
+            group_cap_usd=float(group_risk_cap_usd),
+            risk_kind="group",
+        )
+
+    total_limit = (
+        float(total_risk_cap_usd)
+        if total_risk_cap_usd is not None
+        else (
+            rules.account_size * rules.max_open_risk_pct
+            if rules.max_open_risk_pct is not None
+            else base.remaining_usd
+        )
+    )
+    cap = base.remaining_usd
+    if total_risk_cap_usd is not None:
+        # El tope agregado aprobado sustituye al max_open_risk_pct genérico.
+        cap = min(cap, float(total_risk_cap_usd))
+    elif rules.max_open_risk_pct is not None:
+        cap = min(cap, rules.account_size * rules.max_open_risk_pct)
+    if total_risk > cap + 1e-9:
+        return AccountGuardReport(
+            False,
+            f"riesgo agregado (total): riesgo abierto {total_risk:,.2f} > "
+            f"{cap:,.2f}",
+            "block",
+            total_risk,
+            open_risk,
+            proposed,
+            base.remaining_usd,
+            total_cap_usd=total_limit,
+            risk_kind="total",
         )
 
     cluster_risk = max(0.0, float(cluster_open_risk_usd)) + proposed
@@ -531,6 +660,9 @@ def evaluate_account(
         cluster_cap,
         symbol_risk,
         float(symbol_risk_cap_usd) if symbol_risk_cap_usd is not None else None,
+        group_risk_usd=group_risk,
+        group_cap_usd=float(group_risk_cap_usd) if group_risk_cap_usd is not None else None,
+        total_cap_usd=total_limit,
     )
 
 

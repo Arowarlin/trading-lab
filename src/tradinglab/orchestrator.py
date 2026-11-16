@@ -237,12 +237,13 @@ def run_bot(
         if account is not None
         else rules_from_settings(settings)
     )
-    open_risk_usd = _open_risk_usd(snap.get("positions") or [])
     trades_today = _trades_today(
         spec.id, account.id if account is not None else "paper_main"
     )
     opened_today = 0
     opened_risk = 0.0
+    opened_by_symbol: dict[str, float] = {}
+    opened_by_group: dict[str, float] = {}
     try:
         account_state = PropGuard.state_from_equity(
             prop_rules,
@@ -257,6 +258,25 @@ def run_bot(
         day_start_equity = snap["equity"]
         peak_equity = snap["equity"]
         realized_today = 0.0
+    from .symbol_risk import (
+        alert_risk_events,
+        group_cap_usd,
+        risk_group,
+        risk_snapshot,
+        symbol_cap_usd,
+        total_cap_usd,
+    )
+
+    account_id = account.id if account is not None else "paper_main"
+    positions_all = snap.get("positions") or []
+    risk = risk_snapshot(
+        positions_all,
+        broker,
+        account_id=account_id,
+        account=account,
+        balance=day_start_equity,
+    )
+    alert_risk_events(account_id, risk, db_path=DEFAULT_DB)
     session = session_block(
         prop_rules,
         asset_class="equity",
@@ -509,15 +529,24 @@ def run_bot(
                 continue
 
         if delta > 0:
+            if risk["ea_over"]:
+                first = risk["ea_over"][0]
+                action.status = "bloqueado"
+                action.detail = (
+                    f"skip: riesgo agregado ({first['kind']}) EA {first['name']} "
+                    f"{first['risk_usd']:,.2f} > {first['cap_usd']:,.2f}"
+                )
+                actions.append(action)
+                continue
             proposed_risk = abs(delta) * risk_per_share
-            from .symbol_risk import open_risk_by_symbol, symbol_cap_usd
-
-            symbol_risk = open_risk_by_symbol(
-                snap.get("positions") or [],
-                broker,
-                account_id=account.id if account is not None else "paper_main",
-            ).get(ticker.upper(), 0.0)
-            symbol_cap = symbol_cap_usd(account, ticker)
+            symbol = ticker.upper()
+            group = risk_group(account, symbol)
+            symbol_risk_value = risk["by_symbol"].get(symbol, 0.0) + opened_by_symbol.get(
+                symbol, 0.0
+            )
+            group_risk_value = risk["by_group"].get(group, 0.0) + opened_by_group.get(
+                group, 0.0
+            )
             account_guard = evaluate_account(
                 prop_rules,
                 AccountSnapshot(
@@ -526,9 +555,10 @@ def run_bot(
                     initial_balance=prop_rules.account_size,
                     peak_equity=peak_equity,
                     realized_pnl_today=realized_today,
-                    open_positions=len(snap.get("positions") or []),
-                    open_risk_usd=open_risk_usd + opened_risk,
+                    open_positions=len(positions_all),
+                    open_risk_usd=risk["total_usd"] + opened_risk,
                     trades_today=trades_today + opened_today,
+                    missing_sl=bool(risk["missing_sl"]),
                 ),
                 limits=limits,
                 max_risk_pct=profile.max_risk_pct if profile else None,
@@ -536,17 +566,27 @@ def run_bot(
                 proposed_risk_usd=proposed_risk,
                 cluster_open_risk_usd=cluster_open_risk_usd,
                 max_cluster_risk_pct=max_cluster_risk_pct,
-                symbol_open_risk_usd=symbol_risk,
-                symbol_risk_cap_usd=symbol_cap,
-                symbol=ticker,
+                symbol_open_risk_usd=symbol_risk_value,
+                symbol_risk_cap_usd=symbol_cap_usd(account, symbol, day_start_equity),
+                symbol=symbol,
+                group_open_risk_usd=group_risk_value,
+                group_risk_cap_usd=group_cap_usd(account, group, day_start_equity),
+                group=group,
+                total_open_risk_usd=risk["total_usd"] + opened_risk,
+                total_risk_cap_usd=total_cap_usd(account, day_start_equity),
             )
             if not account_guard.allowed:
                 action.status = "bloqueado"
-                action.detail = f"guard de cuenta: {account_guard.reason}"
+                detail = str(account_guard.reason)
+                if detail.startswith("riesgo agregado"):
+                    detail = f"skip: {detail}"
+                else:
+                    detail = f"guard de cuenta: {detail}"
+                action.detail = detail
                 actions.append(action)
                 send_alert(
                     "account_guard_block",
-                    f"{spec.id}/{ticker}: {account_guard.reason}",
+                    f"{spec.id}/{ticker}: {detail}",
                     severity="warning",
                 )
                 continue
@@ -596,7 +636,10 @@ def run_bot(
             action.status = "ejecutado"
             action.order = order
             if delta > 0:
-                opened_risk += abs(delta) * risk_per_share
+                opened = abs(delta) * risk_per_share
+                opened_risk += opened
+                opened_by_symbol[symbol] = opened_by_symbol.get(symbol, 0.0) + opened
+                opened_by_group[group] = opened_by_group.get(group, 0.0) + opened
                 opened_today += 1
         except Exception as exc:
             action.status = "error"

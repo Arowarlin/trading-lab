@@ -44,11 +44,19 @@ accounts:
     pocket: intraday_fx
     symbol_risk_caps:
       US100.cash: 0.02
+    account_risk_caps:
+      symbol_pct: 0.02
+      group_pct: 0.03
+      total_pct: 0.04
+      groups:
+        indices_us: ["US100", "US500", "US30", "US2000"]
+        metales: ["XAU", "XAG"]
+        # `usd` se calcula en código: cualquier par que contenga USD.
     limits:
       daily_loss_pct: 0.05
       max_drawdown_pct: 0.10
       per_trade_risk_pct: 0.005
-      max_open_risk_pct: 0.02
+      max_open_risk_pct: 0.04
       max_trades_per_day: 4
 
   # Cuenta dedicada al EA externo cuando exista un FTMO Free Trial nuevo.
@@ -66,11 +74,19 @@ accounts:
     pocket: intraday_fx
     symbol_risk_caps:
       US100.cash: 0.02
+    account_risk_caps:
+      symbol_pct: 0.02
+      group_pct: 0.03
+      total_pct: 0.04
+      groups:
+        indices_us: ["US100", "US500", "US30", "US2000"]
+        metales: ["XAU", "XAG"]
+        # `usd` se calcula en código: cualquier par que contenga USD.
     limits:
       daily_loss_pct: 0.05
       max_drawdown_pct: 0.10
       per_trade_risk_pct: 0.005
-      max_open_risk_pct: 0.02
+      max_open_risk_pct: 0.04
       max_trades_per_day: 4
 
   topstep_template:

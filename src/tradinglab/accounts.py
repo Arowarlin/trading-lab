@@ -39,6 +39,23 @@ DEFAULT_LOOSEN_WAIT_DAYS = 1
 
 
 @dataclass(frozen=True)
+class AccountRiskCaps:
+    """Topes agregados de riesgo abierto, en fracción del balance inicial."""
+
+    symbol_pct: float | None = None
+    group_pct: float | None = None
+    total_pct: float | None = None
+    groups: dict[str, tuple[str, ...]] = dc_field(default_factory=dict)
+
+    @property
+    def enabled(self) -> bool:
+        return any(
+            value is not None
+            for value in (self.symbol_pct, self.group_pct, self.total_pct)
+        )
+
+
+@dataclass(frozen=True)
 class AccountDefinition:
     id: str
     name: str
@@ -53,6 +70,13 @@ class AccountDefinition:
     defaults: AccountLimits
     account_daily_stop: float | None = None
     symbol_risk_caps: dict[str, float] = dc_field(default_factory=dict)
+    risk_caps: AccountRiskCaps = dc_field(default_factory=AccountRiskCaps)
+
+
+def _optional_float(value: Any) -> float | None:
+    if value in (None, ""):
+        return None
+    return float(value)
 
 
 def _limits_from_dict(data: dict[str, Any]) -> AccountLimits:
@@ -74,6 +98,19 @@ def load_accounts(path: str | Path | None = None) -> dict[str, AccountDefinition
     for account_id, item in (raw.get("accounts") or {}).items():
         data = item or {}
         daily_stop_raw = data.get("account_daily_stop")
+        raw_caps = data.get("account_risk_caps") or {}
+        risk_caps = AccountRiskCaps(
+            symbol_pct=_optional_float(raw_caps.get("symbol_pct")),
+            group_pct=_optional_float(raw_caps.get("group_pct")),
+            total_pct=_optional_float(raw_caps.get("total_pct")),
+            groups={
+                str(name): tuple(
+                    str(member).strip().upper()
+                    for member in (members or [])
+                )
+                for name, members in (raw_caps.get("groups") or {}).items()
+            },
+        )
         out[str(account_id)] = AccountDefinition(
             id=str(account_id),
             name=str(data.get("name") or account_id),
@@ -95,6 +132,7 @@ def load_accounts(path: str | Path | None = None) -> dict[str, AccountDefinition
                 str(symbol).strip().upper(): float(value)
                 for symbol, value in (data.get("symbol_risk_caps") or {}).items()
             },
+            risk_caps=risk_caps,
         )
     return out
 
@@ -194,15 +232,21 @@ def effective_limits(
         daily_candidates.append(float(firm["daily_loss_pct"]))
     if account.account_daily_stop is not None:
         daily_candidates.append(float(account.account_daily_stop))
+    if account.risk_caps.total_pct is not None:
+        # Tope agregado aprobado para esta cuenta; sustituye al genérico de
+        # prop.yaml, que sigue intacto para las demás cuentas.
+        max_open = float(account.risk_caps.total_pct)
+    elif firm["max_open_risk_pct"] is not None:
+        max_open = min(own.max_open_risk_pct, float(firm["max_open_risk_pct"]))
+    else:
+        max_open = own.max_open_risk_pct
     return AccountLimits(
         daily_loss_pct=min(daily_candidates),
         max_drawdown_pct=min(own.max_drawdown_pct, firm["max_drawdown_pct"])
         if firm["max_drawdown_pct"] is not None
         else own.max_drawdown_pct,
         per_trade_risk_pct=own.per_trade_risk_pct,
-        max_open_risk_pct=min(own.max_open_risk_pct, firm["max_open_risk_pct"])
-        if firm["max_open_risk_pct"] is not None
-        else own.max_open_risk_pct,
+        max_open_risk_pct=max_open,
         max_trades_per_day=own.max_trades_per_day,
     )
 
@@ -422,6 +466,7 @@ def cash_flows(
 __all__ = [
     "ACCOUNTS_FILE",
     "AccountDefinition",
+    "AccountRiskCaps",
     "DEFAULT_LOOSEN_WAIT_DAYS",
     "FLOW_KINDS",
     "LIMIT_FIELDS",

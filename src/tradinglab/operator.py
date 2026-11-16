@@ -775,10 +775,34 @@ class OperatorService:
                 open_positions=len(positions),
             )
             state.equity = equity
-            open_risk = sum(
-                abs(float(position.get("value") or 0.0)) * 0.02
-                for position in positions
+            from .symbol_risk import (
+                alert_risk_events,
+                group_cap_usd,
+                risk_group,
+                risk_snapshot,
+                symbol_cap_usd,
+                total_cap_usd,
             )
+
+            balance = float(
+                state.day_start_balance or state.day_start_equity or equity
+            )
+            risk = risk_snapshot(
+                positions,
+                broker,
+                account_id=account.id,
+                account=account,
+                balance=balance,
+            )
+            alert_risk_events(account.id, risk, db_path=self.db_path)
+            if risk["ea_over"]:
+                first = risk["ea_over"][0]
+                raise OperatorError(
+                    f"skip: riesgo agregado ({first['kind']}) EA "
+                    f"{first['name']} {first['risk_usd']:,.2f} > "
+                    f"{first['cap_usd']:,.2f}",
+                    409,
+                )
             risk_per_unit = abs(price - sl)
             if account.platform == "mt5":
                 try:
@@ -821,6 +845,7 @@ class OperatorService:
                 raise OperatorError(
                     f"máximo de posiciones alcanzado ({rules.max_positions})", 409
                 )
+            group = risk_group(account, ticker)
             report = evaluate_account(
                 rules,
                 AccountSnapshot(
@@ -830,14 +855,28 @@ class OperatorService:
                     peak_equity=state.peak_equity or equity,
                     realized_pnl_today=state.closed_pnl_today,
                     open_positions=len(positions),
-                    open_risk_usd=open_risk,
+                    open_risk_usd=risk["total_usd"],
                     trades_today=self._console_trades_today(account.id),
+                    missing_sl=bool(risk["missing_sl"]),
                 ),
                 limits=limits,
                 proposed_risk_usd=risk_usd,
+                symbol_open_risk_usd=risk["by_symbol"].get(ticker.upper(), 0.0),
+                symbol_risk_cap_usd=symbol_cap_usd(account, ticker, balance),
+                symbol=ticker,
+                group_open_risk_usd=risk["by_group"].get(group, 0.0),
+                group_risk_cap_usd=group_cap_usd(account, group, balance),
+                group=group,
+                total_open_risk_usd=risk["total_usd"],
+                total_risk_cap_usd=total_cap_usd(account, balance),
             )
             if not report.allowed:
-                raise OperatorError(f"guard de cuenta: {report.reason}", 409)
+                reason = str(report.reason)
+                if reason.startswith("riesgo agregado"):
+                    reason = f"skip: {reason}"
+                else:
+                    reason = f"guard de cuenta: {reason}"
+                raise OperatorError(reason, 409)
 
             if equity_platform:
                 check = check_order(

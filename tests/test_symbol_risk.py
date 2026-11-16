@@ -8,10 +8,15 @@ from tradinglab.prop.guard import AccountSnapshot, PropGuard, evaluate_account
 from tradinglab.prop.rules import from_yaml
 from tradinglab.symbol_risk import (
     account_magics,
+    alert_risk_events,
+    group_cap_usd,
     open_risk_by_symbol,
     open_risk_report,
     position_risk_usd,
+    risk_group,
+    risk_snapshot,
     symbol_cap_usd,
+    total_cap_usd,
 )
 
 
@@ -71,7 +76,20 @@ def test_riesgo_por_simbolo_suma_carriles_y_eas():
 def test_tope_por_simbolo_en_accounts_yaml():
     account = load_accounts()["ftmo_demo"]
     assert symbol_cap_usd(account, "US100.cash") == pytest.approx(2_000.0)
-    assert symbol_cap_usd(account, "EURUSD") is None
+    assert symbol_cap_usd(account, "EURUSD") == pytest.approx(2_000.0)
+    assert group_cap_usd(account, "indices_us") == pytest.approx(3_000.0)
+    assert group_cap_usd(account, "usd") == pytest.approx(3_000.0)
+    assert group_cap_usd(account, "metales") == pytest.approx(3_000.0)
+    assert total_cap_usd(account) == pytest.approx(4_000.0)
+
+
+def test_grupos_de_riesgo():
+    account = load_accounts()["ftmo_demo"]
+    assert risk_group(account, "US100.cash") == "indices_us"
+    assert risk_group(account, "US500.cash") == "indices_us"
+    assert risk_group(account, "XAUUSD") == "metales"
+    assert risk_group(account, "EURUSD") == "usd"
+    assert risk_group(account, "EURJPY") == "symbol:EURJPY"
 
 
 def test_guard_bloquea_apertura_que_supera_el_tope_del_simbolo():
@@ -132,3 +150,146 @@ def test_informe_de_riesgo_usa_el_tope_de_la_cuenta():
     assert item["open_risk_usd"] == pytest.approx(200.0)
     assert item["cap_usd"] == pytest.approx(2_000.0)
     assert item["remaining_usd"] == pytest.approx(1_800.0)
+    assert payload["groups"]["indices_us"]["cap_usd"] == pytest.approx(3_000.0)
+    assert payload["total"]["cap_usd"] == pytest.approx(4_000.0)
+
+
+def test_tres_carriles_us100_el_tercero_no_abre():
+    rules = from_yaml("ftmo", "challenge", 100_000)
+    open_risk = 0.0
+    results = []
+    report = None
+    for _ in range(3):
+        report = evaluate_account(
+            rules,
+            _state(open_risk_usd=open_risk),
+            proposed_risk_usd=700.0,
+            symbol_open_risk_usd=open_risk,
+            symbol_risk_cap_usd=2_000.0,
+            symbol="US100.CASH",
+            total_open_risk_usd=open_risk,
+            total_risk_cap_usd=4_000.0,
+        )
+        results.append(report.allowed)
+        if report.allowed:
+            open_risk += 700.0
+    assert results == [True, True, False]
+    assert report is not None
+    assert "riesgo agregado (símbolo" in report.reason
+
+
+def test_posicion_sin_sl_bloquea_todo(monkeypatch):
+    monkeypatch.setattr(
+        "tradinglab.symbol_risk.account_magics", lambda account_id: [1]
+    )
+    monkeypatch.setattr("tradinglab.symbol_risk.ea_magics", lambda account_id: [])
+    account = load_accounts()["ftmo_demo"]
+    position = {
+        "symbol": "US100.cash",
+        "magic": 1,
+        "volume": 1.0,
+        "price_open": 20_000.0,
+        "sl": 0.0,
+    }
+    risk = risk_snapshot(
+        [position],
+        _Broker(),
+        account_id="ftmo_demo",
+        account=account,
+        balance=100_000,
+    )
+    assert risk["missing_sl"]
+    assert risk["total_usd"] == pytest.approx(4_000.0)
+
+    report = evaluate_account(
+        from_yaml("ftmo", "challenge", 100_000),
+        _state(),
+        proposed_risk_usd=10.0,
+        total_open_risk_usd=risk["total_usd"],
+        total_risk_cap_usd=4_000.0,
+        missing_sl=True,
+    )
+    assert report.allowed is False
+    assert "sin SL" in report.reason
+
+
+def test_alerta_critical_por_sl_ausente(monkeypatch):
+    import tradinglab.alerts as alerts_mod
+
+    sent: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        alerts_mod,
+        "send_once",
+        lambda event, message, **kwargs: sent.append(
+            (event, str(kwargs.get("severity")))
+        ),
+    )
+    risk = {
+        "missing_sl": [{"symbol": "US100.cash", "magic": 1}],
+        "ea_over": [],
+    }
+    alert_risk_events("ftmo_demo", risk, db_path="unused.db")
+    assert any(event.startswith("missing_sl:") for event, _ in sent)
+    assert any(severity == "critical" for _, severity in sent)
+
+
+def test_ea_cuenta_en_el_total_y_alerta_warning(monkeypatch):
+    import tradinglab.alerts as alerts_mod
+
+    monkeypatch.setattr(
+        "tradinglab.symbol_risk.account_magics",
+        lambda account_id: [1, 93010001],
+    )
+    monkeypatch.setattr(
+        "tradinglab.symbol_risk.ea_magics", lambda account_id: [93010001]
+    )
+    account = load_accounts()["ftmo_demo"]
+    positions = [
+        {
+            "symbol": "US100.cash",
+            "magic": 1,
+            "volume": 70.0,
+            "price_open": 20_000.0,
+            "sl": 19_990.0,
+        },
+        {
+            "symbol": "US100.cash",
+            "magic": 93010001,
+            "volume": 410.0,
+            "price_open": 20_000.0,
+            "sl": 19_990.0,
+        },
+    ]
+    risk = risk_snapshot(
+        positions,
+        _Broker(),
+        account_id="ftmo_demo",
+        account=account,
+        balance=100_000,
+    )
+    assert risk["total_usd"] == pytest.approx(4_800.0)
+    assert risk["ea_total_usd"] == pytest.approx(4_100.0)
+    assert risk["lab_total_usd"] == pytest.approx(700.0)
+    assert any(item["kind"] == "total" for item in risk["ea_over"])
+
+    blocked = evaluate_account(
+        from_yaml("ftmo", "challenge", 100_000),
+        _state(),
+        proposed_risk_usd=100.0,
+        total_open_risk_usd=risk["total_usd"],
+        total_risk_cap_usd=4_000.0,
+    )
+    assert blocked.allowed is False
+    assert "riesgo agregado (total)" in blocked.reason
+
+    sent: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        alerts_mod,
+        "send_once",
+        lambda event, message, **kwargs: sent.append(
+            (event, str(kwargs.get("severity")))
+        ),
+    )
+    alert_risk_events("ftmo_demo", risk, db_path="unused.db")
+    assert any(event.startswith("ea_risk_cap:") for event, _ in sent)
+    assert any(severity == "warning" for _, severity in sent)

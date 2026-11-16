@@ -38,6 +38,15 @@ def test_cuentas_y_limites_efectivos(tmp_path):
     assert effective.daily_loss_pct == pytest.approx(0.04)
     assert effective.max_drawdown_pct == pytest.approx(0.10)
     assert effective.per_trade_risk_pct == pytest.approx(0.005)
+    assert effective.max_open_risk_pct == pytest.approx(0.04)
+    assert ftmo.risk_caps.symbol_pct == pytest.approx(0.02)
+    assert ftmo.risk_caps.group_pct == pytest.approx(0.03)
+    assert ftmo.risk_caps.total_pct == pytest.approx(0.04)
+    assert ftmo.risk_caps.groups["indices_us"] == (
+        "US100", "US500", "US30", "US2000"
+    )
+    trial = accounts["ftmo_trial_ea"]
+    assert trial.risk_caps.total_pct == pytest.approx(0.04)
 
 
 def test_apretar_inmediato_y_aflojar_confirmado(tmp_path):

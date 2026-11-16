@@ -84,6 +84,8 @@ Es el punto 1 del prompt anterior. Si ya está hecho, solo se verifica. `guardia
 
 Es el punto 2 del prompt anterior, ampliado con clústeres: `account_risk_caps` en `accounts.yaml` (símbolo 2 %, clúster 3 %, total 4 %), aplicado en PropGuard, ai_trader y el forward.
 
+**Estado:** implementado el 2026-11-16; ver la entrada T12 de `PLAN.md`.
+
 ## T13 · P5 · Separar el replay del forward en el carril IA
 
 - Verifica que `ai_replay` escriba en tablas o etiquetas distintas a las del scoreboard forward, y que `ai_distill` no use operaciones de replay como evidencia.

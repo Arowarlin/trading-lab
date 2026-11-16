@@ -1859,30 +1859,66 @@ def _propose(item: dict, *, broker, cfg: dict, settings: Settings,
     guard = PropGuard(rules)
     try:
         from .accounts import load_accounts
-        from .symbol_risk import open_risk_by_symbol, symbol_cap_usd
+        from .symbol_risk import (
+            alert_risk_events,
+            group_cap_usd,
+            risk_group,
+            risk_snapshot,
+            symbol_cap_usd,
+            total_cap_usd,
+        )
 
         account_cfg = load_accounts().get(cfg["account"])
         live_positions = broker.positions()
-        symbol_open_risk = open_risk_by_symbol(
-            live_positions, broker, account_id=cfg["account"]
-        ).get(str(item["symbol"]).upper(), 0.0)
-        symbol_cap = symbol_cap_usd(account_cfg, item["symbol"])
         state = PropGuard.state_from_equity(
             rules, broker.equity_series(), initial_balance=rules.account_size,
             open_positions=len(live_positions),
         )
+        balance = float(
+            state.day_start_balance or state.day_start_equity or equity
+        )
+        risk = risk_snapshot(
+            live_positions,
+            broker,
+            account_id=cfg["account"],
+            account=account_cfg,
+            balance=balance,
+        )
+        alert_risk_events(cfg["account"], risk, db_path=db_path)
+        if risk["ea_over"]:
+            first = risk["ea_over"][0]
+            raise _Reject(
+                f"skip: riesgo agregado ({first['kind']}) EA {first['name']} "
+                f"{first['risk_usd']:,.2f} > {first['cap_usd']:,.2f}",
+                decision="skip", setup_valid=1, snapshot=snap,
+            )
+        symbol = str(item["symbol"]).upper()
+        group = risk_group(account_cfg, symbol)
         report = guard.evaluate(
             state, proposed_lots=lots, risk_per_lot=risk_per_lot,
-            open_risk_usd=_open_risk(db_path, style["magic"]), new_position=True,
-            symbol_open_risk_usd=symbol_open_risk,
-            symbol_risk_cap_usd=symbol_cap,
-            symbol=item["symbol"],
+            open_risk_usd=risk["total_usd"], new_position=True,
+            symbol_open_risk_usd=risk["by_symbol"].get(symbol, 0.0),
+            symbol_risk_cap_usd=symbol_cap_usd(account_cfg, symbol, balance),
+            symbol=symbol,
+            group_open_risk_usd=risk["by_group"].get(group, 0.0),
+            group_risk_cap_usd=group_cap_usd(account_cfg, group, balance),
+            group=group,
+            total_open_risk_usd=risk["total_usd"],
+            total_risk_cap_usd=total_cap_usd(account_cfg, balance),
+            missing_sl=bool(risk["missing_sl"]),
         )
+    except _Reject:
+        raise
     except Exception as exc:
         raise _Reject(f"PropGuard no disponible: {exc}", decision="skip",
                       setup_valid=1, snapshot=snap) from exc
     if not report.allowed:
-        raise _Reject(f"PropGuard: {report.reason}", decision="skip",
+        reason = str(report.reason)
+        if reason.startswith("riesgo agregado"):
+            reason = f"skip: {reason}"
+        else:
+            reason = f"PropGuard: {reason}"
+        raise _Reject(reason, decision="skip",
                       setup_valid=1, snapshot=snap)
 
     pid = uuid.uuid4().hex

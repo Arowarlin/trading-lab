@@ -1029,10 +1029,7 @@ def run_forward_bot(
     atr_value = _atr_value(df)
     tick = _tick(broker, symbol)
     positions = _positions(broker, symbol)
-    from .symbol_risk import open_risk_by_symbol, symbol_cap_usd
-
-    symbol_risk = open_risk_by_symbol(positions, broker, account_id=account.id)
-    symbol_cap = symbol_cap_usd(account, symbol)
+    account_positions = broker.positions() or []
     ours, foreign = _split_positions(positions, symbol, bot.magic)
     if len(ours) > 1:
         raise ForwardError(
@@ -1054,6 +1051,23 @@ def run_forward_bot(
     equity = float(health.get("equity") or state.equity or 0.0)
     if equity <= 0:
         raise ForwardError(f"{bot.id}: equity inválido")
+    from .symbol_risk import (
+        alert_risk_events,
+        group_cap_usd,
+        risk_group,
+        risk_snapshot,
+        symbol_cap_usd,
+        total_cap_usd,
+    )
+
+    balance = float(state.day_start_balance or state.day_start_equity or equity)
+    risk = risk_snapshot(
+        account_positions,
+        broker,
+        account_id=account.id,
+        account=account,
+        balance=balance,
+    )
     guards = {
         "health": "ok",
         "account": "ok",
@@ -1396,7 +1410,24 @@ def run_forward_bot(
         instrument.risk_per_lot(stop_distance, quote_rate=rate)
     )
     risk_usd = volume * risk_per_lot
-
+    alert_risk_events(account.id, risk, db_path=db_path)
+    if risk["ea_over"]:
+        first = risk["ea_over"][0]
+        reason = (
+            f"skip: riesgo agregado ({first['kind']}) EA {first['name']} "
+            f"{first['risk_usd']:,.2f} > {first['cap_usd']:,.2f}"
+        )
+        _record_signal(db_path, bot, symbol, signal, entry, reason)
+        return _blocked(
+            bot,
+            symbol,
+            signal,
+            reason,
+            price=entry,
+            atr_value=atr_value,
+            guards=guards,
+        )
+    group = risk_group(account, symbol)
     try:
         account_report = evaluate_account(
             rules,
@@ -1406,35 +1437,39 @@ def run_forward_bot(
                 initial_balance=rules.account_size,
                 peak_equity=state.peak_equity or equity,
                 realized_pnl_today=state.closed_pnl_today,
-                open_positions=len(positions),
-                open_risk_usd=_open_risk_usd(positions, broker),
+                open_positions=len(account_positions),
+                open_risk_usd=risk["total_usd"],
                 trades_today=account_trades,
+                missing_sl=bool(risk["missing_sl"]),
             ),
             limits=limits,
             max_risk_pct=profile.max_risk_pct,
             max_trades_per_day=max_trades,
             proposed_risk_usd=risk_usd,
-            symbol_open_risk_usd=symbol_risk.get(symbol.upper(), 0.0),
-            symbol_risk_cap_usd=symbol_cap,
+            symbol_open_risk_usd=risk["by_symbol"].get(symbol.upper(), 0.0),
+            symbol_risk_cap_usd=symbol_cap_usd(account, symbol, balance),
             symbol=symbol,
+            group_open_risk_usd=risk["by_group"].get(group, 0.0),
+            group_risk_cap_usd=group_cap_usd(account, group, balance),
+            group=group,
+            total_open_risk_usd=risk["total_usd"],
+            total_risk_cap_usd=total_cap_usd(account, balance),
         )
     except Exception as exc:
         raise ForwardError(f"{bot.id}: guard de cuenta no disponible: {exc}") from exc
     guards["account_guard"] = "ok" if account_report.allowed else account_report.reason
     if not account_report.allowed:
-        _record_signal(
-            db_path,
-            bot,
-            symbol,
-            signal,
-            entry,
-            f"blocked account_guard: {account_report.reason}",
-        )
+        reason = str(account_report.reason)
+        if reason.startswith("riesgo agregado"):
+            reason = f"skip: {reason}"
+        else:
+            reason = f"guard de cuenta: {reason}"
+        _record_signal(db_path, bot, symbol, signal, entry, reason)
         return _blocked(
             bot,
             symbol,
             signal,
-            f"guard de cuenta: {account_report.reason}",
+            reason,
             price=entry,
             atr_value=atr_value,
             guards=guards,
