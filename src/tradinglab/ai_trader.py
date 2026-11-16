@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
 import random
 import statistics
 import uuid
@@ -1669,12 +1670,17 @@ def _record_decision(
     snapshot_payload=None,
     source: str = "forward",
     plan_id: str | None = None,
+    model: str | None = None,
     settings: Settings | None = None,
 ) -> dict:
     if decision not in DECISIONS:
         raise AiTraderError(f"decisión inválida: {decision}")
     if source not in SOURCES:
         raise AiTraderError(f"source inválido: {source}")
+    # El orquestador de sesión exporta TRADINGLAB_AI_MODEL con el modelo que
+    # está usando opencode; si no hay modelo conocido se guarda NULL.
+    model_name = model or os.getenv("TRADINGLAB_AI_MODEL") or None
+    model_name = str(model_name).strip() if model_name else None
     text = str(reason or "").strip()
     if not text:
         raise AiTraderError("motivo obligatorio y <= 200 caracteres")
@@ -1685,8 +1691,8 @@ def _record_decision(
             "INSERT INTO ai_decisions"
             "(ts, decision_date, session, style, symbol, timeframe, strategy, "
             " setup_valid, decision, reason, confidence, snapshot, "
-            " playbook_version, source, plan_id) "
-            "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            " playbook_version, source, plan_id, model) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 utcnow(),
                 _reset_date(settings),
@@ -1703,6 +1709,7 @@ def _record_decision(
                 config["playbook_version"],
                 source,
                 plan_id,
+                model_name,
             ),
         )
         decision_id = int(cursor.lastrowid)

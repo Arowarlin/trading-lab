@@ -16,6 +16,9 @@ $logDir = Join-Path $root "logs\intel"
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 $log = Join-Path $logDir ("intel_" + (Get-Date -Format "yyyyMMdd_HHmmss") + ".log")
 
+# Preflight compartido: solo se usa si hay que puntuar noticias (-Score).
+. (Join-Path $root "scripts\llm_preflight.ps1")
+
 & ".\.venv\Scripts\lab.exe" intel fetch *>> $log
 $code = $LASTEXITCODE
 
@@ -28,10 +31,14 @@ if ($Finnhub) {
 }
 
 if ($Score) {
-    & ".\.venv\Scripts\lab.exe" intel score --limit 20 --batch-size 4 *>> $log
-    if ($LASTEXITCODE -ne 0) {
-        & ".\.venv\Scripts\lab.exe" alerts send intel_score_failed -m "Scoring de noticias falló con código $LASTEXITCODE" --severity warning *>> $log
-        $code = 1
+    if (Ensure-LMStudio -Log $log) {
+        & ".\.venv\Scripts\lab.exe" intel score --limit 20 --batch-size 4 *>> $log
+        if ($LASTEXITCODE -ne 0) {
+            & ".\.venv\Scripts\lab.exe" alerts send intel_score_failed -m "Scoring de noticias falló con código $LASTEXITCODE" --severity warning *>> $log
+            $code = 1
+        }
+    } else {
+        Add-Content -Path $log -Encoding utf8 -Value "Sin datos: LM Studio no disponible; scoring omitido."
     }
 }
 

@@ -29,7 +29,15 @@ if ($PreflightOnly) {
     exit $LASTEXITCODE
 }
 
-& $lab premarket --send --out $report *>> $log
+# Preflight compartido: si LM Studio no está listo en 90 s, el informe se
+# genera igualmente sin LLM ("Sin datos") y se envía; no se bloquea la tarea.
+. (Join-Path $root "scripts\llm_preflight.ps1")
+if (Ensure-LMStudio -Log $log) {
+    & $lab premarket --send --out $report *>> $log
+} else {
+    Add-Content -Path $log -Value "Sin datos: LM Studio no disponible; pre-market sin LLM." -Encoding utf8
+    & $lab premarket --no-llm --send --out $report *>> $log
+}
 $code = $LASTEXITCODE
 if ($code -ne 0) {
     & $lab alerts send premarket_failed -m "El pre-market fallo con codigo $code" --severity warning *>> $log

@@ -529,13 +529,20 @@ def doctor(network: bool = typer.Option(False, "--network", help="Probar descarg
         table.add_row("Telegram remoto", WARN, str(exc)[:160])
     if settings:
         px = settings.projectx
-        px_ok = bool(px.username and os.getenv("PROJECTX_API_KEY") and px.account_id)
-        table.add_row(
-            "ProjectX",
-            OK if px_ok else WARN,
-            f"credenciales={'sí' if px_ok else 'faltan'} · "
-            f"dry_run={px.dry_run} · simulated={px.require_simulated}",
-        )
+        if not px.enabled:
+            table.add_row(
+                "ProjectX",
+                "n/a",
+                "desactivada en config/ops.yaml",
+            )
+        else:
+            px_ok = bool(px.username and os.getenv("PROJECTX_API_KEY") and px.account_id)
+            table.add_row(
+                "ProjectX",
+                OK if px_ok else WARN,
+                f"credenciales={'sí' if px_ok else 'faltan'} · "
+                f"dry_run={px.dry_run} · simulated={px.require_simulated}",
+            )
 
     # Base de datos
     try:
@@ -794,7 +801,10 @@ def doctor(network: bool = typer.Option(False, "--network", help="Probar descarg
                 table.add_row(
                     "Reglas fondeo",
                     WARN,
-                    "plantilla: verifica cada límite en el contrato de tu firma",
+                    f"plantilla {rules.firm} en config/prop.yaml: límites "
+                    "contrastados con el directorio público (verified_source), "
+                    "no con tu contrato; aviso aceptable hasta verificarlo: el "
+                    "guard usa el lado conservador (equity + colchón)",
                 )
         except Exception as exc:
             table.add_row("Fondeo", FAIL, str(exc)[:160])

@@ -39,6 +39,15 @@ if (-not (Test-Path $lms)) {
     Fail "No existe $lms"
 }
 
+# Preflight compartido: sin LM Studio no hay comparación. Si no arranca en
+# 90 s se registra "Sin datos" y la tarea termina OK, no como fallo.
+. (Join-Path $PSScriptRoot "llm_preflight.ps1")
+if (-not (Ensure-LMStudio -Log $log)) {
+    Write-Log "Sin datos: LM Studio no disponible; comparación omitida."
+    Send-TaskHeartbeat -Root $root -Check "llmcompare" -Status "ok"
+    exit 0
+}
+
 $available = & $lms ls 2>&1 | Out-String
 if ($LASTEXITCODE -ne 0) {
     Fail "lms ls fallo con codigo $LASTEXITCODE"

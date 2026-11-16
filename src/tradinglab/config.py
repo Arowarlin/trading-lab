@@ -180,6 +180,7 @@ class MT5Settings(BaseModel):
 
 
 class ProjectXSettings(BaseModel):
+    enabled: bool = False  # integración desactivada por defecto (sin credenciales)
     base_url: str = "https://api.topstepx.com"
     username: str | None = None
     account_id: int | None = None

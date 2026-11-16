@@ -91,6 +91,7 @@ try {
     }
 
     $model = "opencode-go/deepseek-v4.1-flash"
+    $env:TRADINGLAB_AI_MODEL = $model
     $message = "Usa el skill trading-lab-operador. Sesión ${Session}: sigue el procedimiento del skill para esta sesión. Termina con una línea por decisión y el scoreboard."
     $job = Start-Job -ScriptBlock {
         param($root, $model, $message)

@@ -42,7 +42,9 @@ mt5:
   server_utc_offset_hours: null   # null = autodetectar (Darwinex ahora va en GMT+2)
 
 # Futuros: ProjectX Gateway (TopstepX). Credenciales en .env.
+# enabled: false = integración apagada (el doctor la muestra como n/a, no WARN).
 projectx:
+  enabled: false
   base_url: https://api.topstepx.com
   username: null              # o PROJECTX_USERNAME
   account_id: null            # o PROJECTX_ACCOUNT_ID (si hay varias cuentas)

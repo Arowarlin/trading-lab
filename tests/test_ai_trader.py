@@ -11,10 +11,12 @@ from tradinglab.ai_trader import (
     _cost_ratio,
     _lane_pnl_today,
     _pause_cells,
+    _record_decision,
     _volume_for_risk,
     load_config,
     resume_cell,
 )
+from tradinglab.config import get_settings
 from tradinglab.db import connect, init_db
 
 
@@ -189,3 +191,36 @@ def test_config_rechaza_live(tmp_path):
     )
     with pytest.raises(AiTraderError, match="ftmo_demo"):
         load_config(path)
+
+
+def test_decision_guarda_modelo_o_null(tmp_path, monkeypatch):
+    db = tmp_path / "lab.db"
+    init_db(db)
+    cfg = load_config()
+    settings = get_settings()
+    base = dict(
+        db_path=db,
+        config=cfg,
+        style="scalping",
+        symbol="XAUUSD",
+        timeframe="M5",
+        strategy="orb_5m",
+        setup_valid=False,
+        decision="skip",
+        reason="prueba de modelo",
+        settings=settings,
+    )
+    _record_decision(**base, model="opencode-go/test")
+    monkeypatch.setenv("TRADINGLAB_AI_MODEL", "qwen/test")
+    _record_decision(**base)
+    monkeypatch.delenv("TRADINGLAB_AI_MODEL")
+    _record_decision(**base)
+    with connect(db) as con:
+        rows = con.execute(
+            "SELECT model FROM ai_decisions ORDER BY id"
+        ).fetchall()
+    assert [row["model"] for row in rows] == [
+        "opencode-go/test",
+        "qwen/test",
+        None,
+    ]

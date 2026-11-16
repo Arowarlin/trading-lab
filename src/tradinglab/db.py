@@ -1035,6 +1035,7 @@ def _migrate_ai_trades(con: sqlite3.Connection) -> None:
             playbook_version INTEGER,
             source TEXT NOT NULL DEFAULT 'forward',
             plan_id TEXT,
+            model TEXT,
             result_r REAL,
             shadow_r REAL,
             entry REAL,
@@ -1105,7 +1106,7 @@ def _migrate_ai_trades(con: sqlite3.Connection) -> None:
     ]
     for column, kind in (("decision_date", "TEXT"), ("session", "TEXT"),
                          ("snapshot", "TEXT"), ("source", "TEXT DEFAULT 'forward'"),
-                         ("plan_id", "TEXT"), ("result_r", "REAL"),
+                         ("plan_id", "TEXT"), ("model", "TEXT"), ("result_r", "REAL"),
                          ("shadow_r", "REAL"), ("entry", "REAL"),
                          ("sl", "REAL"), ("tp", "REAL"), ("exit_ts", "TEXT")):
         if column not in decision_columns:

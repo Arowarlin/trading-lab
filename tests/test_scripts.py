@@ -15,6 +15,37 @@ def test_lmstudio_start_sin_descarga_ni_secretos():
     assert "TradingLab-LMStudio" not in script  # la tarea se registra fuera del script
 
 
+def test_llm_preflight_arranca_si_no_responde_y_espera_90s():
+    script = (ROOT / "scripts" / "llm_preflight.ps1").read_text(encoding="utf-8")
+    assert "127.0.0.1:1234/v1/models" in script
+    assert "TcpClient" in script
+    assert "127.0.0.1" in script
+    assert "1234" in script
+    assert "lmstudio_start.ps1" in script
+    assert "WaitSeconds = 90" in script
+    assert "Start-Sleep -Seconds 3" in script
+    assert "Sin datos" in script
+    assert "download" not in script.lower()
+    assert "api_key" not in script.lower()
+
+
+def test_tareas_llm_usan_el_preflight_comun():
+    for name in (
+        "intel_daily.ps1",
+        "premarket_daily.ps1",
+        "llm_compare_daily.ps1",
+        "agents_daily.ps1",
+    ):
+        script = (ROOT / "scripts" / name).read_text(encoding="utf-8")
+        assert "llm_preflight.ps1" in script
+        assert "Ensure-LMStudio" in script
+
+    session = (ROOT / "scripts" / "ai_trader_session.ps1").read_text(
+        encoding="utf-8"
+    )
+    assert "TRADINGLAB_AI_MODEL" in session
+
+
 def test_orchestrate_spy_solo_paper_y_ventana_et():
     script = (ROOT / "scripts" / "orchestrate_spy_daily.ps1").read_text(encoding="utf-8")
     assert "orchestrate --bot trend-spy" in script

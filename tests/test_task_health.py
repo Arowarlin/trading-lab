@@ -63,38 +63,62 @@ def test_missed_tasks_solo_tradinglab_activas_y_con_perdidas():
     assert problems[1]["stale"] is False
 
 
-def test_doctor_status_avisa_y_resume(monkeypatch):
+def test_doctor_status_semilla_y_solo_avisa_nuevas(monkeypatch, tmp_path):
+    state = tmp_path / "seen.json"
     monkeypatch.setattr(
         task_health, "collect_tradinglab_tasks", lambda: RECORDS
     )
 
-    result = task_health.doctor_status(now=NOW)
+    # La primera lectura fija la línea base: el histórico no es una pérdida nueva.
+    first = task_health.doctor_status(now=NOW, state_path=state)
+    assert first["status"] == "ok"
+    assert first["tasks"] == []
+    assert "sin ejecuciones perdidas nuevas" in first["detail"]
+
+    again = task_health.doctor_status(now=NOW, state_path=state)
+    assert again["status"] == "ok"
+
+    updated = [
+        dict(RECORDS[0], missed=90),
+        dict(RECORDS[1], missed=3),
+    ] + RECORDS[2:]
+    monkeypatch.setattr(
+        task_health, "collect_tradinglab_tasks", lambda: updated
+    )
+    result = task_health.doctor_status(now=NOW, state_path=state)
 
     assert result["status"] == "warn"
-    assert "AI-Scalp 88" in result["detail"]
-    assert len(result["tasks"]) == 2
+    assert "AI-Scalp +2 (total 90" in result["detail"]
+    assert {item["name"]: item["missed"] for item in result["tasks"]} == {
+        "TradingLab-AI-Scalp": 2,
+        "TradingLab-AI-NY": 1,
+    }
 
 
-def test_doctor_status_ok_sin_perdidas(monkeypatch):
+def test_doctor_status_ok_sin_perdidas(monkeypatch, tmp_path):
     monkeypatch.setattr(
         task_health,
         "collect_tradinglab_tasks",
         lambda: [RECORDS[2]],
     )
 
-    result = task_health.doctor_status(now=NOW)
+    result = task_health.doctor_status(
+        now=NOW, state_path=tmp_path / "seen.json"
+    )
 
     assert result["status"] == "ok"
-    assert "sin ejecuciones perdidas" in result["detail"]
+    assert "sin ejecuciones perdidas nuevas" in result["detail"]
 
 
-def test_doctor_status_warn_si_no_puede_leer(monkeypatch):
+def test_doctor_status_warn_si_no_puede_leer(monkeypatch, tmp_path):
     def boom():
         raise RuntimeError("PowerShell no disponible")
 
     monkeypatch.setattr(task_health, "collect_tradinglab_tasks", boom)
 
-    result = task_health.doctor_status(now=NOW)
+    result = task_health.doctor_status(
+        now=NOW, state_path=tmp_path / "seen.json"
+    )
 
     assert result["status"] == "warn"
     assert "sin datos del Programador" in result["detail"]

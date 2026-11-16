@@ -4,7 +4,9 @@ import json
 
 import httpx
 import pytest
+import yaml
 
+from tradinglab.config import ROOT, ProjectXSettings
 from tradinglab.db import connect, init_db
 from tradinglab.execution.projectx import (
     ProjectXAuthError,
@@ -191,3 +193,11 @@ def test_positions_and_close_dry_run():
     result = broker.close_position("c-1")
     assert result["status"] == "preview"
     assert "/api/Position/closeContract" not in gateway.paths()
+
+
+def test_projectx_desactivado_por_defecto_y_en_ops():
+    assert ProjectXSettings().enabled is False
+    ops = yaml.safe_load(
+        (ROOT / "config" / "ops.yaml").read_text(encoding="utf-8")
+    )
+    assert ops["projectx"]["enabled"] is False

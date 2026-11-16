@@ -12,13 +12,19 @@ $logDir = Join-Path $root "logs\agents"
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 $log = Join-Path $logDir ("agents_" + (Get-Date -Format "yyyyMMdd_HHmmss") + ".log")
 
-# Tras dormir o reiniciar, LM Studio puede haber descargado el modelo: sin
-# esto los tres tickers fallan con "modelo no cargado".
-& (Join-Path $root "scripts\lmstudio_start.ps1") -Quick *>> $log
+# Preflight compartido: arranca LM Studio solo si el puerto 1234 no responde.
+# Si no está listo en 90 s, los agentes se omiten ("Sin datos") y la tarea
+# sigue con decisions update; nunca se inventan decisiones.
+. (Join-Path $root "scripts\llm_preflight.ps1")
+$llmReady = Ensure-LMStudio -Log $log
 
 $tickers = @("SPY", "QQQ", "NVDA")
 $failed = @()
+if (-not $llmReady) {
+    Add-Content -Path $log -Value "Sin datos: LM Studio no disponible; agentes omitidos." -Encoding utf8
+}
 foreach ($ticker in $tickers) {
+    if (-not $llmReady) { continue }
     Add-Content -Path $log -Value "=== $ticker $(Get-Date -Format o) ==="
     & ".\.venv\Scripts\lab.exe" agent $ticker --mode lite *>> $log
     if ($LASTEXITCODE -ne 0) { $failed += $ticker }

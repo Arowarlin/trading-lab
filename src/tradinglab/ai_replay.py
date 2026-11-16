@@ -523,9 +523,9 @@ def _insert_decision(db_path: str | Path, moment: ReplayMoment, *,
             "INSERT INTO ai_decisions"
             "(ts, decision_date, session, style, symbol, timeframe, strategy, "
             " setup_valid, decision, reason, confidence, snapshot, "
-            " playbook_version, source, plan_id, result_r, shadow_r, "
+            " playbook_version, source, plan_id, model, result_r, shadow_r, "
             " entry, sl, tp, exit_ts) "
-            "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 datetime.now(timezone.utc).isoformat(),
                 moment.moment.date().isoformat(),
@@ -542,6 +542,7 @@ def _insert_decision(db_path: str | Path, moment: ReplayMoment, *,
                 config["playbook_version"],
                 "replay",
                 run_id,
+                MODEL,
                 result_r,
                 shadow_r,
                 moment.price,
