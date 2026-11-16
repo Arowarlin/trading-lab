@@ -670,6 +670,9 @@ CREATE INDEX IF NOT EXISTS idx_equity_ts ON equity(ts);
 """
 
 
+BUSY_TIMEOUT_MS = 5000
+
+
 def utcnow() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="milliseconds")
 
@@ -679,6 +682,7 @@ def connect(path: str | Path) -> Iterator[sqlite3.Connection]:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     con = sqlite3.connect(path)
+    con.execute(f"PRAGMA busy_timeout={BUSY_TIMEOUT_MS}")
     con.row_factory = sqlite3.Row
     try:
         yield con
