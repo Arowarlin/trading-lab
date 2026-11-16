@@ -60,7 +60,7 @@ def _ids(db):
 
 def test_scoring_config_lee_modelo_e_id_fallback():
     cfg = scoring_config(Settings())
-    assert cfg["model"]
+    assert cfg["model"] == "qwen/qwen3-30b-a3b"
     assert cfg["limit"] >= 1
     assert cfg["batch_size"] >= 1
 

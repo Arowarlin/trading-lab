@@ -2,7 +2,9 @@
 # Finnhub usa FINNHUB_API_KEY desde keyring/.env; nunca se escribe aquí.
 scoring:
   # ID exacto cargado en LM Studio; no cambia el modelo por defecto del lab.
-  model: "qwen/qwen3.8-27b"
+  # Alineado al MoE que el lab carga por defecto (30B-A3B, CPU): el 27B denso
+  # tarda ~1340 s por llamada y no está cargado.
+  model: "qwen/qwen3-30b-a3b"
   limit: 20
   batch_size: 8
 feeds:
