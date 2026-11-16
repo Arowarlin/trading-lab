@@ -44,6 +44,42 @@ def hm(x):
     return (x // 100) * 60 + x % 100
 
 
+VERSION = "3.1"
+
+# Cierres tempranos de NYSE (1:00 p.m. ET) en el periodo del backtest.
+# El motor cierra 10 minutos antes y nunca deja una posicion abierta de un dia
+# para otro. Es el mismo calendario que el input InpEarlyClose del EA.
+EARLY_CLOSE = {
+    20211126: 1300,
+    20221125: 1300,
+    20230703: 1300,
+    20231124: 1300,
+    20240703: 1300,
+    20241129: 1300,
+    20241224: 1300,
+    20250703: 1300,
+    20251128: 1300,
+    20251224: 1300,
+    20260703: 1300,
+    20261127: 1300,
+    20261224: 1300,
+}
+
+
+def effective_flat_min(day: int, flat_at: int, calendar: dict | None = None) -> int:
+    """Minuto NY del cierre efectivo: min(flat_at, cierre - 10)."""
+    base = hm(flat_at)
+    close = (EARLY_CLOSE if calendar is None else calendar).get(int(day))
+    if close is None:
+        return base
+    return min(base, max(0, hm(close) - 10))
+
+
+def entry_allowed(minute: int, flat_min: int, min_before: int = 60) -> bool:
+    """False si quedan menos de `min_before` minutos hasta el cierre efectivo."""
+    return int(flat_min) - int(minute) >= int(min_before)
+
+
 class SessHL:
     def __init__(self):
         self.ch = self.cl = self.ph = self.pl = math.nan
@@ -80,6 +116,8 @@ def run(df, p=None, start=None, end=None):
     S_OR = hm(930); E_OR = hm(P['or_end']); S_RTH, E_RTH = hm(930), hm(1600)
     S_ON, E_ON = hm(1800), hm(930); S_PM = hm(800)
     S_TR, E_TR = hm(P['trade_start']), hm(P['trade_end']); S_FL = hm(P['flat_at'])
+    calendar = P['early_close'] if 'early_close' in P else EARLY_CLOSE
+    flat_min = S_FL
     tot_w = sum(P['w']) or 1.0
     nSw, nFvg, nVw, nSt, nRv, nOr = [x * 100.0 / tot_w for x in P['w']]
 
@@ -106,8 +144,10 @@ def run(df, p=None, start=None, end=None):
     n = len(df)
     for i in range(n):
         m = nym[i]
+        if i == 0 or nyday[i] != nyday[i - 1]:
+            flat_min = effective_flat_min(int(nyday[i]), P['flat_at'], calendar)
         # ── 1) ejecución al OPEN de la barra i (orden de la barra i-1) ─────
-        if pending is not None and pos is None:
+        if pending is not None and pos is None and entry_allowed(m, flat_min):
             d, sl0 = pending
             sp = SP[i]
             if d == 1:
@@ -126,7 +166,7 @@ def run(df, p=None, start=None, end=None):
         # ── 2) salidas durante la barra i ─────────────────────────────────
         if pos is not None:
             d = pos['d']; sp = SP[i]; ex = None; why = ''
-            if in_sess(m, S_FL, hm(1800)) and i > pos['i0']:
+            if m >= flat_min and i > pos['i0']:
                 ex = O[i] if d == 1 else O[i] + sp; why = 'EOD'
             elif d == 1:
                 if L[i] <= pos['sl']:
@@ -140,7 +180,7 @@ def run(df, p=None, start=None, end=None):
                     ex = pos['tp']; why = 'TP'
             if ex is not None:
                 r = (ex - pos['ent']) * d / pos['risk']
-                trades.append(dict(t=pos['t0'], d=d, r=r, why=why, risk=pos['risk'], nym=pos['nym']))
+                trades.append(dict(t=pos['t0'], t_exit=t[i], d=d, r=r, why=why, risk=pos['risk'], nym=pos['nym']))
                 dayR += r
                 consec = consec + 1 if r < 0 else 0
                 if dayR <= -P['daily_loss_r']:
@@ -165,7 +205,7 @@ def run(df, p=None, start=None, end=None):
         rvolOk = rvol >= P['rvol_thr']; rvolLow = rvol < P['rvol_low']
 
         inRTH = in_sess(m, S_RTH, E_RTH); inON = in_sess(m, S_ON, E_ON); inPM = in_sess(m, S_PM, E_ON)
-        inOR = in_sess(m, S_OR, E_OR); inTR = in_sess(m, S_TR, E_TR); inFL = in_sess(m, S_FL, hm(1800))
+        inOR = in_sess(m, S_OR, E_OR); inTR = in_sess(m, S_TR, E_TR); inFL = m >= flat_min
         if (not inRTH) and rth.prev_in:
             dcl.append(C[i - 1])
             if P['regime'] == 'sma' and len(dcl) >= P['reg_len']:
@@ -328,7 +368,7 @@ def run(df, p=None, start=None, end=None):
             mS = (cSwS == 1 or (brokeDn and c < orL)) and cVwS > 0
         okL = P['allow_long'] and gap_ok and reg_up and inTR and orDone and not vetoL and sL >= P['min_score'] and mL
         okS = P['allow_short'] and gap_ok and reg_dn and inTR and orDone and not vetoS and sS >= P['min_score'] and mS
-        can = inTR and not inFL and tradesToday < P['max_trades'] and not locked and consec < P['max_consec'] and pos is None and i - lastEntry > P['cooldown'] and SP[i] <= P['max_spread']
+        can = inTR and not inFL and entry_allowed(m, flat_min) and tradesToday < P['max_trades'] and not locked and consec < P['max_consec'] and pos is None and i - lastEntry > P['cooldown'] and SP[i] <= P['max_spread']
         if not can or not (okL or okS):
             # gestión BE / trailing al cierre
             pass

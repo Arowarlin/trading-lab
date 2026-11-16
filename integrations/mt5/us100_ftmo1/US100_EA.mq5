@@ -8,10 +8,11 @@
 //|                                                                  |
 //|  Configuración por defecto = variante validada con datos FTMO    |
 //|  US100.cash M5 2021-09 → 2026-11 (ver documentación).            |
+//|  v3.1 · cierre efectivo en días de cierre temprano.              |
 //+------------------------------------------------------------------+
 #property copyright "US100 FTMO Project"
-#property version   "1.00"
-#property description "NY Open · Liquidity Confluence / ORB · Riesgo compartido FTMO"
+#property version   "3.10"
+#property description "v3.1 · NY Open · Liquidity Confluence / ORB · Riesgo compartido FTMO"
 
 #include <Trade/Trade.mqh>
 #include "Shared_Logger.mqh"
@@ -38,6 +39,7 @@ input int               InpORMinutes     = 15;              // Opening Range (mi
 input int               InpTradeStart    = 945;             // Inicio de entradas NY (HHMM)
 input int               InpTradeEnd      = 1130;            // Fin de entradas NY (HHMM)
 input int               InpFlatAt        = 1545;            // Cierre forzoso NY (HHMM)
+input string            InpEarlyClose    = "20211126:1300,20221125:1300,20230703:1300,20231124:1300,20240703:1300,20241129:1300,20241224:1300,20250703:1300,20251128:1300,20251224:1300,20260703:1300,20261127:1300,20261224:1300"; // Cierres tempranos NYSE (YYYYMMDD:HHMM, coma)
 
 input group "3 · Pesos del score (se normalizan a 100)"
 input double InpWSweep  = 25; // Liquidity sweep
@@ -221,6 +223,7 @@ int OnInit()
    SExitConfig xc;
    xc.symbol = g_sym; xc.magic = InpMagic; xc.be = InpBE; xc.beR = InpBER; xc.beOffsetPts = InpBEOffPts;
    xc.trail = InpTrail; xc.trailAtr = InpTrailAtr; xc.closeOnNews = InpCloseOnNews; xc.killClosesAllManaged = InpKillAll;
+   xc.earlyClose = InpEarlyClose;
    g_exit.Init(xc, GetPointer(g_log), GetPointer(g_shared), GetPointer(g_ma), InpDeviationPts);
 
    if(StringFind(InpManagedMagics, IntegerToString(InpMagic)) < 0)
@@ -228,6 +231,7 @@ int OnInit()
    g_log.Info(StringFormat("Iniciado en %s · modo %s · riesgo %.2f%% · tope agregado %.2f%% · diario %.2f%% · DD %.2f%%",
                            g_sym, InpMode == STRAT_CONFLUENCE ? "CONFLUENCE" : "ORB_RETEST", g_risk.RiskPct(),
                            InpMaxAggRiskPct, InpDailyLossPct, InpMaxDDPct));
+   g_log.Info("US100 EA v3.1 · cierre efectivo y bloqueo de entradas a <60 min del cierre.");
    g_warm = false; g_lastBar = 0;
    EventSetTimer(5);
    return INIT_SUCCEEDED;
@@ -269,7 +273,9 @@ void OnNewBar()
      {
       g_lastSig = sig;
       if(s.inTrade) g_lastSigBar = s.bar;
-      if(g_entry.TryEnter(sig, s, NyDayStartServer())) g_lastMsg = "Entrada: " + sig.reason;
+      int nyNow = g_ma.NyMinutesNow();
+      int flatMin = g_exit.EffectiveFlatMin(HM(InpFlatAt));
+      if(g_entry.TryEnter(sig, s, NyDayStartServer(), nyNow, flatMin)) g_lastMsg = "Entrada: " + sig.reason;
       else { g_lastMsg = "Señal descartada: " + g_entry.LastReason(); g_log.Info(g_lastMsg + " (" + sig.reason + ")"); }
      }
   }
@@ -306,7 +312,8 @@ void Dashboard()
    int tr, cl; g_risk.DayStats(NyDayStartServer(), tr, cl);
    double eq = AccountInfoDouble(ACCOUNT_EQUITY);
    string txt = "US100 FTMO EA · " + (InpMode == STRAT_CONFLUENCE ? "Confluence" : "ORB retest") + "\n";
-   txt += StringFormat("Hora NY %02d:%02d · %s\n", m / 60, m % 60, s.inTrade ? "ventana de entradas" : (s.inOR ? "Opening Range" : "fuera de ventana"));
+   int flat = g_exit.EffectiveFlatMin(HM(InpFlatAt));
+   txt += StringFormat("Hora NY %02d:%02d · cierre efectivo %02d:%02d · %s\n", m / 60, m % 60, flat / 60, flat % 60, s.inTrade ? "ventana de entradas" : (s.inOR ? "Opening Range" : "fuera de ventana"));
    txt += StringFormat("OR %s  H %.2f  L %.2f · gap %.2f× · régimen %s\n", s.orDone ? "ok" : "pendiente",
                        s.orH == MA_NA ? 0 : s.orH, s.orL == MA_NA ? 0 : s.orL, s.gapRatio, s.regime == 1 ? "alcista" : s.regime == -1 ? "bajista" : "—");
    txt += StringFormat("VWAP %.2f (%.2fσ) · M5 %d · M15 %d · H1 %d · vol %.2f×\n", s.vwap == MA_NA ? 0 : s.vwap, s.vwapDsd, s.m5Trend, s.m15Trend, s.h1Trend, s.volRatio);

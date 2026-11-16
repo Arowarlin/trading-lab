@@ -11,6 +11,9 @@
 #include "US100_Strategy.mqh"
 #include "US100_RiskManager.mqh"
 
+// v3.1: no abrir si quedan menos de 60 minutos hasta el cierre efectivo.
+#define US100_MIN_BEFORE_CLOSE 60
+
 struct SEntryConfig
   {
    string symbol;
@@ -62,12 +65,13 @@ public:
      }
 
    // Devuelve true si se abrió la operación
-   bool TryEnter(const SSignal &sig, const SMarket &s, const datetime dayStart)
+   bool TryEnter(const SSignal &sig, const SMarket &s, const datetime dayStart, const int nyMinNow, const int flatMin)
      {
       m_lastReason = "";
       if(sig.dir == 0) return false;
       string why;
       if(!s.inTrade || s.inFlat)                 { m_lastReason = "Fuera de la ventana de entradas"; return false; }
+      if(flatMin - nyMinNow < US100_MIN_BEFORE_CLOSE) { m_lastReason = "Cierre próximo: no se abren entradas"; return false; }
       if(HasPosition())                           { m_lastReason = "Ya hay una posición abierta"; return false; }
       if(!m_shared.IsTradingAllowed(why))         { m_lastReason = why; return false; }
       if(!m_risk.DailyLimitsOk(dayStart, why))    { m_lastReason = why; return false; }

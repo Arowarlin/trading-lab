@@ -16,6 +16,7 @@ corre dentro del terminal con su propio motor, su riesgo compartido y su magic.
 | Magics gestionados | `93010001`, `93020001` |
 | Timeframe | M5 |
 | Estrategia | `us100_ftmo_confluence` |
+| Versión | **v3.1** (cierre efectivo en cierres tempranos) |
 | Setfile | `US100_FTMO_v3_challenge.set` |
 | Ruta | `MQL5/Experts/TradingLab/US100_FTMO1` |
 
@@ -182,6 +183,9 @@ Resultado de la base **v3 challenge** (2021-09-15 → 2026-11-13):
 | Total | +143,2 R |
 | DD máximo | 24,8 R |
 
+Esta tabla es la base **v3**. La v3.1 cambia solo el cierre de los días de
+cierre temprano: 481 operaciones y +146,8 R (ver la sección v3.1).
+
 ### Filtros del laboratorio
 
 | Filtro | Valor | Estado |
@@ -250,6 +254,92 @@ recompilado.
 La ventaja es de proceso, no de “pasar el Challenge en 30 días”. El propio
 README del EA ya lo advertía.
 
+## v3.1 · cierre efectivo en cierres tempranos
+
+La v3 cerraba solo si llegaba un tick con la hora NY entre `InpFlatAt` (15:45)
+y las 18:00. En un cierre temprano no hay ticks en esa ventana: la posición
+sobrevivía a la sesión siguiente. La réplica lo detectó en **2 de 480**
+operaciones (3-jul-2025 y 3-jul-2026), que se quedaron dentro hasta el SL.
+
+La v3.1 cambia solo la salida forzosa:
+
+- **Cierre efectivo** = `min(InpFlatAt, fin_de_sesión − 10 min)`.
+- El fin de sesión se lee de `SymbolInfoSessionTrade` para el día actual.
+- Si la lectura falla, se usa el calendario `InpEarlyClose`; si tampoco hay
+  entrada, se queda `InpFlatAt`.
+- El calendario también se aplica cuando la lectura funciona pero el bróker
+  publica una sesión semanal fija que no conoce el cierre puntual (es el caso
+  de los índices CFD): siempre se toma el mínimo.
+- En la réplica Python no existe `SymbolInfoSessionTrade`: el calendario NYSE
+  hace de fin de sesión y el resto de la regla es idéntico.
+- **Entradas nuevas:** se bloquean si quedan menos de **60 minutos** hasta el
+  cierre efectivo. En este setfile la ventana termina a las 11:00, así que la
+  regla no recorta ninguna entrada; queda como protección para otros horarios.
+
+Formato del input (coma entre fechas, `YYYYMMDD:HHMM`):
+
+```text
+InpEarlyClose=20211126:1300,20221125:1300,20230703:1300,20231124:1300,20240703:1300,20241129:1300,20241224:1300,20250703:1300,20251128:1300,20251224:1300,20260703:1300,20261127:1300,20261224:1300
+```
+
+También acepta `=` y `;` como separadores. El setfile v3 ya trae el calendario
+cargado; no se cambió ningún otro input.
+
+### Réplica v3.1 (mismos parámetros, counted=0)
+
+| Métrica | v3 | v3.1 | Δ |
+|---|---:|---:|---:|
+| Operaciones | 480 | **481** | +1 |
+| Win rate | 33,8 % | **34,1 %** | +0,3 pp |
+| Profit factor | 1,45 | **1,46** | +0,01 |
+| Expectancy | +0,298 R | **+0,305 R** | +0,007 R |
+| Total | +143,2 R | **+146,8 R** | **+3,6 R** |
+| DD máximo | 24,8 R | 24,8 R | 0 |
+| Operaciones que cruzan noche | 2 | **0** | −2 |
+
+Las tres operaciones que cambian:
+
+| Entrada | Lado | v3 | v3.1 | Δ |
+|---|---|---:|---:|---:|
+| 2025-07-03 10:00 | largo | −1,0149 R (SL 04-jul 03:15) | **+2,0427 R** (EOD 12:50) | +3,0576 R |
+| 2026-07-03 09:50 | corto | −1,0172 R (SL 05-jul 18:20) | **+0,5037 R** (EOD 12:50) | +1,5209 R |
+| 2025-07-04 09:50 | largo | — | **−1,0229 R** (SL 12:40) | −1,0229 R |
+
+La tercera operación es una cascada: en v3 el SL del 3-jul cerraba el 4-jul a
+las 03:15 y contaba como primera pérdida consecutiva del día 4; con v3.1 el
+3-jul cierra como ganancia y `InpMaxConsecLoss=1` ya no bloquea la entrada del
+4-jul. El balance neto sigue siendo **+3,6 R**. Informe completo:
+`reports/research/ea_us100_ftmo1/early_close.md`.
+
+La rejilla de 8 variantes y la tabla de optimización siguen siendo la base v3;
+no se reejecutaron.
+
+### Cómo compilarlo y probarlo en el Strategy Tester
+
+1. Copia `US100_EA.mq5`, `US100_EntryManager.mqh` y `US100_ExitManager.mqh` a
+   `MQL5/Experts/TradingLab/US100_FTMO1` y compila `US100_EA.mq5` en MetaEditor.
+   Debe terminar con **0 errores y 0 warnings**. El `#property version` es
+   `3.10`.
+2. Abre `US100.cash` M5 y carga `US100_FTMO_v3_challenge.set`. Comprueba en
+   Entradas que `InpEarlyClose` trae el calendario y que `InpFlatAt=1545`.
+3. Strategy Tester: símbolo `US100.cash`, M5, **Every tick based on real
+   ticks**, depósito 100.000 USD, modo *Every tick* y el setfile v3.
+4. Primera prueba: **2025-07-01 → 2025-07-04**. El panel debe mostrar
+   `cierre efectivo 12:50` el 3-jul. En el Diario busca
+   `Fin del horario operativo` y comprueba que la posición del 3-jul se cerró
+   antes de las 13:00 NY y que no hay ningún deal del mismo ticket el 4-jul.
+5. Segunda prueba: **2024-11-27 → 2024-11-30** (Black Friday **29-11-2024**).
+   Mismo control: cierre ≤ 12:50 NY y cero posiciones al día siguiente.
+6. Si el tester no tiene ticks en la ventana, el `OnTimer` también llama al
+   cierre; aun así, la prueba válida es con ticks reales.
+
+El calendario cubre los cierres tempranos de NYSE 2021-2026. Si el bróker
+añade un cierre puntual, se añade una línea `YYYYMMDD:HHMM` al input; no hace
+falta recompilar.
+
+La copia versionada se compiló con MetaEditor64 el 2026-11-16: **0 errores,
+0 warnings**. El `.ex5` se genera al compilar en el terminal; no se versiona.
+
 ## Optimización
 
 `lab ea optimize us100-ftmo1` barre una vecindad acotada y **congelada** del
@@ -296,5 +386,9 @@ El EA sigue usando `InpRiskPct=0.35` como respaldo si `InpDynRisk=false`.
   walk-forward es la estimación más prudente.
 - 2023 es plano y el PBO está cerca del límite. No subir riesgo por los
   resultados del backtest.
+- La v3.1 cierra antes en los cierres tempranos, pero el calendario es una
+  lista manual: si el bróker añade un cierre puntual, hay que añadirlo a
+  `InpEarlyClose`. El `SymbolInfoSessionTrade` es la primera fuente; el
+  calendario es la red de seguridad.
 - El EA sigue en demo. Nada de esto es asesoramiento financiero ni una
   autorización para live.

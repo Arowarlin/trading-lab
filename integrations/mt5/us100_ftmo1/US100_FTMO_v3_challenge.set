@@ -1,4 +1,4 @@
-; US100_EA · v3 Challenge: v2 + riesgo dinámico 1.0 → 0.6 → 0.35 → 0.25 % (solo US100 operando)
+; US100_EA · v3.1 Challenge: v3 + cierre efectivo en cierres tempranos (NYSE)
 ; Cargar en MT5: propiedades del EA → Entradas → Cargar
 InpSymbol=
 InpClock=0
@@ -12,6 +12,7 @@ InpORMinutes=15
 InpTradeStart=945
 InpTradeEnd=1100
 InpFlatAt=1545
+InpEarlyClose=20211126:1300,20221125:1300,20230703:1300,20231124:1300,20240703:1300,20241129:1300,20241224:1300,20250703:1300,20251128:1300,20251224:1300,20260703:1300,20261127:1300,20261224:1300
 InpWSweep=25
 InpWFvg=20
 InpWVwap=20

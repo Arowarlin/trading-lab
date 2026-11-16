@@ -7,12 +7,15 @@ Copia de los archivos que viven en el terminal FTMO:
 ```
 
 Incluye el parche de riesgo dinámico v3 (`InpDynRisk`, escalera
-1,0/0,6/0,35/0,25 %) aplicado el 2026-11-14. El `.ex5` compilado en el terminal
-terminó con **0 errores y 0 warnings** con MetaEditor 64.
+1,0/0,6/0,35/0,25 %) aplicado el 2026-11-14 y el parche **v3.1** de cierre
+efectivo en cierres tempranos (`InpEarlyClose`, `US100_ExitManager.mqh`).
+La copia v3.1 compila con **0 errores y 0 warnings** en MetaEditor64
+(2026-11-16); el `.ex5` se genera al compilar en el terminal.
 
 - Magic: `93010001`
 - Símbolo: `US100.cash`
-- Setfile: `US100_FTMO_v3_challenge.set`
+- Setfile: `US100_FTMO_v3_challenge.set` (incluye `InpEarlyClose`)
+- Versión: `3.10` (`v3.1`)
 - Registro del laboratorio: `config/mt5_eas.yaml`
 - Validación: `lab ea validate us100-ftmo1`
 - Informe: `reports/ea/us100-ftmo1_v3.md`
