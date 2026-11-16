@@ -811,7 +811,7 @@ def doctor(network: bool = typer.Option(False, "--network", help="Probar descarg
 
     # Horario NY: compara las tareas con config/schedule.yaml para hoy.
     try:
-        from .schedule_ny import doctor_status as schedule_status
+        from .schedule_tz import doctor_status as schedule_status
 
         schedule = schedule_status()
         table.add_row(
