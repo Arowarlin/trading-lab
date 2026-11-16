@@ -8,11 +8,11 @@
 //|                                                                  |
 //|  Configuración por defecto = variante validada con datos FTMO    |
 //|  US100.cash M5 2021-09 → 2026-11 (ver documentación).            |
-//|  v3.1 · cierre efectivo en días de cierre temprano.              |
+//|  v3.2 · sin entradas en festivos completos de NYSE.              |
 //+------------------------------------------------------------------+
 #property copyright "US100 FTMO Project"
-#property version   "3.10"
-#property description "v3.1 · NY Open · Liquidity Confluence / ORB · Riesgo compartido FTMO"
+#property version   "3.20"
+#property description "v3.2 · NY Open · Liquidity Confluence / ORB · Riesgo compartido FTMO"
 
 #include <Trade/Trade.mqh>
 #include "Shared_Logger.mqh"
@@ -39,7 +39,8 @@ input int               InpORMinutes     = 15;              // Opening Range (mi
 input int               InpTradeStart    = 945;             // Inicio de entradas NY (HHMM)
 input int               InpTradeEnd      = 1130;            // Fin de entradas NY (HHMM)
 input int               InpFlatAt        = 1545;            // Cierre forzoso NY (HHMM)
-input string            InpEarlyClose    = "20211126:1300,20221125:1300,20230703:1300,20231124:1300,20240703:1300,20241129:1300,20241224:1300,20250703:1300,20251128:1300,20251224:1300,20260703:1300,20261127:1300,20261224:1300"; // Cierres tempranos NYSE (YYYYMMDD:HHMM, coma)
+input string            InpEarlyClose    = "20211126:1300,20221125:1300,20230703:1300,20231124:1300,20240703:1300,20241129:1300,20241224:1300,20250703:1300,20251128:1300,20251224:1300,20261127:1300,20261224:1300,20271126:1300"; // Cierres tempranos NYSE (YYYYMMDD:HHMM, coma)
+input string            InpHolidays      = "20260101,20260119,20260216,20260403,20260525,20260619,20260703,20260907,20261126,20261225,20270101,20270118,20270215,20270326,20270531,20270618,20270705,20270906,20271125,20271224"; // Festivos completos NYSE (YYYYMMDD, coma)
 
 input group "3 · Pesos del score (se normalizan a 100)"
 input double InpWSweep  = 25; // Liquidity sweep
@@ -218,6 +219,7 @@ int OnInit()
    ec.symbol = g_sym; ec.magic = InpMagic; ec.rr = InpRR; ec.minSlPoints = InpMinSlPts; ec.maxSlPoints = 0;
    ec.deviationPoints = InpDeviationPts; ec.newsFilter = InpNewsFilter; ec.newsBefore = InpNewsBefore; ec.newsAfter = InpNewsAfter;
    ec.useRoom = InpUseRoom; ec.roomR = InpRoomR;
+   ec.holidays = InpHolidays;
    g_entry.Init(ec, GetPointer(g_log), GetPointer(g_risk), GetPointer(g_shared), GetPointer(g_ma));
 
    SExitConfig xc;
@@ -231,7 +233,7 @@ int OnInit()
    g_log.Info(StringFormat("Iniciado en %s · modo %s · riesgo %.2f%% · tope agregado %.2f%% · diario %.2f%% · DD %.2f%%",
                            g_sym, InpMode == STRAT_CONFLUENCE ? "CONFLUENCE" : "ORB_RETEST", g_risk.RiskPct(),
                            InpMaxAggRiskPct, InpDailyLossPct, InpMaxDDPct));
-   g_log.Info("US100 EA v3.1 · cierre efectivo y bloqueo de entradas a <60 min del cierre.");
+   g_log.Info("US100 EA v3.2 · cierre efectivo y bloqueo de entradas en festivos NYSE.");
    g_warm = false; g_lastBar = 0;
    EventSetTimer(5);
    return INIT_SUCCEEDED;
@@ -275,7 +277,8 @@ void OnNewBar()
       if(s.inTrade) g_lastSigBar = s.bar;
       int nyNow = g_ma.NyMinutesNow();
       int flatMin = g_exit.EffectiveFlatMin(HM(InpFlatAt));
-      if(g_entry.TryEnter(sig, s, NyDayStartServer(), nyNow, flatMin)) g_lastMsg = "Entrada: " + sig.reason;
+      int nyDay = CTimeUtil::DateKey(CTimeUtil::ServerToNY(TimeTradeServer()));
+      if(g_entry.TryEnter(sig, s, NyDayStartServer(), nyNow, flatMin, nyDay)) g_lastMsg = "Entrada: " + sig.reason;
       else { g_lastMsg = "Señal descartada: " + g_entry.LastReason(); g_log.Info(g_lastMsg + " (" + sig.reason + ")"); }
      }
   }
@@ -313,7 +316,9 @@ void Dashboard()
    double eq = AccountInfoDouble(ACCOUNT_EQUITY);
    string txt = "US100 FTMO EA · " + (InpMode == STRAT_CONFLUENCE ? "Confluence" : "ORB retest") + "\n";
    int flat = g_exit.EffectiveFlatMin(HM(InpFlatAt));
-   txt += StringFormat("Hora NY %02d:%02d · cierre efectivo %02d:%02d · %s\n", m / 60, m % 60, flat / 60, flat % 60, s.inTrade ? "ventana de entradas" : (s.inOR ? "Opening Range" : "fuera de ventana"));
+   int nyDay = CTimeUtil::DateKey(CTimeUtil::ServerToNY(TimeTradeServer()));
+   bool holiday = g_entry.IsHoliday(nyDay);
+   txt += StringFormat("Hora NY %02d:%02d · cierre efectivo %02d:%02d · %s%s\n", m / 60, m % 60, flat / 60, flat % 60, s.inTrade ? "ventana de entradas" : (s.inOR ? "Opening Range" : "fuera de ventana"), holiday ? " · FESTIVO NYSE" : "");
    txt += StringFormat("OR %s  H %.2f  L %.2f · gap %.2f× · régimen %s\n", s.orDone ? "ok" : "pendiente",
                        s.orH == MA_NA ? 0 : s.orH, s.orL == MA_NA ? 0 : s.orL, s.gapRatio, s.regime == 1 ? "alcista" : s.regime == -1 ? "bajista" : "—");
    txt += StringFormat("VWAP %.2f (%.2fσ) · M5 %d · M15 %d · H1 %d · vol %.2f×\n", s.vwap == MA_NA ? 0 : s.vwap, s.vwapDsd, s.m5Trend, s.m15Trend, s.h1Trend, s.volRatio);

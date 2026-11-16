@@ -6,16 +6,18 @@ import pytest
 from tradinglab import ea_us100
 from tradinglab import ea_us100_engine as engine
 from tradinglab.ea_registry import get_ea
+from tradinglab.nyse_calendar import FULL_HOLIDAYS, is_full_holiday
 
 
-def test_version_v31():
-    assert engine.VERSION == "3.1"
+def test_version_v32():
+    assert engine.VERSION == "3.2"
 
 
 def test_cierre_efectivo_usa_el_calendario():
     assert engine.effective_flat_min(20250703, 1545) == 770
     assert engine.effective_flat_min(20241129, 1545) == 770
-    assert engine.effective_flat_min(20260703, 1545) == 770
+    assert engine.effective_flat_min(20260703, 1545) == 945
+    assert is_full_holiday(20260703)
     assert engine.effective_flat_min(20250702, 1545) == 945
     assert engine.effective_flat_min(20250703, 1200) == 720
     assert engine.effective_flat_min(20250703, 1545, {}) == 945
@@ -30,7 +32,7 @@ def test_entradas_bloqueadas_si_quedan_menos_de_60_min():
 @pytest.mark.skipif(
     not ea_us100.CACHE.exists(), reason="cache M5 del EA no disponible"
 )
-def test_replica_v31_no_cruza_noche():
+def test_replica_v32_no_cruza_noche_y_no_opera_en_festivos():
     ea = get_ea("us100-ftmo1")
     if ea is None or not ea.setfile.exists():
         pytest.skip("EA o setfile no disponibles")
@@ -46,9 +48,12 @@ def test_replica_v31_no_cruza_noche():
     exit_day = pd.to_datetime(trades["t_exit"]).dt.normalize()
     assert (entry_day == exit_day).all()
 
-    for stamp in ("2025-07-03 10:00:00", "2026-07-03 09:50:00"):
-        row = trades[pd.to_datetime(trades["t"]) == pd.Timestamp(stamp)]
-        assert len(row) == 1
-        assert pd.Timestamp(row.iloc[0]["t_exit"]) == pd.Timestamp(
-            stamp[:10] + " 12:50:00"
-        )
+    days = pd.to_datetime(trades["t"]).dt.strftime("%Y%m%d").astype(int)
+    assert not days.isin(FULL_HOLIDAYS).any()
+    assert not (days == 20260703).any()
+
+    row = trades[pd.to_datetime(trades["t"]) == pd.Timestamp("2025-07-03 10:00:00")]
+    assert len(row) == 1
+    assert pd.Timestamp(row.iloc[0]["t_exit"]) == pd.Timestamp(
+        "2025-07-03 12:50:00"
+    )

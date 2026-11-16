@@ -16,7 +16,7 @@ corre dentro del terminal con su propio motor, su riesgo compartido y su magic.
 | Magics gestionados | `93010001`, `93020001` |
 | Timeframe | M5 |
 | Estrategia | `us100_ftmo_confluence` |
-| Versión | **v3.1** (cierre efectivo en cierres tempranos) |
+| Versión | **v3.2** (sin entradas en festivos completos NYSE) |
 | Setfile | `US100_FTMO_v3_challenge.set` |
 | Ruta | `MQL5/Experts/TradingLab/US100_FTMO1` |
 
@@ -122,7 +122,10 @@ símbolo ya incluyen sus magics.
 ## Forward pre-registrado
 
 El forward del EA está congelado en `lifecycle` **antes** de contar, con hash
-`2bfad45ca4ba36fc`. El reloj no arranca hoy: arranca el primer día con un fill
+**`f490642ba7a1f71b`** (v3.2). El hash anterior era `2bfad45ca4ba36fc`; se
+actualizó **antes de la primera operación forward** (`start_date=NULL`, 0 fills)
+y el cambio quedó registrado en `lifecycle_events`. El reloj no arranca hoy:
+arranca el primer día con un fill
 real del EA (`start_date` queda `NULL` hasta entonces).
 
 | Criterio | Umbral |
@@ -333,12 +336,64 @@ no se reejecutaron.
 6. Si el tester no tiene ticks en la ventana, el `OnTimer` también llama al
    cierre; aun así, la prueba válida es con ticks reales.
 
-El calendario cubre los cierres tempranos de NYSE 2021-2026. Si el bróker
+El calendario cubre los cierres tempranos de NYSE 2021-2027. Si el bróker
 añade un cierre puntual, se añade una línea `YYYYMMDD:HHMM` al input; no hace
 falta recompilar.
 
+**Nota v3.2:** el `20260703` que aparecía en la lista v3.1 era una
+clasificación incorrecta: el 4 de julio de 2026 cae en sábado y NYSE cierra el
+viernes 3 **completo**, no a las 13:00. v3.2 lo quita de `InpEarlyClose` y lo
+bloquea con `InpHolidays`.
+
 La copia versionada se compiló con MetaEditor64 el 2026-11-16: **0 errores,
 0 warnings**. El `.ex5` se genera al compilar en el terminal; no se versiona.
+
+## v3.2 · sin entradas en festivos completos NYSE
+
+Adoptada el 2026-11-16. Es una prueba nueva: `counted=1`, `count_tests` pasa de
+**1042** a **1043**. Informe: `reports/research/ea_us100_ftmo1/v32.md`.
+
+- Un solo módulo, `src/tradinglab/nyse_calendar.py`, con **69 festivos
+  completos** y **13 cierres tempranos** de NYSE 2021-2027. La réplica y los
+  inputs del EA se comparan en `tests/test_nyse_calendar.py`; no hay dos listas.
+- `InpHolidays` (`YYYYMMDD`, comas) trae los festivos **2026-2027**. El EA no
+  abre entradas esos días. El setfile solo añade ese input y corrige
+  `InpEarlyClose` (sale el 2026-07-03).
+- Verificación: **2026-2027** contra `nyse.com/markets/hours-calendars`
+  (consultada el 2026-11-16). La página solo publica 2026-2028; **2021-2025
+  quedan “por verificar”** con el calendario histórico y los datos.
+
+| Métrica | v3 | v3.1 | **v3.2** |
+|---|---:|---:|---:|
+| Operaciones | 480 | 481 | **476** |
+| Win rate | 33,8 % | 34,1 % | **34,2 %** |
+| Profit factor | 1,45 | 1,46 | **1,48** |
+| Expectativa | +0,298 R | +0,305 R | **+0,316 R** |
+| R total | +143,2 R | +146,8 R | **+150,4 R** |
+| DD máximo | 24,8 R | 24,8 R | **24,8 R** |
+| Noches | 2 | 0 | **0** |
+| Operaciones en festivo | 4 | 5 | **0** |
+
+v3.2 quita las **5 entradas de festivo** de v3.1 (suman −3,5755 R: cuatro
+stops y un EOD ganador). La única ganadora era el corto del 2026-07-03
+(+0,5037 R); el filtro también la quita, pero las cuatro pérdidas pesan más.
+La operación del 2025-07-04 era la cascada de v3.1; v3.2 la elimina por
+festivo.
+
+### Cómo probar v3.2 en el Strategy Tester
+
+1. Compila `US100_EA.mq5`; el `#property version` es **`3.20`**. Debe terminar
+   con 0 errores y 0 warnings.
+2. Carga `US100_FTMO_v3_challenge.set` y comprueba que `InpHolidays` trae los
+   festivos 2026-2027 y que `InpEarlyClose` ya **no** incluye `20260703`.
+3. **2026-06-29 → 2026-07-06**: el panel debe mostrar `FESTIVO NYSE` el 3-jul y
+   no debe haber ninguna entrada ese día.
+4. **2025-11-24 → 2025-11-29**: Thanksgiving 27-nov (festivo) y Black Friday
+   28-nov (cierre temprano). No debe abrir el 27 y el 28 debe cerrar ≤ 12:50 NY.
+5. **2025-07-01 → 2025-07-04**: el 3-jul sigue siendo cierre temprano; debe
+   mostrar `cierre efectivo 12:50` y no dejar posición al 4-jul.
+
+La copia versionada v3.2 compila con **0 errores y 0 warnings**.
 
 ## Optimización
 
@@ -386,9 +441,15 @@ El EA sigue usando `InpRiskPct=0.35` como respaldo si `InpDynRisk=false`.
   walk-forward es la estimación más prudente.
 - 2023 es plano y el PBO está cerca del límite. No subir riesgo por los
   resultados del backtest.
-- La v3.1 cierra antes en los cierres tempranos, pero el calendario es una
-  lista manual: si el bróker añade un cierre puntual, hay que añadirlo a
-  `InpEarlyClose`. El `SymbolInfoSessionTrade` es la primera fuente; el
-  calendario es la red de seguridad.
+- La v3.2 bloquea las entradas en festivos completos NYSE. El calendario
+  2026-2027 está verificado contra `nyse.com`; **2021-2025 quedan “por
+  verificar”** porque la página oficial solo publica 2026-2028. Si el bróker
+  añade un festivo o un cierre puntual, hay que actualizar el módulo
+  `nyse_calendar.py` y los inputs `InpHolidays` / `InpEarlyClose`; el test de
+  calendario falla si las listas se separan.
+- El forward está atado a `f490642ba7a1f71b` (v3.2). Si cambia el setfile, el
+  código MQL5, la réplica o el calendario, el hash cambia y el forward deja de
+  coincidir: hay que decidir explícitamente si se refresca antes del primer
+  fill o si se abre un forward nuevo.
 - El EA sigue en demo. Nada de esto es asesoramiento financiero ni una
   autorización para live.

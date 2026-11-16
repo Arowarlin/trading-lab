@@ -1,13 +1,14 @@
-# Propuesta v3.2. NO aplicada.
+# Propuesta v3.2. APROBADA y aplicada el 2026-11-16.
 #
 # Filtro de hipotesis: sin entradas en cierres completos de NYSE.
-# No se toca el EA ni el motor; si se adopta, suma 1 a count_tests y el
-# operador decide. Informe: reports/research/ea_us100_ftmo1/holidays.md
+# La replica v3.2 se registro como prueba counted=1: count_tests 1042 -> 1043.
+# El forward se refresco a f490642ba7a1f71b antes del primer fill.
+# Informe: reports/research/ea_us100_ftmo1/v32.md
 #
 version: 1
 id: ea_v32_holidays
 created_at: '2026-11-16'
-status: proposed
+status: adopted
 action: block_entries_on_nyse_full_holidays
 target: integrations/mt5/us100_ftmo1/US100_EA.mq5 + src/tradinglab/ea_us100_engine.py
 reason: 'En un cierre completo de NYSE no hay subasta de apertura cash; la sesion
@@ -144,4 +145,13 @@ impact:
   note: Adoptarla exige una prueba counted=1; este bloque no la ejecuta ni cambia
     el EA.
 decision: operator
-not_applied: true
+not_applied: false
+adopted_at: '2026-11-16'
+implementation:
+  setfile: integrations/mt5/us100_ftmo1/US100_FTMO_v3_challenge.set
+  ea_version: '3.20'
+  replica: '3.2'
+  count_tests: 1043
+  trial_id: 1700
+  report: reports/research/ea_us100_ftmo1/v32.md
+  forward_hash: f490642ba7a1f71b

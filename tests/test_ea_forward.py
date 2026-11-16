@@ -10,6 +10,7 @@ from tradinglab.ea_forward import (
     criteria_preview,
     ensure_forward,
     forward_metrics,
+    refresh_forward_preregistration,
 )
 from tradinglab.journal import ClosedTrade
 from tradinglab.lifecycle import (
@@ -20,7 +21,7 @@ from tradinglab.lifecycle import (
     start_external_forward,
 )
 
-FROZEN_HASH = "2bfad45ca4ba36fc"
+FROZEN_HASH = "f490642ba7a1f71b"
 
 
 def test_criterios_del_ea_congelados_con_hash():
@@ -35,6 +36,14 @@ def test_criterios_del_ea_congelados_con_hash():
     assert EA_CRITERIA["max_slippage_mean_points"] == pytest.approx(2.0)
     assert EA_CRITERIA["min_entry_match_pct"] == pytest.approx(0.90)
     assert EA_CRITERIA["max_guard_breaches"] == 0
+    assert EA_CRITERIA["engine_version"] == "3.2"
+    for key in (
+        "setfile_sha256",
+        "code_sha256",
+        "replica_sha256",
+        "calendar_sha256",
+    ):
+        assert len(EA_CRITERIA[key]) == 64
 
 
 def test_pre_registro_no_admite_otro_hash(tmp_path):
@@ -189,3 +198,35 @@ def test_coincidencia_de_entradas_50_y_criterio(tmp_path, monkeypatch):
         EA_CRITERIA,
     )
     assert not any("coincidencia de entradas" in item for item in passed)
+
+
+
+def test_refresh_preregistro_solo_antes_del_primer_fill(tmp_path):
+    db = tmp_path / "lab.db"
+    init_db(db)
+    old = pre_register_external(
+        db,
+        bot="ea:us100-ftmo1",
+        asset="US100.cash",
+        criteria={**EA_CRITERIA, "engine_version": "3.1"},
+    )
+    assert old["criteria_hash"] != criteria_hash(EA_CRITERIA)
+
+    row = refresh_forward_preregistration(db)
+
+    assert row["criteria_hash"] == criteria_hash(EA_CRITERIA)
+    assert row["start_date"] is None
+    assert "v3.2" in row["note"]
+    with connect(db) as con:
+        events = con.execute(
+            "SELECT reason, criteria_hash FROM lifecycle_events "
+            "WHERE bot='ea:us100-ftmo1' ORDER BY id"
+        ).fetchall()
+    assert events[-1]["criteria_hash"] == criteria_hash(EA_CRITERIA)
+    assert "v3.2" in events[-1]["reason"]
+
+    start_external_forward(
+        db, bot="ea:us100-ftmo1", first_date="2026-11-16"
+    )
+    with pytest.raises(LifecycleError, match="ya empez?"):
+        refresh_forward_preregistration(db)

@@ -207,12 +207,17 @@ def pre_register_external(
     asset: str,
     criteria: dict,
     note: str = "",
+    allow_refresh: bool = False,
 ) -> dict:
     """Pre-registra un forward externo con criterios y hash antes de contar.
 
     El estado queda en `incubando` sin fecha de inicio: el reloj arranca con el
     primer fill real (`start_external_forward`). El hash cubre solo criterios,
     no la fecha, para que pueda congelarse antes de operar.
+
+    `allow_refresh` solo se usa para cambiar el pre-registro **antes del primer
+    fill** (por ejemplo, al pasar de v3.1 a v3.2). Nunca cambia un forward que
+    ya tenga `start_date`.
     """
     init_db(db_path)
     payload = dict(criteria)
@@ -225,22 +230,50 @@ def pre_register_external(
         if row is not None:
             stored = row["criteria_hash"]
             if stored and str(stored) != digest:
-                raise LifecycleError(
-                    f"{bot}: criterios ya congelados con hash {stored}; "
-                    f"no se puede pre-registrar otro hash"
-                )
+                if not allow_refresh:
+                    raise LifecycleError(
+                        f"{bot}: criterios ya congelados con hash {stored}; "
+                        f"no se puede pre-registrar otro hash"
+                    )
+                if row["start_date"]:
+                    raise LifecycleError(
+                        f"{bot}: el forward ya empezó; no se puede refrescar "
+                        "el pre-registro"
+                    )
             if not row["start_date"]:
                 con.execute(
                     "UPDATE lifecycle_bots SET updated_at=?, criteria=?, "
-                    "criteria_hash=?, frozen_at=COALESCE(frozen_at, ?) WHERE bot=?",
+                    "criteria_hash=?, frozen_at=?, note=? WHERE bot=?",
                     (
                         now,
                         json.dumps(payload, ensure_ascii=False, sort_keys=True),
                         digest,
                         now,
+                        str(
+                            note
+                            or "pre-registro forward externo; inicio al primer fill"
+                        )[:1000],
                         bot,
                     ),
                 )
+                if allow_refresh and str(stored or "") != digest:
+                    con.execute(
+                        "INSERT INTO lifecycle_events"
+                        "(ts, bot, from_state, to_state, actor, reason, criteria_hash) "
+                        "VALUES(?,?,?,?,?,?,?)",
+                        (
+                            now,
+                            bot,
+                            row["state"],
+                            row["state"],
+                            "sistema",
+                            str(
+                                note
+                                or "pre-registro actualizado antes del primer fill"
+                            )[:1000],
+                            digest,
+                        ),
+                    )
         else:
             con.execute(
                 "INSERT INTO lifecycle_bots"

@@ -8,12 +8,13 @@ consume `lifecycle`. No envía órdenes ni modifica el EA.
 
 from __future__ import annotations
 
+import hashlib
 from datetime import date
 from pathlib import Path
 
 import pandas as pd
 
-from .config import DEFAULT_DB, Settings, get_settings
+from .config import DEFAULT_DB, ROOT, Settings, get_settings
 from .db import connect, init_db
 from .ea_registry import EAError, ExternalEA, get_ea
 from .ea_us100 import load_bars, load_setfile, params_from_set
@@ -25,6 +26,31 @@ from .lifecycle import (
     report_bot,
     start_external_forward,
 )
+
+
+def _sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _code_sha256(paths: list[Path]) -> str:
+    digest = hashlib.sha256()
+    for path in sorted(paths):
+        digest.update(path.name.encode("utf-8"))
+        digest.update(path.read_bytes())
+    return digest.hexdigest()
+
+
+EA_DIR = ROOT / "integrations" / "mt5" / "us100_ftmo1"
+EA_CODE = [
+    EA_DIR / "US100_EA.mq5",
+    EA_DIR / "US100_EntryManager.mqh",
+    EA_DIR / "US100_ExitManager.mqh",
+    EA_DIR / "US100_MarketAnalysis.mqh",
+    EA_DIR / "US100_RiskManager.mqh",
+    EA_DIR / "US100_Strategy.mqh",
+    EA_DIR / "Shared_FTMO_Risk.mqh",
+    EA_DIR / "Shared_Logger.mqh",
+]
 
 EA_CRITERIA = {
     "window_days": 60,
@@ -38,6 +64,11 @@ EA_CRITERIA = {
     "max_guard_breaches": 0,
     "require_drift": False,
     "min_forward_sharpe": None,
+    "engine_version": "3.2",
+    "setfile_sha256": _sha256(EA_DIR / "US100_FTMO_v3_challenge.set"),
+    "code_sha256": _code_sha256(EA_CODE),
+    "replica_sha256": _sha256(ROOT / "src" / "tradinglab" / "ea_us100_engine.py"),
+    "calendar_sha256": _sha256(ROOT / "src" / "tradinglab" / "nyse_calendar.py"),
 }
 DEFAULT_BOT = "ea:us100-ftmo1"
 POINT = 0.01
@@ -143,6 +174,43 @@ def ensure_forward(
     if first and not row.get("start_date"):
         row = start_external_forward(db_path, bot=bot, first_date=first)
     return dict(row)
+
+
+def refresh_forward_preregistration(
+    db_path: str | Path = DEFAULT_DB,
+    *,
+    bot: str = DEFAULT_BOT,
+) -> dict:
+    """Actualiza el pre-registro a v3.2 antes del primer fill del forward.
+
+    Si ya hay `start_date` o fills, se niega: cambiar el hash después del primer
+    fill sería un forward nuevo, no una actualización del pre-registro.
+    """
+    ea = _ea_for_bot(bot)
+    init_db(db_path)
+    with connect(db_path) as con:
+        found = con.execute(
+            "SELECT * FROM lifecycle_bots WHERE bot = ?", (bot,)
+        ).fetchone()
+    row = dict(found) if found is not None else None
+    if row is not None:
+        if row.get("start_date"):
+            raise LifecycleError(
+                f"{bot}: el forward ya empezó; no se puede actualizar el pre-registro"
+            )
+        first = _first_fill_date(db_path, ea, since=row.get("frozen_at"))
+        if first is not None:
+            raise LifecycleError(
+                f"{bot}: ya hay fills; no se puede actualizar el pre-registro"
+            )
+    return pre_register_external(
+        db_path,
+        bot=bot,
+        asset=ea.symbol,
+        criteria=EA_CRITERIA,
+        note="v3.2: pre-registro actualizado antes de la primera operación forward",
+        allow_refresh=True,
+    )
 
 
 def forward_metrics(
@@ -297,4 +365,5 @@ __all__ = [
     "ensure_forward",
     "forward_metrics",
     "forward_report",
+    "refresh_forward_preregistration",
 ]

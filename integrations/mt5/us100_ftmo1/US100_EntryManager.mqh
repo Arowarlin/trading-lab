@@ -24,6 +24,7 @@ struct SEntryConfig
    int    deviationPoints;
    bool   newsFilter; int newsBefore; int newsAfter;
    bool   useRoom; double roomR;   // exigir espacio hasta PDH/ONH (o PDL/ONL) ≥ roomR × riesgo
+   string holidays;          // festivos completos YYYYMMDD separados por comas
   };
 
 class CEntryManager
@@ -64,13 +65,31 @@ public:
       return false;
      }
 
+   // Festivo completo de NYSE para la fecha YYYYMMDD indicada.
+   bool IsHoliday(const int dateKey) const
+     {
+      if(StringLen(m_cfg.holidays) == 0) return false;
+      string items[];
+      int n = StringSplit(m_cfg.holidays, StringGetCharacter(",", 0), items);
+      for(int i = 0; i < n; i++)
+        {
+         string item = items[i];
+         StringTrimLeft(item);
+         StringTrimRight(item);
+         if(item == "") continue;
+         if((int)StringToInteger(item) == dateKey) return true;
+        }
+      return false;
+     }
+
    // Devuelve true si se abrió la operación
-   bool TryEnter(const SSignal &sig, const SMarket &s, const datetime dayStart, const int nyMinNow, const int flatMin)
+   bool TryEnter(const SSignal &sig, const SMarket &s, const datetime dayStart, const int nyMinNow, const int flatMin, const int nyDay)
      {
       m_lastReason = "";
       if(sig.dir == 0) return false;
       string why;
       if(!s.inTrade || s.inFlat)                 { m_lastReason = "Fuera de la ventana de entradas"; return false; }
+      if(IsHoliday(nyDay))                       { m_lastReason = "Festivo NYSE: no se abren entradas"; return false; }
       if(flatMin - nyMinNow < US100_MIN_BEFORE_CLOSE) { m_lastReason = "Cierre próximo: no se abren entradas"; return false; }
       if(HasPosition())                           { m_lastReason = "Ya hay una posición abierta"; return false; }
       if(!m_shared.IsTradingAllowed(why))         { m_lastReason = why; return false; }

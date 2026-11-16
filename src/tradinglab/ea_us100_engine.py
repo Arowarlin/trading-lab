@@ -21,6 +21,12 @@ from collections import deque
 import numpy as np
 import pandas as pd
 
+from .nyse_calendar import (
+    EARLY_CLOSES as EARLY_CLOSE,
+    effective_flat_min,
+    is_full_holiday,
+)
+
 DEF = dict(
     ny_offset_h=7, or_end=945, trade_start=935, trade_end=1130, flat_at=1545,
     atr_len=14, or_avg_days=20, fb_window=6,
@@ -44,35 +50,7 @@ def hm(x):
     return (x // 100) * 60 + x % 100
 
 
-VERSION = "3.1"
-
-# Cierres tempranos de NYSE (1:00 p.m. ET) en el periodo del backtest.
-# El motor cierra 10 minutos antes y nunca deja una posicion abierta de un dia
-# para otro. Es el mismo calendario que el input InpEarlyClose del EA.
-EARLY_CLOSE = {
-    20211126: 1300,
-    20221125: 1300,
-    20230703: 1300,
-    20231124: 1300,
-    20240703: 1300,
-    20241129: 1300,
-    20241224: 1300,
-    20250703: 1300,
-    20251128: 1300,
-    20251224: 1300,
-    20260703: 1300,
-    20261127: 1300,
-    20261224: 1300,
-}
-
-
-def effective_flat_min(day: int, flat_at: int, calendar: dict | None = None) -> int:
-    """Minuto NY del cierre efectivo: min(flat_at, cierre - 10)."""
-    base = hm(flat_at)
-    close = (EARLY_CLOSE if calendar is None else calendar).get(int(day))
-    if close is None:
-        return base
-    return min(base, max(0, hm(close) - 10))
+VERSION = "3.2"
 
 
 def entry_allowed(minute: int, flat_min: int, min_before: int = 60) -> bool:
@@ -118,6 +96,7 @@ def run(df, p=None, start=None, end=None):
     S_TR, E_TR = hm(P['trade_start']), hm(P['trade_end']); S_FL = hm(P['flat_at'])
     calendar = P['early_close'] if 'early_close' in P else EARLY_CLOSE
     flat_min = S_FL
+    holiday = False
     tot_w = sum(P['w']) or 1.0
     nSw, nFvg, nVw, nSt, nRv, nOr = [x * 100.0 / tot_w for x in P['w']]
 
@@ -146,8 +125,9 @@ def run(df, p=None, start=None, end=None):
         m = nym[i]
         if i == 0 or nyday[i] != nyday[i - 1]:
             flat_min = effective_flat_min(int(nyday[i]), P['flat_at'], calendar)
+            holiday = is_full_holiday(int(nyday[i]))
         # ── 1) ejecución al OPEN de la barra i (orden de la barra i-1) ─────
-        if pending is not None and pos is None and entry_allowed(m, flat_min):
+        if pending is not None and pos is None and not holiday and entry_allowed(m, flat_min):
             d, sl0 = pending
             sp = SP[i]
             if d == 1:
@@ -368,7 +348,7 @@ def run(df, p=None, start=None, end=None):
             mS = (cSwS == 1 or (brokeDn and c < orL)) and cVwS > 0
         okL = P['allow_long'] and gap_ok and reg_up and inTR and orDone and not vetoL and sL >= P['min_score'] and mL
         okS = P['allow_short'] and gap_ok and reg_dn and inTR and orDone and not vetoS and sS >= P['min_score'] and mS
-        can = inTR and not inFL and entry_allowed(m, flat_min) and tradesToday < P['max_trades'] and not locked and consec < P['max_consec'] and pos is None and i - lastEntry > P['cooldown'] and SP[i] <= P['max_spread']
+        can = inTR and not inFL and not holiday and entry_allowed(m, flat_min) and tradesToday < P['max_trades'] and not locked and consec < P['max_consec'] and pos is None and i - lastEntry > P['cooldown'] and SP[i] <= P['max_spread']
         if not can or not (okL or okS):
             # gestión BE / trailing al cierre
             pass
