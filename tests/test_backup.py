@@ -20,6 +20,7 @@ def test_restore_test_existe_y_verifica():
     assert ".env" in script
     assert "ALPACA_API_KEY" in script
     assert "integrity_check" in script
+    assert "MANIFEST.json" in script
     assert "PASS" in script
 
 
@@ -29,6 +30,20 @@ def test_migrate_secrets_no_imprime_valores():
     assert "get_password" in script
     assert "print(f\"OK   {key}\")" in script
     assert "print(f\"OK   {key}: {value}\")" not in script
+
+def test_backup_usa_api_sqlite_y_manifiesto():
+    backup = (ROOT / "scripts" / "backup.ps1").read_text(encoding="utf-8")
+    helper = (ROOT / "scripts" / "backup_db.py").read_text(encoding="utf-8")
+    assert "backup_db.py" in backup
+    assert "MANIFEST.json" in backup
+    assert "integrity_check" in backup
+    assert "fills" in backup and "strategy_trials" in backup and "ai_decisions" in backup
+    assert 'Copy-Item "data\\lab.db"' not in backup
+    assert "source_con.backup(dest_con)" in helper
+    assert "PRAGMA integrity_check" in helper
+    assert "wal_checkpoint(TRUNCATE)" in helper
+    assert "journal_mode=DELETE" in helper
+
 
 def test_backup_offsite_cifra_y_restore_descifra():
     backup = (ROOT / "scripts" / "backup.ps1").read_text(encoding="utf-8")

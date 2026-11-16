@@ -1,5 +1,7 @@
 # Backup local del laboratorio (código, config, informes e historial git).
 # Uso: backup.ps1 [-Offsite] [-Dest F:\TradingLabBackups]
+# La base SQLite se copia con la API de backup (incluye el WAL) y se verifica
+# con integrity_check; los conteos quedan en MANIFEST.json.
 # El zip NO contiene .env: los secretos viven en Windows Credential Manager
 # (keyring) y .env queda solo como fallback local. No compartir este zip.
 param(
@@ -11,6 +13,8 @@ param(
 $ErrorActionPreference = "Stop"
 
 $root = "E:\trading-lab"
+$python = Join-Path $root ".venv\Scripts\python.exe"
+if (-not (Test-Path $python)) { throw "Falta Python del venv: $python" }
 . (Join-Path $PSScriptRoot "heartbeat_task.ps1")
 Send-TaskHeartbeat -Root $root -Check "backup" -Status "start"
 trap {
@@ -24,6 +28,7 @@ trap {
     throw
 }
 $stamp = Get-Date -Format "yyyyMMdd_HHmmss"
+$startedAt = (Get-Date).ToUniversalTime().ToString("o")
 $stage = Join-Path $env:TEMP "tradinglab-backup-$stamp"
 $zip = Join-Path $Dest "trading-lab_$stamp.zip"
 $enc = $null
@@ -57,11 +62,22 @@ try {
         }
     }
 
-    # Estado útil, sin cachés ni modelos.
+    # Estado útil, sin cachés ni modelos. SQLite se copia con la API de
+    # backup: incluye las transacciones confirmadas que siguen en el WAL.
     $dataStage = Join-Path $stage "data"
     New-Item -ItemType Directory -Force -Path $dataStage | Out-Null
-    if (Test-Path "data\lab.db") {
-        Copy-Item "data\lab.db" (Join-Path $dataStage "lab.db") -Force
+    if (-not (Test-Path "data\lab.db")) {
+        throw "No existe data\lab.db; no se puede hacer un backup consistente"
+    }
+    $dbHelper = Join-Path $root "scripts\backup_db.py"
+    $dbBackup = Join-Path $dataStage "lab.db"
+    $dbJson = & $python $dbHelper --source (Join-Path $root "data\lab.db") --dest $dbBackup
+    if ($LASTEXITCODE -ne 0) {
+        throw "backup_db.py fallo: $dbJson"
+    }
+    $dbInfo = $dbJson | ConvertFrom-Json
+    if (-not $dbInfo.ok) {
+        throw "backup SQLite inconsistente: $($dbInfo.error)"
     }
     if (Test-Path "data\agent_runs") {
         Copy-Item "data\agent_runs" (Join-Path $dataStage "agent_runs") -Recurse -Force
@@ -82,12 +98,36 @@ try {
         Copy-Item ".git" (Join-Path $stage ".git") -Recurse -Force
     }
 
+    $manifest = [ordered]@{
+        version = 1
+        created_at = $startedAt
+        backup_at = $dbInfo.backup_at
+        archive = (Split-Path $zip -Leaf)
+        database = [ordered]@{
+            source = $dbInfo.source
+            backup = "data/lab.db"
+            integrity_check = $dbInfo.integrity_check
+            counts = $dbInfo.counts
+            time_columns = $dbInfo.time_columns
+        }
+    }
+    $manifestJson = $manifest | ConvertTo-Json -Depth 8
+    [System.IO.File]::WriteAllText(
+        (Join-Path $stage "MANIFEST.json"),
+        $manifestJson,
+        [System.Text.UTF8Encoding]::new($false)
+    )
+
     $info = @"
 TradingLab backup $stamp
 Origen: $root
 
-Contenido: código, configuración, tests, scripts, docs, informes, lab.db,
-historial git y .env.example.
+Contenido: código, configuración, tests, scripts, docs, informes, lab.db
+(backup SQLite consistente), MANIFEST.json, historial git y .env.example.
+
+SQLite: integrity_check=$($dbInfo.integrity_check)
+Filas: fills=$($dbInfo.counts.fills) · strategy_trials=$($dbInfo.counts.strategy_trials) · ai_decisions=$($dbInfo.counts.ai_decisions)
+Backup SQLite: $($dbInfo.backup_at)
 
 IMPORTANTE: este zip NO incluye .env. Los secretos están en Windows
 Credential Manager (servicio "tradinglab") y .env queda como fallback local.
@@ -116,7 +156,6 @@ finally {
 Remove-OldBackups $Dest
 
 if ($Offsite) {
-    $python = Join-Path $root ".venv\Scripts\python.exe"
     $helper = Join-Path $root "scripts\backup_config.py"
     $offsiteDir = (& $python $helper "dir" 2>$null | Out-String).Trim()
     if (-not $offsiteDir) { throw "backup.offsite_dir no está configurado en config/lab.yaml" }

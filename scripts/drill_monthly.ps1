@@ -4,6 +4,11 @@
 # rastro, sin cancelar ordenes, sin cerrar posiciones y sin enviar avisos.
 # Es lo que ejecuta la tarea programada `TradingLab-Drill` (domingo 03:00).
 #
+# Desde P1 el modo simulacion restaura el ultimo backup y compara los conteos
+# con las filas de la base viva anteriores a backup_at. El drill anterior solo
+# miraba ordenes/posiciones y no abria el zip; por eso un backup sin WAL podia
+# pasar integrity_check (era una base valida, solo mas vieja) sin detectarse.
+#
 # El simulacro real (-Confirm) solo paper/demo y exige el operador ARMADO.
 # NO registra la tarea: eso lo hace register_drill_task.ps1 y necesita
 # autorizacion explicita del usuario.
@@ -32,7 +37,7 @@ Write-Log "INICIO simulacro mensual (modo: $(if ($Confirm) { 'real' } else { 'si
 if ($Confirm) {
     $output = & $lab drill --confirm 2>&1
 } else {
-    $output = & $lab drill --dry-run 2>&1
+    $output = & $lab drill --dry-run --check-backup 2>&1
 }
 $code = $LASTEXITCODE
 $output | ForEach-Object {

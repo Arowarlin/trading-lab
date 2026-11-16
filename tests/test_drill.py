@@ -76,6 +76,54 @@ def _counts(db: Path) -> tuple[int, int]:
     return orders, positions
 
 
+def test_el_drill_puede_comprobar_el_backup(tmp_path, monkeypatch):
+    import tradinglab.drill as drill_mod
+
+    db = tmp_path / "lab.db"
+    init_db(db)
+    monkeypatch.setattr(
+        drill_mod,
+        "verify_latest_backup",
+        lambda live_db: {"ok": True, "detail": "OK backup"},
+    )
+    result = simulate_drill(db, _Settings(), check_backup=True)
+    assert result["backup_ok"] is True
+    assert result["backup"]["detail"] == "OK backup"
+    assert any(step["step"] == "backup" and step["ok"] for step in result["steps"])
+
+
+def test_el_drill_falla_si_el_backup_no_tiene_filas_anteriores(tmp_path, monkeypatch):
+    import tradinglab.drill as drill_mod
+
+    db = tmp_path / "lab.db"
+    init_db(db)
+    monkeypatch.setattr(
+        drill_mod,
+        "verify_latest_backup",
+        lambda live_db: {"ok": False, "detail": "fills: backup 0 < vivas 1"},
+    )
+    result = simulate_drill(db, _Settings(), check_backup=True)
+    assert result["backup_ok"] is False
+    assert any(step["step"] == "backup" and not step["ok"] for step in result["steps"])
+
+
+def test_el_cli_drill_check_backup_sale_1_si_falla(tmp_path, monkeypatch):
+    import tradinglab.cli as cli_mod
+    import tradinglab.drill as drill_mod
+
+    monkeypatch.setattr(cli_mod, "DEFAULT_DB", tmp_path / "lab.db")
+    init_db(tmp_path / "lab.db")
+    monkeypatch.setattr(
+        drill_mod,
+        "verify_latest_backup",
+        lambda live_db: {"ok": False, "detail": "falta fills anterior"},
+    )
+    runner = CliRunner()
+    result = runner.invoke(app, ["drill", "--dry-run", "--check-backup"])
+    assert result.exit_code == 1
+    assert "Backup FAIL" in result.output
+
+
 def test_el_simulacro_real_avisa_por_los_dos_canales(tmp_path, monkeypatch):
     enviados: list[str] = []
 

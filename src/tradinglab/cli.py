@@ -9222,6 +9222,11 @@ def drill_cmd(
         "--dry-run",
         help="Simulación sin tocar nada: informa y deja rastro, no cancela ni cierra",
     ),
+    check_backup: bool = typer.Option(
+        False,
+        "--check-backup",
+        help="Restaura el último backup y compara conteos con la base viva",
+    ),
 ) -> None:
     """Simulacro de emergencia (R8). Solo paper/demo y con operador armado."""
     from .drill import DrillError, run_drill, simulate_drill
@@ -9233,7 +9238,9 @@ def drill_cmd(
         raise typer.Exit(2)
     if dry_run:
         try:
-            resultado = simulate_drill(DEFAULT_DB, settings)
+            resultado = simulate_drill(
+                DEFAULT_DB, settings, check_backup=check_backup
+            )
         except DrillError as exc:
             console.print(f"[red]{exc}[/red]")
             raise typer.Exit(2) from exc
@@ -9245,10 +9252,17 @@ def drill_cmd(
             f"ntfy {'sí' if resultado['ntfy_configured'] else 'no'} · "
             f"telegram {'sí' if resultado['telegram_configured'] else 'no'}"
         )
+        if check_backup:
+            estado = "OK" if resultado["backup_ok"] else "FAIL"
+            color = "green" if resultado["backup_ok"] else "red"
+            detail = (resultado.get("backup") or {}).get("detail", "")
+            console.print(f"[{color}]Backup {estado}[/{color}]: {detail}")
         console.print(
             "[dim]No se canceló nada, no se cerró nada y no se enviaron avisos. "
             "El simulacro real sigue exigiendo operador armado y --confirm.[/dim]"
         )
+        if check_backup and not resultado["backup_ok"]:
+            raise typer.Exit(1)
         return
     try:
         session = server_session()

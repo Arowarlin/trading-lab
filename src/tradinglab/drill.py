@@ -14,6 +14,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
+from .backup_check import verify_latest_backup
 from .db import connect, init_db
 
 
@@ -29,6 +30,7 @@ def simulate_drill(
     settings,
     *,
     magics: tuple[int, ...] = (),
+    check_backup: bool = False,
 ) -> dict:
     """Simulación **sin tocar nada**: qué haría el simulacro y con qué canales.
 
@@ -98,6 +100,19 @@ def simulate_drill(
     except Exception as exc:
         step("canales", False, str(exc))
 
+    backup_ok = True
+    backup_report = None
+    if check_backup:
+        try:
+            backup_report = verify_latest_backup(db_path)
+            backup_ok = bool(backup_report.get("ok"))
+            detail = str(backup_report.get("detail") or "")
+        except Exception as exc:
+            backup_ok = False
+            detail = f"backup: {exc}"
+            backup_report = {"ok": False, "detail": detail}
+        step("backup", backup_ok, detail)
+
     result = {
         "ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "mode": str(getattr(settings, "mode", "paper")),
@@ -108,6 +123,8 @@ def simulate_drill(
         "telegram_configured": telegram,
         "magics": list(magics),
         "elapsed_s": round(time.time() - started, 2),
+        "backup_ok": backup_ok,
+        "backup": backup_report,
         "steps": steps,
     }
     try:

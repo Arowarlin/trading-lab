@@ -147,6 +147,31 @@ try {
         Write-Host "WARN no se pudo comprobar SQLite (falta venv o lab.db)"
     }
 
+    # 6) Manifiesto del backup: integrity_check y conteos deben coincidir
+    # con la base restaurada. Un backup sin WAL puede ser valido pero viejo;
+    # los conteos del manifiesto permiten detectarlo.
+    $manifestPath = Join-Path $expanded "MANIFEST.json"
+    if (-not (Test-Path $manifestPath)) {
+        $failures.Add("Falta MANIFEST.json")
+    } else {
+        try {
+            $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
+            if ([string]$manifest.database.integrity_check -ne "ok") {
+                $failures.Add("MANIFEST integrity_check != ok")
+            }
+            foreach ($table in @("fills", "strategy_trials", "ai_decisions")) {
+                $expected = [int]$manifest.database.counts.$table
+                $actual = & $python -c "import sqlite3,sys; con=sqlite3.connect(sys.argv[1]); print(con.execute('SELECT COUNT(*) FROM '+sys.argv[2]).fetchone()[0]); con.close()" $db $table
+                if ([int]$actual -ne $expected) {
+                    $failures.Add("Manifiesto $table=$expected, restaurado=$actual")
+                }
+            }
+            Write-Host "OK   MANIFEST.json y conteos"
+        } catch {
+            $failures.Add("MANIFEST.json invalido: $($_.Exception.Message)")
+        }
+    }
+
     if ($failures.Count -gt 0) {
         Write-Host ""
         Write-Host "FALLOS ($($failures.Count)):" -ForegroundColor Red
