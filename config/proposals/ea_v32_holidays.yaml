@@ -1,0 +1,147 @@
+# Propuesta v3.2. NO aplicada.
+#
+# Filtro de hipotesis: sin entradas en cierres completos de NYSE.
+# No se toca el EA ni el motor; si se adopta, suma 1 a count_tests y el
+# operador decide. Informe: reports/research/ea_us100_ftmo1/holidays.md
+#
+version: 1
+id: ea_v32_holidays
+created_at: '2026-11-16'
+status: proposed
+action: block_entries_on_nyse_full_holidays
+target: integrations/mt5/us100_ftmo1/US100_EA.mq5 + src/tradinglab/ea_us100_engine.py
+reason: 'En un cierre completo de NYSE no hay subasta de apertura cash; la sesion
+  de manana del CFD es sintetica y el edge de la apertura NY no esta presente. En
+  la replica v3.1 las 5 operaciones en festivos suman -3.5755R (PF 0.12, 1 ganadora
+  de 5) frente a +146.7849R del total. Muestra pequena: se propone por hipotesis,
+  no por optimizacion.'
+evidence:
+  engine: '3.1'
+  period: 2021-09-20/2026-11-11
+  total_trades: 481
+  total_r: 146.7849
+  holiday_days_in_window: 50
+  holiday_trades: 5
+  holiday_r: -3.5755
+  holiday_share_r: -0.0244
+  holiday_wins: 1
+  holiday_losses: 4
+  holiday_pf: 0.1235
+  holiday_expectancy_r: -0.7151
+  naive_total_without_holidays_r: 150.3604
+  detail:
+  - date: '2025-06-19'
+    holiday: Juneteenth
+    side: long
+    entry: '2025-06-19 11:00:00'
+    exit: '2025-06-19 11:35:00'
+    r: -1.0137
+    why: SL
+  - date: '2025-07-04'
+    holiday: 4 de julio
+    side: long
+    entry: '2025-07-04 09:50:00'
+    exit: '2025-07-04 12:40:00'
+    r: -1.0229
+    why: SL
+  - date: '2026-01-19'
+    holiday: MLK
+    side: long
+    entry: '2026-01-19 10:10:00'
+    exit: '2026-01-19 10:20:00'
+    r: -1.0149
+    why: SL
+  - date: '2026-05-25'
+    holiday: Memorial
+    side: long
+    entry: '2026-05-25 10:00:00'
+    exit: '2026-05-25 10:05:00'
+    r: -1.0277
+    why: SL
+  - date: '2026-07-03'
+    holiday: 4 de julio (observado)
+    side: short
+    entry: '2026-07-03 09:50:00'
+    exit: '2026-07-03 12:50:00'
+    r: 0.5037
+    why: EOD
+  report: reports/research/ea_us100_ftmo1/holidays.md
+proposal:
+  rule: No abrir entradas si la fecha NY de la senal esta en el calendario de cierres
+    completos de NYSE.
+  calendar:
+    '2021':
+    - '2021-01-01'
+    - '2021-01-18'
+    - '2021-02-15'
+    - '2021-04-02'
+    - '2021-05-31'
+    - '2021-07-05'
+    - '2021-09-06'
+    - '2021-11-25'
+    - '2021-12-24'
+    - '2021-12-31'
+    '2022':
+    - '2022-01-17'
+    - '2022-02-21'
+    - '2022-04-15'
+    - '2022-05-30'
+    - '2022-06-20'
+    - '2022-07-04'
+    - '2022-09-05'
+    - '2022-11-24'
+    - '2022-12-26'
+    '2023':
+    - '2023-01-02'
+    - '2023-01-16'
+    - '2023-02-20'
+    - '2023-04-07'
+    - '2023-05-29'
+    - '2023-06-19'
+    - '2023-07-04'
+    - '2023-09-04'
+    - '2023-11-23'
+    - '2023-12-25'
+    '2024':
+    - '2024-01-01'
+    - '2024-01-15'
+    - '2024-02-19'
+    - '2024-03-29'
+    - '2024-05-27'
+    - '2024-06-19'
+    - '2024-07-04'
+    - '2024-09-02'
+    - '2024-11-28'
+    - '2024-12-25'
+    '2025':
+    - '2025-01-01'
+    - '2025-01-20'
+    - '2025-02-17'
+    - '2025-04-18'
+    - '2025-05-26'
+    - '2025-06-19'
+    - '2025-07-04'
+    - '2025-09-01'
+    - '2025-11-27'
+    - '2025-12-25'
+    '2026':
+    - '2026-01-01'
+    - '2026-01-19'
+    - '2026-02-16'
+    - '2026-04-03'
+    - '2026-05-25'
+    - '2026-06-19'
+    - '2026-07-03'
+    - '2026-09-07'
+    - '2026-11-26'
+    - '2026-12-25'
+  scope: Solo entradas; salidas y parametros no cambian.
+  implementation: Calendario nuevo en el EA y en la replica; test counted=1 antes
+    de activarlo.
+impact:
+  count_tests_delta: 1
+  count_tests_after: 1043
+  note: Adoptarla exige una prueba counted=1; este bloque no la ejecuta ni cambia
+    el EA.
+decision: operator
+not_applied: true

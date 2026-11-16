@@ -3,11 +3,19 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
+from tradinglab import ea_forward
 from tradinglab.db import connect, init_db
-from tradinglab.ea_forward import EA_CRITERIA, criteria_preview, ensure_forward
+from tradinglab.ea_forward import (
+    EA_CRITERIA,
+    criteria_preview,
+    ensure_forward,
+    forward_metrics,
+)
+from tradinglab.journal import ClosedTrade
 from tradinglab.lifecycle import (
     LifecycleError,
     criteria_hash,
+    evaluate_criteria,
     pre_register_external,
     start_external_forward,
 )
@@ -103,3 +111,81 @@ def test_el_reloj_arranca_en_el_primer_fill(tmp_path):
         ).fetchall()
     assert [row["to_state"] for row in events] == ["incubando", "incubando"]
     assert events[-1]["criteria_hash"] == FROZEN_HASH
+
+
+
+def _forward_trade(
+    *,
+    entry_ts: str,
+    entry_price: float,
+    pnl: float,
+    r_multiple: float,
+    side: str = "long",
+) -> ClosedTrade:
+    return ClosedTrade(
+        bot="ea:us100-ftmo1",
+        account="ftmo_demo",
+        profile="intraday_fx",
+        ticker="US100.cash",
+        qty=1.0,
+        entry_price=entry_price,
+        exit_price=entry_price + pnl,
+        entry_ts=entry_ts,
+        exit_ts=entry_ts[:11] + "16:00:00+00:00",
+        pnl=pnl,
+        fees=0.0,
+        return_pct=0.0,
+        holding_hours=1.0,
+        day=entry_ts[:10],
+        hour=10,
+        entry_order_id=1,
+        exit_order_id=2,
+        exit_fill_id=3,
+        risk_usd=100.0,
+        r_multiple=r_multiple,
+        side=side,
+    )
+
+
+def test_coincidencia_de_entradas_50_y_criterio(tmp_path, monkeypatch):
+    db = tmp_path / "lab.db"
+    init_db(db)
+    trades = [
+        _forward_trade(
+            entry_ts="2025-07-03T14:02:00+00:00",
+            entry_price=100.01,
+            pnl=100.0,
+            r_multiple=1.0,
+        ),
+        _forward_trade(
+            entry_ts="2025-07-04T15:00:00+00:00",
+            entry_price=200.00,
+            pnl=-50.0,
+            r_multiple=-0.5,
+        ),
+    ]
+    monkeypatch.setattr(ea_forward, "_closed", lambda db_path, ea: trades)
+    monkeypatch.setattr(ea_forward, "load_bars", lambda cfg: pd.DataFrame())
+    monkeypatch.setattr(ea_forward, "load_setfile", lambda path: {})
+    monkeypatch.setattr(ea_forward, "params_from_set", lambda values: {})
+    predicted = pd.DataFrame(
+        [
+            {"t": pd.Timestamp("2025-07-03 10:00:00"), "d": 1, "ent": 100.0},
+            {"t": pd.Timestamp("2025-07-04 10:00:00"), "d": 1, "ent": 200.0},
+        ]
+    )
+    monkeypatch.setattr(ea_forward, "run_engine", lambda df, params: predicted)
+
+    metrics = forward_metrics(db)
+
+    assert metrics["n_trades"] == 2
+    assert metrics["entry_match_pct"] == pytest.approx(0.50)
+    assert metrics["slippage_mean_points"] == pytest.approx(1.0)
+    failures = evaluate_criteria({**metrics, "drift_status": "ok"}, EA_CRITERIA)
+    assert any("coincidencia de entradas" in item for item in failures)
+
+    passed = evaluate_criteria(
+        {**metrics, "entry_match_pct": 1.0, "drift_status": "ok"},
+        EA_CRITERIA,
+    )
+    assert not any("coincidencia de entradas" in item for item in passed)

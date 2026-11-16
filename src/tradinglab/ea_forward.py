@@ -204,6 +204,7 @@ def forward_metrics(
         if window.empty:
             continue
         engine_trade = window.iloc[0]
+        # El motor exporta t (hora NY), d (lado) y ent (precio de entrada).
         matched += 1
         slips.append(abs(float(trade.entry_price) - float(engine_trade["ent"])) / points)
     rs = []

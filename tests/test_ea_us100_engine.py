@@ -41,6 +41,7 @@ def test_replica_v31_no_cruza_noche():
     )
 
     assert len(trades) > 0
+    assert "ent" in trades.columns
     entry_day = pd.to_datetime(trades["t"]).dt.normalize()
     exit_day = pd.to_datetime(trades["t_exit"]).dt.normalize()
     assert (entry_day == exit_day).all()

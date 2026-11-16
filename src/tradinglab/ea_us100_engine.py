@@ -180,7 +180,7 @@ def run(df, p=None, start=None, end=None):
                     ex = pos['tp']; why = 'TP'
             if ex is not None:
                 r = (ex - pos['ent']) * d / pos['risk']
-                trades.append(dict(t=pos['t0'], t_exit=t[i], d=d, r=r, why=why, risk=pos['risk'], nym=pos['nym']))
+                trades.append(dict(t=pos['t0'], t_exit=t[i], ent=pos['ent'], d=d, r=r, why=why, risk=pos['risk'], nym=pos['nym']))
                 dayR += r
                 consec = consec + 1 if r < 0 else 0
                 if dayR <= -P['daily_loss_r']:
