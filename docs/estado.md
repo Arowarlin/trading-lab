@@ -182,3 +182,25 @@ Notas de lectura:
 
 Mientras no se cumplan, no se añaden familias, no se sube exposición y no se
 activa ningún bot: se mide y se espera.
+
+## Semana de observación 17-23 nov
+
+Del **2026-11-17** al **2026-11-23** no se construye nada nuevo salvo
+arreglos de fallos. No se añaden familias, no se sube exposición y no se
+activa ningún bot: se mide y se espera. Si algo falla, se corrige solo la
+causa operativa (tarea deshabilitada, ruta, LM Studio, datos sin refrescar).
+
+Comprobaciones diarias:
+
+| Comprobación | Cómo |
+|---|---|
+| Estado general | `lab doctor` — revisar cada WARN/FAIL, su causa y desde cuándo |
+| IA sesiones de hoy | `logs/ai_trader/<fecha>_{london,ny,daily}.log` y `logs/ai_trader/status/`; `lab doctor` → IA sesiones / IA tareas |
+| Riesgo abierto | `lab ai-trader status --json` (global y por estilo) y `lab mt5 positions` |
+| Frescura | `lab doctor` → Frescura (0/19); si falla, `lab fetch` / `lab mt5 fetch` del par atrasado |
+
+Pendiente, aplazado hasta después de la semana:
+
+- **T10** · Optuna con informe honesto.
+- **T15** · N efectivo del DSR global por clúster de correlación de las pruebas.
+
