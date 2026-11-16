@@ -810,6 +810,19 @@ def doctor(network: bool = typer.Option(False, "--network", help="Probar descarg
         table.add_row("IA sesiones", WARN, str(exc)[:160])
         table.add_row("IA tareas", WARN, str(exc)[:160])
 
+    # Tareas programadas: avisa si alguna TradingLab perdió ejecuciones.
+    try:
+        from .task_health import doctor_status as task_health_status
+
+        task_state = task_health_status()
+        table.add_row(
+            "Tareas perdidas",
+            OK if task_state["status"] == "ok" else WARN,
+            str(task_state["detail"])[:180],
+        )
+    except Exception as exc:
+        table.add_row("Tareas perdidas", WARN, str(exc)[:160])
+
     # Datos
     if network:
         try:
