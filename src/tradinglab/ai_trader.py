@@ -11,8 +11,10 @@ import hashlib
 import json
 import math
 import random
+import statistics
 import uuid
-from datetime import datetime, timedelta, timezone
+from dataclasses import replace
+from datetime import date, datetime, timedelta, timezone
 from datetime import time as dtime
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -29,6 +31,7 @@ from .ai_setups import (
 )
 from .ai_setups import plan as setup_plan
 from .audit import append_hashed
+from .carry import cost_model_from_asset
 from .config import DEFAULT_DB, ROOT, Settings, get_settings
 from .db import connect, init_db, utcnow
 from .indicators import atr, ema
@@ -692,6 +695,73 @@ def _commission_bps(symbol: str, price: float) -> float | None:
         return None
 
 
+def _swing_holding_nights(db_path: str | Path) -> float:
+    """Mediana de noches cerradas del estilo swing; 3 si no hay datos."""
+    init_db(db_path)
+    with connect(db_path) as con:
+        rows = con.execute(
+            "SELECT ts, exit_ts FROM ai_trades "
+            "WHERE style='swing' AND status='closed' AND exit_ts IS NOT NULL "
+            "AND COALESCE(source,'forward')='forward'"
+        ).fetchall()
+    nights: list[int] = []
+    for row in rows:
+        try:
+            entry = datetime.fromisoformat(str(row["ts"]).replace("Z", "+00:00"))
+            exit_at = datetime.fromisoformat(
+                str(row["exit_ts"]).replace("Z", "+00:00")
+            )
+        except (TypeError, ValueError):
+            continue
+        nights.append(max(0, (exit_at.date() - entry.date()).days))
+    if not nights:
+        return 3.0
+    return float(statistics.median(nights))
+
+
+def _swap_cost_price(
+    symbol: str,
+    price: float,
+    side: str,
+    *,
+    holding_nights: float,
+    start_day: date,
+    value_per_price: float,
+) -> float | None:
+    """Carry esperado en unidades de precio (positivo = coste)."""
+    if holding_nights <= 0:
+        return 0.0
+    if value_per_price <= 0:
+        return None
+    try:
+        asset = asset_costs(symbol)
+        model = cost_model_from_asset(asset)
+    except Exception:
+        return None
+    if model.swap_long is None or model.swap_short is None:
+        return None
+    # La tasa actual es la foto de swap de costs.yaml. Se usa como carry fijo
+    # para el gate; no se inventa una tasa histórica si falta DFF/markup.
+    model = replace(
+        model,
+        read_date=None,
+        dff=None,
+        markup_long=None,
+        markup_short=None,
+    )
+    nights = max(0, int(math.ceil(float(holding_nights))))
+    if nights <= 0:
+        return 0.0
+    cash = model.carry_for_nights(
+        "long" if str(side).strip().lower() in {"buy", "long"} else "short",
+        notional=float(price) * float(model.contract_size or 1.0),
+        shares=1.0,
+        start_day=start_day,
+        end_day=start_day + timedelta(days=nights),
+    )
+    return -float(cash) / float(value_per_price)
+
+
 def _cost_ratio(
     symbol: str,
     price: float,
@@ -699,8 +769,12 @@ def _cost_ratio(
     stop_distance: float,
     *,
     slippage_price: float | None = None,
+    side: str | None = None,
+    holding_nights: float = 0.0,
+    start_day: date | None = None,
+    value_per_price: float | None = None,
 ) -> float | None:
-    """Coste/R en precio: spread + comisión FTMO + 2× slippage_price."""
+    """Coste/R en precio: spread + comisión + 2× slippage + swap esperado."""
     commission = _commission_bps(symbol, price)
     if commission is None or stop_distance <= 0 or slippage_price is None:
         return None
@@ -709,6 +783,20 @@ def _cost_ratio(
         + price * commission / 10_000.0
         + 2.0 * float(slippage_price)
     )
+    if holding_nights and holding_nights > 0:
+        if side is None or start_day is None or value_per_price is None:
+            return None
+        swap_cost = _swap_cost_price(
+            symbol,
+            price,
+            side,
+            holding_nights=holding_nights,
+            start_day=start_day,
+            value_per_price=float(value_per_price),
+        )
+        if swap_cost is None:
+            return None
+        cost_price += swap_cost
     return cost_price / stop_distance
 
 
@@ -1821,19 +1909,37 @@ def _propose(item: dict, *, broker, cfg: dict, settings: Settings,
             f"SL {dist:.5f} < mínimo {min_sl:.5f} (3×spread o stops_level)",
             decision="skip", setup_valid=1, snapshot=snap,
         )
+    tick_size = float(spec.get("tick_size") or spec.get("point") or 0.0)
+    tick_value = float(spec.get("tick_value") or 0.0)
+    value_per_price = (
+        tick_value / tick_size if tick_size > 0 and tick_value > 0 else None
+    )
+    holding_nights = (
+        _swing_holding_nights(db_path) if style_name == "swing" else 0.0
+    )
+    start_day = (now or datetime.now(timezone.utc)).date()
     cost_ratio = _cost_ratio(
         item["symbol"], price, float(snap["spread"]), dist,
         slippage_price=cfg["slippage_price"].get(
             str(item["symbol"]).upper()
         ),
+        side=item["side"],
+        holding_nights=holding_nights,
+        start_day=start_day,
+        value_per_price=value_per_price,
     )
     if cost_ratio is None:
-        raise _Reject("coste/R Sin datos: comisión no verificada",
+        raise _Reject("coste/R Sin datos: comisión o swap no verificado",
                       decision="skip", setup_valid=1, snapshot=snap)
     max_cost = style["max_cost_r"]
     if max_cost is not None and cost_ratio > float(max_cost) + 1e-12:
+        reason = (
+            "skip: coste/R con swap"
+            if holding_nights > 0
+            else f"coste/R {cost_ratio:.3f} > {float(max_cost):.2f}"
+        )
         raise _Reject(
-            f"coste/R {cost_ratio:.3f} > {float(max_cost):.2f}",
+            reason,
             decision="skip", setup_valid=1, snapshot=snap,
         )
     risk_pct = float(
