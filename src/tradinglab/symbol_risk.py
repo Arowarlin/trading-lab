@@ -176,22 +176,138 @@ def open_risk_by_symbol(
     return {symbol: round(value, 2) for symbol, value in out.items()}
 
 
+def _cap_candidate(pct: float, usd: float, source: str) -> dict:
+    return {"pct": float(pct), "usd": float(usd), "source": source}
+
+
+def _effective_cap(candidates: list[dict]) -> dict:
+    """El mínimo de todos los topes aplicables; lista las fuentes que empatan."""
+    usable = [item for item in candidates if item.get("usd") is not None]
+    if not usable:
+        return {"pct": None, "usd": None, "source": ""}
+    low = min(float(item["usd"]) for item in usable)
+    binding = [
+        item for item in usable if abs(float(item["usd"]) - low) <= 1e-9
+    ]
+    source = " / ".join(
+        f"{item['source']} {float(item['pct']):.2%}" for item in binding
+    )
+    return {"pct": float(binding[0]["pct"]), "usd": low, "source": source}
+
+
+def effective_symbol_cap(
+    account: AccountDefinition | None,
+    symbol: str,
+    *,
+    balance: float | None = None,
+    ai_pct: float | None = None,
+) -> dict:
+    """Mínimo entre el tope explícito existente, el 2 % nuevo y ai_trader."""
+    if account is None:
+        return _effective_cap([])
+    base = _risk_base(account, balance)
+    target = canonical_symbol(symbol)
+    candidates: list[dict] = []
+    for key, value in (account.symbol_risk_caps or {}).items():
+        if canonical_symbol(key) == target:
+            candidates.append(
+                _cap_candidate(
+                    value,
+                    float(account.account_size) * float(value),
+                    "accounts.yaml symbol_risk_caps",
+                )
+            )
+            break
+    caps = getattr(account, "risk_caps", None)
+    if caps is not None and caps.symbol_pct is not None:
+        candidates.append(
+            _cap_candidate(
+                caps.symbol_pct,
+                base * float(caps.symbol_pct),
+                "accounts.yaml account_risk_caps",
+            )
+        )
+    if ai_pct is not None:
+        candidates.append(
+            _cap_candidate(ai_pct, base * float(ai_pct), "ai_trader.yaml")
+        )
+    return _effective_cap(candidates)
+
+
+def effective_group_cap(
+    account: AccountDefinition | None,
+    group: str,
+    *,
+    balance: float | None = None,
+) -> dict:
+    """Tope del grupo; ``symbol:XXX`` no tiene tope de grupo adicional."""
+    if account is None or str(group).startswith("symbol:"):
+        return _effective_cap([])
+    caps = getattr(account, "risk_caps", None)
+    if caps is None or caps.group_pct is None:
+        return _effective_cap([])
+    base = _risk_base(account, balance)
+    return _effective_cap(
+        [
+            _cap_candidate(
+                caps.group_pct,
+                base * float(caps.group_pct),
+                "accounts.yaml account_risk_caps",
+            )
+        ]
+    )
+
+
+def effective_total_cap(
+    account: AccountDefinition | None,
+    *,
+    balance: float | None = None,
+    prop_pct: float | None = None,
+    ai_pct: float | None = None,
+) -> dict:
+    """Mínimo entre prop.yaml, accounts.yaml, ai_trader.yaml y el 4 % nuevo."""
+    if account is None:
+        return _effective_cap([])
+    base = _risk_base(account, balance)
+    candidates: list[dict] = []
+    if prop_pct is not None:
+        candidates.append(
+            _cap_candidate(
+                prop_pct,
+                float(account.account_size) * float(prop_pct),
+                "prop.yaml",
+            )
+        )
+    if account.defaults.max_open_risk_pct:
+        candidates.append(
+            _cap_candidate(
+                account.defaults.max_open_risk_pct,
+                float(account.account_size) * float(account.defaults.max_open_risk_pct),
+                "accounts.yaml",
+            )
+        )
+    if ai_pct is not None:
+        candidates.append(
+            _cap_candidate(ai_pct, base * float(ai_pct), "ai_trader.yaml")
+        )
+    caps = getattr(account, "risk_caps", None)
+    if caps is not None and caps.total_pct is not None:
+        candidates.append(
+            _cap_candidate(
+                caps.total_pct,
+                base * float(caps.total_pct),
+                "accounts.yaml account_risk_caps",
+            )
+        )
+    return _effective_cap(candidates)
+
+
 def symbol_cap_usd(
     account: AccountDefinition | None,
     symbol: str,
     balance: float | None = None,
 ) -> float | None:
-    """Tope del símbolo: override explícito o 2 % por defecto de la cuenta."""
-    if account is None:
-        return None
-    target = canonical_symbol(symbol)
-    for key, value in (account.symbol_risk_caps or {}).items():
-        if canonical_symbol(key) == target:
-            return _risk_base(account, balance) * float(value)
-    caps = getattr(account, "risk_caps", None)
-    if caps is not None and caps.symbol_pct is not None:
-        return _risk_base(account, balance) * float(caps.symbol_pct)
-    return None
+    return effective_symbol_cap(account, symbol, balance=balance).get("usd")
 
 
 def group_cap_usd(
@@ -199,23 +315,14 @@ def group_cap_usd(
     group: str,
     balance: float | None = None,
 ) -> float | None:
-    """Tope del grupo; ``symbol:XXX`` no tiene tope de grupo adicional."""
-    if account is None or str(group).startswith("symbol:"):
-        return None
-    caps = getattr(account, "risk_caps", None)
-    if caps is None or caps.group_pct is None:
-        return None
-    return _risk_base(account, balance) * float(caps.group_pct)
+    return effective_group_cap(account, group, balance=balance).get("usd")
 
 
 def total_cap_usd(
     account: AccountDefinition | None,
     balance: float | None = None,
 ) -> float | None:
-    caps = getattr(account, "risk_caps", None)
-    if account is None or caps is None or caps.total_pct is None:
-        return None
-    return _risk_base(account, balance) * float(caps.total_pct)
+    return effective_total_cap(account, balance=balance).get("usd")
 
 
 def risk_snapshot(
@@ -377,6 +484,8 @@ def open_risk_report(
     *,
     broker,
     balance: float | None = None,
+    prop_pct: float | None = None,
+    ai_pct: float | None = None,
 ) -> dict:
     positions = broker.positions() or []
     risk = risk_snapshot(
@@ -388,26 +497,39 @@ def open_risk_report(
     )
     symbols = {}
     for symbol, open_risk in sorted(risk["by_symbol"].items()):
-        cap = risk["symbol_caps"].get(symbol)
+        effective = effective_symbol_cap(
+            account, symbol, balance=balance, ai_pct=ai_pct
+        )
+        cap = effective.get("usd")
         symbols[symbol] = {
             "open_risk_usd": round(open_risk, 2),
             "cap_usd": round(cap, 2) if cap is not None else None,
+            "cap_pct": effective.get("pct"),
+            "source": effective.get("source") or "",
             "used_pct": round(open_risk / cap, 6) if cap else None,
             "remaining_usd": round(max(0.0, cap - open_risk), 2) if cap is not None else None,
         }
     groups = {}
     for group, open_risk in sorted(risk["by_group"].items()):
-        cap = risk["group_caps"].get(group)
+        effective = effective_group_cap(account, group, balance=balance)
+        cap = effective.get("usd")
         groups[group] = {
             "open_risk_usd": round(open_risk, 2),
             "cap_usd": round(cap, 2) if cap is not None else None,
+            "cap_pct": effective.get("pct"),
+            "source": effective.get("source") or "",
             "used_pct": round(open_risk / cap, 6) if cap else None,
             "remaining_usd": round(max(0.0, cap - open_risk), 2) if cap is not None else None,
         }
-    total_cap = risk["total_cap_usd"]
+    effective_total = effective_total_cap(
+        account, balance=balance, prop_pct=prop_pct, ai_pct=ai_pct
+    )
+    total_cap = effective_total.get("usd")
     total = {
         "open_risk_usd": round(risk["total_usd"], 2),
         "cap_usd": round(total_cap, 2) if total_cap is not None else None,
+        "cap_pct": effective_total.get("pct"),
+        "source": effective_total.get("source") or "",
         "used_pct": round(risk["total_usd"] / total_cap, 6) if total_cap else None,
         "remaining_usd": round(max(0.0, total_cap - risk["total_usd"]), 2)
         if total_cap is not None
@@ -434,6 +556,9 @@ __all__ = [
     "alert_risk_events",
     "canonical_symbol",
     "ea_magics",
+    "effective_group_cap",
+    "effective_symbol_cap",
+    "effective_total_cap",
     "group_cap_usd",
     "open_risk_by_symbol",
     "open_risk_report",

@@ -328,12 +328,17 @@ foreach ($cfg in $config.tasks) {
             if ($null -eq $trig -or -not $trig.at) { continue }
             $startText = Convert-AnchorToLocal ([string]$trig.at) $today $anchor
             $startLocal = [datetime]::ParseExact("$($today.ToString('yyyy-MM-dd')) $startText", "yyyy-MM-dd HH:mm", $null)
-            $mask = Get-DayMask $trig.days
+            $mask = 0
+            $type = "weekly"
+            if ($trig.type -eq "daily") {
+                $type = "daily"
+            } else {
+                $mask = Get-DayMask $trig.days
+            }
             $intervalMinutes = 0
             if ($null -ne $trig.interval_minutes) { $intervalMinutes = [int]$trig.interval_minutes }
             $endLocal = $null
             $spanText = ""
-            $type = "weekly"
             if ($trig.type -eq "repetition") {
                 $type = "repetition"
                 if ($trig.end) {
@@ -603,7 +608,9 @@ foreach ($plan in $plans) {
             if ($mask -band 32) { $dayNames += "Friday" }
             if ($mask -band 64) { $dayNames += "Saturday" }
             $days = @($dayNames | ForEach-Object { Get-DayOfWeek $_ })
-            if ($local.type -eq "repetition") {
+            if ($local.type -eq "daily") {
+                $trigger = New-ScheduledTaskTrigger -Daily -At $local.start
+            } elseif ($local.type -eq "repetition") {
                 $duration = $local.end - $local.start
                 $once = New-ScheduledTaskTrigger -Once -At ((Get-Date).Date.AddDays(1)) `
                     -RepetitionInterval (New-TimeSpan -Minutes ([int]$local.intervalMinutes)) `

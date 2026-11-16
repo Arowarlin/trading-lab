@@ -103,6 +103,18 @@ tasks:
       - days: weekdays
         at: "07:59"
 
+  # Backup cifrado a OneDrive, despues del backup local de las 19:00.
+  # Sin RunLevel Highest: no necesita administrador. WakeToRun=false.
+  - name: TradingLab-BackupOffsite
+    anchor: local
+    manage: true
+    script: scripts/backup.ps1
+    args: "-Offsite"
+    wake_to_run: false
+    triggers:
+      - type: daily
+        at: "19:30"
+
   # Inventario completo: no se re-registran, solo se muestran.
   - {name: TradingLab-Agents, anchor: local, manage: false}
   - {name: TradingLab-AI-Daily, anchor: local, manage: false}

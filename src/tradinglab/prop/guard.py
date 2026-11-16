@@ -313,13 +313,12 @@ class PropGuard:
                 open_risk = max(0.0, float(open_risk_usd)) + proposed_risk
             else:
                 open_risk = (state.open_lots + proposed_lots) * risk_per_lot
+            caps = []
+            if rules.max_open_risk_pct is not None:
+                caps.append(rules.account_size * rules.max_open_risk_pct)
             if total_risk_cap_usd is not None:
-                # El tope agregado aprobado (4 %) sustituye al genérico de
-                # prop.yaml para esta cuenta; el colchón de la cuenta sigue
-                # aplicándose por separado.
-                cap = float(total_risk_cap_usd)
-            else:
-                cap = rules.account_size * float(rules.max_open_risk_pct or 0.0)
+                caps.append(float(total_risk_cap_usd))
+            cap = min(caps)
             if open_risk > cap + 1e-9:
                 return report(
                     False,
@@ -600,21 +599,17 @@ def evaluate_account(
             risk_kind="group",
         )
 
-    total_limit = (
-        float(total_risk_cap_usd)
-        if total_risk_cap_usd is not None
-        else (
-            rules.account_size * rules.max_open_risk_pct
-            if rules.max_open_risk_pct is not None
-            else base.remaining_usd
-        )
-    )
-    cap = base.remaining_usd
+    total_candidates = []
+    if rules.max_open_risk_pct is not None:
+        total_candidates.append(rules.account_size * rules.max_open_risk_pct)
     if total_risk_cap_usd is not None:
-        # El tope agregado aprobado sustituye al max_open_risk_pct genérico.
-        cap = min(cap, float(total_risk_cap_usd))
-    elif rules.max_open_risk_pct is not None:
+        total_candidates.append(float(total_risk_cap_usd))
+    total_limit = min(total_candidates) if total_candidates else base.remaining_usd
+    cap = base.remaining_usd
+    if rules.max_open_risk_pct is not None:
         cap = min(cap, rules.account_size * rules.max_open_risk_pct)
+    if total_risk_cap_usd is not None:
+        cap = min(cap, float(total_risk_cap_usd))
     if total_risk > cap + 1e-9:
         return AccountGuardReport(
             False,

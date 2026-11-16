@@ -157,6 +157,28 @@ def test_check_ignora_tarea_de_inventario():
     assert "TradingLab-AI-Daily" not in {item["task"] for item in problems}
 
 
+def test_check_incluye_trigger_diario():
+    records = [
+        {
+            "name": "TradingLab-BackupOffsite",
+            "triggers": [
+                {"start": "19:30", "days": 0, "type": "MSFT_TaskDailyTrigger"}
+            ],
+        }
+    ]
+    schedule = {
+        "tasks": [
+            {
+                "name": "TradingLab-BackupOffsite",
+                "anchor": "local",
+                "manage": True,
+                "triggers": [{"at": "19:30"}],
+            }
+        ]
+    }
+    assert check_schedule(records, schedule, US_WINTER, LOCAL) == []
+
+
 def test_check_ignora_trigger_temporal_de_recuperacion():
     records = [
         {
@@ -238,6 +260,7 @@ def test_calendario_real_inventario_completo():
         "TradingLab-AI-NY",
         "TradingLab-AI-Scalp",
         "TradingLab-Backup",
+        "TradingLab-BackupOffsite",
         "TradingLab-DeepCompare",
         "TradingLab-Drill",
         "TradingLab-DryRun",
@@ -277,6 +300,11 @@ def test_calendario_real_inventario_completo():
     assert by_name["TradingLab-RebootAfterDownload"]["manage"] is False
     assert by_name["TradingLab-RebootAfterDownload"]["enabled"] is False
     assert "Reinicia" in by_name["TradingLab-RebootAfterDownload"]["disabled_reason"]
+    offsite = by_name["TradingLab-BackupOffsite"]
+    assert offsite["args"] == "-Offsite"
+    assert offsite["wake_to_run"] is False
+    assert offsite["triggers"][0]["type"] == "daily"
+    assert offsite["triggers"][0]["at"] == "19:30"
 
     maintenance = schedule["maintenance"]
     assert maintenance["name"] == "TradingLab-ScheduleTZ"

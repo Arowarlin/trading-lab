@@ -357,6 +357,19 @@ def _mt5_account_for_rules(rules: PropRules):
     return candidates[0] if candidates else None
 
 
+def _short_risk_source(source: str) -> str:
+    """accounts.yaml symbol_risk_caps 2.00% -> accounts.yaml 2.00%."""
+    parts = []
+    for item in str(source or "").split("/"):
+        tokens = item.strip().split()
+        if not tokens:
+            continue
+        file_name = tokens[0]
+        pct = tokens[-1] if tokens[-1].endswith("%") else ""
+        parts.append(f"{file_name} {pct}".strip())
+    return " + ".join(parts)
+
+
 @app.command()
 def version() -> None:
     """Muestra la versión instalada."""
@@ -686,8 +699,28 @@ def doctor(network: bool = typer.Option(False, "--network", help="Probar descarg
                         )
                     except Exception:
                         pass
+                    prop_pct = _prop_rules().max_open_risk_pct
+                    ai_pct = None
+                    try:
+                        from .ai_trader import load_config as load_ai_config
+
+                        ai_caps = [
+                            float(item["max_open_risk"])
+                            for item in (
+                                (load_ai_config().get("styles") or {}).values()
+                            )
+                            if item.get("max_open_risk") is not None
+                        ]
+                        ai_pct = min(ai_caps) if ai_caps else None
+                    except Exception:
+                        ai_pct = None
                     risk = open_risk_report(
-                        DEFAULT_DB, account, broker=broker, balance=balance
+                        DEFAULT_DB,
+                        account,
+                        broker=broker,
+                        balance=balance,
+                        prop_pct=prop_pct,
+                        ai_pct=ai_pct,
                     )
                 finally:
                     try:
@@ -701,8 +734,10 @@ def doctor(network: bool = typer.Option(False, "--network", help="Probar descarg
                     if cap is None:
                         parts.append(f"{symbol} {item['open_risk_usd']:,.0f}/sin tope")
                         continue
+                    source = _short_risk_source(item.get("source") or "")
                     parts.append(
                         f"{symbol} {item['open_risk_usd']:,.0f}/{cap:,.0f}"
+                        + (f" ({source})" if source else "")
                     )
                     if item["open_risk_usd"] > cap + 1e-9:
                         over = True
@@ -710,15 +745,19 @@ def doctor(network: bool = typer.Option(False, "--network", help="Probar descarg
                     cap = item.get("cap_usd")
                     if cap is None:
                         continue
+                    source = _short_risk_source(item.get("source") or "")
                     parts.append(
                         f"{group} {item['open_risk_usd']:,.0f}/{cap:,.0f}"
+                        + (f" ({source})" if source else "")
                     )
                     if item["open_risk_usd"] > cap + 1e-9:
                         over = True
                 total = risk["total"]
                 if total.get("cap_usd") is not None:
+                    source = _short_risk_source(total.get("source") or "")
                     parts.append(
                         f"total {total['open_risk_usd']:,.0f}/{total['cap_usd']:,.0f}"
+                        + (f" ({source})" if source else "")
                     )
                     if total["open_risk_usd"] > total["cap_usd"] + 1e-9:
                         over = True

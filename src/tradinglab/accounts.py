@@ -232,21 +232,15 @@ def effective_limits(
         daily_candidates.append(float(firm["daily_loss_pct"]))
     if account.account_daily_stop is not None:
         daily_candidates.append(float(account.account_daily_stop))
-    if account.risk_caps.total_pct is not None:
-        # Tope agregado aprobado para esta cuenta; sustituye al genérico de
-        # prop.yaml, que sigue intacto para las demás cuentas.
-        max_open = float(account.risk_caps.total_pct)
-    elif firm["max_open_risk_pct"] is not None:
-        max_open = min(own.max_open_risk_pct, float(firm["max_open_risk_pct"]))
-    else:
-        max_open = own.max_open_risk_pct
     return AccountLimits(
         daily_loss_pct=min(daily_candidates),
         max_drawdown_pct=min(own.max_drawdown_pct, firm["max_drawdown_pct"])
         if firm["max_drawdown_pct"] is not None
         else own.max_drawdown_pct,
         per_trade_risk_pct=own.per_trade_risk_pct,
-        max_open_risk_pct=max_open,
+        max_open_risk_pct=min(own.max_open_risk_pct, firm["max_open_risk_pct"])
+        if firm["max_open_risk_pct"] is not None
+        else own.max_open_risk_pct,
         max_trades_per_day=own.max_trades_per_day,
     )
 

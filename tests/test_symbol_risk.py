@@ -9,6 +9,8 @@ from tradinglab.prop.rules import from_yaml
 from tradinglab.symbol_risk import (
     account_magics,
     alert_risk_events,
+    effective_symbol_cap,
+    effective_total_cap,
     group_cap_usd,
     open_risk_by_symbol,
     open_risk_report,
@@ -80,7 +82,7 @@ def test_tope_por_simbolo_en_accounts_yaml():
     assert group_cap_usd(account, "indices_us") == pytest.approx(3_000.0)
     assert group_cap_usd(account, "usd") == pytest.approx(3_000.0)
     assert group_cap_usd(account, "metales") == pytest.approx(3_000.0)
-    assert total_cap_usd(account) == pytest.approx(4_000.0)
+    assert total_cap_usd(account) == pytest.approx(2_000.0)
 
 
 def test_grupos_de_riesgo():
@@ -151,7 +153,25 @@ def test_informe_de_riesgo_usa_el_tope_de_la_cuenta():
     assert item["cap_usd"] == pytest.approx(2_000.0)
     assert item["remaining_usd"] == pytest.approx(1_800.0)
     assert payload["groups"]["indices_us"]["cap_usd"] == pytest.approx(3_000.0)
-    assert payload["total"]["cap_usd"] == pytest.approx(4_000.0)
+    assert payload["total"]["cap_usd"] == pytest.approx(2_000.0)
+    assert "accounts.yaml" in payload["total"]["source"]
+
+
+def test_limite_nuevo_no_afloja_el_existente():
+    account = load_accounts()["ftmo_demo"]
+    symbol_cap = effective_symbol_cap(
+        account, "US100.cash", balance=105_000, ai_pct=0.02
+    )
+    assert symbol_cap["usd"] == pytest.approx(2_000.0)
+    assert "symbol_risk_caps" in symbol_cap["source"]
+
+    total_cap = effective_total_cap(
+        account, balance=105_000, prop_pct=0.02, ai_pct=0.02
+    )
+    assert total_cap["usd"] == pytest.approx(2_000.0)
+    assert "prop.yaml" in total_cap["source"]
+    assert "accounts.yaml" in total_cap["source"]
+    assert total_cap["usd"] < 0.04 * 105_000
 
 
 def test_tres_carriles_us100_el_tercero_no_abre():
@@ -199,7 +219,7 @@ def test_posicion_sin_sl_bloquea_todo(monkeypatch):
         balance=100_000,
     )
     assert risk["missing_sl"]
-    assert risk["total_usd"] == pytest.approx(4_000.0)
+    assert risk["total_usd"] == pytest.approx(2_000.0)
 
     report = evaluate_account(
         from_yaml("ftmo", "challenge", 100_000),

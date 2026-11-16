@@ -132,7 +132,7 @@ def _current_times(records: list[dict] | None) -> dict[str, set[str]]:
             if not isinstance(trigger, dict):
                 continue
             kind = str(trigger.get("type") or "")
-            if kind and "Weekly" not in kind:
+            if kind and "Weekly" not in kind and "Daily" not in kind:
                 continue
             start = str(trigger.get("start") or "").strip()
             if start:
