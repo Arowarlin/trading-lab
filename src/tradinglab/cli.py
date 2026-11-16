@@ -10422,7 +10422,9 @@ def costs_swap_sync_cmd(
         release(DEFAULT_DB)
 
     table = Table(title="Swap · MT5 → costs.yaml")
-    for column in ("Símbolo", "Long", "Short", "Unidad", "Modo", "Estado"):
+    for column in (
+        "Símbolo", "Long", "Short", "Unidad", "Triple", "Modo", "Estado"
+    ):
         table.add_column(column)
     for symbol, item in sorted(payload["symbols"].items()):
         table.add_row(
@@ -10430,12 +10432,14 @@ def costs_swap_sync_cmd(
             f"{item['long']:+.4f}",
             f"{item['short']:+.4f}",
             item["unit"],
+            item.get("triple_name", str(item["triple_swap_weekday"])),
             str(item["swap_mode"]),
             item["mode_label"],
         )
     for symbol, item in sorted(payload["skipped"].items()):
         table.add_row(
-            symbol, "Sin datos", "Sin datos", "—", str(item.get("swap_mode", "—")),
+            symbol, "Sin datos", "Sin datos", "—", "—",
+            str(item.get("swap_mode", "—")),
             item.get("reason", item.get("status", "no_soportado")),
         )
     console.print(table)

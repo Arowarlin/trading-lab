@@ -22,6 +22,40 @@ SWAP_MODES = {
     6: ("percent_annual", "interes_open"),
 }
 UNSUPPORTED_MODES = {2: "moneda_symbol", 3: "moneda_margin", 4: "moneda_deposit"}
+DAY_NAMES = ("lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo")
+
+
+def _symbol_name(item) -> str:
+    if isinstance(item, dict):
+        return str(item.get("name") or "")
+    return str(getattr(item, "name", "") or "")
+
+
+def resolve_broker_symbol(
+    canonical: str,
+    names: list[str],
+    mapping: dict[str, str] | None = None,
+) -> tuple[str | None, str]:
+    """Resuelve el nombre del bróker sin distinguir mayúsculas."""
+    target = str(canonical).strip().upper()
+    if mapping:
+        for key, value in mapping.items():
+            if str(key).strip().upper() == target:
+                return str(value), ""
+    clean = [str(name) for name in names if str(name)]
+    exact = [name for name in clean if name == target]
+    if len(exact) == 1:
+        return exact[0], ""
+    folded = [name for name in clean if name.upper() == target]
+    if len(folded) == 1:
+        return folded[0], ""
+    if not folded:
+        return None, "sin coincidencia en symbols_get"
+    return None, f"coincidencia ambigua en symbols_get: {folded[:4]}"
+
+
+def _triple_name(weekday: int) -> str:
+    return DAY_NAMES[int(weekday) % 7]
 
 
 def _get(info, key: str, default=None):
@@ -36,7 +70,9 @@ def _triple_weekday(info) -> int:
     return (raw - 1) % 7
 
 
-def convert_symbol(symbol: str, info, read_at: str) -> dict:
+def convert_symbol(
+    symbol: str, info, read_at: str, *, broker_symbol: str | None = None
+) -> dict:
     mode = int(_get(info, "swap_mode", -1))
     if mode not in SWAP_MODES:
         return {
@@ -48,6 +84,7 @@ def convert_symbol(symbol: str, info, read_at: str) -> dict:
     unit, label = SWAP_MODES[mode]
     return {
         "symbol": str(symbol).upper(),
+        "broker_symbol": broker_symbol or str(symbol),
         "status": "ok",
         "swap_mode": mode,
         "mode_label": label,
@@ -55,6 +92,7 @@ def convert_symbol(symbol: str, info, read_at: str) -> dict:
         "short": float(_get(info, "swap_short", 0.0) or 0.0),
         "unit": unit,
         "triple_swap_weekday": _triple_weekday(info),
+        "triple_name": _triple_name(_triple_weekday(info)),
         "source": f"mt5.symbol_info {read_at}",
     }
 
@@ -63,21 +101,42 @@ def build_swap_payload(
     symbols: list[str],
     info_getter,
     *,
+    symbols_getter=None,
+    broker_map: dict[str, str] | None = None,
     read_at: str | None = None,
 ) -> dict:
     """Convierte `symbol_info` en el bloque swap; no escribe nada."""
     moment = read_at or datetime.now(timezone.utc).isoformat(timespec="seconds")
+    names: list[str] | None = None
+    if symbols_getter is not None:
+        try:
+            names = [_symbol_name(item) for item in symbols_getter()]
+        except Exception:
+            names = []
     items: dict[str, dict] = {}
     skipped: dict[str, dict] = {}
     for symbol in symbols:
-        info = info_getter(str(symbol))
+        canonical = str(symbol).upper()
+        if names is None:
+            broker_symbol, reason = str(symbol), ""
+        else:
+            broker_symbol, reason = resolve_broker_symbol(
+                canonical, names, broker_map
+            )
+        if broker_symbol is None:
+            skipped[canonical] = {"status": "Sin datos", "reason": reason}
+            continue
+        info = info_getter(broker_symbol)
         if info is None:
-            skipped[str(symbol).upper()] = {
+            skipped[canonical] = {
                 "status": "Sin datos",
-                "reason": "symbol_info vacío",
+                "reason": f"symbol_info vacío para {broker_symbol}",
+                "broker_symbol": broker_symbol,
             }
             continue
-        converted = convert_symbol(symbol, info, moment)
+        converted = convert_symbol(
+            canonical, info, moment, broker_symbol=broker_symbol
+        )
         if converted["status"] == "ok":
             items[converted["symbol"]] = converted
         else:
@@ -148,6 +207,8 @@ def sync_swaps(
     info_getter=None,
     costs_path: str | Path = COSTS_PATH,
     symbols: list[str] | None = None,
+    broker_map: dict[str, str] | None = None,
+    symbols_getter=None,
 ) -> dict:
     """Lee swap de MT5 o de un getter inyectado; escribe solo si `write`."""
     symbols = (
@@ -165,11 +226,21 @@ def sync_swaps(
             import MetaTrader5 as mt5
 
             info_getter = mt5.symbol_info
-            payload = build_swap_payload(symbols, info_getter)
+            payload = build_swap_payload(
+                symbols,
+                info_getter,
+                symbols_getter=symbols_getter or mt5.symbols_get,
+                broker_map=broker_map,
+            )
         finally:
             broker.shutdown()
     else:
-        payload = build_swap_payload(symbols, info_getter)
+        payload = build_swap_payload(
+            symbols,
+            info_getter,
+            symbols_getter=symbols_getter,
+            broker_map=broker_map,
+        )
     payload["costs_path"] = str(costs_path)
     payload["written"] = False
     if write and payload["symbols"]:
@@ -180,10 +251,12 @@ def sync_swaps(
 
 
 __all__ = [
+    "DAY_NAMES",
     "SWAP_MODES",
     "UNSUPPORTED_MODES",
     "build_swap_payload",
     "convert_symbol",
+    "resolve_broker_symbol",
     "render_swap_block",
     "sync_swaps",
     "update_costs_yaml",

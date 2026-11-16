@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 import yaml
@@ -75,6 +76,55 @@ def test_comisiones_del_catalogo_coinciden_con_la_especificacion():
     assert xau.commission_side == "per_side"
     us100 = asset_costs("US100.CASH")
     assert us100.commission_type == "zero"
+
+
+def test_resuelve_us100_cash_case_insensitive_y_guarda_canonico():
+    names = [
+        SimpleNamespace(name="EURUSD"),
+        SimpleNamespace(name="US100.cash"),
+    ]
+    infos = {
+        "US100.cash": _info(1, -676.55, 1.75, triple=5),
+    }
+    payload = build_swap_payload(
+        ["US100.CASH"],
+        infos.get,
+        symbols_getter=lambda: names,
+        read_at=READ_AT,
+    )
+    assert payload["n_read"] == 1
+    item = payload["symbols"]["US100.CASH"]
+    assert item["broker_symbol"] == "US100.cash"
+    assert item["long"] == -676.55
+    assert item["triple_swap_weekday"] == 4
+    assert item["triple_name"] == "viernes"
+    block = yaml.safe_load(render_swap_block(payload))
+    assert block["swap"]["assets"]["US100.CASH"]["triple_swap_weekday"] == 4
+    assert "US100.cash" not in block["swap"]["assets"]
+
+
+def test_symbols_get_sin_coincidencia_o_ambigua_es_sin_datos():
+    info = _info(1, -1.0, 1.0)
+    none = build_swap_payload(
+        ["US100.CASH"],
+        lambda symbol: info,
+        symbols_getter=lambda: [SimpleNamespace(name="EURUSD")],
+        read_at=READ_AT,
+    )
+    assert none["n_read"] == 0
+    assert "sin coincidencia" in none["skipped"]["US100.CASH"]["reason"]
+
+    ambiguous = build_swap_payload(
+        ["US100.CASH"],
+        lambda symbol: info,
+        symbols_getter=lambda: [
+            SimpleNamespace(name="US100.cash"),
+            SimpleNamespace(name="us100.CASH"),
+        ],
+        read_at=READ_AT,
+    )
+    assert ambiguous["n_read"] == 0
+    assert "ambigua" in ambiguous["skipped"]["US100.CASH"]["reason"]
 
 
 def test_build_payload_y_bloque_yaml():
