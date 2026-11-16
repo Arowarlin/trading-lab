@@ -306,6 +306,7 @@ def _dynamic_risk(daily_r: pd.Series, values: dict) -> dict:
         "max_drawdown": max_dd,
         "killed": killed,
         "risk_steps": [base, r1, r2, r3],
+        "daily_returns": returns,
         "monte_carlo": mc,
     }
 

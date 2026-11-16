@@ -101,6 +101,20 @@ Es el punto 2 del prompt anterior, ampliado con clústeres: `account_risk_caps` 
 - **Aceptación:** informe con N nominal, N efectivo y pruebas por clúster; `dsr_global` sigue usando el N actual hasta aprobación explícita.
 - **No implementar en Fase 1:** queda como tarea P2.
 
+## T16 · P1 · El gate coste/R del swing IA debe incluir el swap esperado por noches de holding
+
+- **Problema:** el gate de coste/R del swing IA suma comisión, spread y slippage, pero no el swap. En operaciones que cruzan noches, el swap puede ser una parte material del coste (sobre todo en índices con markup negativo para largos).
+- **Diseño pendiente:** estimar las noches de holding esperadas, aplicar la tasa anual del símbolo (DFF + markup, con el modelo de `carry.py`) y sumar el swap al coste antes de calcular el coste/R. Si falta la tasa o el DFF, el gate debe devolver **Sin datos** y no asumir 0.
+- **Aceptación:** un candidato swing con 3 noches y swap negativo empeora su coste/R y puede quedar bloqueado; el test sintético comprueba el signo y la magnitud.
+- **No implementar ahora:** queda pendiente.
+
+## T17 · P1 · Resolver el símbolo del bróker sin distinguir mayúsculas en `broker_costs.mt5_swap`, `clock.py` y `execution/mt5.py`
+
+- **Problema:** MT5 devuelve el símbolo con una grafía concreta (`US100.cash` frente a `US100.CASH`). Varias búsquedas comparan la cadena exacta y no encuentran el símbolo, así que el swap o el reloj quedan en **Sin datos**.
+- **Diseño pendiente:** resolver el nombre canónico con `mt5.symbol_info` de forma insensible a mayúsculas y cachearlo; usar ese nombre en `broker_costs.mt5_swap`, `clock.py` y `execution/mt5.py`. No cambiar los símbolos de configuración.
+- **Aceptación:** los tres módulos resuelven `US100.cash` y `US100.CASH` al mismo símbolo del bróker; test con las dos grafías.
+- **No implementar ahora:** queda pendiente.
+
 ## Orden y dependencias
 
 1. T01, T03 y T05 son independientes y van primero.
@@ -108,3 +122,4 @@ Es el punto 2 del prompt anterior, ampliado con clústeres: `account_risk_caps` 
 3. T06, T07, T08 y T09 son independientes entre sí.
 4. T10 y T11 dependen de T01.
 5. T12 depende de T03. T13 y T14 son independientes.
+6. T16 y T17 son independientes y quedan pendientes.
