@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from tradinglab.alerts import AlertConfig, heartbeat, last_alerts, send
+from tradinglab.alerts import AlertConfig, heartbeat, last_alerts, send, send_once
 
 
 class FakeResponse:
@@ -112,3 +112,26 @@ def test_heartbeat(tmp_path):
     assert result.ok
     assert client.gets == ["https://hc.test/ping/abc"]
     assert heartbeat(config=_cfg(), db_path=tmp_path / "lab.db").skipped
+
+
+
+def test_send_once_dedupe_persistente(tmp_path):
+    client = FakeClient()
+    db = tmp_path / "lab.db"
+    first = send_once(
+        "stale_data:test",
+        "datos viejos",
+        config=_cfg(),
+        db_path=db,
+        client=client,
+    )
+    second = send_once(
+        "stale_data:test",
+        "datos viejos",
+        config=_cfg(),
+        db_path=db,
+        client=client,
+    )
+    assert first.ok and not first.skipped
+    assert second.skipped
+    assert len(client.posts) == 1

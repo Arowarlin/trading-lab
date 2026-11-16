@@ -10,8 +10,10 @@ from tradinglab.ai_setups import ALLOWED, allowed_timeframe, validate
 from tradinglab.ai_setups import plan as setup_plan
 from tradinglab.ai_trader import (
     AiTraderError,
+    StaleDataError,
     _safe_rates,
     create_plan,
+    execute,
     load_config,
     scalp,
 )
@@ -388,3 +390,72 @@ def test_sesion_ny_crea_el_plan_del_dia():
     assert "ai-trader plans" in text
     assert "ai-trader plan --json-file" in text
     assert "US100.cash" in text and "XAUUSD" in text
+
+
+
+class _StaleBroker:
+    def health(self):
+        return {"mode": "demo", "equity": 100_000.0}
+
+    def rates(self, symbol, timeframe, count):
+        idx = pd.date_range("2026-11-10 10:00", periods=100, freq="5min", tz="UTC")
+        close = [100.0] * len(idx)
+        return pd.DataFrame(
+            {"open": close, "high": close, "low": close, "close": close},
+            index=idx,
+        )
+
+    def tick(self, symbol):
+        raise AssertionError("no debe pedir tick si los datos son viejos")
+
+    def submit_market(self, *args, **kwargs):
+        raise AssertionError("no debe enviar orden con datos viejos")
+
+
+def test_execute_bloquea_datos_obsoletos_en_cualquier_familia(tmp_path, monkeypatch):
+    db = tmp_path / "lab.db"
+    init_db(db)
+    with connect(db) as con:
+        con.execute(
+            "INSERT INTO ai_trades(proposal_id, ts, symbol, setup, side, thesis, "
+            "confidence, playbook_version, entry, sl, tp, volume, risk_usd, magic, "
+            "status, style, timeframe, created_at, updated_at) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (
+                "p-stale",
+                "2026-11-16T15:00:00+00:00",
+                "US100.cash",
+                "orb_5m",
+                "buy",
+                "prueba",
+                3,
+                1,
+                101.0,
+                99.0,
+                105.0,
+                1.0,
+                100.0,
+                20261191,
+                "proposed",
+                "scalping",
+                "M5",
+                "2026-11-16T15:00:00+00:00",
+                "2026-11-16T15:00:00+00:00",
+            ),
+        )
+    alerts = []
+    monkeypatch.setattr(
+        "tradinglab.ai_trader._alert_stale",
+        lambda *args, **kwargs: alerts.append(args),
+    )
+
+    with pytest.raises(StaleDataError, match="datos obsoletos"):
+        execute("p-stale", broker=_StaleBroker(), db_path=db)
+
+    with connect(db) as con:
+        row = con.execute(
+            "SELECT decision, reason FROM ai_decisions ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+    assert row["decision"] == "skip"
+    assert "datos obsoletos" in row["reason"]
+    assert alerts and alerts[0][1] == "scalping"

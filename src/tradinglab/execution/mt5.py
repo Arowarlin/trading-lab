@@ -461,6 +461,12 @@ class MT5Broker:
         df["time"] = server_time - pd.to_timedelta(offsets.to_numpy(), unit="h")
         df = df.set_index("time").rename(columns={"tick_volume": "volume"})
         cols = ["open", "high", "low", "close", "volume", "spread"]
+        try:
+            from ..freshness import record
+
+            record(symbol, key, last_bar_utc=df.index[-1], source="mt5")
+        except Exception:
+            pass
         return df[[c for c in cols if c in df.columns]].astype(float)
 
     def copy_ticks(

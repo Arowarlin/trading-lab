@@ -88,6 +88,124 @@ def thresholds(config_path: Path | None = None) -> dict[str, tuple[float, float]
     return out
 
 
+def active_pairs(config_dir: Path | None = None) -> list[tuple[str, str]]:
+    """Pares (s?mbolo, timeframe) del universo que opera el laboratorio.
+
+    Incluye bots deterministas, forward intrad?a, los tres estilos de
+    ai_trader y el EA externo. `D1` se comprueba contra `H4` porque el carril
+    IA deriva el diario de las velas H4.
+    """
+    base = Path(config_dir) if config_dir else CONFIG_DIR
+    pairs: set[tuple[str, str]] = set()
+
+    def add(symbol, timeframe) -> None:
+        if not symbol or not timeframe:
+            return
+        tf = str(timeframe)
+        pairs.add((str(symbol).strip().upper(), "H4" if tf.upper() == "D1" else tf))
+
+    def load(name: str) -> dict:
+        path = base / name
+        if not path.exists():
+            return {}
+        try:
+            import yaml
+
+            data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+            return data if isinstance(data, dict) else {}
+        except Exception:
+            return {}
+
+    bots = load("bots.yaml")
+    for bot in bots.get("bots") or []:
+        if not isinstance(bot, dict) or not bot.get("enabled"):
+            continue
+        timeframe = bot.get("timeframe", "1d")
+        for symbol in bot.get("universe") or []:
+            add(symbol, timeframe)
+
+    forward = load("intraday_forward.yaml")
+    for bot in forward.get("bots") or []:
+        if not isinstance(bot, dict) or not bot.get("enabled"):
+            continue
+        add(bot.get("canonical_symbol"), bot.get("timeframe", "M15"))
+
+    ai = load("ai_trader.yaml")
+    if ai.get("enabled"):
+        for style in (ai.get("styles") or {}).values():
+            if not isinstance(style, dict) or not style.get("enabled"):
+                continue
+            allowed = style.get("allowed") or {}
+            if isinstance(allowed, dict) and allowed:
+                for symbol, strategies in allowed.items():
+                    if isinstance(strategies, dict):
+                        for timeframe in strategies.values():
+                            add(symbol, timeframe)
+                    elif isinstance(strategies, (list, tuple)):
+                        for timeframe in strategies:
+                            add(symbol, timeframe)
+            else:
+                timeframes = style.get("timeframes") or []
+                for symbol in style.get("universe") or []:
+                    for timeframe in timeframes:
+                        add(symbol, timeframe)
+
+    eas = load("mt5_eas.yaml")
+    for ea in eas.get("eas") or []:
+        if isinstance(ea, dict) and ea.get("enabled"):
+            add(ea.get("symbol"), "M5")
+
+    return sorted(pairs)
+
+
+def doctor_status(
+    now: datetime | None = None,
+    *,
+    db_path: str | Path | None = None,
+    config_dir: Path | None = None,
+) -> dict:
+    """Resumen de frescura del universo activo para `lab doctor`."""
+    pairs = active_pairs(config_dir)
+    if not pairs:
+        return {
+            "status": "aviso",
+            "fails": 0,
+            "warns": 0,
+            "total": 0,
+            "detail": "sin universo activo",
+        }
+    states = [
+        check(
+            symbol,
+            timeframe,
+            now=now,
+            db_path=db_path,
+            config_path=(Path(config_dir) / "ops.yaml") if config_dir else None,
+        )
+        for symbol, timeframe in pairs
+    ]
+    fails = [item for item in states if item["status"] == STATUS_FALLA]
+    warns = [item for item in states if item["status"] == STATUS_AVISO]
+    status = STATUS_FALLA if fails else STATUS_AVISO if warns else STATUS_OK
+    detail = f"{len(fails)}/{len(pairs)} fallan"
+    visible = fails or warns
+    if visible:
+        sample = []
+        for item in visible[:4]:
+            last = (item.get("last_bar_utc") or "")[:10] or "sin datos"
+            sample.append(f"{item['symbol']} {item['timeframe']} ({last})")
+        detail += " ? " + ", ".join(sample)
+    if warns and fails:
+        detail += f" ? {len(warns)} avisos"
+    return {
+        "status": status,
+        "fails": len(fails),
+        "warns": len(warns),
+        "total": len(pairs),
+        "detail": detail[:220],
+    }
+
+
 def record(
     symbol: str,
     timeframe: str,
@@ -229,6 +347,8 @@ def check(
 
 __all__ = [
     "DEFAULT_THRESHOLDS",
+    "active_pairs",
+    "doctor_status",
     "FreshnessError",
     "STATUS_AVISO",
     "STATUS_FALLA",

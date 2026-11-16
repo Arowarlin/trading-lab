@@ -7,6 +7,7 @@ import pandas as pd
 import pytest
 import yaml
 
+import tradinglab.freshness as freshness
 import tradinglab.orchestrator as orch
 from tradinglab import clock as clock_mod
 from tradinglab.config import Settings
@@ -257,3 +258,48 @@ def test_el_offset_del_servidor_no_es_desviacion(monkeypatch):
     # sin NTP ni referencia de offset no hay desviación que reportar
     assert estado["status"] == clock_mod.STATUS_SIN_DATOS
     assert estado["skew_s"] is None
+
+
+
+def test_universo_activo_incluye_bots_forward_ia_y_ea():
+    pairs = set(freshness.active_pairs())
+    assert ("SPY", "1d") in pairs
+    assert ("QQQ", "1d") in pairs
+    assert ("EURUSD", "M15") in pairs
+    assert ("US100.CASH", "H4") in pairs
+    assert ("US100.CASH", "M5") in pairs
+    assert ("XAUUSD", "M1") in pairs
+    assert all(timeframe.upper() != "D1" for _, timeframe in pairs)
+
+
+def test_doctor_frescura_resume_el_universo(monkeypatch):
+    monkeypatch.setattr(
+        freshness,
+        "active_pairs",
+        lambda config_dir=None: [("SPY", "1d"), ("QQQ", "1d")],
+    )
+    states = {
+        ("SPY", "1d"): {
+            "symbol": "SPY",
+            "timeframe": "1d",
+            "status": STATUS_FALLA,
+            "last_bar_utc": "2026-11-11T00:00:00+00:00",
+        },
+        ("QQQ", "1d"): {
+            "symbol": "QQQ",
+            "timeframe": "1d",
+            "status": STATUS_OK,
+            "last_bar_utc": "2026-11-15T00:00:00+00:00",
+        },
+    }
+
+    def fake_check(symbol, timeframe, **kwargs):
+        return states[(symbol, timeframe)]
+
+    monkeypatch.setattr(freshness, "check", fake_check)
+    result = freshness.doctor_status(now=NOW)
+    assert result["status"] == STATUS_FALLA
+    assert result["fails"] == 1
+    assert result["total"] == 2
+    assert "1/2 fallan" in result["detail"]
+    assert "SPY 1d" in result["detail"]

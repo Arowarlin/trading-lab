@@ -197,6 +197,39 @@ def send(
     return AlertResult(ok, cfg.channel, event, error=error)
 
 
+def send_once(
+    event: str,
+    message: str,
+    *,
+    severity: str = "warning",
+    config: AlertConfig | None = None,
+    db_path: str | Path = DEFAULT_DB,
+    client: httpx.Client | None = None,
+    now: datetime | None = None,
+) -> AlertResult:
+    """Env?a una alerta como m?ximo una vez por `event` (dedupe persistente).
+
+    A diferencia de `send`, no depende del cooldown: si el evento ya est? en
+    `alerts`, no se vuelve a intentar aunque el primer env?o fallara.
+    """
+    init_db(db_path)
+    with connect(db_path) as con:
+        row = con.execute(
+            "SELECT 1 FROM alerts WHERE event = ? LIMIT 1", (event,)
+        ).fetchone()
+    if row is not None:
+        return AlertResult(True, "dedupe", event, skipped=True)
+    return send(
+        event,
+        message,
+        severity=severity,
+        config=config,
+        db_path=db_path,
+        client=client,
+        now=now,
+    )
+
+
 def heartbeat(
     *,
     config: AlertConfig | None = None,

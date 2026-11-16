@@ -636,6 +636,31 @@ def _stale(last_close: datetime, now: datetime, timeframe: str) -> bool:
     return _as_utc(now) - _as_utc(last_close) > max_age
 
 
+def _alert_stale(
+    db_path: str | Path,
+    bot: ForwardBot,
+    symbol: str,
+    now: datetime,
+    reason: str,
+) -> None:
+    try:
+        from .alerts import send_once
+
+        event = (
+            f"stale_data:{_as_utc(now).date().isoformat()}:"
+            f"{bot.id}:{str(symbol).upper()}"
+        )
+        send_once(
+            event,
+            f"{bot.id} {symbol}: {reason}",
+            severity="warning",
+            db_path=db_path,
+        )
+    except Exception:
+        pass
+
+
+
 def _equity_series(broker):
     try:
         series = broker.equity_series()
@@ -1107,14 +1132,16 @@ def run_forward_bot(
     fresh = check_freshness(symbol, bot.timeframe, db_path=db_path)
     guards["freshness"] = f"{fresh['status']}: {fresh['reason']}"
     if fresh["status"] == FRESHNESS_FALLA:
+        stale_reason = f"datos obsoletos: {fresh['reason']}"
+        _alert_stale(db_path, bot, symbol, moment, stale_reason)
         _record_signal(
-            db_path, bot, symbol, signal, price, f"blocked freshness: {fresh['reason']}"
+            db_path, bot, symbol, signal, price, f"skip: {stale_reason}"
         )
         return _blocked(
             bot,
             symbol,
             signal,
-            f"datos: {fresh['reason']}",
+            f"skip: {stale_reason}",
             price=price,
             atr_value=atr_value,
             guards=guards,
@@ -1198,14 +1225,16 @@ def run_forward_bot(
             guards=guards,
         )
     if _stale(last_close, moment, bot.timeframe):
+        stale_reason = f"datos obsoletos: última vela cerró {last_close.isoformat()}"
+        _alert_stale(db_path, bot, symbol, moment, stale_reason)
         _record_signal(
-            db_path, bot, symbol, signal, price, "blocked stale_data"
+            db_path, bot, symbol, signal, price, f"skip: {stale_reason}"
         )
         return _blocked(
             bot,
             symbol,
             signal,
-            f"datos obsoletos: última vela cerró {last_close.isoformat()}",
+            f"skip: {stale_reason}",
             price=price,
             atr_value=atr_value,
             guards=guards,

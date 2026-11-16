@@ -55,6 +55,10 @@ class AiTraderError(ValueError):
     pass
 
 
+class StaleDataError(AiTraderError):
+    """La vela usada por la se?al es m?s vieja que dos velas del timeframe."""
+
+
 class _Reject(AiTraderError):
     """Rechazo con la decisión que debe quedar registrada."""
 
@@ -947,6 +951,53 @@ def _safe_rates(broker, symbol: str, timeframe: str, count: int,
         if len(frame) == 0:
             return None
     return frame
+
+
+def _stale_reason(
+    broker, symbol: str, timeframe: str, now: datetime
+) -> str | None:
+    """Motivo si la ?ltima vela cerrada es m?s vieja que 2 velas."""
+    tf = "H4" if str(timeframe).upper() == "D1" else str(timeframe).upper()
+    counts = {"M1": 20_000, "M5": 6_000, "M15": 2_000, "H1": 1_000, "H4": 3_000}
+    frame = _safe_rates(
+        broker, symbol, tf, counts.get(tf, 1_000), now=now
+    )
+    if frame is None or len(frame) == 0:
+        return "Sin datos: no se pudieron leer velas"
+    last = frame.index[-1]
+    duration = pd.Timedelta(minutes=TF_MINUTES.get(tf, 60))
+    age = _as_utc(now) - _as_utc(pd.Timestamp(last).to_pydatetime())
+    if age > 2 * duration:
+        return (
+            f"datos obsoletos: ?ltima vela {last.isoformat()} "
+            f"({age / duration:.1f} velas de retraso)"
+        )
+    return None
+
+
+def _alert_stale(
+    db_path: str | Path,
+    style: str,
+    symbol: str,
+    timeframe: str,
+    reason: str,
+) -> None:
+    try:
+        from .alerts import send_once
+        from .time_utils import market_today
+
+        event = (
+            f"stale_data:{market_today().isoformat()}:{style}:"
+            f"{symbol.upper()}:{str(timeframe).upper()}"
+        )
+        send_once(
+            event,
+            f"{style} {symbol} {timeframe}: {reason}",
+            severity="warning",
+            db_path=db_path,
+        )
+    except Exception:
+        pass
 
 
 def _empty_block(reason: str) -> dict:
@@ -2045,6 +2096,28 @@ def execute(proposal_id: str, *, broker, config: dict | None = None,
     if not style_name or style_name not in cfg["styles"]:
         raise AiTraderError(f"propuesta con estilo desconocido: {row['style']!r}")
     style = cfg["styles"][style_name]
+    stale = _stale_reason(
+        broker, row["symbol"], row["timeframe"], datetime.now(timezone.utc)
+    )
+    if stale:
+        reason = f"skip: {stale}"
+        try:
+            _record_decision(
+                db_path=db_path,
+                config=cfg,
+                style=style_name,
+                symbol=row["symbol"],
+                timeframe=row["timeframe"],
+                strategy=str(row["setup"] or ""),
+                setup_valid=False,
+                decision="skip",
+                reason=reason,
+                source="forward",
+            )
+        except Exception:
+            pass
+        _alert_stale(db_path, style_name, row["symbol"], row["timeframe"], stale)
+        raise StaleDataError(reason)
     side = str(row["side"])
     tick = broker.tick(row["symbol"])
     current = float(tick["ask"] if side == "buy" else tick["bid"])
@@ -2100,7 +2173,7 @@ def execute(proposal_id: str, *, broker, config: dict | None = None,
     _audit(
         db_path, "ai_trader_execute",
         {"proposal_id": proposal_id, "style": style_name, "symbol": row["symbol"],
-         "strategy": row["strategy"], "timeframe": row["timeframe"], "side": side,
+         "strategy": row["setup"], "timeframe": row["timeframe"], "side": side,
          "volume": float(row["volume"]), "magic": style["magic"]},
         "executed", detail=str(row["thesis"]),
     )
@@ -2549,6 +2622,9 @@ def scalp(*, broker=None, config: dict | None = None,
                         result["id"], broker=broker, config=cfg,
                         db_path=db_path,
                     )
+                except StaleDataError:
+                    skipped += 1
+                    continue
                 except Exception as exc:
                     _record_scalp_skip(
                         plan, setup, f"execute: {exc}",
