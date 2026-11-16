@@ -35,6 +35,25 @@ def _trial(db, **kwargs):
     return record_trial(db, **base)
 
 
+def test_cost_reeval_no_suma_al_contador(tmp_path):
+    db = tmp_path / "lab.db"
+    init_db(db)
+    before = count_tests(db)
+    row = record_trial(
+        db,
+        family="trend_daily_atr",
+        hypothesis="reevaluación de costes",
+        symbol="US100.CASH",
+        source="cost_reeval",
+        outcome="failed",
+        reason="cost_reeval",
+        counted=False,
+    )
+    assert row["source"] == "cost_reeval"
+    assert row["counted"] == 0
+    assert count_tests(db) == before
+
+
 def test_columnas_dsr_v2_son_aditivas_y_no_cuentan(tmp_path):
     db = tmp_path / "lab.db"
     init_db(db)

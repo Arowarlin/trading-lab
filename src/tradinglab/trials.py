@@ -21,7 +21,7 @@ from .db import connect, init_db, utcnow
 BUDGET_PATH = ROOT / "config" / "research_budget.yaml"
 OUTCOMES = {"passed", "failed", "discarded", "incubating"}
 DISCARDED_OUTCOMES = {"failed", "discarded"}
-SOURCES = {"humano", "qwen", "optuna", "lesson", "sweep", "campaign"}
+SOURCES = {"humano", "qwen", "optuna", "lesson", "sweep", "campaign", "cost_reeval"}
 
 
 class TrialsError(ValueError):

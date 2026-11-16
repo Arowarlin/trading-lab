@@ -63,6 +63,8 @@ class BacktestResult:
     trade_days: list[str] = field(default_factory=list)
     trade_returns: list[float] = field(default_factory=list)
     costs_status: str = "Sin datos: swap no disponible"
+    carry_paid: float = 0.0
+    time_in_market: float = 0.0
 
 
 def run(
@@ -127,6 +129,7 @@ def run(
     trip_entry_fee = 0.0
     trip_pnl = 0.0
     trip_return = 0.0
+    carry_paid = 0.0
 
     for dt, bar in df.iterrows():
         px_open = float(bar["open"])
@@ -138,13 +141,15 @@ def run(
             and shares != 0
             and carry is not None
         ):
-            cash += carry.carry_for_nights(
+            carry_amount = carry.carry_for_nights(
                 "long" if shares > 0 else "short",
                 notional=abs(shares) * last_close,
                 shares=shares,
                 start_day=last_date,
                 end_day=dt.date(),
             )
+            cash += carry_amount
+            carry_paid += carry_amount
 
         local = _local_stamp(dt, session_tz)
         force_flat = local.date().isoformat() in flat
@@ -263,7 +268,12 @@ def run(
         else float(pos_target.abs().mean())
     )
     metrics = compute_metrics(eq, rets, realized, exposure, realized_returns)
+    in_market = sum(
+        1 for row in rows if abs(float(row["shares"])) > 1e-12
+    ) / len(rows)
     metrics["costs_status"] = costs_status
+    metrics["carry_paid"] = carry_paid
+    metrics["time_in_market"] = in_market
 
     return BacktestResult(
         equity=eq,
@@ -275,6 +285,8 @@ def run(
         trade_days=realized_days,
         trade_returns=realized_returns,
         costs_status=costs_status,
+        carry_paid=carry_paid,
+        time_in_market=in_market,
     )
 
 

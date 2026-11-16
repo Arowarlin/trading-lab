@@ -602,19 +602,370 @@ assets:
 # provisionales; no se inventa una cifra.
 swap:
   unit: percent_annual
-  triple_swap_weekday: 2  # miércoles: 3x el swap diario
-  source: "MT5 symbol_info; Sin datos si no está disponible"
+  triple_swap_weekday: 2
+  source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+  synced_at: '2026-11-16T00:45:58+00:00'
   defaults:
     long: null
     short: null
-  # Overrides por símbolo, si el operador los verifica:
-  # assets:
-  #   US100.CASH:
-  #     long: -2.5
-  #     short: -1.2
-  #     unit: percent_annual
-
-# Supuesto explícito de slippage por lado, en bps (global y por activo).
+  assets:
+    AUDCAD:
+      long: 1.77
+      short: -9.07
+      unit: points
+      swap_mode: 1
+      triple_swap_weekday: 2
+      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+    AUDCHF:
+      long: 3.02
+      short: -10.53
+      unit: points
+      swap_mode: 1
+      triple_swap_weekday: 2
+      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+    AUDJPY:
+      long: 4.87
+      short: -16.87
+      unit: points
+      swap_mode: 1
+      triple_swap_weekday: 2
+      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+    AUDNZD:
+      long: 1.58
+      short: -10.94
+      unit: points
+      swap_mode: 1
+      triple_swap_weekday: 2
+      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+    AUDUSD:
+      long: -2.28
+      short: -6.98
+      unit: points
+      swap_mode: 1
+      triple_swap_weekday: 2
+      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+    AUS200.CASH:
+      long: -259.3
+      short: 14.39
+      unit: points
+      swap_mode: 1
+      triple_swap_weekday: 4
+      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+    CADCHF:
+      long: 1.16
+      short: -7.24
+      unit: points
+      swap_mode: 1
+      triple_swap_weekday: 2
+      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+    CADJPY:
+      long: 1.27
+      short: -7.85
+      unit: points
+      swap_mode: 1
+      triple_swap_weekday: 2
+      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+    CHFJPY:
+      long: -9.98
+      short: 1.07
+      unit: points
+      swap_mode: 1
+      triple_swap_weekday: 2
+      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+    DXY.CASH:
+      long: -25.36
+      short: 0.76
+      unit: points
+      swap_mode: 1
+      triple_swap_weekday: 4
+      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+    EU50.CASH:
+      long: -125.53
+      short: -12.67
+      unit: points
+      swap_mode: 1
+      triple_swap_weekday: 4
+      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+    EURAUD:
+      long: -15.2
+      short: 2.98
+      unit: points
+      swap_mode: 1
+      triple_swap_weekday: 2
+      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+    EURCAD:
+      long: -3.43
+      short: -3.88
+      unit: points
+      swap_mode: 1
+      triple_swap_weekday: 2
+      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+    EURCHF:
+      long: 1.7
+      short: -11.95
+      unit: points
+      swap_mode: 1
+      triple_swap_weekday: 2
+      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+    EURGBP:
+      long: -7.6
+      short: 0.2
+      unit: points
+      swap_mode: 1
+      triple_swap_weekday: 2
+      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+    EURJPY:
+      long: 2.2
+      short: -12.34
+      unit: points
+      swap_mode: 1
+      triple_swap_weekday: 2
+      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+    EURNZD:
+      long: -5.42
+      short: -3.95
+      unit: points
+      swap_mode: 1
+      triple_swap_weekday: 2
+      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+    EURUSD:
+      long: -8.59
+      short: 0.33
+      unit: points
+      swap_mode: 1
+      triple_swap_weekday: 2
+      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+    FRA40.CASH:
+      long: -164.25
+      short: -16.58
+      unit: points
+      swap_mode: 1
+      triple_swap_weekday: 4
+      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+    GBPAUD:
+      long: -11.54
+      short: -1.19
+      unit: points
+      swap_mode: 1
+      triple_swap_weekday: 2
+      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+    GBPCAD:
+      long: 0.98
+      short: -16.08
+      unit: points
+      swap_mode: 1
+      triple_swap_weekday: 2
+      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+    GBPCHF:
+      long: 3.28
+      short: -22.16
+      unit: points
+      swap_mode: 1
+      triple_swap_weekday: 2
+      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+    GBPJPY:
+      long: 6.17
+      short: -28.05
+      unit: points
+      swap_mode: 1
+      triple_swap_weekday: 2
+      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+    GBPNZD:
+      long: 0.74
+      short: -19.07
+      unit: points
+      swap_mode: 1
+      triple_swap_weekday: 2
+      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+    GBPUSD:
+      long: -4.43
+      short: -5.51
+      unit: points
+      swap_mode: 1
+      triple_swap_weekday: 2
+      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+    GER40.CASH:
+      long: -525.8
+      short: -53.06
+      unit: points
+      swap_mode: 1
+      triple_swap_weekday: 4
+      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+    HK50.CASH:
+      long: -480.98
+      short: -29.8
+      unit: points
+      swap_mode: 1
+      triple_swap_weekday: 4
+      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+    JP225.CASH:
+      long: -939.68
+      short: -386.93
+      unit: points
+      swap_mode: 1
+      triple_swap_weekday: 4
+      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+    N25.CASH:
+      long: -10.7
+      short: 1.13
+      unit: points
+      swap_mode: 1
+      triple_swap_weekday: 4
+      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+    NZDCAD:
+      long: -1.92
+      short: -2.73
+      unit: points
+      swap_mode: 1
+      triple_swap_weekday: 2
+      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+    NZDCHF:
+      long: 0.9
+      short: -6.68
+      unit: points
+      swap_mode: 1
+      triple_swap_weekday: 2
+      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+    NZDJPY:
+      long: 0.92
+      short: -6.97
+      unit: points
+      swap_mode: 1
+      triple_swap_weekday: 2
+      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+    NZDUSD:
+      long: -4.48
+      short: 0.02
+      unit: points
+      swap_mode: 1
+      triple_swap_weekday: 2
+      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+    SPN35.CASH:
+      long: -392.66
+      short: -39.63
+      unit: points
+      swap_mode: 1
+      triple_swap_weekday: 4
+      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+    UK100.CASH:
+      long: -274.38
+      short: 9.05
+      unit: points
+      swap_mode: 1
+      triple_swap_weekday: 4
+      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+    US100.CASH:
+      long: -676.55
+      short: 1.75
+      unit: points
+      swap_mode: 1
+      triple_swap_weekday: 4
+      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+    US2000.CASH:
+      long: -44.79
+      short: -21.99
+      unit: points
+      swap_mode: 1
+      triple_swap_weekday: 4
+      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+    US30.CASH:
+      long: -1286.21
+      short: 38.72
+      unit: points
+      swap_mode: 1
+      triple_swap_weekday: 4
+      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+    US500.CASH:
+      long: -149.57
+      short: -31.58
+      unit: points
+      swap_mode: 1
+      triple_swap_weekday: 4
+      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+    USDCAD:
+      long: 0.62
+      short: -10.49
+      unit: points
+      swap_mode: 1
+      triple_swap_weekday: 2
+      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+    USDCHF:
+      long: 1.96
+      short: -13.52
+      unit: points
+      swap_mode: 1
+      triple_swap_weekday: 2
+      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+    USDJPY:
+      long: 2.71
+      short: -21.25
+      unit: points
+      swap_mode: 1
+      triple_swap_weekday: 2
+      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+    XAGAUD:
+      long: -12.13
+      short: 4.6
+      unit: points
+      swap_mode: 1
+      triple_swap_weekday: 2
+      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+    XAGEUR:
+      long: -4.68
+      short: 1.34
+      unit: points
+      swap_mode: 1
+      triple_swap_weekday: 2
+      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+    XAGUSD:
+      long: -12.9
+      short: -0.59
+      unit: points
+      swap_mode: 1
+      triple_swap_weekday: 2
+      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+    XAUAUD:
+      long: -93.86
+      short: -10.3
+      unit: points
+      swap_mode: 1
+      triple_swap_weekday: 2
+      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+    XAUEUR:
+      long: -35.83
+      short: -3.22
+      unit: points
+      swap_mode: 1
+      triple_swap_weekday: 2
+      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+    XAUUSD:
+      long: -58.74
+      short: -4.2
+      unit: points
+      swap_mode: 1
+      triple_swap_weekday: 2
+      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+    XCUUSD:
+      long: -18.93
+      short: 2.34
+      unit: points
+      swap_mode: 1
+      triple_swap_weekday: 2
+      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+    XPDUSD:
+      long: -43.27
+      short: -17.85
+      unit: points
+      swap_mode: 1
+      triple_swap_weekday: 2
+      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
+    XPTUSD:
+      long: -52.32
+      short: -27.91
+      unit: points
+      swap_mode: 1
+      triple_swap_weekday: 2
+      source: mt5.symbol_info 2026-11-16T00:45:58+00:00
 slippage:
   optimistic_bps: 0.5
   conservative_bps: 2.0

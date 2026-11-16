@@ -1,0 +1,50 @@
+# Propuesta mecánica de cementerio. NO aplicada.
+#
+# Reevaluación de costes (no una prueba nueva):
+#   Sharpe con swap 0.0409 < 0.3 y CAGR 0.07% >= 0.
+# No se toca `intraday_forward.yaml` ni `enabled`; el operador decide.
+#
+# Aplicación manual: revisar el informe y, si se aprueba, pasar
+# `us100-trend-d1` a `enabled: false` y registrar la decisión en el ciclo de
+# vida/PLAN. No existe `lab proposals apply`.
+version: 1
+id: us100-trend-d1-cemetery
+created_at: "2026-11-16"
+status: proposed
+action: move_to_cemetery
+target: config/intraday_forward.yaml
+reason: >-
+  La reevaluación con swap real, spread y comisión actuales deja el Sharpe en
+  0.0409 y el CAGR en 0.07%, por debajo del umbral mecánico de Sharpe 0.3.
+evidence:
+  period: "2017-12-28/2026-11-12"
+  data: H4 US100.CASH
+  params:
+    fast: 50
+    slow: 200
+    regime: 200
+    stop_atr: 3.0
+    atr_window: 14
+    exposure: 0.75
+  without_swap:
+    cagr: 0.019854
+    sharpe: 0.368686
+    max_drawdown: -0.202875
+    trades: 10
+  with_swap:
+    cagr: 0.000684
+    sharpe: 0.040907
+    max_drawdown: -0.246595
+    trades: 10
+    swap_total: -71265.40
+    swap_pct_gross: 0.963701
+  report: reports/research/us100-trend-d1/cost_reeval.md
+changes:
+  - bot: us100-trend-d1
+    magic: 20261153
+    path: bots[2].enabled
+    from: true
+    to: false
+not_changed:
+  - eurusd-london-pullback-forward
+  - usdjpy-tokyo-breakout-forward

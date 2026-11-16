@@ -45,8 +45,20 @@ def test_tres_noches_con_miercoles_pagan_cinco_veces_el_swap_diario():
     assert total == pytest.approx(5.0 * daily)
 
 
-def test_costs_yaml_no_inventa_swap_si_falta_mt5():
-    asset = asset_costs("US100.CASH")
+def test_costs_yaml_no_inventa_swap_si_falta_mt5(tmp_path):
+    path = tmp_path / "costs.yaml"
+    path.write_text(
+        "assets:\n"
+        "  US100.CASH:\n"
+        "    verified: true\n"
+        "    commission_type: zero\n"
+        "swap:\n"
+        "  defaults:\n"
+        "    long: null\n"
+        "    short: null\n",
+        encoding="utf-8",
+    )
+    asset = asset_costs("US100.CASH", path)
     assert asset.swap_long is None
     assert asset.swap_short is None
     assert asset.swap_provisional is True
@@ -155,6 +167,9 @@ def test_backtest_aplica_carry_y_marca_estado():
     assert without.equity.iloc[-1] - with_carry.equity.iloc[-1] == pytest.approx(
         50.0, abs=0.5
     )
+    assert with_carry.metrics["carry_paid"] < 0
+    assert with_carry.metrics["time_in_market"] > 0
+    assert without.metrics["carry_paid"] == 0.0
 
 
 def test_event_backtest_cobra_carry_al_cruzar_noches():

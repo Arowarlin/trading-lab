@@ -24,6 +24,20 @@ def test_propuesta_desactiva_solo_los_dos_forwards_fx():
     assert proposal["not_changed"][0]["magic"] == 20261153
 
 
+def test_propuesta_de_cementerio_no_toca_enabled():
+    path = ROOT / "config" / "proposals" / "us100-trend-d1-cemetery.yaml"
+    proposal = yaml.safe_load(path.read_text(encoding="utf-8"))
+    assert proposal["action"] == "move_to_cemetery"
+    assert proposal["changes"][0]["bot"] == "us100-trend-d1"
+    assert proposal["changes"][0]["from"] is True
+    assert proposal["changes"][0]["to"] is False
+    forward = yaml.safe_load(
+        (ROOT / "config" / "intraday_forward.yaml").read_text(encoding="utf-8")
+    )
+    bot = next(item for item in forward["bots"] if item["id"] == "us100-trend-d1")
+    assert bot["enabled"] is True
+
+
 def test_la_propuesta_no_esta_aplicada():
     path = ROOT / "config" / "intraday_forward.yaml"
     config = yaml.safe_load(path.read_text(encoding="utf-8"))
