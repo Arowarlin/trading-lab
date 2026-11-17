@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pandas as pd
 import pytest
 
@@ -97,7 +99,7 @@ def test_el_reloj_arranca_con_un_fill_abierto(tmp_path):
                 1.0,
                 20_000.0,
                 "ea:us100-ftmo1",
-                "ftmo_trial_ea",
+                "ftmo_demo",
                 93010001,
             ),
         )
@@ -209,6 +211,39 @@ def test_coincidencia_de_entradas_50_y_criterio(tmp_path, monkeypatch):
     assert not any("coincidencia de entradas" in item for item in passed)
 
 
+def test_forward_deriva_r_del_riesgo_del_setfile(tmp_path, monkeypatch):
+    db = tmp_path / "lab.db"
+    init_db(db)
+    trade = replace(
+        _forward_trade(
+            entry_ts="2026-11-16T14:55:00+00:00",
+            entry_price=27_495.13,
+            pnl=2_974.01,
+            r_multiple=1.0,
+        ),
+        risk_usd=None,
+        r_multiple=None,
+    )
+    monkeypatch.setattr(ea_forward, "_closed", lambda db_path, ea: [trade])
+    monkeypatch.setattr(ea_forward, "load_bars", lambda cfg: pd.DataFrame())
+    monkeypatch.setattr(
+        ea_forward,
+        "load_setfile",
+        lambda path: {"InpDynRisk": True, "InpDynBase": 1.0},
+    )
+    monkeypatch.setattr(ea_forward, "params_from_set", lambda values: {})
+    monkeypatch.setattr(
+        ea_forward,
+        "run_engine",
+        lambda df, params: pd.DataFrame({"t": [], "d": [], "ent": []}),
+    )
+
+    metrics = forward_metrics(db)
+
+    assert metrics["n_trades"] == 1
+    assert metrics["expectancy"] == pytest.approx(2.97401, rel=1e-4)
+
+
 
 def test_refresh_preregistro_solo_antes_del_primer_fill(tmp_path):
     db = tmp_path / "lab.db"
@@ -264,18 +299,13 @@ def _insert_fill(con, *, ts, account, side, price, deal_id, magic=93010001):
     return int(cur.lastrowid)
 
 
-def test_forward_ignora_fills_de_ftmo_demo(tmp_path):
+def test_forward_usa_la_cuenta_del_ea_e_ignora_la_trial(tmp_path):
     db = tmp_path / "lab.db"
     init_db(db)
     row = ensure_forward(db)
     frozen = pd.Timestamp(row["frozen_at"])
-    demo_ts = (frozen + pd.Timedelta(minutes=5)).isoformat()
-    trial_ts = (frozen + pd.Timedelta(minutes=10)).isoformat()
-    with connect(db) as con:
-        _insert_fill(
-            con, ts=demo_ts, account="ftmo_demo", side="buy", price=20_000, deal_id=1
-        )
-    assert ensure_forward(db)["start_date"] is None
+    trial_ts = (frozen + pd.Timedelta(minutes=5)).isoformat()
+    demo_ts = (frozen + pd.Timedelta(minutes=10)).isoformat()
     with connect(db) as con:
         _insert_fill(
             con,
@@ -283,14 +313,19 @@ def test_forward_ignora_fills_de_ftmo_demo(tmp_path):
             account="ftmo_trial_ea",
             side="buy",
             price=20_000,
-            deal_id=2,
+            deal_id=1,
+        )
+    assert ensure_forward(db)["start_date"] is None
+    with connect(db) as con:
+        _insert_fill(
+            con, ts=demo_ts, account="ftmo_demo", side="buy", price=20_000, deal_id=2
         )
     started = ensure_forward(db)
-    expected = pd.Timestamp(trial_ts).tz_convert("America/New_York").date().isoformat()
+    expected = pd.Timestamp(demo_ts).tz_convert("America/New_York").date().isoformat()
     assert started["start_date"] == expected
 
 
-def test_forward_solo_cuenta_trial(tmp_path):
+def test_forward_solo_cuenta_del_ea(tmp_path):
     db = tmp_path / "lab.db"
     init_db(db)
     with connect(db) as con:
@@ -302,7 +337,7 @@ def test_forward_solo_cuenta_trial(tmp_path):
             price=20_000,
             deal_id=10,
         )
-        _insert_fill(
+        demo_exit = _insert_fill(
             con,
             ts="2026-11-10T16:00:00+00:00",
             account="ftmo_demo",
@@ -318,7 +353,7 @@ def test_forward_solo_cuenta_trial(tmp_path):
             price=21_000,
             deal_id=20,
         )
-        trial_exit = _insert_fill(
+        _insert_fill(
             con,
             ts="2026-11-11T16:00:00+00:00",
             account="ftmo_trial_ea",
@@ -329,6 +364,7 @@ def test_forward_solo_cuenta_trial(tmp_path):
 
     ea = get_ea("us100-ftmo1")
     assert ea is not None
+    assert ea_forward.FORWARD_ACCOUNT == ea.account == "ftmo_demo"
     trades = ea_forward._closed(db, ea)
     assert len(trades) == 1
-    assert trades[0].exit_fill_id == trial_exit
+    assert trades[0].exit_fill_id == demo_exit

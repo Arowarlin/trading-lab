@@ -71,7 +71,9 @@ EA_CRITERIA = {
     "calendar_sha256": _sha256(ROOT / "src" / "tradinglab" / "nyse_calendar.py"),
 }
 DEFAULT_BOT = "ea:us100-ftmo1"
-FORWARD_ACCOUNT = "ftmo_trial_ea"
+# Cuenta por defecto del forward. La fuente de verdad es `ea.account`
+# (config/mt5_eas.yaml); la constante se conserva por compatibilidad.
+FORWARD_ACCOUNT = "ftmo_demo"
 POINT = 0.01
 
 
@@ -101,7 +103,7 @@ def _closed(db_path: str | Path, ea: ExternalEA):
         tz="America/New_York",
         bots={ea.bot_id: {"account": ea.account, "profile": "intraday_fx"}},
     )
-    allowed = _fill_ids_for_account(db_path)
+    allowed = _fill_ids_for_account(db_path, ea.account)
     return [
         trade
         for trade in trades
@@ -134,7 +136,7 @@ def _first_fill_date(
     try:
         with connect(db_path) as con:
             rows = con.execute(
-                sql, (ea.bot_id, *magics, FORWARD_ACCOUNT)
+                sql, (ea.bot_id, *magics, ea.account)
             ).fetchall()
     except Exception:
         return None
@@ -268,6 +270,16 @@ def forward_metrics(
     cfg = settings or get_settings()
     df = load_bars(cfg)
     values = load_setfile(ea.setfile)
+    # Los fills externos no traen `risk_usd`; se usa el riesgo del setfile
+    # (base dinámica 1.0 % o fijo 0.35 %) para no convertir un +2,97R en 0R.
+    risk_fraction = None
+    try:
+        if bool(values.get("InpDynRisk", False)):
+            risk_fraction = float(values.get("InpDynBase", 1.0)) / 100.0
+        else:
+            risk_fraction = float(values.get("InpRiskPct", 0.35)) / 100.0
+    except (TypeError, ValueError):
+        risk_fraction = None
     predicted = run_engine(df, params_from_set(values))
     predicted = predicted.copy()
     predicted["t"] = pd.to_datetime(predicted["t"])
@@ -300,6 +312,8 @@ def forward_metrics(
         r = trade.r_multiple
         if r is None and risk > 0:
             r = float(trade.pnl) / risk
+        if r is None and risk_fraction and account_size:
+            r = float(trade.pnl) / (float(account_size) * risk_fraction)
         rs.append(float(r or 0.0))
         pnls.append(float(trade.pnl or 0.0))
     wins = [value for value in rs if value > 0]

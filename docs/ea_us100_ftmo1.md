@@ -10,7 +10,8 @@ corre dentro del terminal con su propio motor, su riesgo compartido y su magic.
 |---|---|
 | ID | `us100-ftmo1` |
 | Cuenta actual | `ftmo_demo` (demo) |
-| Cuenta dedicada | `ftmo_trial_ea` (registrada y `blocked` hasta abrir el trial) |
+| Cuenta del forward | `ftmo_demo` — sigue a `ea.account` en `config/mt5_eas.yaml` |
+| Cuenta dedicada | `ftmo_trial_ea` (registrada y `blocked`; opcional, ya no es la cuenta del forward) |
 | Símbolo | `US100.cash` |
 | Magic | `93010001` |
 | Magics gestionados | `93010001`, `93020001` |
@@ -61,11 +62,16 @@ lab ea status us100-ftmo1
 
 ## Cuenta dedicada y FTMO Free Trial
 
-El EA sigue en `ftmo_demo` con los controles compartidos. Para separarlo se
-reservó `ftmo_trial_ea` en `config/accounts.yaml` con las reglas del challenge
-FTMO 100k, pero **`status: blocked`**: mientras esté bloqueada, el guardián no
-exporta esa cuenta y `PropGuard`, el forward y `ai_trader` rechazan operarla.
-No se inventó una cuenta que todavía no existe.
+El EA sigue en `ftmo_demo` con los controles compartidos, y **el forward mide
+esa misma cuenta**. `ftmo_trial_ea` queda como cuenta dedicada opcional en
+`config/accounts.yaml`, con las reglas del challenge FTMO 100k y
+**`status: blocked`**: mientras esté bloqueada, el guardián no exporta esa
+cuenta y `PropGuard`, el forward y `ai_trader` rechazan operarla. No se inventó
+una cuenta que todavía no existe.
+
+Si más adelante se abre el trial y se mueve el EA, el forward cambiará de
+fuente porque sigue `ea.account`: habrá que decidir si se conserva este forward
+o se abre uno nuevo con la cuenta del trial. No se cambia solo.
 
 Pasos para abrir el trial y mover el EA:
 
@@ -85,6 +91,11 @@ Pasos para abrir el trial y mover el EA:
    empiezan a usar los magics de esa cuenta en la siguiente exportación.
 7. En `config/ops.yaml` apunta `mt5.terminal_path` al terminal del trial y
    reinicia los procesos del lab que hablan con MT5.
+
+Si el forward ya arrancó (hoy sí, **2026-11-16**), mover el EA al trial cambia
+`ea.account` y el forward dejará de contar los fills de `ftmo_demo`. Decide
+explícitamente si se conserva este forward o se abre uno nuevo con la cuenta
+del trial; no se cambia solo.
 
 **Dos terminales a la vez:** el paquete `MetaTrader5` inicializa un solo
 terminal por proceso (`mt5.initialize(path=...)`); no mantiene dos conexiones
@@ -123,14 +134,19 @@ símbolo ya incluyen sus magics.
 
 El forward del EA está congelado en `lifecycle` **antes** de contar, con hash
 **`f490642ba7a1f71b`** (v3.2). El hash anterior era `2bfad45ca4ba36fc`; se
-actualizó **antes de la primera operación forward** (`start_date=NULL`, 0 fills)
-y el cambio quedó registrado en `lifecycle_events`. El reloj no arranca hoy:
-arranca el primer día con un fill real del EA (`start_date` queda `NULL` hasta
-entonces).
+actualizó **antes de la primera operación forward** y el cambio quedó registrado
+en `lifecycle_events`. El reloj arrancó el **2026-11-16** con el primer fill real
+del EA; la ventana termina el **2027-01-15**.
 
-El forward solo cuenta fills de la cuenta **`ftmo_trial_ea`** (hoy `blocked`).
-Una operación del EA en `ftmo_demo` **no** fija `start_date` ni entra en las
-métricas: `_first_fill_date` y `_closed` filtran por esa cuenta.
+El forward sigue la cuenta registrada del EA (`ea.account`), hoy **`ftmo_demo`**.
+Los fills de otra cuenta (por ejemplo `ftmo_trial_ea`) se ignoran:
+`_first_fill_date` y `_closed` filtran por `ea.account`. El primer fill válido
+fue el **2026-11-16 14:55 UTC**, posterior al pre-registro (02:38 UTC).
+
+Los fills externos no traen `risk_usd`; para no convertir un +2,97R en 0R,
+`forward_metrics` usa el riesgo del setfile (base dinámica 1,0 % o fijo 0,35 %).
+La primera operación: **+2.974,01 USD ≈ +2,97R**. La réplica del motor no
+coincidió en esa vela (`entry_match 0/1`); con n=1 no se concluye.
 
 | Criterio | Umbral |
 |---|---|
