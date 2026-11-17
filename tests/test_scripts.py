@@ -71,6 +71,12 @@ def test_scalp_ejecuta_manage_cada_minuto():
     assert "AI-Manage" in script
 
 
+def test_manage_no_compite_por_el_candado_del_scalp():
+    script = (ROOT / "scripts" / "ai_trader_manage.ps1").read_text(encoding="utf-8")
+    assert "lock-acquire" not in script
+    assert "ai-trader manage" in script
+
+
 def test_open_console_y_acceso_directo():
     script = (ROOT / "scripts" / "open_console.ps1").read_text(encoding="utf-8")
     assert 'web", "--no-open"' in script
