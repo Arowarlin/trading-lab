@@ -62,7 +62,10 @@ lab ai-trader execute --id <proposal_id>
 # Decision de no operar (motivo <= 200, confidence 1-5)
 lab ai-trader skip --json '{"style":"intraday","strategy":"ema_pullback","symbol":"USDJPY","timeframe":"H1","reason":"sin retroceso a EMA21","confidence":3}'
 
-# Manage sin LLM: BE 0,5R, trailing 1 ATR, Donchian 10d, salida SMA5 y cierres de sesion
+# Manage sin LLM: BE 0,5R, trailing 1 ATR, protección por avance al TP
+# (50 % -> BE, 80 % -> 50 % del trayecto al TP), Donchian 10d, salida SMA5
+# y cierres de sesión. El scalp también lo ejecuta cada minuto, antes de
+# buscar setups, para que el candado del scalp no deje sin turno a AI-Manage.
 lab ai-trader manage
 
 # Marcador por estilo x estrategia x simbolo x timeframe, sombras e IC 90%
@@ -70,6 +73,8 @@ lab ai-trader scoreboard
 ```
 
 `propose` rechaza con `estrategia desconocida`, `fuera de ventana`, `celda pausada`, `stop diario`, `coste/R`, `volumen < minimo` o `PropGuard`. Un rechazo queda en `ai_decisions`; no se reintenta a ciegas.
+
+La protección por TP usa el **mejor extremo alcanzado** desde la entrada: al **50 %** del trayecto mueve el SL a **breakeven**; al **80 %** lo mueve al **50 % del trayecto** (mitad del beneficio objetivo). Nunca aleja el stop ni lo deja del lado equivocado del mercado; si el precio ya devolvió el tramo del 80 %, cae a breakeven cuando ese nivel sigue siendo válido. Aplica al carril IA; el EA externo tiene su propia gestión.
 
 ## Estrategias por sesion
 

@@ -65,6 +65,12 @@ def test_calendar_csv_estructura():
     )
 
 
+def test_scalp_ejecuta_manage_cada_minuto():
+    script = (ROOT / "scripts" / "ai_trader_scalp.ps1").read_text(encoding="utf-8")
+    assert "ai-trader manage" in script
+    assert "AI-Manage" in script
+
+
 def test_open_console_y_acceso_directo():
     script = (ROOT / "scripts" / "open_console.ps1").read_text(encoding="utf-8")
     assert 'web", "--no-open"' in script

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
@@ -108,15 +109,30 @@ def test_ventanas_con_y_sin_horario_de_verano():
 def test_candado_adquiere_bloquea_y_libera(tmp_path):
     path = tmp_path / "ai_trader.lock"
     now = datetime(2026, 1, 15, 7, 5, tzinfo=timezone.utc)
-    first = lock_acquire(path, pid=123, now=now, session="london")
+    owner = os.getpid()
+    first = lock_acquire(path, pid=owner, now=now, session="london")
     assert first["ok"] is True
-    assert first["lock"]["pid"] == 123
+    assert first["lock"]["pid"] == owner
     second = lock_acquire(path, pid=456, now=now, session="ny")
     assert second["ok"] is False
-    assert "PID 123" in second["reason"]
+    assert f"PID {owner}" in second["reason"]
     assert lock_release(path, pid=999)["ok"] is False
-    assert lock_release(path, pid=123)["ok"] is True
+    assert lock_release(path, pid=owner)["ok"] is True
     assert lock_acquire(path, pid=456, now=now, session="ny")["ok"] is True
+
+
+def test_candado_limpia_pid_muerto(tmp_path):
+    path = tmp_path / "ai_trader.lock"
+    now = datetime(2026, 1, 15, 7, 5, tzinfo=timezone.utc)
+    path.write_text(
+        json.dumps({"pid": 999_999_999, "ts": now.isoformat(), "session": "scalp"}),
+        encoding="utf-8",
+    )
+
+    result = lock_acquire(path, pid=os.getpid(), now=now, session="ny")
+
+    assert result["ok"] is True
+    assert result["lock"]["pid"] == os.getpid()
 
 
 def test_preflight_sale_por_ventana_antes_de_mt5():

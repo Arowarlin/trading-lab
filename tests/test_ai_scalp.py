@@ -459,3 +459,19 @@ def test_execute_bloquea_datos_obsoletos_en_cualquier_familia(tmp_path, monkeypa
     assert row["decision"] == "skip"
     assert "datos obsoletos" in row["reason"]
     assert alerts and alerts[0][1] == "scalping"
+
+
+def test_scalp_ejecuta_manage_aunque_no_haya_plan(tmp_path, monkeypatch):
+    db = tmp_path / "lab.db"
+    init_db(db)
+    calls = []
+    monkeypatch.setattr(
+        "tradinglab.ai_trader.manage",
+        lambda **kwargs: calls.append(kwargs) or [{"ticket": 1, "new_sl": 100.0}],
+    )
+
+    result = scalp(broker=_ScalpBroker(), db_path=db, now=_window_now())
+
+    assert result["status"] == "no_plan"
+    assert result["managed"] == 1
+    assert calls

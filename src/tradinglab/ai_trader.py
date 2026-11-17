@@ -41,7 +41,7 @@ from .killswitch import ensure as ensure_killswitch
 from .killswitch import load_state as load_killswitch_state
 from .prop.guard import PropGuard
 from .prop.rules import from_yaml
-from .trailing import next_stop
+from .trailing import next_stop, tp_protection_stop
 
 CONFIG_PATH = ROOT / "config" / "ai_trader.yaml"
 PRAGUE = ZoneInfo("Europe/Prague")
@@ -2562,12 +2562,26 @@ def scalp(*, broker=None, config: dict | None = None,
     style = cfg["styles"].get("scalping")
     if not cfg["enabled"] or style is None or not style["enabled"]:
         return {"status": "disabled"}
+    # El scalp corre cada minuto y su candado deja sin turno a AI-Manage.
+    # Proteger aquí garantiza que BE/50 % del TP se aplique a tiempo.
+    protected: list[dict] = []
+    if broker is not None:
+        try:
+            protected = manage(broker=broker, config=cfg, db_path=db_path)
+        except Exception:
+            protected = []
     if session_open(style, moment) is not True:
-        return {"status": "outside_window", "now": moment.isoformat()}
+        return {
+            "status": "outside_window", "now": moment.isoformat(),
+            "managed": len(protected),
+        }
     session_date = _reset_date(settings)
     plans = _active_plans(db_path, session_date)
     if not plans:
-        return {"status": "no_plan", "session_date": session_date}
+        return {
+            "status": "no_plan", "session_date": session_date,
+            "managed": len(protected),
+        }
 
     def fail(status: str, reason: str, *, ok: int = 0) -> dict:
         for plan in plans:
@@ -2584,6 +2598,7 @@ def scalp(*, broker=None, config: dict | None = None,
         return {
             "status": status, "reason": reason,
             "session_date": session_date, "plans": len(plans),
+            "managed": len(protected),
         }
 
     try:
@@ -3062,18 +3077,33 @@ def manage(*, broker, config: dict | None = None,
         spec = broker.symbol_spec(position["symbol"])
         digits = int(spec.get("digits") or 2)
         if setup == "donchian_turtle":
-            candidate = _donchian_stop(
+            base = _donchian_stop(
                 broker, position["symbol"], position["side"], entry, sl,
                 profit_r, now, digits,
             )
         else:
-            candidate = next_stop(
+            base = next_stop(
                 side=position["side"], entry=entry, best=best,
                 atr_value=float(atr(bars).iloc[-1]),
                 current_sl=sl, profit_r=profit_r,
                 digits=digits,
                 min_distance=float(spec.get("stops_level") or 0) * float(spec.get("point") or 0),
             )
+        candidates: list[float] = []
+        if base is not None:
+            candidates.append(base)
+        tp_price = float(position.get("tp") or 0)
+        if tp_price > 0:
+            protected = tp_protection_stop(
+                side=position["side"], entry=entry, tp=tp_price,
+                best=best, price=price, current_sl=sl, digits=digits,
+                min_distance=float(spec.get("stops_level") or 0) * float(spec.get("point") or 0),
+            )
+            if protected is not None:
+                candidates.append(protected)
+        candidate = (
+            min(candidates) if short else max(candidates)
+        ) if candidates else None
         moved = None
         if candidate is not None and ((short and candidate < sl) or (not short and candidate > sl)):
             try:

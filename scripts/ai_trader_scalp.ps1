@@ -32,6 +32,12 @@ if (-not $lock -or -not $lock.ok) {
 }
 
 try {
+    # Protección cada minuto, también fuera de la ventana: BE/50 % del TP y
+    # cierre de las 12:00. AI-Manage cada 15 min queda bloqueado por este
+    # candado; el scalp cubre esa gestión.
+    $manageOut = & $lab ai-trader manage 2>&1
+    Write-AiLog -Log $log -Message (($manageOut | Out-String).Trim())
+
     $pre = Invoke-AiPreflight -Root $root -Session $session
     if (-not $pre.ok) {
         $skippedStages = @("window", "killswitch", "account_stop", "global_stop", "market")

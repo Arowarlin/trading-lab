@@ -207,6 +207,25 @@ def preflight(
                 pass
 
 
+def _pid_alive(pid: int) -> bool:
+    """True si el PID existe; un candado de un proceso muerto se puede limpiar."""
+    if int(pid) <= 0:
+        return False
+    if os.name == "nt":
+        import ctypes
+
+        handle = ctypes.windll.kernel32.OpenProcess(0x1000, False, int(pid))
+        if not handle:
+            return False
+        ctypes.windll.kernel32.CloseHandle(handle)
+        return True
+    try:
+        os.kill(int(pid), 0)
+    except OSError:
+        return False
+    return True
+
+
 def lock_acquire(path: str | Path, *, pid: int | None = None,
                  now: datetime | None = None, session: str | None = None,
                  max_age_hours: float = 12.0) -> dict:
@@ -225,6 +244,9 @@ def lock_acquire(path: str | Path, *, pid: int | None = None,
             stale = (moment - _as_utc(stamp)).total_seconds() > max_age_hours * 3600
         except Exception:
             stale = False
+        owner = int(data.get("pid") or 0)
+        if not stale and owner and not _pid_alive(owner):
+            stale = True
         if not stale:
             return {
                 "ok": False,
