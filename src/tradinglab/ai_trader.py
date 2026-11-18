@@ -3089,6 +3089,7 @@ def manage(*, broker, config: dict | None = None,
                 digits=digits,
                 min_distance=float(spec.get("stops_level") or 0) * float(spec.get("point") or 0),
             )
+        min_distance = float(spec.get("stops_level") or 0) * float(spec.get("point") or 0)
         candidates: list[float] = []
         if base is not None:
             candidates.append(base)
@@ -3097,10 +3098,20 @@ def manage(*, broker, config: dict | None = None,
             protected = tp_protection_stop(
                 side=position["side"], entry=entry, tp=tp_price,
                 best=best, price=price, current_sl=sl, digits=digits,
-                min_distance=float(spec.get("stops_level") or 0) * float(spec.get("point") or 0),
+                min_distance=min_distance,
             )
             if protected is not None:
                 candidates.append(protected)
+
+        def stop_valid(value: float) -> bool:
+            # El SL debe quedar al lado correcto del precio actual; el
+            # trailing puede proponer un nivel ya atravesado y el bróker lo
+            # rechaza, dejando sin aplicar también el candidato del TP.
+            if short:
+                return value > price + min_distance + 1e-9
+            return value < price - min_distance - 1e-9
+
+        candidates = [value for value in candidates if stop_valid(value)]
         candidate = (
             min(candidates) if short else max(candidates)
         ) if candidates else None

@@ -281,3 +281,42 @@ def test_manage_protege_por_avance_al_tp(tmp_path, close, high, expected_sl):
     assert any(row["ticket"] == ticket and row["new_sl"] == expected_sl for row in rows)
     assert broker.modified[-1][0] == ticket
     assert broker.modified[-1][1] == expected_sl
+
+
+def test_manage_short_80_usa_tp_aunque_el_trailing_quede_detras(tmp_path):
+    from tradinglab.ai_trader import manage
+
+    now = datetime.now(timezone.utc)
+    opened = now - timedelta(hours=1)
+    ticket = 779
+    position = {
+        "ticket": ticket, "symbol": "US100.cash", "side": "sell", "volume": 1.0,
+        "price_open": 100.0, "price_current": 84.0, "sl": 110.0, "tp": 80.0,
+        "profit": 0.0, "magic": 20261192, "time": opened,
+    }
+    end = pd.Timestamp.now(tz="UTC").floor("h")
+    frames = {
+        "M1": _frame(periods=300, freq="1min", end=end),
+        "M5": _frame(periods=300, freq="5min", end=end),
+        "M15": _frame(periods=300, freq="15min", end=end),
+        "H1": _frame(periods=300, freq="1h", end=end, close=84.0, high=84.0, low=83.0),
+        "H4": _frame(periods=300, freq="4h", end=end),
+    }
+    broker = _FakeBroker(frames, positions=[position])
+    db = tmp_path / "lab.db"
+    init_db(db)
+    with connect(db) as con:
+        con.execute(
+            "INSERT INTO ai_trades(proposal_id, ts, style, symbol, setup, side, "
+            "timeframe, status, magic, ticket, risk_usd) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+            ("p-short-tp", opened.isoformat(), "intraday", "US100.cash",
+             "trend_pullback", "sell", "H1", "open", 20261192, ticket, 10.0),
+        )
+
+    rows = manage(broker=broker, db_path=db)
+
+    # El trailing proponía 84 (por debajo del ask 84.5) y el bróker lo
+    # rechazaría; debe usar el 50 % del TP (90), que sí es válido.
+    assert any(row["ticket"] == ticket and row["new_sl"] == 90.0 for row in rows)
+    assert broker.modified[-1][0] == ticket
+    assert broker.modified[-1][1] == 90.0
