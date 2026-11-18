@@ -561,24 +561,48 @@ def test_execute_sin_armar_no_envia(tmp_path, guards) -> None:
     assert broker.submit_calls == []
 
 
-def test_posicion_ajena_bloquea_y_no_cierra(tmp_path, guards) -> None:
+def test_posicion_ajena_no_bloquea_y_no_cierra(tmp_path, guards) -> None:
     db = tmp_path / "lab.db"
     _seed_alias(db)
     foreign = _own_position(magic=123, ticket=999)
     broker = FakeBroker(positions=[foreign])
     decision = fwd.run_forward_bot(
-        _bot(),
+        _bot(enabled=True),
         broker,
         _settings(),
+        dry_run=False,
         db_path=db,
         now=NOW,
         strategy_fn=_strategy(1),
     )
-    assert decision.action == "bloqueado"
-    assert "ajena" in decision.reason
-    assert broker.submit_calls == []
+    # Otro bot puede tener su posición en el mismo símbolo: este abre la
+    # suya y no toca la ajena.
+    assert decision.action == "opened_long"
+    assert len(broker.submit_calls) == 1
+    assert broker.submit_calls[0]["magic"] == 20261151
     assert broker.close_calls == []
     assert any(item["ticket"] == 999 for item in broker.positions())
+    assert decision.guards["symbol_positions"] == "propias=0 ajenas=1"
+
+
+def test_mismo_bot_no_abre_una_segunda_posicion(tmp_path, guards) -> None:
+    db = tmp_path / "lab.db"
+    _seed_alias(db)
+    ours = _own_position(ticket=700, magic=20261151)
+    broker = FakeBroker(positions=[ours])
+    decision = fwd.run_forward_bot(
+        _bot(enabled=True),
+        broker,
+        _settings(),
+        dry_run=False,
+        db_path=db,
+        now=NOW,
+        strategy_fn=_strategy(1),
+    )
+    # Una operación por bot: con su posición abierta gestiona, no duplica.
+    assert decision.action == "hold"
+    assert broker.submit_calls == []
+    assert decision.guards["symbol_positions"] == "propias=1 ajenas=0"
 
 
 def test_solo_cierra_posicion_propia(tmp_path, guards) -> None:

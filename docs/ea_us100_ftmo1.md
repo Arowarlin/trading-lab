@@ -129,6 +129,12 @@ símbolo ya incluyen sus magics.
   del lab y del EA en ese símbolo. `PropGuard`, el forward y `ai_trader` rechazan una
   apertura que supere el tope; `lab doctor` muestra el riesgo abierto por
   símbolo y marca WARN si está por encima.
+- **Varios bots por símbolo:** cada bot con su propio `magic` puede mantener
+  **una posición** en el mismo símbolo a la vez (AI, forward y EA conviven en
+  `US100.cash`). El laboratorio solo cierra o modifica la posición de su
+  `magic`; el forward ya no bloquea por una posición ajena. Los topes por
+  símbolo, grupo y total siguen sumando todos los magics, y `max_positions`
+  de FTMO limita el total de la cuenta.
 
 ## Forward pre-registrado
 

@@ -1081,6 +1081,10 @@ def run_forward_bot(
         "freshness": "pendiente",
         "clock": "pendiente",
     }
+    # Varios bots pueden convivir en el mismo símbolo: cada uno opera con su
+    # magic y solo gestiona su propia posición. Las ajenas no se tocan; los
+    # topes por símbolo, grupo y total siguen sumando todos los magics.
+    guards["symbol_positions"] = f"propias={len(ours)} ajenas={len(foreign)}"
     defense = _defense_guard(bot, state, equity, moment, rules)
     guards["defense"] = defense["label"]
 
@@ -1171,26 +1175,6 @@ def run_forward_bot(
             symbol,
             signal,
             f"reloj: {clock_state['reason']}",
-            price=price,
-            atr_value=atr_value,
-            guards=guards,
-        )
-
-    if foreign:
-        guards["session"] = "bloqueada"
-        _record_signal(
-            db_path,
-            bot,
-            symbol,
-            signal,
-            price,
-            "blocked foreign_position",
-        )
-        return _blocked(
-            bot,
-            symbol,
-            signal,
-            "hay una posición ajena en el símbolo; no se abre",
             price=price,
             atr_value=atr_value,
             guards=guards,
