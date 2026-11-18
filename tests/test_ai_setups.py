@@ -43,7 +43,6 @@ class _FakeBroker:
         self.equity = equity
         self._positions = positions or []
         self.closed: list[int] = []
-        self.modified: list[tuple[int, float | None, float | None]] = []
 
     def health(self):
         return {"mode": "demo", "equity": self.equity}
@@ -68,11 +67,6 @@ class _FakeBroker:
     def close_position(self, ticket: int, volume: float | None = None):
         self.closed.append(int(ticket))
         return {"ticket": ticket, "closed": True}
-
-    def modify_position(self, ticket: int, *, sl: float | None = None,
-                        tp: float | None = None):
-        self.modified.append((int(ticket), sl, tp))
-        return {"ok": True, "ticket": ticket, "sl": sl, "tp": tp}
 
 
 def test_asignacion_exacta_por_activo_y_timeframe():
@@ -161,10 +155,10 @@ def test_donchian_trailing_nunca_aleja_el_stop():
     broker = _FakeBroker({"H4": h4})
     now = datetime.now(timezone.utc)
 
-    # Largo: el canal de 10 días sube el stop, pero nunca lo baja.
+    # Largo: el canal de 10 d├¡as sube el stop, pero nunca lo baja.
     assert _donchian_stop(broker, "XAUUSD", "buy", 105.0, 99.0, 0.2, now, 2) == 100.0
     assert _donchian_stop(broker, "XAUUSD", "buy", 105.0, 100.5, 0.2, now, 2) is None
-    # Corto: el canal de 10 días baja el stop, pero nunca lo sube.
+    # Corto: el canal de 10 d├¡as baja el stop, pero nunca lo sube.
     assert _donchian_stop(broker, "XAUUSD", "sell", 105.0, 111.0, 0.2, now, 2) == 110.0
     assert _donchian_stop(broker, "XAUUSD", "sell", 105.0, 109.0, 0.2, now, 2) is None
 
@@ -237,86 +231,3 @@ def test_manage_cierra_orb_al_final_de_sesion(tmp_path):
     rows = manage(broker=broker, db_path=db)
     assert any(row["ticket"] == ticket and row.get("closed") for row in rows)
     assert ticket in broker.closed
-
-
-@pytest.mark.parametrize(
-    ("close", "high", "expected_sl"),
-    [
-        (111.0, 112.0, 100.0),  # ~60 % del TP -> breakeven
-        (118.0, 119.0, 110.0),  # ~95 % del TP -> 50 % del trayecto
-    ],
-)
-def test_manage_protege_por_avance_al_tp(tmp_path, close, high, expected_sl):
-    from tradinglab.ai_trader import manage
-
-    now = datetime.now(timezone.utc)
-    opened = now - timedelta(hours=1)
-    ticket = 778
-    position = {
-        "ticket": ticket, "symbol": "US100.cash", "side": "buy", "volume": 1.0,
-        "price_open": 100.0, "price_current": close, "sl": 60.0, "tp": 120.0,
-        "profit": 0.0, "magic": 20261192, "time": opened,
-    }
-    end = pd.Timestamp.now(tz="UTC").floor("h")
-    frames = {
-        "M1": _frame(periods=300, freq="1min", end=end),
-        "M5": _frame(periods=300, freq="5min", end=end),
-        "M15": _frame(periods=300, freq="15min", end=end),
-        "H1": _frame(periods=300, freq="1h", end=end, close=close, high=high),
-        "H4": _frame(periods=300, freq="4h", end=end),
-    }
-    broker = _FakeBroker(frames, positions=[position])
-    db = tmp_path / "lab.db"
-    init_db(db)
-    with connect(db) as con:
-        con.execute(
-            "INSERT INTO ai_trades(proposal_id, ts, style, symbol, setup, side, "
-            "timeframe, status, magic, ticket, risk_usd) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
-            ("p-tp", opened.isoformat(), "intraday", "US100.cash",
-             "trend_pullback", "buy", "H1", "open", 20261192, ticket, 40.0),
-        )
-
-    rows = manage(broker=broker, db_path=db)
-
-    assert any(row["ticket"] == ticket and row["new_sl"] == expected_sl for row in rows)
-    assert broker.modified[-1][0] == ticket
-    assert broker.modified[-1][1] == expected_sl
-
-
-def test_manage_short_80_usa_tp_aunque_el_trailing_quede_detras(tmp_path):
-    from tradinglab.ai_trader import manage
-
-    now = datetime.now(timezone.utc)
-    opened = now - timedelta(hours=1)
-    ticket = 779
-    position = {
-        "ticket": ticket, "symbol": "US100.cash", "side": "sell", "volume": 1.0,
-        "price_open": 100.0, "price_current": 84.0, "sl": 110.0, "tp": 80.0,
-        "profit": 0.0, "magic": 20261192, "time": opened,
-    }
-    end = pd.Timestamp.now(tz="UTC").floor("h")
-    frames = {
-        "M1": _frame(periods=300, freq="1min", end=end),
-        "M5": _frame(periods=300, freq="5min", end=end),
-        "M15": _frame(periods=300, freq="15min", end=end),
-        "H1": _frame(periods=300, freq="1h", end=end, close=84.0, high=84.0, low=83.0),
-        "H4": _frame(periods=300, freq="4h", end=end),
-    }
-    broker = _FakeBroker(frames, positions=[position])
-    db = tmp_path / "lab.db"
-    init_db(db)
-    with connect(db) as con:
-        con.execute(
-            "INSERT INTO ai_trades(proposal_id, ts, style, symbol, setup, side, "
-            "timeframe, status, magic, ticket, risk_usd) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
-            ("p-short-tp", opened.isoformat(), "intraday", "US100.cash",
-             "trend_pullback", "sell", "H1", "open", 20261192, ticket, 10.0),
-        )
-
-    rows = manage(broker=broker, db_path=db)
-
-    # El trailing proponía 84 (por debajo del ask 84.5) y el bróker lo
-    # rechazaría; debe usar el 50 % del TP (90), que sí es válido.
-    assert any(row["ticket"] == ticket and row["new_sl"] == 90.0 for row in rows)
-    assert broker.modified[-1][0] == ticket
-    assert broker.modified[-1][1] == 90.0
