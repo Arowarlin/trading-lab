@@ -3133,9 +3133,12 @@ def sync_closed(broker, *, db_path: str | Path = DEFAULT_DB,
         if ticket in open_tickets:
             continue
         try:
+            # El terminal interpreta el rango como hora de servidor (GMT+2);
+            # con `now + 1h` un cierre reciente podía quedar fuera y la fila
+            # seguía "open" aunque el broker ya la había cerrado.
             deals = broker.history_deals(
                 datetime.fromisoformat(str(row["ts"])) - timedelta(hours=2),
-                moment + timedelta(hours=1),
+                moment + timedelta(days=1),
             )
         except Exception:
             continue
