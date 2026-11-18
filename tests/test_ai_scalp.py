@@ -475,3 +475,75 @@ def test_scalp_ejecuta_manage_aunque_no_haya_plan(tmp_path, monkeypatch):
     assert result["status"] == "no_plan"
     assert result["managed"] == 1
     assert calls
+
+
+class _DealsBroker:
+    def __init__(self, deals):
+        self.deals = deals
+
+    def positions(self):
+        return []
+
+    def history_deals(self, start, end):
+        return list(self.deals)
+
+
+def _open_sync_trade(db, ticket=777):
+    init_db(db)
+    with connect(db) as con:
+        con.execute(
+            "INSERT INTO ai_trades(proposal_id, ts, style, symbol, setup, side, "
+            "timeframe, status, magic, ticket, risk_usd) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+            ("p-sync", "2026-11-17T14:00:00+00:00", "scalping", "XAUUSD",
+             "vwap_bounce", "sell", "M5", "open", 20261191, ticket, 100.0),
+        )
+
+
+def test_sync_closed_no_cierra_sin_deal_de_salida(tmp_path):
+    from tradinglab.ai_trader import sync_closed
+
+    db = tmp_path / "lab.db"
+    _open_sync_trade(db)
+    entry = {
+        "position_id": 777, "magic": 20261191, "entry": 0, "profit": 0.0,
+        "price": 100.0, "ts_utc": "2026-11-17T14:00:01+00:00",
+        "swap": 0.0, "commission": 0.0,
+    }
+    assert sync_closed(_DealsBroker([entry]), db_path=db) == 0
+    with connect(db) as con:
+        row = con.execute(
+            "SELECT status FROM ai_trades WHERE proposal_id='p-sync'"
+        ).fetchone()
+    assert row["status"] == "open"
+
+
+def test_sync_closed_usa_el_deal_de_salida(tmp_path):
+    from tradinglab.ai_trader import sync_closed
+
+    db = tmp_path / "lab.db"
+    _open_sync_trade(db)
+    entry = {
+        "position_id": 777, "magic": 20261191, "entry": 0, "profit": 0.0,
+        "price": 100.0, "ts_utc": "2026-11-17T14:00:01+00:00",
+        "swap": 0.0, "commission": 0.0,
+    }
+    exit_deal = {
+        "position_id": 777, "magic": 20261105, "entry": 1, "profit": 50.0,
+        "price": 90.0, "ts_utc": "2026-11-17T14:30:00+00:00",
+        "swap": 0.0, "commission": 0.0,
+    }
+    # El cierre real puede llevar el magic por defecto de MT5 (20261105).
+    assert sync_closed(
+        _DealsBroker([entry, exit_deal]), db_path=db
+    ) == 1
+    with connect(db) as con:
+        row = con.execute(
+            "SELECT status, pnl, result_r, exit_price, exit_ts "
+            "FROM ai_trades WHERE proposal_id='p-sync'"
+        ).fetchone()
+    assert row["status"] == "closed"
+    assert row["pnl"] == 50.0
+    assert row["result_r"] == 0.5
+    assert row["exit_price"] == 90.0
+    assert row["exit_ts"] == "2026-11-17T14:30:00+00:00"

@@ -3115,12 +3115,11 @@ def manage(*, broker, config: dict | None = None,
                     "style": style_name, "setup": setup, "timeframe": timeframe,
                     "profit_r": round(profit_r, 4), "sl": sl, "new_sl": moved,
                     "closed": None})
-    for name, item in cfg["styles"].items():
-        sync_closed(broker, magic=int(item["magic"]), db_path=db_path, now=now)
+    sync_closed(broker, db_path=db_path, now=now)
     return out
 
 
-def sync_closed(broker, *, magic: int, db_path: str | Path = DEFAULT_DB,
+def sync_closed(broker, *, db_path: str | Path = DEFAULT_DB,
                 now: datetime | None = None) -> int:
     moment = _as_utc(now)
     open_tickets = {int(p["ticket"]) for p in (broker.positions() or [])}
@@ -3140,9 +3139,14 @@ def sync_closed(broker, *, magic: int, db_path: str | Path = DEFAULT_DB,
             )
         except Exception:
             continue
-        rel = [d for d in deals if int(d.get("position_id") or 0) == ticket
-               and int(d.get("magic") or 0) == magic]
-        if not rel:
+        rel = [d for d in deals if int(d.get("position_id") or 0) == ticket]
+        # El cierre puede llevar el magic por defecto de MT5 (20261105), no
+        # el magic de la entrada; el position_id es el identificador único.
+        # Solo se cierra con un deal de salida. Si la posición acaba de abrir
+        # y el broker aún no la lista, un deal de entrada no es un cierre:
+        # marcarla cerrada con pnl 0 falseaba el marcador (race del 17/11).
+        exits = [d for d in rel if int(d.get("entry") or 0) != 0]
+        if not exits:
             continue
         pnl = sum(float(d.get("profit") or 0) + float(d.get("swap") or 0)
                   + float(d.get("commission") or 0) for d in rel)
@@ -3155,7 +3159,7 @@ def sync_closed(broker, *, magic: int, db_path: str | Path = DEFAULT_DB,
                 broker, row["symbol"], str(row.get("timeframe") or "H1")
             )
             start = pd.Timestamp(row["ts"])
-            end = pd.Timestamp(str(rel[-1].get("ts_utc") or moment.isoformat()))
+            end = pd.Timestamp(str(exits[-1].get("ts_utc") or moment.isoformat()))
             since = _shadow_window(
                 bars, start, end, str(row.get("timeframe") or "H1")
             )
@@ -3174,7 +3178,8 @@ def sync_closed(broker, *, magic: int, db_path: str | Path = DEFAULT_DB,
                 "UPDATE ai_trades SET status='closed', exit_price=?, exit_ts=?, pnl=?, "
                 "r_multiple=?, result_r=?, shadow_r=?, shadow2_r=?, updated_at=? "
                 "WHERE proposal_id=?",
-                (float(rel[-1].get("price") or 0), str(rel[-1].get("ts_utc") or moment.isoformat()),
+                (float(exits[-1].get("price") or 0),
+                 str(exits[-1].get("ts_utc") or moment.isoformat()),
                  round(pnl, 2), result_r, result_r, shadow_r, shadow2_r,
                  utcnow(), row["proposal_id"]),
             )

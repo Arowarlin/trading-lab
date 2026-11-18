@@ -306,8 +306,8 @@ def _snapshot_at(bars: pd.DataFrame, d1: pd.DataFrame, signal_index: int,
 
 def _valid_for_assignment(symbol: str, strategy: str, timeframe: str,
                           bars: pd.DataFrame, d1: pd.DataFrame,
-                          cutoff: pd.Timestamp | None, rng: random.Random,
-                          cap: int = 450) -> list[ReplayMoment]:
+                          cutoff: pd.Timestamp | None, rng: random.Random
+                          ) -> list[ReplayMoment]:
     frame = bars
     slippage_price = load_config().get("slippage_price", {}).get(
         str(symbol).upper()
@@ -324,7 +324,11 @@ def _valid_for_assignment(symbol: str, strategy: str, timeframe: str,
     ]
     if not positions:
         return []
-    sample = rng.sample(positions, min(cap, len(positions)))
+    # Recorrer todos los candidatos (barajados con la semilla) hasta juntar
+    # momentos válidos. Una muestra aleatoria de 450 se quedaba corta cuando
+    # el cache se ampliaba y el setup es raro.
+    sample = list(positions)
+    rng.shuffle(sample)
     out: list[ReplayMoment] = []
     for index in sample:
         entry_index = index + 1
