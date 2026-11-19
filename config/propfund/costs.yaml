@@ -10,10 +10,41 @@ version: 1
 accounts:
   CFD-001:
     symbols:
-      US100: {spread_price: null, spread_p75_price: null, slippage_price: 1.0, source: "slippage: config/ai_trader.yaml global.slippage_price"}
-      XAUUSD: {spread_price: null, spread_p75_price: null, slippage_price: 0.15, source: "slippage: config/ai_trader.yaml global.slippage_price"}
-      EURUSD: {spread_price: null, spread_p75_price: null, slippage_price: 0.00005, source: "slippage: config/ai_trader.yaml global.slippage_price"}
-
+      US100:
+        spread_price: 1.919866
+        spread_p75_price: 1.945476
+        slippage_price: 1.0
+        source: 'spread: broker_spreads · US100.CASH · p50 de medianas horarias y p75 de p75 horarios (23 h) · slippage: config/ai_trader.yaml global.slippage_price'
+        measured_at: '2026-11-19T20:01:11+00:00'
+        needs_verification: false
+      XAUUSD:
+        spread_price: 0.381448
+        spread_p75_price: 0.430976
+        slippage_price: 0.15
+        source: 'spread: broker_spreads · XAUUSD · p50 de medianas horarias y p75 de p75 horarios (23 h) · slippage: config/ai_trader.yaml global.slippage_price'
+        measured_at: '2026-11-19T20:01:00+00:00'
+        needs_verification: false
+      EURUSD:
+        spread_price: 0.00001
+        spread_p75_price: 0.00002
+        slippage_price: 0.00005
+        source: 'spread: broker_spreads · EURUSD · p50 de medianas horarias y p75 de p75 horarios (24 h) · slippage: config/ai_trader.yaml global.slippage_price'
+        measured_at: '2026-11-19T20:00:53+00:00'
+        needs_verification: false
+      GBPUSD:
+        spread_price: 0.00003
+        spread_p75_price: 0.00007
+        source: 'spread: broker_spreads · GBPUSD · p50 de medianas horarias y p75 de p75 horarios (24 h) · slippage: config/ai_trader.yaml global.slippage_price'
+        measured_at: '2026-11-19T20:10:57+00:00'
+        needs_verification: false
+        slippage_price: 0.00005
+      USDJPY:
+        spread_price: 0.003002
+        spread_p75_price: 0.007246
+        source: 'spread: broker_spreads · USDJPY · p50 de medianas horarias y p75 de p75 horarios (24 h) · slippage: config/ai_trader.yaml global.slippage_price'
+        measured_at: '2026-11-19T20:10:49+00:00'
+        needs_verification: false
+        slippage_price: 0.005
   FUT-001:
     symbols:
       MNQ: {commission_value: null, exchange_fee_per_side: null, clearing_fee_per_side: null, nfa_fee_per_side: null, slippage_ticks: 1, source: "Comisiones Topstep Sin datos: verificar en el contrato"}

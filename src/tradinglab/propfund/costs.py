@@ -93,10 +93,16 @@ def _yaml(path: Path) -> dict:
     return data if isinstance(data, dict) else {}
 
 
+def broker_symbol(symbol: str) -> str:
+    """Nombre del símbolo en MT5 para un id canónico (US100 → US100.CASH)."""
+    item = resolve(symbol)
+    return _FTMO_COST_KEYS.get(item.id, item.id)
+
+
 def _legacy_ftmo_entry(item: CanonicalInstrument, path: Path = LEGACY_COSTS_PATH) -> dict | None:
     """Comisión verificada de FTMO desde config/costs.yaml (solo lectura)."""
     assets = (_yaml(path).get("assets") or {})
-    key = _FTMO_COST_KEYS.get(item.id, item.id)
+    key = broker_symbol(item.id)
     entry = assets.get(key) or assets.get(key.upper())
     if not entry or not entry.get("verified"):
         return None
@@ -216,6 +222,7 @@ def estimate_futures(profile: CostProfile, *, contracts: int, risk_usd: float | 
 __all__ = [
     "CostEstimate",
     "CostProfile",
+    "broker_symbol",
     "estimate_cfd",
     "estimate_futures",
     "load_profile",

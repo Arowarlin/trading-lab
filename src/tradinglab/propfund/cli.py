@@ -10,6 +10,7 @@ from rich.table import Table
 
 from . import protected
 from .console import payload
+from .measure import sync_spreads as sync_spreads_report
 from .registry import load_registry
 from .router import Signal, log_decisions, route
 
@@ -144,3 +145,56 @@ def route_cmd(
         t.add_row(d.assignment, d.account, d.firm, d.decision.value,
                   "; ".join(last["reasons"]) if last else "—")
     console.print(t)
+
+
+def _fmt_bps(value: float | None) -> str:
+    return "Sin datos" if value is None else f"{value:.4f}"
+
+
+def _fmt_price(value: float | None) -> str:
+    return "Sin datos" if value is None else f"{value:.6f}".rstrip("0").rstrip(".")
+
+
+@app.command("sync-spreads")
+def sync_spreads_cmd(
+    account: str = typer.Option(..., "--account", help="Cuenta CFD, p. ej. CFD-001"),
+    write: bool = typer.Option(
+        False, "--write",
+        help="Escribe en config/propfund/costs.yaml. Sin esta opción solo simula.",
+    ),
+    as_json: bool = typer.Option(False, "--json"),
+) -> None:
+    """Mide spreads desde broker_spreads y los convierte a precio (dry-run)."""
+    try:
+        report = sync_spreads_report(account, write=write)
+    except (ValueError, KeyError) as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2) from exc
+    if as_json:
+        console.print_json(json.dumps(report, default=str))
+        return
+    out = Console(width=150)
+    t = Table(title=f"Spreads medidos · {account} · {'ESCRITURA' if write else 'dry-run'}")
+    for col in ("Símbolo", "Bróker", "Horas", "p50 bps", "p75 bps", "Cierre", "Spread", "Spread p75", "Estado"):
+        t.add_column(col, no_wrap=True)
+    for row in report["symbols"]:
+        color = "green" if row["status"] == "ok" else "yellow"
+        t.add_row(
+            row["symbol"], row["broker_symbol"], str(row["hours"]),
+            _fmt_bps(row["p50_bps"]), _fmt_bps(row["p75_bps"]),
+            _fmt_price(row["last_close"]),
+            _fmt_price(row["spread_price"]), _fmt_price(row["spread_p75_price"]),
+            f"[{color}]{row['status']}[/{color}]",
+        )
+    out.print(t)
+    for warning in report["warnings"]:
+        out.print(f"[yellow]Aviso:[/yellow] {warning}")
+    if write:
+        written = ", ".join(report["planned"]) or "ninguno"
+        out.print(f"Escrito en {report['costs_path']} · símbolos: {written}")
+    else:
+        planned = ", ".join(report["planned"]) or "ninguno"
+        out.print(
+            f"[bold]Dry-run:[/bold] no se escribió nada. Se escribirían: {planned}. "
+            "Usa --write para aplicar."
+        )

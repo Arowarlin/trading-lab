@@ -160,9 +160,14 @@ def test_equivalencias_micro_y_nocional():
 def test_coste_ftmo_usa_la_tabla_verificada():
     profile = load_profile("CFD-001", "EURUSD", firm="ftmo")
     assert profile.commission_type == "per_lot_usd" and profile.commission_value == 2.5
-    assert profile.spread_price is None  # sin medición: nunca un spread fijo
+    # Spread medido por cuenta (Tarea A): ya no es None, y el p75 es conservador.
+    assert profile.spread_price is not None and profile.spread_price > 0
+    assert profile.spread_p75_price is not None
+    assert profile.spread_p75_price >= profile.spread_price
+    assert profile.measured_at and "broker_spreads" in profile.source
     est = estimate_cfd(profile, lots=1, price=1.1, contract_size=100_000, risk_usd=500)
-    assert not est.complete and "spread" in est.missing
+    assert est.complete
+    assert est.components["spread"] > 0
 
 
 def test_coste_futuros_no_usa_spreads_mt5():
