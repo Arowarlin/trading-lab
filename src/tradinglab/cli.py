@@ -204,6 +204,9 @@ app.add_typer(intel_app, name="intel")
 app.add_typer(sec_app, name="sec")
 app.add_typer(telegram_app, name="telegram")
 app.add_typer(library_app, name="library")
+from .propfund.cli import app as propfund_app  # noqa: E402  (capa Prop Fund aislada)
+
+app.add_typer(propfund_app, name="propfund")
 
 
 def _harden_stdio() -> None:

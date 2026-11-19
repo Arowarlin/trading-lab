@@ -45,6 +45,7 @@ def test_barra_lateral_con_secciones_y_todas_las_vistas() -> None:
         "fund",
         "journal",
         "risk",
+        "propfund",
         "operator",
         "sala",
         "decisions",

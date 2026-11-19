@@ -1514,6 +1514,35 @@ Evidencia: `pytest tests/test_exports.py -q` → **4 passed**; suite completa
 
 ---
 
+## 6q. Prop Fund multiempresa (CFD + Futures)
+
+Capa nueva y aislada en `src/tradinglab/propfund/` + `config/propfund/`. Administra
+varias empresas de fondeo, programas y cuentas con reglas, costes, conexiones y
+riesgo independientes. **No modifica el carril FTMO**: el EA `us100-ftmo1`,
+`ai_trader` y las dos estrategias forward (EURUSD `london_pullback`, USDJPY
+`tokyo_breakout`) quedan congelados por SHA-256 en
+`config/propfund/protected_manifest.json`.
+
+- Universo: CFD Forex/Índices/Metales y Futures NQ/MNQ/ES/MES/YM/MYM/RTY/M2K/GC/MGC/SI.
+  Acciones y ETF excluidos. Alias de bróker (`US100.cash` = `NAS100` = `USTEC`) y
+  riesgo global por subyacente (US100 + NQ + MNQ = Nasdaq-100).
+- 10 firmas con matriz de automatización y fuente: FTMO, The5ers, FundedNext,
+  FundingPips, FXIFY · Topstep, Apex, MyFundedFutures, Tradeify, Take Profit Trader.
+- Router por cuenta: Señal → Elegibilidad → Compliance → Riesgo → Coste → Solicitud
+  (dry-run). Firmas sin automatización autorizada → `ALERT_ONLY`.
+
+```powershell
+.\.venv\Scripts\lab.exe propfund status
+.\.venv\Scripts\lab.exe propfund firms --market futures
+.\.venv\Scripts\lab.exe propfund accounts
+.\.venv\Scripts\lab.exe propfund verify          # hashes de los componentes protegidos
+.\.venv\Scripts\lab.exe propfund route --strategy nq-orb-ny --symbol MNQ --side long --entry 20000 --stop 19990 --include-disabled
+.\.venv\Scripts\lab.exe propfund affected --firm topstep
+```
+
+Consola: vista **Prop Fund** (Riesgo y fondeo). Documentación en `docs/propfund/`
+(auditoría, arquitectura, matriz de firmas, datos, plan y prompt de OpenCode).
+
 ## 6n. Catálogo único de instrumentos (6.4)
 
 `instruments.py` es el catálogo único por clase (`equity`, `forex`, `futures`,

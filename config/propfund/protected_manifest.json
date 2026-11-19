@@ -1,0 +1,93 @@
+{
+  "algorithm": "sha256 (CRLF normalizado a LF)",
+  "groups": {
+    "ai_trader": {
+      "description": "Carril IA discrecional ai_trader (solo demo, cuenta ftmo_demo).",
+      "files": {
+        ".opencode/agents/ai-operator.md": "66440ee4a58b801fc4c6fb9ebb06d24288ab86e2db16f130b9888bd587166e9e",
+        ".opencode/agents/ai-replay.md": "35adc0177855bbbb78f9f95cf6926ec2d32ef679b8e94874ee0ff1cce3d26766",
+        "config/ai_trader.yaml": "6d3d5af7907006ae097a03075230cb290c96155d2c0a4d831096d6c9b032da52",
+        "docs/ai_trader_opencode.md": "924d8c42be584f40261d099215cd79c8a08998600f3db32a6b125ebbaffc25bd",
+        "docs/ai_trader_skill.md": "255375b9780d8b29a9f730b36d9dfaeb63241424366f1f32f5444568f098cf89",
+        "scripts/ai_trader_distill.ps1": "669c3b877f20b5388636cde585442eb98be00e29ce42f29980bd1c52ca869c90",
+        "scripts/ai_trader_manage.ps1": "a77df2ab634bf9a5f0421021ed45811d864aea9668565a6517c53c14d6ebb14e",
+        "scripts/ai_trader_scalp.ps1": "0870a40a8b89f827c00d8525d0068b6e7d7c673e5d46ea829b91e8c16aa50829",
+        "scripts/ai_trader_session.ps1": "b23f1cab51ecc2738f2d2cd414be2d242f65b0b617e2604bbd8ba504576231bd",
+        "scripts/ai_trader_task_common.ps1": "192a59612b0a218c52fa819cdabad3cf819b753c8a7cc6110b96d8762794b6b4",
+        "scripts/register_ai_trader_tasks.ps1": "5658e2e2bcc038d689b90b1cc78e67f014d4aefa109158ed09add7b0256e7535",
+        "src/tradinglab/ai_distill.py": "77ba06c941f8e4835ad6efa3130d270b21f0fd8308212132a18f31b330b8a54d",
+        "src/tradinglab/ai_learn.py": "86a4c5ed852bb2a92b134358db8e84b2787bce4f4a2f1dc700ef3d3c2b427b0d",
+        "src/tradinglab/ai_replay.py": "64d6794b413cb62779b66aff3d8d0e4fbcd49466e5908c5ca5ca013f49615eb0",
+        "src/tradinglab/ai_session.py": "9797ee0b4ca51b66d8d8f8312fa64d8a7a6d80832a2831ab17968f4aab894ab0",
+        "src/tradinglab/ai_setups.py": "686890c02e79d534d5b28ddb6b31b4e48099a90ed88a6ec7d898c575a3c3b6c1",
+        "src/tradinglab/ai_trader.py": "8883a2a4b3f9eb56102a3bb1d3e27d1ce74d1ac32dcc1175e65d5b4c3b21f801"
+      }
+    },
+    "ea_us100_ftmo1": {
+      "description": "EA externo us100-ftmo1 (US100.cash, magics 93010001/93020001).",
+      "files": {
+        "config/mt5_eas.yaml": "c371cb18d2f49d0c6eefecc5059b8b6b74b6d93ae4f7e0a877608f9052cf3905",
+        "docs/ea_us100_ftmo1.md": "fb692e66e432dda5c8adafbd3877a9b013963535665834ef7d2c6224a5b97d72",
+        "integrations/mt5/us100_ftmo1/README.md": "4162e63f520ca82e8692aec0414ade517fa32648acf5368a5e8c5fd64929c03d",
+        "integrations/mt5/us100_ftmo1/Shared_FTMO_Risk.mqh": "c2a44b69cbc55a2529dae68a85eb0fa01ccd37b2d64ee1277564b137fb27a3c5",
+        "integrations/mt5/us100_ftmo1/Shared_Logger.mqh": "25c55ec1723c4c30d90fe23dfba75dd86117ff9ade201323761f218eae08e0c0",
+        "integrations/mt5/us100_ftmo1/TradingLab_US100_v3.tpl": "beb9015b43800469f574dbd80be381131e13396e3a6d545e64706870de9ce138",
+        "integrations/mt5/us100_ftmo1/US100_EA.mq5": "bbd1e1d5b42ddf65b57a9bf796715104c782ecfb496f294e0d0e859203bd6654",
+        "integrations/mt5/us100_ftmo1/US100_EntryManager.mqh": "6ec33dc589b6e80ee1049594a14c218a05744b27d35cbcedced8950dec3cad7f",
+        "integrations/mt5/us100_ftmo1/US100_ExitManager.mqh": "89fc721dcfd6ad78995f6d6d3a42db0b9510b405c50e7c72c6ac09662f3c04b1",
+        "integrations/mt5/us100_ftmo1/US100_FTMO_v3_challenge.set": "3f2b0fc5f5fe099e43464875d92781b86a33930f637fb3cb1ed3ceb58ffa430c",
+        "integrations/mt5/us100_ftmo1/US100_MarketAnalysis.mqh": "c4e7f8f5bf9b781d0dac1c2a930f0e2b8b08b013098b0cca6bd230b50da9f19e",
+        "integrations/mt5/us100_ftmo1/US100_RiskManager.mqh": "b9a0554361cc7b7bd38b5ac1f7e1a7bdea50d1b7c00123d401fe55acb1898880",
+        "integrations/mt5/us100_ftmo1/US100_Strategy.mqh": "7a42e8d3826eb04cfff1466a51c6a14b66bcaad6cc6b03c916b1e2bfc74ffd78",
+        "src/tradinglab/ea_forward.py": "9671db092f2b5b54a976eec2108aba170d98d05f81b7c71f9cbdd866bcbed585",
+        "src/tradinglab/ea_horizon.py": "01a4895b8aecc0006429fc86147a313c388e7501abbe50336f97e1ce13c00838",
+        "src/tradinglab/ea_registry.py": "bb97597de5f20625ce44e9b3d2581424980a964490ada45ffef1fb06103b4047",
+        "src/tradinglab/ea_us100.py": "90e93f40fd259f8ca12edc36ea82892937bf7d44561d623c2029c05c4854ff62",
+        "src/tradinglab/ea_us100_engine.py": "10b183ca0b9812f4859c2445d23412318cbbc9365565c87eff0d019030cb4adb"
+      }
+    },
+    "f13_hash": {
+      "description": "Archivos del hash congelado de F13: cambiarlos detiene el piloto.",
+      "files": {
+        "config/accounts.yaml": "5e9e96f4f090bf339838b69bb6c328fdee7e8a91ed0a5a75b5aa09d66a207a31",
+        "config/bots.yaml": "cb45ce69a28dea6c35a979347e96cc1c43922f816fa8f7e65ad609585892046e",
+        "config/f13.yaml": "bab020a23aaf4acd7dbd2267fd9b29516313e53444f86402f74cd86c296abb40",
+        "config/lab.yaml": "c2342c669648559ef26f3e1b40fbb3ff4d0ac62d6ba0603aa621dc2a5eccd926",
+        "config/prop.yaml": "698369f12c39ff30c0cbd76125df753b4f6954e3981ea8269d17ef253fbc8c92"
+      }
+    },
+    "ftmo_forward": {
+      "description": "Las dos estrategias forward fijas del carril FTMO (eurusd-london-pullback-forward, usdjpy-tokyo-breakout-forward) y la incubación us100-trend-d1.",
+      "files": {
+        "config/intraday_forward.yaml": "4abdfd53f876f2743407b5d56f25e56ed4553a6ad4a991b0427cacb0a6764194",
+        "scripts/intraday_forward_execute.ps1": "e2194daba07bbadb42d4e212695c9a3122ea613090e83bf94509f13dcde688fb",
+        "scripts/intraday_forward_signal.ps1": "c131bf8ab83768c547aef62a9a00e1d4a70702bb53edf736ce482bea96a4634b",
+        "src/tradinglab/asset_aliases.py": "103577641e38714d117730bc4b7e2d274bbebd134fb19d6f9bb5a84095ae5f8f",
+        "src/tradinglab/forward_intraday.py": "080b3faab337fda99756d34c7b73e2b9b4b0eff256e68d0dc8fd58b6c2b13b89",
+        "src/tradinglab/intraday.py": "22c10f1b490d396f5229b669631191a96843985b5176b9750bfac7f9d3705db0",
+        "src/tradinglab/strategies/swing.py": "cfcede9e47d2752bd8d8c079a7a341dd28fc19708f2eb6edf55ab16c2afdb47f",
+        "src/tradinglab/swing.py": "361afbd268f151e9c755f58a0bf22cc0a5b0976185919177a897a06106dfba34"
+      }
+    },
+    "ftmo_risk": {
+      "description": "Reglas de fondeo, guard, defensa, guardián MT5 y stop diario de cuenta.",
+      "files": {
+        "config/guardian.yaml": "eb53944473ec47abf5e435f5ed2e6430430c4e081893419a039ae405002532e7",
+        "config/prop_templates.yaml": "e4c8be816420dd337b580583a1ed9a2e542461290e052cc80bba9ec4e391f9dc",
+        "mql5/TradingLabGuardian.mq5": "bdd94e1c060a1996713ca98d780b1d5e8f45f9ad6b06c1b4dc7d104c054705d0",
+        "src/tradinglab/account_daily.py": "217e2eb4ee60709d6956ad9bd02c2424357d13d827e3d6ffb06319fda1036c72",
+        "src/tradinglab/execution/mt5.py": "b0a58818e6a399324b900bf7ce8929062ddcb9481e3bd4a7889c5dcc41fb33d6",
+        "src/tradinglab/execution/mt5_offsets.py": "9535fbfe22242c002dd122a2a386be67d42a82f096b678a13f6b5bf3f2557dd5",
+        "src/tradinglab/guardian.py": "a9bbeda2b6dce38e97de3d780a7361d828632ab7ba89ee08329bc829c3637559",
+        "src/tradinglab/prop/__init__.py": "2b5f0229b536875861f8c5a94b0b7ccec5b2474ee14c6950be58e6461f0da816",
+        "src/tradinglab/prop/defense.py": "d8113ed244e1dbbd180468dfd7fa08d29fa368ee0c4c63369dfc2637c6703573",
+        "src/tradinglab/prop/guard.py": "a442f04df619da00fab16122bbef11cf86162dd6dcdadefe5d69c0ddefdbd597",
+        "src/tradinglab/prop/overlay.py": "5e601846fda871963b94457b1722bb534e47bf0c6aa30bf04fa4ef3e70e4d025",
+        "src/tradinglab/prop/rules.py": "69a7708b6cea6d20baf4312012235b71d79e6d66fc887c99ebd814daf36032fe",
+        "src/tradinglab/prop/simulator.py": "e5afbd61826a3fa8592b6efbfaaea68b133769d8f9bd94071bbb73941c02bb7e",
+        "src/tradinglab/symbol_risk.py": "c0f9e941d1811054f2e09b9fe7230a2471acbd47286d14fe13df9c59f43c1486"
+      }
+    }
+  },
+  "version": 1
+}

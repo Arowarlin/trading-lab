@@ -2646,6 +2646,10 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     equity=equity,
                     account_risk=account_risk,
                 ))
+            elif path == "/api/propfund":
+                from .propfund.console import payload as propfund_payload
+
+                self._json(propfund_payload(self.server.data.root))
             elif path == "/api/risk":
                 self._json(self.server.data.risk())
             elif path == "/api/market":

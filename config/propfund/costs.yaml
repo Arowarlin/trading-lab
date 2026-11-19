@@ -1,0 +1,20 @@
+# Prop Fund · perfiles de coste por cuenta y símbolo.
+#
+# * FTMO (CFD-001/002): la comisión verificada sale de config/costs.yaml; aquí
+#   solo se añaden spread/slippage medidos.
+# * El spread se mide (lab costs broker / broker_spreads) y se escribe con
+#   source + measured_at. Nunca un spread fijo global.
+# * null = Sin datos → el router rechaza la operación por coste incompleto.
+version: 1
+
+accounts:
+  CFD-001:
+    symbols:
+      US100: {spread_price: null, spread_p75_price: null, slippage_price: 1.0, source: "slippage: config/ai_trader.yaml global.slippage_price"}
+      XAUUSD: {spread_price: null, spread_p75_price: null, slippage_price: 0.15, source: "slippage: config/ai_trader.yaml global.slippage_price"}
+      EURUSD: {spread_price: null, spread_p75_price: null, slippage_price: 0.00005, source: "slippage: config/ai_trader.yaml global.slippage_price"}
+
+  FUT-001:
+    symbols:
+      MNQ: {commission_value: null, exchange_fee_per_side: null, clearing_fee_per_side: null, nfa_fee_per_side: null, slippage_ticks: 1, source: "Comisiones Topstep Sin datos: verificar en el contrato"}
+      NQ: {commission_value: null, exchange_fee_per_side: null, clearing_fee_per_side: null, nfa_fee_per_side: null, slippage_ticks: 1}

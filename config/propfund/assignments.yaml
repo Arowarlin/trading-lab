@@ -1,0 +1,38 @@
+# Prop Fund · asignaciones estrategia → cuenta.
+#
+# Cada asignación recibe una decisión independiente:
+#   Señal → Elegibilidad → Compliance → Riesgo → Coste → Solicitud → Reconciliación
+#
+# replication_group: la misma señal hacia varias cuentas. Solo pasa si TODAS las
+# firmas del grupo permiten copiar entre cuentas propias y ninguna exige
+# exclusividad del bot (p. ej. Tradeify). Por defecto: sin replicación.
+#
+# Todas enabled: false. Activar una asignación es decisión del operador.
+version: 1
+
+assignments:
+  - id: A-001
+    strategy: nq-orb-ny
+    account: FUT-001
+    instruments: [MNQ]
+    enabled: false
+    notes: "Topstep Combine · micro primero. Requiere datos intradía (Fase 3)."
+
+  - id: A-002
+    strategy: gold-asian-rev
+    account: CFD-003
+    instruments: [XAUUSD]
+    enabled: false
+
+  - id: A-003
+    strategy: gc-trend-intraday
+    account: FUT-002
+    instruments: [MGC]
+    enabled: false
+
+  - id: A-004
+    strategy: nq-orb-ny
+    account: FUT-004
+    instruments: [MNQ]
+    enabled: false
+    notes: "Apex prohíbe automatización: el router solo emitirá alertas."

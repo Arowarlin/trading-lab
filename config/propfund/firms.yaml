@@ -1,0 +1,272 @@
+# Prop Fund · registro de empresas de fondeo (CFD y Futures).
+#
+# ⚠️  Este archivo NO entra en el hash de F13 y NO modifica la firma activa del
+# carril FTMO (config/prop.yaml). Es la capa nueva multiempresa.
+#
+# Reglas del archivo:
+#   * Ningún dato inventado. Si no se encontró en la fuente: value: null y
+#     status: needs_verification (la consola lo muestra como "Sin datos").
+#   * Toda política lleva fuente (url + consulted_at). Las fuentes secundarias
+#     se marcan kind: secondary y NO cuentan como verificadas.
+#   * La automatización solo se permite si permission es full/conditional, el
+#     status es verified_official y el operador marcó automation_acknowledged
+#     en la cuenta. "API disponible" no significa "API autorizada".
+#   * rules_version cambia cada vez que se edita una regla: el comando
+#     `lab propfund affected --firm X` lista las cuentas afectadas.
+#
+# Investigación: 2026-11-19 (help centers oficiales y comparativas 2026).
+version: 1
+
+firms:
+  # ------------------------------------------------------------------ CFD
+  - id: ftmo
+    name: FTMO
+    market: cfd
+    priority: 1
+    enabled: true
+    protected: true
+    legacy_prop_key: ftmo
+    website: https://ftmo.com
+    platforms: [mt4, mt5, ctrader, dxtrade]
+    execution_providers: [mt5]
+    rules_version: "2026-11-19.1"
+    notes: >
+      Implementación existente (EA us100-ftmo1, ai_trader, forward FX). Las reglas
+      numéricas viven en config/prop.yaml (hash F13) y no se duplican aquí.
+    automation:
+      permission: conditional
+      status: verified_official
+      conditions:
+        - "EAs permitidos sin aprobación previa (MT4/MT5/cTrader)."
+        - "Prohibida la hiperactividad: más de 2.000 peticiones al servidor por día."
+        - "Un EA de terceros compartido puede chocar con el límite de asignación de capital."
+        - "El estilo debe ser replicable en una cuenta real."
+      allowed_phases: [evaluation, verification, funded]
+      copy_trading: unknown
+      sources:
+        - {url: "https://ftmo.com/?p=678488", consulted_at: 2026-11-19, kind: official}
+        - {url: "https://ftmo.oanda.com/forbidden-trading-practices/", consulted_at: 2026-11-19, kind: official}
+    programs:
+      - id: ftmo_2step
+        name: FTMO Challenge 2-Step
+        phases: [evaluation, verification, funded]
+        platforms: [mt5]
+        sizes: [10000, 25000, 50000, 100000, 200000]
+        rules:
+          - {key: profit_target_pct, value: 0.10, unit: fraction, phase: evaluation, status: verified_secondary, source: {url: "https://app.luxalgo.com/api/propfirms/list", consulted_at: 2026-11-05, kind: secondary}, notes: "Referencia de config/prop.yaml"}
+          - {key: profit_target_pct, value: 0.05, unit: fraction, phase: verification, status: verified_secondary, source: {url: "https://app.luxalgo.com/api/propfirms/list", consulted_at: 2026-11-05, kind: secondary}}
+          - {key: max_daily_loss_pct, value: 0.05, unit: fraction, status: verified_secondary, source: {url: "https://app.luxalgo.com/api/propfirms/list", consulted_at: 2026-11-05, kind: secondary}}
+          - {key: max_loss_pct, value: 0.10, unit: fraction, status: verified_secondary, source: {url: "https://app.luxalgo.com/api/propfirms/list", consulted_at: 2026-11-05, kind: secondary}}
+          - {key: drawdown_mode, value: static, status: verified_secondary, source: {url: "https://app.luxalgo.com/api/propfirms/list", consulted_at: 2026-11-05, kind: secondary}}
+          - {key: reset_tz, value: Europe/Prague, status: verified_secondary}
+          - {key: max_server_requests_per_day, value: 2000, unit: requests, status: verified_official, source: {url: "https://ftmo.oanda.com/forbidden-trading-practices/", consulted_at: 2026-11-19}}
+
+  - id: the5ers
+    name: The5ers
+    market: cfd
+    priority: 2
+    website: https://the5ers.com
+    platforms: [mt5, ctrader]
+    execution_providers: [mt5]
+    rules_version: "2026-11-19.1"
+    automation:
+      permission: conditional
+      status: needs_verification
+      conditions:
+        - "EAs permitidos según comparativas; la página oficial de prácticas prohibidas veta HFT, arbitraje de latencia/rollover y abuso de órdenes pendientes."
+        - "Varias cuentas Bootcamp deben usar estrategias distintas (fuente secundaria)."
+      copy_trading: own_accounts
+      sources:
+        - {url: "https://the5ers.com/faqs/prohibited-trading-practices/", consulted_at: 2026-11-19, kind: official}
+        - {url: "https://fxempire.com/prop-firms/the5ers", consulted_at: 2026-11-19, kind: secondary}
+    programs:
+      - {id: the5ers_hyper_growth, name: Hyper Growth, phases: [evaluation, funded], platforms: [mt5]}
+      - {id: the5ers_bootcamp, name: Bootcamp, phases: [evaluation, funded], platforms: [mt5]}
+      - {id: the5ers_high_stakes, name: High Stakes, phases: [evaluation, verification, funded], platforms: [mt5]}
+
+  - id: fundednext
+    name: FundedNext
+    market: cfd
+    priority: 3
+    website: https://fundednext.com
+    platforms: [mt4, mt5, ctrader, matchtrader]
+    execution_providers: [mt5]
+    rules_version: "2026-11-19.1"
+    automation:
+      permission: conditional
+      status: verified_official
+      conditions:
+        - "Solo MT4/MT5; no en cTrader ni Match-Trader."
+        - "EAs/bots de terceros solo en cuentas menores de 50.000 USD y con tarifa de uso de EA."
+        - "Estrategia única por EA; prohibido copiar el mismo setup entre cuentas de otras personas."
+        - "Prohibidos EAs conectados a Telegram/WhatsApp."
+      vps_allowed: true
+      copy_trading: own_accounts
+      sources:
+        - {url: "https://help.fundednext.com/en/articles/8020763-is-ea-allowed-in-fundednext", consulted_at: 2026-11-19, kind: official}
+        - {url: "https://fundednext.com/general-rules/cfds/what-is-allowed", consulted_at: 2026-11-19, kind: official}
+    programs:
+      - {id: fundednext_stellar_2step, name: Stellar 2-Step, phases: [evaluation, verification, funded], platforms: [mt5]}
+      - {id: fundednext_stellar_1step, name: Stellar 1-Step, phases: [evaluation, funded], platforms: [mt5]}
+
+  - id: fundingpips
+    name: FundingPips
+    market: cfd
+    priority: 4
+    website: https://fundingpips.com
+    platforms: [mt5, matchtrader, ctrader]
+    execution_providers: [mt5]
+    rules_version: "2026-11-19.1"
+    automation:
+      permission: conditional
+      status: verified_official
+      conditions:
+        - "EA de terceros solo como gestor de operaciones o de riesgo."
+        - "Automatización completa solo con EA propio y prueba de propiedad (código fuente)."
+        - "Prohibido copiar operaciones con otras personas o gestión por terceros."
+      copy_trading: prohibited
+      sources:
+        - {url: "https://intercom.help/fundingpips/en/articles/8536000-what-are-the-forbidden-strategies", consulted_at: 2026-11-19, kind: official}
+    programs:
+      - {id: fundingpips_2step, name: 2-Step, phases: [evaluation, verification, funded], platforms: [mt5]}
+
+  - id: fxify
+    name: FXIFY
+    market: cfd
+    priority: 5
+    website: https://fxify.com
+    platforms: [mt4, mt5, dxtrade]
+    execution_providers: [mt5]
+    rules_version: "2026-11-19.1"
+    automation:
+      permission: conditional
+      status: needs_verification
+      conditions:
+        - "Comparativas indican aprobación previa de soporte antes de usar un EA en el challenge."
+        - "Las cuentas instantáneas no admiten EAs (fuente secundaria)."
+        - "FXIFY Futures es otro producto: allí los EAs NO están permitidos."
+      copy_trading: own_accounts
+      sources:
+        - {url: "https://fundedtrading.com/prop-firms-for-expert-advisors-ea-trading/", consulted_at: 2026-11-19, kind: secondary}
+    programs:
+      - {id: fxify_2phase, name: Two Phase, phases: [evaluation, verification, funded], platforms: [mt5]}
+
+  # -------------------------------------------------------------- FUTURES
+  - id: topstep
+    name: Topstep
+    market: futures
+    priority: 1
+    legacy_prop_key: topstep
+    website: https://www.topstep.com
+    platforms: [topstepx]
+    execution_providers: [projectx]
+    rules_version: "2026-11-19.1"
+    automation:
+      permission: conditional
+      status: verified_official
+      conditions:
+        - "Bots solo a través de la API TopstepX/ProjectX (suscripción aparte)."
+        - "Permitido en Trading Combine y Express Funded; NO en Live Funded."
+        - "Prohibido el HFT; sin VPS/VPN/servidor remoto (ejecutar desde equipo propio)."
+      allowed_phases: [evaluation, funded]
+      vps_allowed: false
+      copy_trading: own_accounts
+      sources:
+        - {url: "https://help.topstep.com/en/articles/11187768-topstepx-api-access", consulted_at: 2026-11-19, kind: official}
+    programs:
+      - id: topstep_combine
+        name: Trading Combine
+        phases: [evaluation, funded]
+        platforms: [topstepx]
+        sizes: [50000, 100000, 150000]
+        rules:
+          - {key: profit_target_usd, value: null, phase: evaluation, status: needs_verification, notes: "Plantilla legacy: 3.000 USD en 50K"}
+          - {key: max_loss_mode, value: trailing_eod, status: needs_verification}
+          - {key: reset_tz, value: America/Chicago, status: needs_verification}
+
+  - id: apex
+    name: Apex Trader Funding
+    market: futures
+    priority: 2
+    legacy_prop_key: apex
+    website: https://apextraderfunding.com
+    platforms: [tradovate, rithmic, ninjatrader]
+    execution_providers: [tradovate, rithmic]
+    rules_version: "2026-11-19.1"
+    automation:
+      permission: prohibited
+      status: needs_verification
+      conditions:
+        - "La lista de actividades prohibidas veta automatización y algoritmos (fuentes coinciden en cuentas PA/Live)."
+        - "Algunas fuentes indican bots en evaluación: NO se asume. Solo investigación, señales y alertas."
+      copy_trading: prohibited
+      sources:
+        - {url: "https://apextraderfunding.com/help-center/getting-started/prohibited-activities/", consulted_at: 2026-11-19, kind: official}
+        - {url: "https://propvator.com/blog/apex-trader-funding-automated-trading/", consulted_at: 2026-11-19, kind: secondary}
+    programs:
+      - {id: apex_eval, name: Evaluation / PA, phases: [evaluation, funded], platforms: [tradovate, rithmic]}
+
+  - id: myfundedfutures
+    name: MyFundedFutures
+    market: futures
+    priority: 3
+    legacy_prop_key: myfundedfutures
+    website: https://myfundedfutures.com
+    platforms: [tradovate, rithmic, ninjatrader, quantower]
+    execution_providers: [tradovate, rithmic]
+    rules_version: "2026-11-19.1"
+    automation:
+      permission: conditional
+      status: verified_official
+      conditions:
+        - "Estrategias automatizadas con configuración propia (política Fair Play)."
+        - "Sin HFT y sin explotar los fills favorables del entorno simulado."
+        - "En Live, la automatización debe seguir las guías de CME."
+      copy_trading: own_accounts
+      sources:
+        - {url: "https://intercom.help/myfundedfutures/en/articles/8444599-fair-play-and-prohibited-trading-practices", consulted_at: 2026-11-19, kind: official}
+    programs:
+      - {id: mff_rapid, name: Rapid, phases: [evaluation, funded], platforms: [tradovate]}
+      - {id: mff_pro, name: Pro, phases: [evaluation, funded], platforms: [tradovate]}
+
+  - id: tradeify
+    name: Tradeify
+    market: futures
+    priority: 4
+    website: https://tradeify.co
+    platforms: [tradovate, rithmic, ninjatrader]
+    execution_providers: [tradovate, rithmic]
+    rules_version: "2026-11-19.1"
+    automation:
+      permission: conditional
+      status: verified_official
+      conditions:
+        - "Bot propio: propiedad exclusiva demostrable."
+        - "El bot no puede usarse en otras firmas (exclusivo de Tradeify)."
+        - "Sin HFT; prohibido el hedging entre cuentas y grupos de productos correlacionados."
+      exclusive_to_firm: true
+      copy_trading: own_accounts
+      sources:
+        - {url: "https://help.tradeify.co/en/articles/10468318-guidelines-for-traders", consulted_at: 2026-11-19, kind: official}
+    programs:
+      - {id: tradeify_eval, name: Evaluation, phases: [evaluation, funded], platforms: [tradovate]}
+
+  - id: takeprofittrader
+    name: Take Profit Trader
+    market: futures
+    priority: 5
+    website: https://takeprofittrader.com
+    platforms: [tradovate, rithmic, ninjatrader]
+    execution_providers: [tradovate, rithmic]
+    rules_version: "2026-11-19.1"
+    automation:
+      permission: prohibited
+      status: needs_verification
+      conditions:
+        - "Universal Trading Policies #1: no se permiten bots ni algoritmos (Test, PRO, PRO+)."
+        - "En PRO todas las operaciones deben ejecutarse manualmente."
+      copy_trading: own_accounts
+      sources:
+        - {url: "https://propvator.com/blog/take-profit-trader-automated-trading/", consulted_at: 2026-11-19, kind: secondary}
+    programs:
+      - {id: tpt_test, name: Test / PRO, phases: [evaluation, funded], platforms: [tradovate, rithmic]}

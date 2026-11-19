@@ -1,0 +1,9 @@
+# Prop Fund · límites del gestor de riesgo global (consolidado de todas las cuentas).
+# Valores conservadores de partida: los decide el operador, no una firma.
+version: 1
+global:
+  max_notional_per_underlying_usd: 400000   # NQ + MNQ + US100 CFD cuentan juntos
+  max_accounts_per_underlying: 3
+  max_open_risk_per_firm_usd: 5000
+  max_open_risk_per_strategy_usd: 4000
+  max_total_open_risk_usd: 10000

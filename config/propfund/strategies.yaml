@@ -1,0 +1,104 @@
+# Prop Fund · catálogo de estrategias por carril.
+#
+# Los parámetros NO se duplican: params_ref apunta al archivo dueño.
+# protected: true → el Prop Fund solo las observa (riesgo global, consola);
+# nunca las optimiza, renombra, migra ni les envía órdenes.
+version: 1
+
+strategies:
+  # --- Carril FTMO protegido -----------------------------------------------
+  - id: ea:us100-ftmo1
+    name: EA US100 FTMO1 (us100_ftmo_confluence)
+    lane: protected_ftmo
+    market: cfd
+    instruments: [US100]
+    timeframe: M5
+    status: forward
+    protected: true
+    engine: mt5_ea
+    params_ref: integrations/mt5/us100_ftmo1/US100_FTMO_v3_challenge.set
+    notes: "Magics 93010001/93020001. El laboratorio lo mide, no lo ejecuta."
+
+  - id: ai_trader
+    name: Carril IA discrecional (scalping · intradía · swing)
+    lane: protected_ftmo
+    market: cfd
+    instruments: [US100, XAUUSD, EURUSD, GBPUSD, USDJPY]
+    timeframe: M1-D1
+    status: demo
+    protected: true
+    engine: ai_trader
+    params_ref: config/ai_trader.yaml
+    notes: "Magics 20261191-20261193. Solo ftmo_demo."
+
+  - id: eurusd-london-pullback-forward
+    name: EURUSD London Pullback (forward FTMO)
+    lane: protected_ftmo
+    market: cfd
+    instruments: [EURUSD]
+    timeframe: M15
+    status: forward
+    protected: true
+    params_ref: config/intraday_forward.yaml
+    notes: "Estrategia existente 1 de 2 del carril FTMO. Parámetros congelados."
+
+  - id: usdjpy-tokyo-breakout-forward
+    name: USDJPY Tokyo Breakout (forward FTMO)
+    lane: protected_ftmo
+    market: cfd
+    instruments: [USDJPY]
+    timeframe: M15
+    status: forward
+    protected: true
+    params_ref: config/intraday_forward.yaml
+    notes: "Estrategia existente 2 de 2 del carril FTMO. Parámetros congelados."
+
+  - id: us100-trend-d1
+    name: US100 Trend D1 (incubación)
+    lane: protected_ftmo
+    market: cfd
+    instruments: [US100]
+    timeframe: H4
+    status: forward
+    protected: true
+    params_ref: config/intraday_forward.yaml
+    notes: "Incubación swing en el mismo archivo protegido."
+
+  # --- Nuevas CFD (investigación; enabled:false en config/intraday_bots.yaml) -
+  - id: gold-asian-rev
+    name: Gold Asian Reversal
+    lane: research
+    market: cfd
+    instruments: [XAUUSD]
+    timeframe: M15
+    status: research
+    params_ref: config/intraday_bots.yaml
+
+  - id: gold-overlap-breakout
+    name: Gold Overlap Breakout
+    lane: research
+    market: cfd
+    instruments: [XAUUSD]
+    timeframe: M15
+    status: research
+    params_ref: config/intraday_bots.yaml
+
+  # --- Nuevas Futures (sin datos históricos de ProjectX: solo investigación) -
+  - id: nq-orb-ny
+    name: NQ/MNQ Opening Range Breakout NY
+    lane: futures_new
+    market: futures
+    instruments: [NQ, MNQ]
+    timeframe: M5
+    status: research
+    params_ref: config/intraday_bots.yaml#nasdaq-orb-ny
+    notes: "Port futuros del candidato CFD nasdaq-orb-ny. Bloqueado hasta tener datos intradía reales."
+
+  - id: gc-trend-intraday
+    name: GC/MGC Trend Intraday
+    lane: futures_new
+    market: futures
+    instruments: [GC, MGC]
+    timeframe: M15
+    status: research
+    notes: "Preparado; requiere proveedor histórico de futuros."

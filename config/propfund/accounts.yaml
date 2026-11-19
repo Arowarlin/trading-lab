@@ -1,0 +1,136 @@
+# Prop Fund · cuentas de fondeo (una entrada por cuenta, nunca por firma).
+#
+# * No hay cuentas de capital propio: paper_main / alpaca_paper siguen en
+#   config/accounts.yaml solo porque el piloto F13 las usa (hash congelado);
+#   el Prop Fund las ignora como destino de ejecución.
+# * template: true  → ejemplo de estructura, NO una cuenta real ni disponibilidad
+#   confirmada. Las plantillas nunca reciben órdenes.
+# * connection_state arranca en DISCONNECTED. Solo PAPER/DEMO pueden enrutar.
+#   LIVE_* exige autorización humana explícita fuera de este archivo.
+# * credentials_ref es el nombre en Windows Credential Manager (keyring), nunca
+#   el secreto.
+# * Una cuenta nunca hereda condiciones de otra: cada una declara sus límites.
+version: 1
+
+accounts:
+  # --- FTMO (carril existente, protegido): espejo de solo lectura ----------
+  - id: CFD-001
+    firm: ftmo
+    program: ftmo_2step
+    market: cfd
+    phase: evaluation
+    nominal_size: 100000
+    platform: mt5
+    execution_provider: mt5
+    connection_state: DEMO
+    legacy_account: ftmo_demo
+    template: false
+    protected: true
+    allowed_instruments: [US100, XAUUSD, EURUSD, GBPUSD, USDJPY]
+    limits: {daily_loss: 5000, max_loss: 10000, drawdown_mode: static, profit_target: 10000, max_lots: 20}
+    risk: {per_trade_risk_pct: 0.005, daily_risk_pct: 0.04, max_trades_per_day: 4, max_open_positions: 5, buffer_vs_firm_pct: 0.10, max_cost_r: 0.20}
+    automation_acknowledged: true
+    credentials_ref: tradinglab/mt5/ftmo_demo
+    notes: >
+      Espejo de ftmo_demo. EA us100-ftmo1, ai_trader y forward FX operan con su
+      propio motor; el router del Prop Fund NO envía órdenes a esta cuenta para
+      esas estrategias, solo las ve en el riesgo global.
+
+  - id: CFD-002
+    firm: ftmo
+    program: ftmo_2step
+    market: cfd
+    phase: evaluation
+    nominal_size: 100000
+    platform: mt5
+    execution_provider: mt5
+    connection_state: DISCONNECTED
+    legacy_account: ftmo_trial_ea
+    template: false
+    protected: true
+    allowed_instruments: [US100]
+    limits: {daily_loss: 5000, max_loss: 10000, drawdown_mode: static, profit_target: 10000, max_lots: 20}
+    notes: "Espejo de ftmo_trial_ea (blocked en el carril FTMO hasta un nuevo Free Trial)."
+
+  # --- Plantillas CFD -------------------------------------------------------
+  - id: CFD-003
+    firm: the5ers
+    program: the5ers_hyper_growth
+    market: cfd
+    phase: evaluation
+    nominal_size: 100000
+    platform: mt5
+    execution_provider: mt5
+    allowed_instruments: [EURUSD, GBPUSD, XAUUSD, US100, GER40]
+    notes: "Plantilla. Límites Sin datos hasta verificar el programa."
+
+  - id: CFD-004
+    firm: fundingpips
+    program: fundingpips_2step
+    market: cfd
+    phase: evaluation
+    nominal_size: 100000
+    platform: mt5
+    execution_provider: mt5
+    allowed_instruments: [EURUSD, USDJPY, XAUUSD, US500]
+    notes: "Plantilla. Requiere EA propio con prueba de propiedad."
+
+  - id: CFD-005
+    firm: fundednext
+    program: fundednext_stellar_2step
+    market: cfd
+    phase: evaluation
+    nominal_size: 25000
+    platform: mt5
+    execution_provider: mt5
+    allowed_instruments: [EURUSD, GBPUSD, XAUUSD, US30]
+    notes: "Plantilla. EA solo < 50K y con add-on de EA."
+
+  # --- Plantillas Futures ---------------------------------------------------
+  - id: FUT-001
+    firm: topstep
+    program: topstep_combine
+    market: futures
+    phase: evaluation
+    nominal_size: 50000
+    platform: topstepx
+    execution_provider: projectx
+    legacy_account: topstep_template
+    allowed_instruments: [NQ, MNQ, ES, MES, GC, MGC]
+    limits: {drawdown_mode: trailing_eod}
+    risk: {per_trade_risk_pct: 0.0025, daily_risk_pct: 0.01, max_trades_per_day: 3, max_open_positions: 1, buffer_vs_firm_pct: 0.15, max_cost_r: 0.15}
+    notes: "Plantilla ligada a topstep_template. Límites en USD Sin datos hasta verificar."
+
+  - id: FUT-002
+    firm: myfundedfutures
+    program: mff_rapid
+    market: futures
+    phase: evaluation
+    nominal_size: 50000
+    platform: tradovate
+    execution_provider: tradovate
+    allowed_instruments: [MNQ, MES, MGC]
+    limits: {drawdown_mode: trailing_eod}
+    notes: "Plantilla. Conector Tradovate pendiente (Fase 4)."
+
+  - id: FUT-003
+    firm: tradeify
+    program: tradeify_eval
+    market: futures
+    phase: evaluation
+    nominal_size: 50000
+    platform: tradovate
+    execution_provider: tradovate
+    allowed_instruments: [NQ, MNQ, ES, MES]
+    notes: "Plantilla. Bot exclusivo de Tradeify: no puede compartir estrategia con otras firmas."
+
+  - id: FUT-004
+    firm: apex
+    program: apex_eval
+    market: futures
+    phase: evaluation
+    nominal_size: 50000
+    platform: tradovate
+    execution_provider: tradovate
+    allowed_instruments: [NQ, MNQ, ES, MES]
+    notes: "Plantilla. Automatización prohibida: solo señales y alertas."

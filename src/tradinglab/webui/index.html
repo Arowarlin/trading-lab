@@ -1094,6 +1094,339 @@
   @media (prefers-reduced-motion: reduce) {
     .skip-link, .gauge-fill, .balance-seg { transition: none !important; }
   }
+
+  /* ================================================================ v4 · QUANTUM
+     Capa visual final: obsidiana + aurora, cristal con borde degradado,
+     tipografía técnica (Bahnschrift/Segoe UI Variable, ya incluidas en Windows)
+     y acentos de neón contenidos. Sin CDNs ni fuentes externas. Sobrescribe
+     v1–v3 sin cambiar ninguna clase que use el JavaScript. */
+  :root {
+    --bg: #04060b;
+    --bg-2: #070b13;
+    --glass: rgba(12, 18, 30, .62);
+    --glass-2: rgba(8, 12, 21, .78);
+    --panel: rgba(12, 18, 30, .62);
+    --panel-2: rgba(8, 13, 22, .72);
+    --border: rgba(120, 160, 220, .14);
+    --border-soft: rgba(120, 160, 220, .08);
+    --hairline: linear-gradient(135deg, rgba(34, 211, 238, .55), rgba(139, 92, 246, .35) 45%, rgba(120, 160, 220, .10) 75%, rgba(34, 211, 238, .25));
+    --text: #eef4ff;
+    --muted: #8c9ab3;
+    --accent: #22d3ee;
+    --accent-2: #8b5cf6;
+    --accent-3: #34d399;
+    --gold: #f5c66b;
+    --green: #34d399;
+    --red: #fb7185;
+    --yellow: #fbbf24;
+    --purple: #a78bfa;
+    --cyan: #22d3ee;
+    --display: "Bahnschrift", "Segoe UI Variable Display", "DIN Alternate", "Barlow", system-ui, sans-serif;
+    --sans: "Segoe UI Variable Text", "Segoe UI", "Inter", system-ui, -apple-system, Roboto, sans-serif;
+    --mono: "Cascadia Code", "Cascadia Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
+    --radius: 14px;
+    --radius-lg: 18px;
+    --shadow: 0 24px 60px -24px rgba(0, 0, 0, .75), 0 2px 0 rgba(255,255,255,.02) inset;
+    --glow-cyan: 0 0 0 1px rgba(34,211,238,.25), 0 0 28px rgba(34,211,238,.18);
+    --glow-violet: 0 0 0 1px rgba(139,92,246,.25), 0 0 28px rgba(139,92,246,.18);
+  }
+  html { background: var(--bg); }
+  body {
+    font-family: var(--sans);
+    letter-spacing: .005em;
+    background:
+      radial-gradient(1200px 620px at 85% -10%, rgba(34, 211, 238, .10), transparent 60%),
+      radial-gradient(900px 600px at -5% 10%, rgba(139, 92, 246, .11), transparent 62%),
+      radial-gradient(900px 520px at 50% 120%, rgba(52, 211, 153, .06), transparent 65%),
+      linear-gradient(180deg, var(--bg) 0%, var(--bg-2) 55%, var(--bg) 100%) fixed;
+  }
+  body::before {
+    background-image:
+      linear-gradient(rgba(120,160,220,.045) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(120,160,220,.045) 1px, transparent 1px);
+    background-size: 56px 56px;
+    mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 10%, transparent 75%);
+  }
+  body::after {
+    background:
+      radial-gradient(600px 300px at 20% 30%, rgba(34,211,238,.05), transparent 70%),
+      radial-gradient(600px 320px at 80% 70%, rgba(139,92,246,.05), transparent 70%);
+    animation: aurora 26s ease-in-out infinite alternate;
+  }
+  @keyframes aurora {
+    0% { transform: translate3d(0, 0, 0) scale(1); opacity: .9; }
+    50% { transform: translate3d(-3%, 2%, 0) scale(1.06); opacity: 1; }
+    100% { transform: translate3d(3%, -2%, 0) scale(1.02); opacity: .85; }
+  }
+  ::selection { background: rgba(34, 211, 238, .30); }
+  ::-webkit-scrollbar-thumb { background: linear-gradient(180deg, #1b2a40, #22184a); border: 2px solid var(--bg); }
+
+  /* ---- sidebar */
+  .sidebar {
+    background: linear-gradient(180deg, rgba(10, 15, 26, .88), rgba(5, 8, 14, .92));
+    border-right: 1px solid rgba(120,160,220,.10);
+    box-shadow: 1px 0 0 rgba(34,211,238,.06), 24px 0 80px -30px rgba(0,0,0,.9);
+    backdrop-filter: blur(18px) saturate(140%);
+  }
+  .sidebar::after {
+    content: ""; position: absolute; top: 0; right: -1px; width: 1px; height: 100%;
+    background: linear-gradient(180deg, transparent, rgba(34,211,238,.55) 30%, rgba(139,92,246,.45) 70%, transparent);
+    opacity: .55; pointer-events: none;
+  }
+  .brand .logo {
+    width: 40px; height: 40px; border-radius: 12px; font-family: var(--display); font-weight: 700;
+    background: conic-gradient(from 200deg, #22d3ee, #8b5cf6, #34d399, #22d3ee);
+    color: #eaffff; text-shadow: 0 0 10px rgba(34,211,238,.9);
+    box-shadow: var(--glow-cyan);
+    isolation: isolate;
+  }
+  .brand .logo::after { inset: 2px; border-radius: 10px; background: radial-gradient(circle at 30% 25%, #10213a, #050a14 70%); }
+  .brand strong { font-family: var(--display); font-weight: 600; font-size: 17px; letter-spacing: .06em; text-transform: uppercase; }
+  .brand small { font-family: var(--mono); color: #6f84a3; letter-spacing: .28em; font-size: 8.5px; }
+  .nav-label {
+    font-family: var(--display); color: #4f6382; font-size: 9px; letter-spacing: .3em;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .nav-label::after { content: ""; flex: 1; height: 1px; background: linear-gradient(90deg, rgba(120,160,220,.16), transparent); }
+  .nav-btn { border-radius: 10px; color: #8d9cb6; font-size: 13px; padding: 8px 11px; position: relative; }
+  .nav-btn .ico { color: #5d7090; transition: color .15s, text-shadow .15s; }
+  .nav-btn:hover { background: rgba(34,211,238,.05); color: #dbe7ff; }
+  .nav-btn:hover .ico { color: var(--accent); }
+  .nav-btn.active {
+    color: #f2f8ff;
+    background: linear-gradient(90deg, rgba(34,211,238,.16), rgba(139,92,246,.10) 60%, transparent);
+    border-color: rgba(34,211,238,.22);
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.02), 0 8px 28px -14px rgba(34,211,238,.55);
+  }
+  .nav-btn.active::before {
+    content: ""; position: absolute; left: -16px; top: 50%; width: 4px; height: 22px; transform: translateY(-50%);
+    border-radius: 0 4px 4px 0; background: linear-gradient(180deg, var(--accent), var(--accent-2));
+    box-shadow: 0 0 14px rgba(34,211,238,.9);
+  }
+  .app.sidebar-collapsed .nav-btn.active::before { left: -9px; }
+  .nav-btn.active .ico { color: var(--accent); text-shadow: 0 0 14px rgba(34,211,238,.9); }
+  .nav-btn.nav-new::after {
+    content: "NEW"; margin-left: auto; font: 600 8px var(--mono); letter-spacing: .12em; color: #04121a;
+    background: linear-gradient(90deg, var(--accent), var(--accent-3)); padding: 2px 5px; border-radius: 5px;
+  }
+  .app.sidebar-collapsed .nav-btn.nav-new::after { display: none; }
+  .side-status {
+    border: 1px solid transparent;
+    background: linear-gradient(180deg, rgba(12,18,30,.9), rgba(6,10,18,.92)) padding-box, var(--hairline) border-box;
+    border-radius: 14px;
+  }
+  .side-status .row b { font-family: var(--mono); font-size: 11px; }
+  .sidebar-toggle { border-radius: 9px; background: rgba(10,16,28,.8); }
+
+  /* ---- HUD */
+  .hud {
+    background: linear-gradient(180deg, rgba(6, 10, 18, .86), rgba(6, 10, 18, .70));
+    border-bottom: 1px solid rgba(120,160,220,.10);
+    backdrop-filter: blur(20px) saturate(150%);
+    box-shadow: 0 18px 40px -26px rgba(0,0,0,.95);
+  }
+  .hud::after {
+    content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(34,211,238,.75), rgba(139,92,246,.6), transparent);
+    background-size: 200% 100%; animation: shimmer 9s linear infinite; opacity: .7;
+  }
+  @keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+  .hud-brand { font-family: var(--display); color: #7a90b2; letter-spacing: .32em; }
+  .hud-brand::before { content: "◆ "; color: var(--accent); text-shadow: 0 0 10px rgba(34,211,238,.9); }
+  .hud-chip { background: rgba(10, 16, 28, .66); border-color: rgba(120,160,220,.14); font-family: var(--display); letter-spacing: .14em; }
+  .hud-chip b { font-family: var(--mono); }
+  .badge { font-family: var(--display); letter-spacing: .14em; border-radius: 8px; }
+  .badge.paper, .badge.ok { color: #6ee7b7; border-color: rgba(52,211,153,.35); background: rgba(52,211,153,.08); box-shadow: 0 0 18px -6px rgba(52,211,153,.6); }
+
+  /* ---- topbar */
+  .topbar { align-items: flex-end; }
+  .topbar h1 {
+    font-family: var(--display); font-weight: 600; font-size: 30px; letter-spacing: .02em;
+    background: linear-gradient(92deg, #ffffff 0%, #bdf3ff 40%, #c4b5fd 75%, #8ef0c8 100%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    filter: drop-shadow(0 0 22px rgba(34,211,238,.18));
+  }
+  .topbar .sub { font-size: 12.5px; color: #7d8fae; letter-spacing: .03em; }
+  .topbar .sub::before { content: "// "; color: var(--accent); font-family: var(--mono); opacity: .8; }
+  .btn {
+    border-radius: 10px; border: 1px solid rgba(120,160,220,.16);
+    background: linear-gradient(180deg, rgba(20,30,48,.9), rgba(10,16,28,.9));
+    font-family: var(--sans);
+  }
+  .btn:hover { border-color: rgba(34,211,238,.5); box-shadow: 0 0 0 1px rgba(34,211,238,.15), 0 10px 30px -12px rgba(34,211,238,.45); transform: translateY(-1px); }
+  .btn.primary {
+    background: linear-gradient(120deg, #0891b2, #4f46e5 55%, #7c3aed);
+    border-color: rgba(34,211,238,.5);
+    box-shadow: 0 10px 34px -12px rgba(79,70,229,.8);
+  }
+  .kbd { border-radius: 6px; background: rgba(4,8,14,.9); color: #9fb6d8; }
+
+  /* ---- cristal: paneles, KPIs y tarjetas con borde degradado */
+  .panel:not(.office-panel), .kpi, .stat, .repo-card, .bot-card, .guard-card, .pf-card {
+    border: 1px solid transparent;
+    background:
+      linear-gradient(180deg, rgba(16, 24, 40, .72), rgba(8, 12, 22, .80)) padding-box,
+      var(--hairline) border-box;
+    box-shadow: var(--shadow);
+    backdrop-filter: blur(14px) saturate(140%);
+    border-radius: var(--radius);
+  }
+  .panel:not(.office-panel)::before {
+    height: 60px; inset: 0 0 auto 0;
+    background: radial-gradient(400px 60px at 20% 0%, rgba(34,211,238,.08), transparent 70%);
+    opacity: 1;
+  }
+  .panel:hover, .kpi:hover, .stat:hover, .bot-card:hover, .pf-card:hover {
+    box-shadow: var(--shadow), 0 0 0 1px rgba(34,211,238,.10), 0 18px 50px -24px rgba(34,211,238,.35);
+  }
+  .panel h2, .panel-head h2 {
+    font-family: var(--display); font-weight: 600; font-size: 12.5px; letter-spacing: .2em; color: #d7e6ff;
+    display: flex; align-items: center; gap: 9px;
+  }
+  .panel-head h2::before {
+    content: ""; width: 6px; height: 6px; border-radius: 2px; transform: rotate(45deg);
+    background: linear-gradient(135deg, var(--accent), var(--accent-2)); box-shadow: 0 0 10px rgba(34,211,238,.8);
+  }
+  .kpi { padding: 16px 18px; }
+  .kpi::before {
+    content: ""; position: absolute; right: 10px; top: 10px; width: 14px; height: 14px;
+    border-top: 1px solid rgba(34,211,238,.55); border-right: 1px solid rgba(34,211,238,.55); border-radius: 0 4px 0 0;
+  }
+  .kpi::after { height: 2px; background: linear-gradient(90deg, var(--accent), var(--accent-2) 50%, transparent); opacity: .7; }
+  .kpi .label, .stat .label, .metric .l { font-family: var(--display); letter-spacing: .2em; font-size: 10px; color: #7f92b3; }
+  .kpi .value, .stat .value {
+    font-family: var(--mono); font-weight: 600; color: #f5faff;
+    text-shadow: 0 0 22px rgba(34,211,238,.18);
+  }
+  .kpi .hint { color: #6f82a2; }
+
+  /* ---- tablas */
+  .table-wrap { border-radius: 12px; border-color: rgba(120,160,220,.10); background: rgba(4, 8, 15, .45); }
+  table th {
+    font-family: var(--display); letter-spacing: .16em; font-weight: 600; color: #7d93b8;
+    background: linear-gradient(180deg, rgba(14,22,36,.96), rgba(9,14,24,.96));
+    border-bottom: 1px solid rgba(34,211,238,.14);
+  }
+  table td { border-bottom-color: rgba(120,160,220,.06); }
+  table tbody tr:hover { background: linear-gradient(90deg, rgba(34,211,238,.07), transparent 70%); box-shadow: inset 2px 0 0 var(--accent); }
+
+  /* ---- etiquetas, notas y alertas */
+  .tag { border-radius: 7px; font-family: var(--mono); font-size: 10px; letter-spacing: .02em; }
+  .tag.green { color: #6ee7b7; border-color: rgba(52,211,153,.35); background: rgba(52,211,153,.08); }
+  .tag.red { color: #fda4af; border-color: rgba(251,113,133,.38); background: rgba(251,113,133,.08); }
+  .tag.yellow { color: #fcd34d; border-color: rgba(251,191,36,.38); background: rgba(251,191,36,.08); }
+  .tag.blue { color: #67e8f9; border-color: rgba(34,211,238,.35); background: rgba(34,211,238,.08); }
+  .tag.purple { color: #c4b5fd; border-color: rgba(139,92,246,.40); background: rgba(139,92,246,.10); }
+  .note { border-style: solid; border-color: rgba(34,211,238,.14); background: rgba(6, 12, 22, .55); border-radius: 12px; }
+  .alert { border-radius: 12px; }
+  .dot.ok { background: var(--green); box-shadow: 0 0 10px rgba(52,211,153,.9); }
+  .dot.bad { background: var(--red); box-shadow: 0 0 10px rgba(251,113,133,.9); }
+  .dot.warn { background: var(--yellow); box-shadow: 0 0 10px rgba(251,191,36,.9); }
+  .ticker { border-radius: 12px; border-color: rgba(120,160,220,.10); background: linear-gradient(90deg, rgba(6,10,18,.8), rgba(12,20,34,.65), rgba(6,10,18,.8)); }
+  .ticker-item b { font-family: var(--display); letter-spacing: .12em; }
+  .modal-box, .command-box {
+    border: 1px solid transparent;
+    background: linear-gradient(180deg, rgba(14,22,38,.97), rgba(6,10,18,.98)) padding-box, var(--hairline) border-box;
+    border-radius: 18px;
+  }
+  .statusbar { font-family: var(--mono); }
+
+  /* ================================================================ PROP FUND */
+  .pf-hero {
+    position: relative; overflow: hidden; border-radius: var(--radius-lg); padding: 22px 24px; margin-bottom: 16px;
+    border: 1px solid transparent;
+    background:
+      radial-gradient(500px 220px at 88% -20%, rgba(139,92,246,.30), transparent 70%),
+      radial-gradient(420px 220px at 0% 120%, rgba(34,211,238,.22), transparent 70%),
+      linear-gradient(135deg, rgba(14,22,40,.92), rgba(6,10,20,.95)) padding-box,
+      var(--hairline) border-box;
+    box-shadow: var(--shadow);
+  }
+  .pf-hero::after {
+    content: ""; position: absolute; inset: 0; pointer-events: none;
+    background-image: linear-gradient(rgba(120,160,220,.06) 1px, transparent 1px), linear-gradient(90deg, rgba(120,160,220,.06) 1px, transparent 1px);
+    background-size: 28px 28px; mask-image: linear-gradient(90deg, transparent, #000 60%);
+  }
+  .pf-hero-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; flex-wrap: wrap; position: relative; z-index: 1; }
+  .pf-eyebrow { font: 600 10px var(--display); letter-spacing: .34em; color: var(--accent); text-transform: uppercase; }
+  .pf-title { font: 600 26px/1.15 var(--display); letter-spacing: .02em; margin: 6px 0 4px; color: #f4f8ff; }
+  .pf-lead { color: #97a8c5; font-size: 12.5px; max-width: 760px; line-height: 1.6; margin: 0; }
+  .pf-seal {
+    display: flex; flex-direction: column; align-items: flex-end; gap: 6px; font-family: var(--mono); font-size: 10.5px; color: #9fb2d0;
+  }
+  .pf-seal .seal {
+    display: inline-flex; align-items: center; gap: 8px; padding: 7px 12px; border-radius: 10px;
+    font: 600 11px var(--display); letter-spacing: .2em; text-transform: uppercase;
+  }
+  .pf-seal .seal.ok { color: #6ee7b7; background: rgba(52,211,153,.10); border: 1px solid rgba(52,211,153,.4); box-shadow: 0 0 26px -8px rgba(52,211,153,.8); }
+  .pf-seal .seal.bad { color: #fda4af; background: rgba(251,113,133,.10); border: 1px solid rgba(251,113,133,.45); box-shadow: 0 0 26px -8px rgba(251,113,133,.8); }
+  .pf-stats { display: grid; grid-template-columns: repeat(6, minmax(0,1fr)); gap: 10px; margin-top: 18px; position: relative; z-index: 1; }
+  .pf-stat { padding: 11px 13px; border-radius: 12px; background: rgba(4,8,16,.55); border: 1px solid rgba(120,160,220,.10); }
+  .pf-stat .l { font: 600 9px var(--display); letter-spacing: .24em; color: #7186a8; text-transform: uppercase; }
+  .pf-stat .v { font: 600 22px var(--mono); color: #f3f8ff; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .pf-stat .s { font-size: 10.5px; color: #7f91ad; margin-top: 2px; }
+  .pf-tabs { display: flex; gap: 4px; padding: 4px; border-radius: 12px; background: rgba(6,10,18,.75); border: 1px solid rgba(120,160,220,.10); width: max-content; max-width: 100%; overflow-x: auto; margin-bottom: 14px; }
+  .pf-tab {
+    appearance: none; border: 0; background: transparent; color: #8c9ab3; font: 600 11px var(--display);
+    letter-spacing: .16em; text-transform: uppercase; padding: 8px 14px; border-radius: 9px; cursor: pointer; white-space: nowrap;
+  }
+  .pf-tab:hover { color: #e4efff; }
+  .pf-tab.active { color: #04121a; background: linear-gradient(90deg, var(--accent), #67e8f9); box-shadow: 0 6px 22px -8px rgba(34,211,238,.9); }
+  .pf-pane { display: none; }
+  .pf-pane.active { display: block; animation: viewIn .2s ease; }
+  .pf-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+  .pf-card { padding: 16px 17px; position: relative; overflow: hidden; display: flex; flex-direction: column; gap: 10px; }
+  .pf-card.protected { background: linear-gradient(180deg, rgba(30,24,10,.55), rgba(8,12,22,.85)) padding-box, linear-gradient(135deg, rgba(245,198,107,.65), rgba(245,198,107,.10) 60%, rgba(34,211,238,.2)) border-box; }
+  .pf-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+  .pf-card h3 { margin: 0; font: 600 16px var(--display); letter-spacing: .04em; color: #f2f7ff; }
+  .pf-card .meta { font-family: var(--mono); font-size: 10.5px; color: #7f91ad; }
+  .pf-card ul { margin: 0; padding-left: 16px; color: #aebcd4; font-size: 11.5px; line-height: 1.55; }
+  .pf-card .foot { margin-top: auto; display: flex; gap: 6px; flex-wrap: wrap; border-top: 1px solid rgba(120,160,220,.08); padding-top: 9px; }
+  .pf-perm {
+    display: inline-flex; align-items: center; gap: 6px; padding: 4px 9px; border-radius: 8px;
+    font: 600 10px var(--display); letter-spacing: .16em; text-transform: uppercase; white-space: nowrap;
+  }
+  .pf-perm::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; box-shadow: 0 0 10px currentColor; }
+  .pf-perm.full { color: #34d399; background: rgba(52,211,153,.10); border: 1px solid rgba(52,211,153,.35); }
+  .pf-perm.conditional { color: #22d3ee; background: rgba(34,211,238,.10); border: 1px solid rgba(34,211,238,.35); }
+  .pf-perm.semi_auto, .pf-perm.manual_only { color: #fbbf24; background: rgba(251,191,36,.10); border: 1px solid rgba(251,191,36,.35); }
+  .pf-perm.unknown { color: #94a3b8; background: rgba(148,163,184,.08); border: 1px solid rgba(148,163,184,.3); }
+  .pf-perm.prohibited { color: #fb7185; background: rgba(251,113,133,.10); border: 1px solid rgba(251,113,133,.38); }
+  .pf-market { font: 600 9.5px var(--display); letter-spacing: .22em; padding: 3px 8px; border-radius: 6px; }
+  .pf-market.cfd { color: #c4b5fd; background: rgba(139,92,246,.12); border: 1px solid rgba(139,92,246,.35); }
+  .pf-market.futures { color: #fcd34d; background: rgba(251,191,36,.10); border: 1px solid rgba(251,191,36,.35); }
+  .pf-state { font: 600 9.5px var(--mono); letter-spacing: .08em; padding: 3px 8px; border-radius: 6px; border: 1px solid rgba(120,160,220,.2); color: #9fb2d0; }
+  .pf-state.DEMO, .pf-state.PAPER { color: #6ee7b7; border-color: rgba(52,211,153,.4); background: rgba(52,211,153,.08); }
+  .pf-state.DISCONNECTED { color: #94a3b8; }
+  .pf-state.CONNECTED_READ_ONLY { color: #67e8f9; border-color: rgba(34,211,238,.4); }
+  .pf-state.LIVE_LOCKED, .pf-state.LIVE_AUTHORIZED { color: #fda4af; border-color: rgba(251,113,133,.45); }
+  .pf-flow { display: grid; grid-template-columns: repeat(7, minmax(0,1fr)); gap: 8px; }
+  .pf-flow .node {
+    position: relative; padding: 12px 10px; border-radius: 12px; text-align: center;
+    background: rgba(6,12,22,.7); border: 1px solid rgba(120,160,220,.12);
+  }
+  .pf-flow .node b { display: block; font: 600 11px var(--display); letter-spacing: .14em; text-transform: uppercase; color: #e6f0ff; }
+  .pf-flow .node span { display: block; font-size: 10px; color: #7f91ad; margin-top: 4px; line-height: 1.4; }
+  .pf-flow .node i { display: block; font: 600 9px var(--mono); color: var(--accent); letter-spacing: .1em; margin-bottom: 4px; font-style: normal; }
+  .pf-flow .node:not(:last-child)::after {
+    content: ""; position: absolute; right: -9px; top: 50%; width: 10px; height: 1px;
+    background: linear-gradient(90deg, var(--accent), var(--accent-2)); box-shadow: 0 0 6px rgba(34,211,238,.9);
+  }
+  .pf-bar { height: 6px; border-radius: 999px; background: rgba(120,160,220,.10); overflow: hidden; }
+  .pf-bar > span { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--accent), var(--accent-2)); box-shadow: 0 0 10px rgba(34,211,238,.6); }
+  .pf-split { display: grid; grid-template-columns: minmax(0, 1.8fr) minmax(0, 1fr); gap: 14px; margin-bottom: 14px; }
+  .pf-kv { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 6px 14px; font-size: 11.5px; }
+  .pf-kv .k { color: #7186a8; font: 600 9px var(--display); letter-spacing: .2em; text-transform: uppercase; }
+  .pf-kv .v { font-family: var(--mono); color: #dfe9fa; }
+  .pf-sindatos { color: #fbbf24; font-family: var(--mono); font-size: 10.5px; }
+  .pf-src a { font-family: var(--mono); font-size: 10px; color: #67e8f9; word-break: break-all; }
+  @media (max-width: 1280px) { .pf-stats { grid-template-columns: repeat(3, minmax(0,1fr)); } .pf-flow { grid-template-columns: repeat(4, minmax(0,1fr)); } .pf-flow .node::after { display: none; } }
+  @media (max-width: 900px) { .pf-split { grid-template-columns: 1fr; } }
+  @media (max-width: 640px) { .pf-stats, .pf-flow { grid-template-columns: repeat(2, minmax(0,1fr)); } .pf-title { font-size: 21px; } .topbar h1 { font-size: 24px; } }
+  @media (prefers-reduced-motion: reduce) {
+    body::after, .hud::after, .pf-pane.active { animation: none !important; }
+    .btn:hover { transform: none; }
+  }
 </style>
 </head>
 <body>
@@ -1102,7 +1435,7 @@
   <aside class="sidebar">
     <div class="brand">
       <div class="logo">TL</div>
-      <div class="brand-text"><strong>TradingLab</strong><small>Console</small></div>
+      <div class="brand-text"><strong>TradingLab</strong><small>Prop Fund OS</small></div>
     </div>
     <button class="sidebar-toggle" id="sidebar-toggle" title="Colapsar barra lateral" aria-label="Colapsar barra lateral">«</button>
 
@@ -1122,6 +1455,7 @@
       <button class="nav-btn" data-view="fund" title="Fondo"><span class="ico">◉</span> Fondo</button>
       <button class="nav-btn" data-view="journal" title="Diario"><span class="ico">▩</span> Diario</button>
       <div class="nav-label">Riesgo y fondeo</div>
+      <button class="nav-btn nav-new" data-view="propfund" title="Prop Fund"><span class="ico">⬢</span> Prop Fund</button>
       <button class="nav-btn" data-view="risk" title="Riesgo"><span class="ico">⛨</span> Riesgo</button>
       <button class="nav-btn" data-view="operator" title="Operador"><span class="ico">⌘</span> Operador</button>
       <div class="nav-label">Inteligencia</div>
@@ -1892,6 +2226,57 @@
     </section>
 
     <!-- ============================================================== REPOS -->
+    <!-- ============================================================ PROP FUND -->
+    <section class="view" id="view-propfund">
+      <div class="pf-hero">
+        <div class="pf-hero-top">
+          <div>
+            <div class="pf-eyebrow">Multi-Prop-Firm · CFD + Futures</div>
+            <div class="pf-title">Centro de operaciones de cuentas de fondeo</div>
+            <p class="pf-lead">Varias empresas, programas y cuentas con reglas, costes, conexiones y riesgo independientes. El carril FTMO (EA us100-ftmo1, ai_trader y forward) queda protegido y solo se observa. Todo en PAPER/DEMO: ninguna vista envía órdenes.</p>
+          </div>
+          <div class="pf-seal" id="pf-seal"><span class="seal">Verificando…</span></div>
+        </div>
+        <div class="pf-stats" id="pf-stats"></div>
+      </div>
+      <div class="pf-tabs" role="tablist" id="pf-tabs">
+        <button class="pf-tab active" data-pf="overview" role="tab">Resumen</button>
+        <button class="pf-tab" data-pf="firms" role="tab">Empresas</button>
+        <button class="pf-tab" data-pf="accounts" role="tab">Cuentas</button>
+        <button class="pf-tab" data-pf="cfd" role="tab">CFD</button>
+        <button class="pf-tab" data-pf="futures" role="tab">Futures</button>
+        <button class="pf-tab" data-pf="strategies" role="tab">Estrategias</button>
+        <button class="pf-tab" data-pf="protection" role="tab">Protección</button>
+      </div>
+      <div class="pf-pane active" id="pf-overview">
+        <div class="panel" style="margin-bottom:14px">
+          <div class="panel-head"><h2>Flujo de decisión por cuenta</h2><span class="muted tiny">cada cuenta recibe una decisión independiente</span></div>
+          <div class="pf-flow">
+            <div class="node"><i>01</i><b>Señal</b><span>Estrategia emite entrada y stop</span></div>
+            <div class="node"><i>02</i><b>Elegibilidad</b><span>Asignación, plantilla, conexión, instrumento</span></div>
+            <div class="node"><i>03</i><b>Compliance</b><span>Matriz de automatización y fase</span></div>
+            <div class="node"><i>04</i><b>Riesgo</b><span>Cuenta + global por subyacente</span></div>
+            <div class="node"><i>05</i><b>Coste</b><span>Spread, comisión, fees, slippage</span></div>
+            <div class="node"><i>06</i><b>Solicitud</b><span>Dry-run PAPER/DEMO idempotente</span></div>
+            <div class="node"><i>07</i><b>Reconciliación</b><span>Fills vs. intención</span></div>
+          </div>
+        </div>
+        <div class="pf-split">
+          <div class="panel"><div class="panel-head"><h2>Matriz de automatización</h2><span class="muted tiny" id="pf-matrix-meta"></span></div><div class="table-wrap" id="pf-matrix"></div></div>
+          <div class="panel"><div class="panel-head"><h2>Avisos del registro</h2></div><div id="pf-warnings"></div></div>
+        </div>
+      </div>
+      <div class="pf-pane" id="pf-firms"><div class="pf-grid" id="pf-firm-grid"></div></div>
+      <div class="pf-pane" id="pf-accounts"><div class="panel"><div class="panel-head"><h2>Cuentas registradas</h2><span class="muted tiny">una cuenta nunca hereda las condiciones de otra</span></div><div class="table-wrap" id="pf-account-table"></div></div></div>
+      <div class="pf-pane" id="pf-cfd"><div class="panel"><div class="panel-head"><h2>Motor CFD · Forex, índices y metales</h2><span class="muted tiny">especificaciones del bróker vía MT5</span></div><div class="table-wrap" id="pf-cfd-table"></div></div></div>
+      <div class="pf-pane" id="pf-futures"><div class="panel"><div class="panel-head"><h2>Motor Futures · CME / CBOT / COMEX</h2><span class="muted tiny">tick, valor del tick y multiplicador</span></div><div class="table-wrap" id="pf-fut-table"></div></div></div>
+      <div class="pf-pane" id="pf-strategies">
+        <div class="panel" style="margin-bottom:14px"><div class="panel-head"><h2>Estrategias por carril</h2></div><div class="table-wrap" id="pf-strategy-table"></div></div>
+        <div class="panel"><div class="panel-head"><h2>Asignaciones estrategia → cuenta</h2></div><div class="table-wrap" id="pf-assignment-table"></div></div>
+      </div>
+      <div class="pf-pane" id="pf-protection"><div class="pf-grid" id="pf-protection-grid"></div></div>
+    </section>
+
     <section class="view" id="view-repos">
       <div class="note" style="margin:0 0 14px">
         <strong>Auditoría de referencia.</strong> AutoHedge y Vibe-Trading son MIT; FinceptTerminal es
@@ -2012,6 +2397,7 @@ const TITLES = {
   fund: ["Fondo", "Límites por cuenta, bolsillos, clústeres y kill-switch"],
   journal: ["Diario", "Operaciones cerradas, métricas y concentración"],
   risk: ["Riesgo", "Guard de FTMO, cuenta MT5 y futuros"],
+  propfund: ["Prop Fund", "Empresas, cuentas, motores CFD/Futures, router y protección del carril FTMO"],
   operator: ["Operador", "Modo armado paper/demo con confirmación en dos pasos"],
   sala: ["Sala", "TradingAgents en su oficina: estados, runs y decisiones"],
   decisions: ["Decisiones", "Retorno forward del LLM por rating"],
@@ -2298,6 +2684,7 @@ function switchView(view, updateHash = true) {
   if (view === "logs") loadReports();
   if (view === "decisions") renderDecisions();
   if (view === "repos") renderRepos();
+  if (view === "propfund") loadPropFund();
   if (view === "sala") renderSala();
   if (view === "logs" && !S.selectedLog) selectLog();
 }
@@ -6114,6 +6501,131 @@ function renderRepos() {
     "Auditoría de repositorios con licencias y política de reutilización.",
   ]);
 }
+
+/* --------------------------------------------------------------- prop fund */
+const PF_PERM_LABEL = {
+  full: "Automatización completa", conditional: "Con condiciones", semi_auto: "Semiautomática",
+  manual_only: "Solo manual", unknown: "Sin datos", prohibited: "Prohibida",
+};
+const PF_STATUS_LABEL = {
+  verified_official: ["Verificada · oficial", "green"], verified_secondary: ["Fuente secundaria", "yellow"],
+  needs_verification: ["Por verificar", "yellow"], unknown: ["Sin datos", "red"],
+};
+function pfPerm(perm) { return `<span class="pf-perm ${esc(perm)}">${esc(PF_PERM_LABEL[perm] || perm)}</span>`; }
+function pfStatus(status) { const [label, tone] = PF_STATUS_LABEL[status] || [status, "blue"]; return `<span class="tag ${tone}">${esc(label)}</span>`; }
+function pfMarket(market) { return `<span class="pf-market ${esc(market)}">${market === "futures" ? "FUTURES" : "CFD"}</span>`; }
+function pfVal(v, fmt) { return v === null || v === undefined ? '<span class="pf-sindatos">Sin datos</span>' : (fmt ? fmt(v) : esc(v)); }
+function pfTable(head, rows, empty = "Sin datos") {
+  if (!rows.length) return `<div class="empty">${esc(empty)}</div>`;
+  return `<table><thead><tr>${head.map((h) => `<th${h.num ? ' class="num"' : ""}>${esc(h.t || h)}</th>`).join("")}</tr></thead><tbody>${rows.join("")}</tbody></table>`;
+}
+
+async function loadPropFund() {
+  try {
+    S.propfund = await getJSON("/api/propfund");
+  } catch (err) {
+    setHTML("#pf-stats", `<div class="alert red">No se pudo cargar el Prop Fund: ${esc(err.message)}</div>`);
+    return;
+  }
+  renderPropFund();
+}
+
+function renderPropFund() {
+  const d = S.propfund;
+  if (!d) return;
+  if (!d.ok) { setHTML("#pf-stats", `<div class="alert red">Registro inválido: ${esc(d.error)}</div>`); return; }
+  const s = d.summary;
+  const prot = d.protection || {};
+  const protFiles = Object.values(prot.groups || {}).reduce((a, g) => a + (g.files || 0), 0);
+  setHTML("#pf-seal", `<span class="seal ${prot.ok ? "ok" : "bad"}">${prot.ok ? "◆ Protegidos intactos" : "✕ " + esc(prot.status || "Alterado")}</span>
+    <span>SHA-256 · ${protFiles} archivos</span><span>modo ${esc(s.mode)}</span>`);
+  const stat = (l, v, sub) => `<div class="pf-stat"><div class="l">${esc(l)}</div><div class="v">${esc(v)}</div><div class="s">${esc(sub)}</div></div>`;
+  setHTML("#pf-stats", [
+    stat("Empresas", s.firms, `${s.firms_cfd} CFD · ${s.firms_futures} Futures`),
+    stat("Automatizables", s.auto_firms, "política oficial verificada"),
+    stat("Cuentas", s.accounts, `${s.accounts_real} reales · ${s.accounts_template} plantillas`),
+    stat("Estrategias", s.strategies, `${s.strategies_protected} protegidas`),
+    stat("Asignaciones", `${s.assignments_enabled}/${s.assignments}`, "activas / total"),
+    stat("En DEMO", (s.states || {}).DEMO || 0, `${(s.states || {}).DISCONNECTED || 0} desconectadas`),
+  ].join(""));
+
+  setHTML("#pf-matrix-meta", `${d.firms.length} firmas`);
+  setHTML("#pf-matrix", pfTable(["Firma", "Mercado", "Automatización", "Política", "Órdenes auto", "Cuentas"], d.firms.map((f) => `<tr>
+      <td><b>${esc(f.name)}</b>${f.protected ? ' <span class="tag yellow">protegida</span>' : ""}</td>
+      <td>${pfMarket(f.market)}</td><td>${pfPerm(f.automation.permission)}</td><td>${pfStatus(f.automation.status)}</td>
+      <td>${f.automation.auto_orders ? '<span class="tag green">permitidas</span>' : '<span class="tag red">solo alertas</span>'}</td>
+      <td class="mono tiny">${esc(f.accounts.join(", ") || "—")}</td></tr>`)));
+  setHTML("#pf-warnings", (d.warnings || []).length
+    ? d.warnings.map((w) => `<div class="alert">${esc(w)}</div>`).join("")
+    : `<div class="note"><strong>Sin avisos.</strong> El registro es coherente: sin acciones ni ETF, sin capital propio, sin LIVE declarado, motores CFD y Futures separados y ninguna estrategia protegida asignada desde el Prop Fund.</div>
+       <div class="note"><strong>Apex y Take Profit Trader</strong> prohíben la automatización: el router solo emite alertas para sus cuentas. <strong>Tradeify</strong> exige que el bot sea exclusivo de la firma.</div>`);
+
+  setHTML("#pf-firm-grid", d.firms.map((f) => {
+    const a = f.automation;
+    const rules = (f.rules || []).slice(0, 6).map((r) => `<div><div class="k">${esc(r.key)}${r.phase !== "all" ? " · " + esc(r.phase) : ""}</div><div class="v">${pfVal(r.value)}</div></div>`).join("");
+    const vps = a.vps_allowed === null || a.vps_allowed === undefined ? '<span class="pf-sindatos">Sin datos</span>' : (a.vps_allowed ? "permitido" : "prohibido");
+    return `<article class="pf-card ${f.protected ? "protected" : ""}">
+      <div class="pf-card-top"><div><h3>${esc(f.name)}</h3><div class="meta">prioridad ${esc(f.priority)} · reglas v${esc(f.rules_version)}</div></div>${pfMarket(f.market)}</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">${pfPerm(a.permission)} ${pfStatus(a.status)}</div>
+      <ul>${(a.conditions || []).map((c) => `<li>${esc(c)}</li>`).join("") || "<li>Sin condiciones registradas</li>"}</ul>
+      ${rules ? `<div class="pf-kv">${rules}</div>` : ""}
+      <div class="pf-kv">
+        <div><div class="k">Plataformas</div><div class="v">${esc((f.platforms || []).join(", ") || "—")}</div></div>
+        <div><div class="k">Ejecución</div><div class="v">${esc((f.providers || []).join(", ") || "—")}</div></div>
+        <div><div class="k">Copy trading</div><div class="v">${esc(a.copy_trading)}</div></div>
+        <div><div class="k">VPS</div><div class="v">${vps}</div></div>
+      </div>
+      <div class="pf-src">${(a.sources || []).map((u) => `<a href="${esc(u)}" target="_blank" rel="noopener noreferrer">${esc(u.replace(/^https?:\/\//, "").slice(0, 70))}</a>`).join("<br>")}</div>
+      <div class="foot">${(f.programs || []).map((p) => `<span class="chip">${esc(p.name)}</span>`).join("")}${a.exclusive_to_firm ? '<span class="tag purple">bot exclusivo</span>' : ""}</div>
+    </article>`;
+  }).join(""));
+
+  setHTML("#pf-account-table", pfTable(["Cuenta", "Firma", "Mercado", "Programa", "Fase", {t: "Tamaño", num: 1}, "Estado", "Tipo", {t: "Pérdida diaria", num: 1}, {t: "Pérdida máx.", num: 1}, "DD", "Riesgo/op", "Instrumentos", "Estrategias"],
+    d.accounts.map((a) => `<tr>
+      <td class="mono"><b>${esc(a.id)}</b>${a.legacy ? `<div class="tiny muted">↳ ${esc(a.legacy)}</div>` : ""}</td>
+      <td>${esc(a.firm)}</td><td>${pfMarket(a.market)}</td><td class="mono tiny">${esc(a.program)}</td><td>${esc(a.phase)}</td>
+      <td class="num">${money(a.size)}</td><td><span class="pf-state ${esc(a.state)}">${esc(a.state)}</span></td>
+      <td>${a.protected ? '<span class="tag yellow">protegida</span>' : (a.template ? '<span class="tag blue">plantilla</span>' : '<span class="tag green">real</span>')}</td>
+      <td class="num">${pfVal(a.limits.daily_loss, money)}</td><td class="num">${pfVal(a.limits.max_loss, money)}</td>
+      <td class="mono tiny">${esc(a.limits.drawdown_mode)}</td><td class="mono">${pct(a.risk.per_trade_risk_pct, 2)}</td>
+      <td class="tiny">${esc(a.instruments.join(", "))}</td><td class="tiny">${esc(a.strategies.join(", ") || "—")}</td></tr>`)));
+
+  const inst = d.instruments || [];
+  const cfd = inst.filter((i) => i.market === "cfd");
+  const fut = inst.filter((i) => i.market === "futures");
+  setHTML("#pf-cfd-table", pfTable(["Instrumento", "Categoría", "Subyacente", "Alias del bróker", {t: "Tamaño contrato", num: 1}, "Fuente"],
+    cfd.map((i) => `<tr><td class="mono"><b>${esc(i.id)}</b></td><td>${esc(i.category)}</td><td class="mono tiny">${esc(i.underlying)}</td>
+      <td class="tiny">${esc(i.aliases.join(" · "))}</td><td class="num">${pfVal(i.contract_size, (v) => num(v, 0))}</td><td class="tiny muted">${esc(i.spec_source)}</td></tr>`)));
+  setHTML("#pf-fut-table", pfTable(["Contrato", "Descripción", "Bolsa", "Subyacente", {t: "Tick", num: 1}, {t: "Valor tick", num: 1}, {t: "Multiplicador", num: 1}],
+    fut.map((i) => `<tr><td class="mono"><b>${esc(i.id)}</b></td><td>${esc(i.description)}</td><td>${esc(i.exchange)}</td><td class="mono tiny">${esc(i.underlying)}</td>
+      <td class="num">${pfVal(i.tick_size, (v) => num(v, 5))}</td><td class="num">${pfVal(i.tick_value, money)}</td><td class="num">${pfVal(i.multiplier, (v) => num(v, 2))}</td></tr>`)));
+
+  const laneTag = { protected_ftmo: "yellow", cfd_new: "purple", futures_new: "blue", research: "blue", paper: "green" };
+  setHTML("#pf-strategy-table", pfTable(["Estrategia", "Carril", "Mercado", "Instrumentos", "TF", "Estado", "Motor", "Parámetros"],
+    d.strategies.map((st) => `<tr><td><b>${esc(st.name)}</b><div class="tiny muted mono">${esc(st.id)}</div></td>
+      <td><span class="tag ${laneTag[st.lane] || "blue"}">${esc(st.lane)}</span></td><td>${pfMarket(st.market)}</td>
+      <td class="tiny">${esc(st.instruments.join(", "))}</td><td class="mono">${esc(st.timeframe)}</td><td>${esc(st.status)}</td>
+      <td class="mono tiny">${esc(st.engine)}</td><td class="mono tiny">${esc(st.params_ref || "—")}</td></tr>`)));
+  setHTML("#pf-assignment-table", pfTable(["Asignación", "Estrategia", "Cuenta", "Firma", "Instrumentos", "Estado", "Replicación", "Notas"],
+    d.assignments.map((a) => `<tr><td class="mono"><b>${esc(a.id)}</b></td><td>${esc(a.strategy)}</td><td class="mono">${esc(a.account)}</td><td>${esc(a.firm)}</td>
+      <td class="tiny">${esc(a.instruments.join(", "))}</td><td>${a.enabled ? '<span class="tag green">activa</span>' : '<span class="tag">deshabilitada</span>'}</td>
+      <td class="tiny">${esc(a.replication_group || "—")}</td><td class="wrap tiny muted">${esc(a.notes || "")}</td></tr>`)));
+
+  setHTML("#pf-protection-grid", Object.entries(prot.groups || {}).map(([name, g]) => `<article class="pf-card protected">
+      <div class="pf-card-top"><div><h3>${esc(name)}</h3><div class="meta">${esc(g.files)} archivos · SHA-256</div></div>
+      <span class="tag ${g.ok ? "green" : "red"}">${g.ok ? "intacto" : "alterado"}</span></div>
+      <p class="muted small" style="margin:0">${esc(g.description)}</p>
+      ${(g.issues || []).length ? `<ul>${g.issues.map((i) => `<li><b>${esc(i.kind)}</b> ${esc(i.path)}</li>`).join("")}</ul>` : ""}
+      <div class="pf-bar"><span style="width:${g.ok ? 100 : 35}%"></span></div>
+    </article>`).join("") || `<div class="alert red">Sin manifiesto de protegidos.</div>`);
+}
+
+document.addEventListener("click", (event) => {
+  const tab = event.target.closest(".pf-tab");
+  if (!tab) return;
+  $$(".pf-tab").forEach((t) => t.classList.toggle("active", t === tab));
+  $$(".pf-pane").forEach((p) => p.classList.toggle("active", p.id === `pf-${tab.dataset.pf}`));
+});
 
 /* --------------------------------------------------------------- research */
 function datacheckTag(status) {
