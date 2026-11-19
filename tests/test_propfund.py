@@ -52,17 +52,17 @@ def test_el_manifiesto_cubre_los_identificadores_protegidos():
 def test_verify_detecta_un_cambio(tmp_path):
     (tmp_path / "config" / "propfund").mkdir(parents=True)
     target = tmp_path / "config" / "lab.yaml"
-    target.write_text("mode: paper\n", encoding="utf-8")
+    target.write_bytes(b"mode: paper\n")
     original = protected.PROTECTED_GROUPS
     protected.PROTECTED_GROUPS = {"x": {"description": "t", "paths": ["config/lab.yaml"]}}
     try:
         protected.write_manifest(tmp_path)
         assert protected.verify(tmp_path)["ok"]
-        target.write_text("mode: live\n", encoding="utf-8")
+        target.write_bytes(b"mode: live\n")
         report = protected.verify(tmp_path)
         assert not report["ok"] and report["issues"][0]["kind"] == "changed"
         # CRLF no cuenta como cambio
-        target.write_text("mode: paper\r\n", encoding="utf-8")
+        target.write_bytes(b"mode: paper\r\n")
         assert protected.verify(tmp_path)["ok"]
     finally:
         protected.PROTECTED_GROUPS = original
