@@ -12,6 +12,7 @@ import json
 import sys
 from pathlib import Path
 
+from ..config import ROOT
 from .atr import atr_ratio
 from .candidate import (
     REPORT_DIR,
@@ -29,7 +30,14 @@ from .data import (
     load_us100_cache,
     measured_spread,
 )
-from .report import write_data_report
+from .report import write_data_report, write_session_data_report
+from .session_data import (
+    build_session_data_report,
+    load_m5_us100_own,
+    session_atr,
+    session_spread,
+)
+from .sessions import ASIA_ANCHORS, CANDIDATES, LONDON_ANCHORS, NYSE_ANCHORS
 from .validation import (
     APPROVAL_PHRASE,
     AlreadyValidated,
@@ -57,6 +65,67 @@ def _data_ok(payload: dict) -> bool:
 
 def _sha256(path: Path) -> str:
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def sessions_data_command(refresh: bool = False) -> int:
+    from ..broker_costs import load_spreads
+
+    bundle = load_m5_us100_own(refresh=refresh)
+    measured = measured_spread("US100.CASH")
+    rows = load_spreads(symbol="US100.CASH", source="broker")
+    ny = session_spread(bundle.frame, measured, NYSE_ANCHORS, "Nueva York", spread_rows=rows)
+    ny_atr = session_atr(bundle.frame, NYSE_ANCHORS)
+    payloads = {}
+    files = {}
+    for candidate, anchors, label in (
+        ("us100-london", LONDON_ANCHORS, "Londres"),
+        ("us100-asia", ASIA_ANCHORS, "Asia"),
+    ):
+        stats = session_spread(bundle.frame, measured, anchors, label, spread_rows=rows)
+        atr_stats = session_atr(bundle.frame, anchors)
+        payload = build_session_data_report(
+            bundle,
+            measured,
+            candidate=candidate,
+            anchors=anchors,
+            session_stats=stats,
+            ny_stats=ny,
+            atr_stats=atr_stats,
+            ny_atr=ny_atr,
+        )
+        out_dir = ROOT / CANDIDATES[candidate]["report_dir"]
+        payloads[candidate] = payload
+        files[candidate] = write_session_data_report(payload, out_dir)
+    quality = payloads["us100-london"]["quality"]
+    print(
+        f"US100.cash M5 | {quality['rows']:,} velas | {quality['start']} -> {quality['end']}"
+    )
+    print(
+        f"Ventana {WINDOW_START} -> {WINDOW_END} | RTH {quality['rth_rows']:,} velas | "
+        f"duplicados {quality['duplicates']} | invalidas {quality['invalid_bars']} | "
+        f"faltantes en dias de trading {quality['missing_rth_bars_trading_days']:,} "
+        f"({quality['missing_rth_bars_pct_trading_days']} %) | "
+        f"punto {quality['spec']['point']} (OK={quality['spec']['point_ok']}) | "
+        f"cobertura {'OK' if quality['coverage_ok'] else 'NO'}"
+    )
+    for candidate, payload in payloads.items():
+        session = payload["spread"]["session"]
+        comp = payload["spread"]["comparison"]
+        print(
+            f"{candidate}: {session['window']} {session['tz']} | "
+            f"mediana {session['median_points']:.2f} pts | "
+            f"NY {comp['ny_median_points']:.2f} pts | ratio {comp['ratio_vs_ny']:.3f} | "
+            f"datos {'OK' if payload['data_ok'] else 'NO'}"
+        )
+        viability = payload["viability"]
+        print(
+            f"  ATR {viability['session']['median_atr']:.3f} | "
+            f"spread/ATR {viability['session']['spread_over_atr']:.4f} | "
+            f"NY {viability['ny']['spread_over_atr']:.4f} | "
+            f"cociente {viability['ratio_vs_ny']:.3f}"
+        )
+        print(f"  JSON: {files[candidate]['json']} | MD: {files[candidate]['markdown']}")
+    return 0 if all(payload["data_ok"] for payload in payloads.values()) else 2
 
 
 def validate_command(approval: str) -> int:
@@ -166,6 +235,11 @@ def main(argv: list[str] | None = None) -> int:
     data = sub.add_parser("data", help="Descarga/valida M5 US500 y calcula el ratio ATR")
     data.add_argument("--refresh", action="store_true", help="Vuelve a leer M5 del terminal")
     data.add_argument("--json", action="store_true", help="Imprime el informe completo")
+    sessions = sub.add_parser(
+        "sessions-data",
+        help="Descarga/valida US100 M5 y compara el spread de Londres/Asia con NY",
+    )
+    sessions.add_argument("--refresh", action="store_true", help="Vuelve a leer M5 del terminal")
     validate = sub.add_parser("validate", help="Fase 3: validación de un solo disparo")
     validate.add_argument(
         "--approval",
@@ -173,6 +247,8 @@ def main(argv: list[str] | None = None) -> int:
         help=f"Frase exacta del operador: {APPROVAL_PHRASE}",
     )
     args = parser.parse_args(argv)
+    if args.command == "sessions-data":
+        return sessions_data_command(refresh=args.refresh)
     if args.command == "validate":
         try:
             return validate_command(args.approval)

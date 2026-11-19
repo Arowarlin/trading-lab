@@ -409,10 +409,131 @@ def write_validation_report(payload: dict, out_dir: str | Path | None = None) ->
     }
 
 
+def render_session_data_report(payload: dict) -> str:
+    quality = payload["quality"]
+    spread = payload["spread"]
+    session = spread["session"]
+    ny = spread["ny"]
+    comparison = spread["comparison"]
+    coverage = spread["coverage"]
+    lines = [
+        f"# Datos · `{payload['candidate']}` (Fase 2)",
+        "",
+        f"Generado: {payload['generated_at']} · solo lectura · **sin backtests**",
+        "",
+        f"- Ventana: **{payload['window']['start']} → {payload['window']['end']}** "
+        f"({payload['window']['tz']})",
+        f"- Caché propia: `{payload['cache']}`",
+        f"- Origen: `{payload['source']}`",
+        f"- Datos válidos para la Fase 3: **{'SÍ' if payload['data_ok'] else 'NO'}**",
+        "",
+        "## Calidad de las velas",
+        "",
+        "| Métrica | Valor |",
+        "|---|---:|",
+        f"| Velas totales | {quality['rows']:,} |",
+        f"| Velas en la ventana | {quality['window_rows']:,} |",
+        f"| Velas RTH (NY) | {quality['rth_rows']:,} |",
+        f"| Inicio / fin real | {quality['start']} → {quality['end']} |",
+        f"| Duplicados | {quality['duplicates']} |",
+        f"| Velas OHLC inválidas | {quality['invalid_bars']} |",
+        f"| Días RTH | {quality['rth_days']:,} |",
+        f"| Faltantes en días de trading | {quality['missing_rth_bars_trading_days']:,} "
+        f"({_fmt(quality['missing_rth_bars_pct_trading_days'], 3)} %) |",
+        f"| Cierres tempranos detectados | {len(quality['early_close_days'])} |",
+        f"| Festivos NYSE con datos | {len(quality['holiday_days_with_data'])} |",
+        f"| Hueco intradía máximo (sin festivos) | {_fmt(quality['max_intraday_gap_min'], 1)} min |",
+        f"| Primera / última hora RTH | {quality['first_rth_time']} / {quality['last_rth_time']} |",
+        f"| Punto del símbolo | {_fmt(quality['spec']['point'], 4)} "
+        f"(OK: {'sí' if quality['spec']['point_ok'] else 'no'}) |",
+        f"| Cobertura de la ventana | {'sí' if quality['coverage_ok'] else 'no'} |",
+        f"| Cada año con ≥300 velas RTH | {'sí' if quality['years_min_300_rth'] else 'no'} |",
+        "",
+        "### Por año",
+        "",
+        "| Año | Velas | Velas RTH | Días | RTH faltantes |",
+        "|---:|---:|---:|---:|---:|",
+    ]
+    for year, row in sorted(quality["years"].items()):
+        lines.append(
+            f"| {year} | {row['bars']:,} | {row['rth_bars']:,} | {row['days']:,} | "
+            f"{row['missing_rth_bars']:,} |"
+        )
+    lines += [
+        "",
+        "## Spread en la ventana de entradas",
+        "",
+        "| Sesión | Ventana | Zona | Velas | Días | Mediana pts | p75 pts | Mediana bruta pts |",
+        "|---|---|---|---:|---:|---:|---:|---:|",
+        f"| {session['label']} | {session['window']} | {session['tz']} | "
+        f"{session['bars']:,} | {session['days']:,} | {_fmt(session['median_points'], 4)} | "
+        f"{_fmt(session['p75_points'], 4)} | {_fmt(session['raw_median_points'], 4)} |",
+        f"| Nueva York | {ny['window']} | {ny['tz']} | {ny['bars']:,} | {ny['days']:,} | "
+        f"{_fmt(ny['median_points'], 4)} | {_fmt(ny['p75_points'], 4)} | "
+        f"{_fmt(ny['raw_median_points'], 4)} |",
+        "",
+        f"- Ratio {session['label']} / NY: **{_fmt(comparison['ratio_vs_ny'], 4)}** "
+        f"({_fmt(comparison['difference_points'], 4)} pts de diferencia).",
+        f"- Medición `broker_spreads` US100.CASH: {_fmt(spread['measured']['median_bps'], 4)} bps, "
+        f"{spread['measured']['rows']} horas, antigüedad {_fmt(spread['measured']['age_hours'], 2)} h.",
+        f"- Cobertura de la ventana: {coverage['days_with_data']:,} días con datos de "
+        f"{coverage['weekdays_in_window']:,} días hábiles ({_fmt(coverage['coverage_pct'], 2)} %).",
+        "",
+        "## Viabilidad de costes previa (no es un backtest)",
+        "",
+        "| Sesión | Ventana | ATR Wilder 14 | Spread medio | Spread / ATR | Cociente vs NY |",
+        "|---|---|---:|---:|---:|---:|",
+        f"| {session['label']} | {session['window']} | "
+        f"{_fmt(payload['viability']['session']['median_atr'], 4)} | "
+        f"{_fmt(payload['viability']['session']['spread_price'], 4)} | "
+        f"**{_fmt(payload['viability']['session']['spread_over_atr'], 6)}** | "
+        f"**{_fmt(payload['viability']['ratio_vs_ny'], 4)}** |",
+        f"| Nueva York | {ny['window']} | "
+        f"{_fmt(payload['viability']['ny']['median_atr'], 4)} | "
+        f"{_fmt(payload['viability']['ny']['spread_price'], 4)} | "
+        f"**{_fmt(payload['viability']['ny']['spread_over_atr'], 6)}** | 1,0000 |",
+        "",
+        "> No es un backtest: no se ejecutó el motor, no se miraron retornos y no se "
+        "registraron trials. Solo mide ATR y spread en la ventana de entradas.",
+        "",
+        "### Spread por hora local",
+        "",
+        "| Hora local | Velas | Mediana pts | p75 pts |",
+        "|---:|---:|---:|---:|",
+    ]
+    for row in session["hourly"]:
+        lines.append(
+            f"| {row['hour_local']:02d}:00 | {row['bars']:,} | "
+            f"{_fmt(row['median_points'], 4)} | {_fmt(row['p75_points'], 4)} |"
+        )
+    lines += [
+        "",
+        "> Fase 2: no se ha ejecutado ningún backtest de Londres ni de Asia. "
+        "El spread usa el suelo horario de `broker_spreads`; la ventana NY "
+        "09:35–11:30 es la referencia.",
+        "",
+    ]
+    return "\n".join(lines)
+
+
+def write_session_data_report(payload: dict, out_dir: str | Path | None = None) -> dict:
+    target = Path(out_dir)
+    target.mkdir(parents=True, exist_ok=True)
+    json_path = target / "data.json"
+    md_path = target / "data.md"
+    json_path.write_text(
+        json.dumps(payload, indent=2, ensure_ascii=False, default=str), encoding="utf-8"
+    )
+    md_path.write_text(render_session_data_report(payload), encoding="utf-8")
+    return {"json": str(json_path), "markdown": str(md_path)}
+
+
 __all__ = [
     "render_data_report",
+    "render_session_data_report",
     "render_validation_report",
     "render_verdict",
     "write_data_report",
+    "write_session_data_report",
     "write_validation_report",
 ]
