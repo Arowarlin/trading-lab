@@ -2649,7 +2649,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
             elif path == "/api/propfund":
                 from .propfund.console import payload as propfund_payload
 
-                self._json(propfund_payload(self.server.data.root))
+                self._json(propfund_payload(self.server.data.root, include_exposure=True))
             elif path == "/api/risk":
                 self._json(self.server.data.risk())
             elif path == "/api/market":

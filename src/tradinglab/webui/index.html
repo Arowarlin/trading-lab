@@ -2265,6 +2265,13 @@
           <div class="panel"><div class="panel-head"><h2>Matriz de automatización</h2><span class="muted tiny" id="pf-matrix-meta"></span></div><div class="table-wrap" id="pf-matrix"></div></div>
           <div class="panel"><div class="panel-head"><h2>Avisos del registro</h2></div><div id="pf-warnings"></div></div>
         </div>
+        <div class="panel" style="margin-top:14px">
+          <div class="panel-head"><h2>Exposición por subyacente</h2><span class="muted tiny" id="pf-exposure-meta"></span></div>
+          <div id="pf-exposure"></div>
+          <div class="table-wrap" id="pf-exposure-table"></div>
+          <div class="panel-head" style="margin-top:14px"><h2>Posiciones en solo lectura</h2><span class="muted tiny">EA us100-ftmo1, ai_trader y forward incluidos por magic</span></div>
+          <div class="table-wrap" id="pf-position-table"></div>
+        </div>
       </div>
       <div class="pf-pane" id="pf-firms"><div class="pf-grid" id="pf-firm-grid"></div></div>
       <div class="pf-pane" id="pf-accounts"><div class="panel"><div class="panel-head"><h2>Cuentas registradas</h2><span class="muted tiny">una cuenta nunca hereda las condiciones de otra</span></div><div class="table-wrap" id="pf-account-table"></div></div></div>
@@ -6618,6 +6625,49 @@ function renderPropFund() {
       ${(g.issues || []).length ? `<ul>${g.issues.map((i) => `<li><b>${esc(i.kind)}</b> ${esc(i.path)}</li>`).join("")}</ul>` : ""}
       <div class="pf-bar"><span style="width:${g.ok ? 100 : 35}%"></span></div>
     </article>`).join("") || `<div class="alert red">Sin manifiesto de protegidos.</div>`);
+
+  renderPfExposure(d.exposure);
+}
+
+function renderPfExposure(expo) {
+  const e = expo || { ok: false, status: "Sin datos", notes: ["Sin datos: respuesta vacía"], by_underlying: {}, positions: [], accounts: [], totals: {} };
+  setHTML("#pf-exposure-meta", `${e.ok ? "MT5" : "Sin datos"} · solo lectura · ${dateTime(e.generated_at)} · caché ${esc(e.ttl_seconds || 60)} s`);
+  const accounts = (e.accounts || []).map((a) => {
+    const s = a.snapshot;
+    const ident = a.identity || {};
+    const detail = s
+      ? `equity ${money(s.equity)} · inicio día ${money(s.day_start_equity)} · pico ${money(s.peak_equity)} · ${num(s.open_positions, 0)} pos. · riesgo ${money(s.open_risk_usd)}`
+      : "snapshot Sin datos";
+    return `<div><b>${esc(a.account)}</b> <span class="tag ${a.ok ? "green" : "red"}">${esc(a.status)}</span> <span class="mono tiny">login ${esc(ident.login ?? "—")} · ${esc(ident.server ?? "—")} · ${esc(detail)}</span></div>`;
+  }).join("");
+  if (!e.ok) {
+    const why = (e.notes || []).map(esc).join(" · ") || "MT5 no disponible";
+    setHTML("#pf-exposure", `<div class="note"><strong>Sin datos.</strong> ${why}</div>${accounts ? `<div class="tiny muted" style="margin-top:6px">${accounts}</div>` : ""}`);
+    setHTML("#pf-exposure-table", "");
+    setHTML("#pf-position-table", "");
+    return;
+  }
+  const totals = e.totals || {};
+  setHTML("#pf-exposure", `<div class="note"><strong>${money(totals.gross_notional_usd)} USD brutos</strong> · ${money(totals.net_notional_usd)} USD netos · ${(e.positions || []).length} posiciones. Lectura por magic; ninguna orden ni cierre.</div>${accounts ? `<div class="note tiny muted" style="margin-top:6px">${accounts}</div>` : ""}`);
+  const rows = Object.entries(e.by_underlying || {});
+  setHTML("#pf-exposure-table", pfTable(["Subyacente", "Instrumentos", "Cuentas", { t: "Neto USD", num: 1 }, { t: "Bruto USD", num: 1 }, "Mercados", "Aviso"],
+    rows.map(([underlying, row]) => `<tr>
+      <td class="mono"><b>${esc(underlying)}</b></td>
+      <td class="tiny">${esc((row.instruments || []).join(", ") || "—")}</td>
+      <td class="tiny mono">${esc((row.accounts || []).join(", ") || "—")}</td>
+      <td class="num">${pfVal(row.net_notional_usd, money)}</td>
+      <td class="num">${pfVal(row.gross_notional_usd, money)}</td>
+      <td class="tiny">${esc((row.markets || []).join(" · ") || "—")}</td>
+      <td class="tiny">${row.cross_market ? '<span class="tag purple">multi-mercado</span>' : ""}${(row.sin_datos || []).length ? '<span class="tag red">Sin datos</span>' : ""}</td>
+    </tr>`)));
+  setHTML("#pf-position-table", pfTable(["Cuenta", "Estrategia", "Carril", "Símbolo", "Lado", { t: "Cantidad", num: 1 }, { t: "Precio", num: 1 }, { t: "Nocional", num: 1 }, { t: "Riesgo", num: 1 }, "Magic"],
+    (e.positions || []).map((p) => `<tr>
+      <td class="mono">${esc(p.account)}</td><td>${esc(p.strategy)}</td><td class="tiny">${esc(p.lane)}</td>
+      <td class="mono">${esc(p.symbol)}</td><td>${p.side === "short" ? '<span class="tag red">corto</span>' : '<span class="tag green">largo</span>'}</td>
+      <td class="num">${num(p.quantity, 2)}</td><td class="num">${num(p.price, 5)}</td>
+      <td class="num">${pfVal(p.notional_usd, money)}</td><td class="num">${pfVal(p.risk_usd, money)}</td>
+      <td class="mono tiny">${esc(p.magic)}</td>
+    </tr>`)));
 }
 
 document.addEventListener("click", (event) => {

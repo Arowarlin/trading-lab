@@ -85,6 +85,82 @@ def accounts() -> None:
     console.print(t)
 
 
+@app.command("exposure")
+def exposure_cmd(as_json: bool = typer.Option(False, "--json")) -> None:
+    """Exposición por subyacente desde MT5 (solo lectura, sin órdenes)."""
+    from .snapshots import collect_exposure
+
+    data = collect_exposure()
+    if as_json:
+        console.print_json(json.dumps(data, default=str))
+        return
+    out = Console(width=150)
+    color = "green" if data["ok"] else "yellow"
+    out.print(
+        f"[bold]Exposición Prop Fund[/bold] · [{color}]{data['status']}[/{color}] · "
+        f"fuente {data['source']} · solo lectura · {data['generated_at']}"
+    )
+    for note in data.get("notes", []):
+        out.print(f"[yellow]Aviso:[/yellow] {note}")
+
+    accounts = data.get("accounts") or []
+    if accounts:
+        t = Table(title="Cuentas MT5 leídas")
+        for col in ("Cuenta", "Estado", "Login", "Servidor", "Equity", "Inicio día", "Pico", "Pos.", "Riesgo USD"):
+            t.add_column(col, no_wrap=True)
+        for a in accounts:
+            snap = a.get("snapshot") or {}
+            ident = a.get("identity") or {}
+            t.add_row(
+                a["account"], a["status"],
+                str(ident.get("login") or "Sin datos"),
+                str(ident.get("server") or "Sin datos"),
+                _fmt_money(snap.get("equity")), _fmt_money(snap.get("day_start_equity")),
+                _fmt_money(snap.get("peak_equity")),
+                str(snap.get("open_positions", "Sin datos")),
+                _fmt_money(snap.get("open_risk_usd")),
+            )
+        out.print(t)
+
+    rows = data.get("by_underlying") or {}
+    t = Table(title="Exposición por subyacente")
+    for col in ("Subyacente", "Instrumentos", "Cuentas", "Neto USD", "Bruto USD", "Mercados", "Sin datos"):
+        t.add_column(col, no_wrap=True)
+    for underlying, row in sorted(rows.items()):
+        t.add_row(
+            underlying,
+            ", ".join(row.get("instruments") or []) or "—",
+            ", ".join(row.get("accounts") or []) or "—",
+            _fmt_money(row.get("net_notional_usd")),
+            _fmt_money(row.get("gross_notional_usd")),
+            ", ".join(row.get("markets") or []) or "—",
+            ", ".join(row.get("sin_datos") or []) or "—",
+        )
+    out.print(t)
+    totals = data.get("totals") or {}
+    out.print(
+        f"Total nocional bruto {_fmt_money(totals.get('gross_notional_usd'))} USD · "
+        f"neto {_fmt_money(totals.get('net_notional_usd'))} USD"
+    )
+
+    positions = data.get("positions") or []
+    t = Table(title="Posiciones en solo lectura")
+    for col in ("Cuenta", "Estrategia", "Carril", "Símbolo", "Lado", "Cantidad", "Precio",
+                "Nocional USD", "Riesgo USD", "Magic", "Ticket"):
+        t.add_column(col, no_wrap=True)
+    for p in positions:
+        t.add_row(
+            p["account"], p["strategy"], p["lane"], p["symbol"], p["side"],
+            f"{float(p['quantity']):g}", f"{float(p['price']):g}",
+            _fmt_money(p.get("notional_usd")), _fmt_money(p.get("risk_usd")),
+            str(p.get("magic", "—")), str(p.get("ticket", "—")),
+        )
+    if positions:
+        out.print(t)
+    elif data["ok"]:
+        out.print("[dim]Sin posiciones abiertas.[/dim]")
+
+
 @app.command("verify")
 def verify() -> None:
     """Comprueba los hashes SHA-256 de los componentes protegidos."""
@@ -149,6 +225,10 @@ def route_cmd(
 
 def _fmt_bps(value: float | None) -> str:
     return "Sin datos" if value is None else f"{value:.4f}"
+
+
+def _fmt_money(value: float | None) -> str:
+    return "Sin datos" if value is None else f"{float(value):,.2f}"
 
 
 def _fmt_price(value: float | None) -> str:

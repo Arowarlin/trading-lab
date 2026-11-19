@@ -28,7 +28,13 @@ def _rule_rows(firm) -> list[dict]:
     return rows
 
 
-def payload(root: Path = ROOT, config_dir: Path | None = None) -> dict:
+def payload(
+    root: Path = ROOT,
+    config_dir: Path | None = None,
+    *,
+    include_exposure: bool = False,
+    exposure: dict | None = None,
+) -> dict:
     if config_dir is None:
         config_dir = root / "config" / "propfund" if root != ROOT else CONFIG_DIR
     try:
@@ -108,7 +114,11 @@ def payload(root: Path = ROOT, config_dir: Path | None = None) -> dict:
     instruments = [item.as_dict() for item in universe()]
     states = Counter(a["state"] for a in accounts)
     integrity = protected.verify(root)
-    return {
+    if exposure is None and include_exposure:
+        from .snapshots import collect_exposure
+
+        exposure = collect_exposure(root=root, config_dir=config_dir)
+    data = {
         "ok": True,
         "summary": {
             "firms": len(firms),
@@ -133,6 +143,9 @@ def payload(root: Path = ROOT, config_dir: Path | None = None) -> dict:
         "protection": integrity,
         "warnings": reg.warnings,
     }
+    if exposure is not None:
+        data["exposure"] = exposure
+    return data
 
 
 __all__ = ["payload"]
