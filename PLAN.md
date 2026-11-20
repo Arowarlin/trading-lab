@@ -12,6 +12,33 @@ Reglas de trabajo:
   `proposed` / `enabled: false`.
 - Al final de cada fase: resumen de máximo 15 líneas y espera de confirmación.
 
+## Migración a fondeo CFD/futuros (2026-11-19)
+
+Decisión del operador: TradingLab queda enfocado **solo** en cuentas de fondeo
+CFD (US100, US500, GER40, XAUUSD, EURUSD, GBPUSD, USDJPY) y futuros (NQ, MNQ,
+GC, MGC cuando haya datos). Se retira todo el carril de acciones/ETF.
+
+| Fase | Contenido | Estado |
+|---|---|---|
+| 0 | Inventario A/R/C sin cambios | ✅ |
+| 1 | Informe final F13 en `reports/f13/final_2026-11.md`; tarea deshabilitada | ✅ |
+| 2 | Archivado A con `git mv` a `legacy/`; CLI y paneles retirados | ✅ |
+| 3 | Reconversión R: briefing pre-Londres/pre-NY, agentes, intel, mercado, overnight | ✅ |
+| 4 | Config: fuera `paper_main`/`alpaca_paper`, bots de acciones, `f13.yaml`, `equities_lane.yaml` y grupo `f13_hash`; re-freeze aprobado | ✅ |
+| 5 | `scripts/register_cfd_tasks.ps1` generado (sin ejecutar) | ✅ |
+| 5b | Consola completa CFD/futuros, HUD Prop Fund, ticker MT5, barrido sin QQQ/SPY/ETF/Alpaca/F13 | ✅ |
+| 5c | **Sustituida por TradingLab 2.0** (`docs/tradinglab2/`, parche aparte). No se crea `lab factory` ni pestaña Fábrica | 🔁 |
+| 6 | README, PLAN y `docs/propfund/05` actualizados | ✅ |
+
+Reglas de la migración: paper/demo, ningún agente ejecuta backtests ni envía
+órdenes, ningún dato inventado (`Sin datos`), y los protegidos (EA
+`us100-ftmo1`, `ai_trader`, forward FTMO, riesgo FTMO, Prop Fund y `ea_lab`) no
+se tocan.
+
+TradingLab 2.0 sustituye la fábrica de estrategias: llegará con su propio
+diseño en `docs/tradinglab2/`; hasta entonces no se registran trials nuevos ni
+se ejecutan barridos.
+
 ## Fase 0 — Higiene y seguridad
 
 - [x] **0.1 README limpio y fusionado** — 2026-11-06

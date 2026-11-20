@@ -1,11 +1,17 @@
 # TradingLab
 
-Entorno multi-bot de trading sobre **TradingAgents** y **Trading-R1**, con LLM local
-(LM Studio / Qwen3.8-27B), ejecución en **Alpaca paper** (acciones) y **MetaTrader 5**
-(forex), con motor de reglas para **cuentas de fondeo** (FTMO).
+Entorno de trading **solo para cuentas de fondeo CFD y futuros**: índices,
+forex y metales en MT5, y futuros CME cuando haya proveedor de datos.
+Los agentes LLM y la investigación trabajan únicamente sobre ese universo.
+No hay acciones, ETF, Alpaca ni carril de renta variable.
 
-> Regla del proyecto: nada de dinero real hasta completar la fase de paper trading
-> (4-8 semanas) con métricas positivas y el kill-switch probado.
+> **Alcance 2026-11-19.** TradingLab se reconvierte a fondeo CFD/futuros. El
+> piloto F13 (QQQ) se cerró, las cuentas `paper_main`/`alpaca_paper` y los bots
+> de acciones/ETF se archivaron en `legacy/` con `git mv`. Todo lo que sigue se
+> refiere a cuentas de fondeo (FTMO demo y plantillas Topstep/ProjectX).
+>
+> Regla del proyecto: paper/demo solamente. Ninguna vista ni agente envía
+> órdenes reales; el máximo es `READY_DRY_RUN` o DEMO con confirmación humana.
 
 ---
 
@@ -18,17 +24,33 @@ Entorno multi-bot de trading sobre **TradingAgents** y **Trading-R1**, con LLM l
 | F2 | Repos instalados y verificados | ✅ TradingAgents · ✅ Trading-R1 en WSL2 |
 | F3 | Núcleo del lab: config, SQLite, datos, riesgo | ✅ |
 | F4 | Backtester + estrategias deterministas | ✅ |
-| F5 | Alpaca paper + ejecución | ✅ validado (cuenta ACTIVE, equity 100k) |
-| F6 | TradingAgents como fuente de señal | ✅ `lite` validado (77 s) · `deep` opcional |
+| F5 | Alpaca paper + ejecución | ⛔ archivado en `legacy/` (2026-11-19) |
+| F6 | TradingAgents como fuente de señal | ✅ `lite` reconvertido a CFD/futuros vía MT5 |
 | F7 | Trading-R1 (informes/Telegram) | 🟡 WSL2 + Trading-R1 operativos · ⏳ informe/Telegram |
-| F8 | Dashboard y observabilidad | ✅ `lab dashboard` (HTML) + `lab web` (consola v2: mercado, research, decisiones, repos) |
-| F9 | Núcleo multi-activo (forex, futuros, acciones) | ✅ |
+| F8 | Dashboard y observabilidad | ✅ `lab web` (consola v4 Quantum, solo fondeo CFD/futuros) |
+| F9 | Núcleo multi-activo | ✅ CFD + futuros (acciones/ETF retiradas) |
 | F10 | MT5: datos, sizing, órdenes, hora de servidor | ✅ demo validada (abrir/cerrar) |
 | F11 | Motor de reglas de fondeo (FTMO) | ✅ guard + Monte Carlo + fuente contrastada |
 | F12 | Futuros (Topstep + ProjectX) | ✅ adaptador y CLI en dry-run · ⏳ cuenta y guard |
-| F13 | Paper continuo 4-8 semanas | ✅ activo en paper · tarea `TradingLab-F13` lunes 22:20 |
-| F14 | Investigación automática (`lab research`) | ✅ barrido + OOS + DSR + PBO + walk-forward + regímenes |
+| F13 | Paper continuo 4-8 semanas | ⛔ cerrado 2026-11-19 · informe `reports/f13/final_2026-11.md` |
+| F14 | Investigación automática | 🟡 sustituida por `ea_lab` y por TradingLab 2.0 (5c) |
 | F15 | Datos de ticks Dukascopy / spread real forex | ✅ descarga/decodifica ticks · ⏳ integración en research |
+
+---
+
+## 1.1 Alcance vigente (2026-11-19)
+
+- **CFD**: US100, US500, GER40, XAUUSD, EURUSD, GBPUSD, USDJPY (alias del bróker
+  resueltos por `src/tradinglab/propfund/instruments.py`).
+- **Futuros**: NQ, MNQ, GC, MGC cuando exista proveedor intradía; hoy `Sin datos`.
+- **Cuentas**: solo `config/propfund/accounts.yaml` (CFD-001/002 y plantillas
+  FUT-*). `config/accounts.yaml` conserva únicamente FTMO demo/trial y Topstep.
+- **Datos**: MT5 en modo adjunto (`AttachOnlyBroker`) para precios, spreads y
+  barras; Yahoo solo como caché macro, nunca para tickers de acciones.
+- **Consola**: 19 vistas, tema v4 Quantum. HUD con chip Prop Fund (protegidos,
+  cuentas DEMO, exposición bruta). Sin QQQ, SPY, ETF, Alpaca ni F13.
+- **Archivado**: `legacy/` contiene el carril de acciones/ETF, F13, Alpaca,
+  TradeStation, SEC y sus tests/scripts. No se borra nada.
 
 ---
 
@@ -489,7 +511,10 @@ lab sec facts NVDA
 
 ---
 
-## 5. Alpaca paper (conectado)
+## 5. Alpaca paper (archivado 2026-11-19)
+
+> El carril de acciones/ETF se retiró. `legacy/src/tradinglab/execution/alpaca.py`
+> se conserva solo como referencia histórica; el código activo no lo importa.
 
 Las claves paper ya están en `.env` y el adaptador está validado:
 

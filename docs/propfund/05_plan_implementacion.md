@@ -90,3 +90,25 @@ worker aislado por cuenta siguen pendientes.
 
 Todo el trabajo es aditivo. Revertir = `git revert` del commit o borrar la rama.
 Ningún componente protegido cambió (`lab propfund verify`).
+
+## Migración 2026-11-19 · solo CFD/futuros
+
+Decisión del operador: TradingLab queda enfocado solo en cuentas de fondeo CFD
+(US100, US500, GER40, XAUUSD, EURUSD, GBPUSD, USDJPY) y futuros (NQ, MNQ, GC,
+MGC cuando haya datos). Se retira el carril de acciones/ETF.
+
+| Fase | Contenido | Estado |
+|---|---|---|
+| 0 | Inventario A/R/C sin cambios | hecho |
+| 1 | Informe final F13 (`reports/f13/final_2026-11.md`); tarea deshabilitada | hecho |
+| 2 | Archivado con `git mv` a `legacy/`; CLI y paneles retirados; tests de F13/acciones archivados | hecho |
+| 3 | Briefing pre-Londres/pre-NY con MT5 en solo lectura (`propfund/market.py`), agentes e intel CFD, mercado y overnight | hecho |
+| 4 | `accounts.yaml` sin `paper_main`/`alpaca_paper`; `bots.yaml` vacío; `f13.yaml` y `equities_lane.yaml` en `legacy/config/`; `f13_hash` fuera del manifiesto y re-freeze aprobado | hecho |
+| 5 | `scripts/register_cfd_tasks.ps1` generado, sin ejecutar | hecho |
+| 5b | Consola CFD/futuros completa y barrido sin QQQ/SPY/ETF/Alpaca/F13 fuera de `legacy/` | hecho |
+| 5c | Sustituida por **TradingLab 2.0** (`docs/tradinglab2/`, parche aparte) | sustituida |
+| 6 | README, PLAN y este documento | hecho |
+
+El manifiesto protegido queda con 4 grupos (`ai_trader`, `ea_us100_ftmo1`,
+`ftmo_forward`, `ftmo_risk`); `f13_hash` se retiró y el re-freeze se
+ejecutó con `lab propfund freeze --approved-by-operator`.
