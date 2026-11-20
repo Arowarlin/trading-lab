@@ -100,6 +100,23 @@ def validate(reg: Registry) -> None:
                 errors.append(f"{acc.id}: {sym} es {resolve(sym).market}, la cuenta es {acc.market}")
         if acc.connection_state.value.startswith("LIVE"):
             errors.append(f"{acc.id}: estado LIVE no se declara en archivo; requiere autorización humana")
+        identity = (acc.terminal_path, acc.login, acc.server)
+        if any(identity) and not all(identity):
+            errors.append(
+                f"{acc.id}: terminal_path, login y server deben declararse juntos"
+            )
+        if any(identity) and acc.platform != "mt5":
+            errors.append(f"{acc.id}: terminal_path/login/server solo aplican a platform mt5")
+        if acc.broker_symbols:
+            unknown = sorted(set(acc.broker_symbols) - set(acc.allowed_instruments))
+            if unknown:
+                errors.append(
+                    f"{acc.id}: broker_symbols para instrumentos no permitidos: {', '.join(unknown)}"
+                )
+            if not acc.spread_source:
+                reg.warnings.append(
+                    f"{acc.id}: broker_symbols sin spread_source; usaría 'broker' y podría colisionar"
+                )
         if acc.protected and not firm.protected:
             reg.warnings.append(f"{acc.id}: cuenta protegida en una firma no protegida")
 

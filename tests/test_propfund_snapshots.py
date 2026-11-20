@@ -112,6 +112,38 @@ def test_attach_sin_credenciales_y_sin_shutdown(fake_mt5):
     assert health["mode"] == "demo"
 
 
+def test_attach_pasa_path_de_la_cuenta_sin_credenciales(fake_mt5):
+    fake_mt5.account.login = 40000453530
+    fake_mt5.account.server = "FundingPips-Trial"
+    path = "C:/Program Files/Darwinex MetaTrader 5/terminal64.exe"
+    broker = AttachOnlyBroker(
+        expected_login=40000453530,
+        expected_server="FundingPips-Trial",
+        path=path,
+        timeout_ms=1234,
+    )
+    health = broker.connect()
+
+    assert fake_mt5.initialize_kwargs == {"timeout": 1234, "path": path}
+    assert "login" not in fake_mt5.initialize_kwargs
+    assert "password" not in fake_mt5.initialize_kwargs
+    assert "server" not in fake_mt5.initialize_kwargs
+    assert fake_mt5.shutdown_called is False
+    assert health["login"] == 40000453530
+    assert health["server"] == "FundingPips-Trial"
+    assert health["expected_login"] == 40000453530
+    assert health["expected_server"] == "FundingPips-Trial"
+    assert health["identity_ok"] is True
+
+
+def test_factory_usa_identidad_de_cfd_006():
+    account = load_registry().accounts["CFD-006"]
+    broker = default_broker_factory(account, settings=Settings())
+    assert broker.path == account.terminal_path
+    assert broker.expected_login == 40000453530
+    assert broker.expected_server == "FundingPips-Trial"
+
+
 def test_attach_no_arranca_mt5_si_no_esta_abierto(monkeypatch):
     fake = _FakeMT5()
     monkeypatch.setattr(snapshots, "_mt5_module", lambda: fake)
@@ -288,7 +320,9 @@ def test_exposure_agrega_por_subyacente():
     )
     assert data["ok"] and data["status"] == "ok"
     assert data["read_only"] is True
-    assert [a["account"] for a in data["accounts"]] == ["CFD-001"]
+    assert [a["account"] for a in data["accounts"]] == ["CFD-001", "CFD-006"]
+    assert data["accounts"][1]["ok"] is False
+    assert any("login" in note for note in data["accounts"][1]["notes"])
     nasdaq = data["by_underlying"]["NASDAQ100"]
     assert nasdaq["gross_notional_usd"] == 63_000.0
     assert nasdaq["net_notional_usd"] == 63_000.0

@@ -157,6 +157,14 @@ class AttachOnlyBroker(MT5Broker):
                 pass
         return self.health()
 
+    def health(self) -> dict:
+        payload = super().health()
+        account = _mt5_module().account_info()
+        payload["expected_login"] = self.expected_login
+        payload["expected_server"] = self.expected_server
+        payload["identity_ok"] = bool(account) and not self._attach_problems(account)
+        return payload
+
     def _attach_problems(self, account) -> list[str]:
         mode = {0: "demo", 1: "contest", 2: "real"}.get(int(account.trade_mode), "desconocido")
         problems: list[str] = []
@@ -179,11 +187,26 @@ def _expected_identity(settings: Settings) -> tuple[int, str] | None:
 
 
 def default_broker_factory(account: PropAccount, *, settings: Settings | None = None) -> AttachOnlyBroker:
-    """Crea el broker de solo lectura para la cuenta espejo de ``ftmo_demo``."""
+    """Crea el broker de solo lectura de la cuenta.
+
+    Si la cuenta declara ``terminal_path``/``login``/``server`` se usan esos
+    valores (FundingPips y futuras cuentas MT5). La cuenta espejo de
+    ``ftmo_demo`` mantiene el fallback a ``settings.mt5``.
+    """
+    if account.platform != "mt5":
+        raise MT5Error(f"Sin datos: {account.id} no es una cuenta MT5")
+    if account.terminal_path and account.login and account.server:
+        return AttachOnlyBroker(
+            expected_login=int(account.login),
+            expected_server=str(account.server).strip(),
+            path=account.terminal_path,
+            timeout_ms=5000,
+            server_utc_offset_hours=None,
+        )
     legacy = account.legacy_account or ""
     if legacy != CONNECTED_LEGACY_ACCOUNT:
         raise MT5Error(
-            f"Sin datos: identidad MT5 no configurada para {legacy or account.id}"
+            f"Sin datos: identidad MT5 no configurada para {account.id}"
         )
     settings = settings or Settings.load()
     expected = _expected_identity(settings)
@@ -426,6 +449,51 @@ def _trades_today(broker, now: datetime, tz_name: str) -> int:
     return count
 
 
+def _rules_from_account(account: PropAccount, health: dict):
+    """Reglas para cuentas sin ``legacy_account`` (FundingPips y futuras).
+
+    No inventa cifras: usa los límites declarados en ``accounts.yaml``. El
+    reset se ancla al offset del servidor detectado, con hora 00:00 como
+    supuesto técnico (marcado como no verificado en las notas).
+    """
+    from ..prop.rules import PropRules
+
+    size = float(account.nominal_size)
+    def pct(value: float | None) -> float:
+        return float(value) / size if value is not None and size else 0.0
+
+    offset = health.get("server_utc_offset_hours")
+    reset_tz = "UTC"
+    if offset is not None:
+        hours = int(round(float(offset)))
+        reset_tz = f"Etc/GMT{-hours:+d}"
+    drawdown = account.limits.drawdown_mode
+    if drawdown not in {"static", "trailing_eod", "trailing_intraday"}:
+        drawdown = "static"
+    return PropRules(
+        firm=account.firm,
+        program=account.program,
+        phase="challenge",
+        account_size=size,
+        profit_target_pct=pct(account.limits.profit_target),
+        max_daily_loss_pct=pct(account.limits.daily_loss),
+        max_loss_pct=pct(account.limits.max_loss),
+        max_loss_mode=drawdown,
+        min_trading_days=int(account.limits.min_trading_days or 0),
+        max_lots=account.limits.max_lots,
+        max_positions=account.risk.max_open_positions,
+        buffer_pct=account.risk.buffer_vs_firm_pct,
+        reset_tz=reset_tz,
+        reset_time="00:00",
+        automation_allowed=account.automation_acknowledged,
+        automation_note=account.notes[:500],
+        notes=(
+            "Reglas del programa Prop Fund; reset 00:00 del servidor como "
+            "supuesto técnico, no verificado en el contrato."
+        ),
+    )
+
+
 def build_account_snapshot(
     account: PropAccount,
     broker,
@@ -555,6 +623,24 @@ def collect_account(
     identity = {
         key: health.get(key) for key in ("login", "server", "mode", "connected")
     }
+    if account.login is not None and int(health.get("login") or 0) != int(account.login):
+        return AccountBundle(
+            account=account.id, legacy=account.legacy_account, firm=account.firm,
+            ok=False, snapshot=None, identity=identity,
+            notes=[
+                f"Sin datos: login {health.get('login')} no coincide con {account.login}"
+            ],
+            generated_at=generated,
+        )
+    if account.server and str(health.get("server") or "").strip().lower() != account.server.strip().lower():
+        return AccountBundle(
+            account=account.id, legacy=account.legacy_account, firm=account.firm,
+            ok=False, snapshot=None, identity=identity,
+            notes=[
+                f"Sin datos: servidor {health.get('server')} no coincide con {account.server}"
+            ],
+            generated_at=generated,
+        )
     if str(health.get("mode") or "") != "demo":
         return AccountBundle(
             account=account.id, legacy=account.legacy_account, firm=account.firm,
@@ -587,8 +673,10 @@ def collect_account(
 
     if rules is None:
         try:
-            legacy = account.legacy_account or ""
-            rules = rules_for_account(load_accounts()[legacy])
+            if account.legacy_account:
+                rules = rules_for_account(load_accounts()[account.legacy_account])
+            else:
+                rules = _rules_from_account(account, health)
         except Exception as exc:
             notes.append(f"Sin datos: reglas de cuenta no disponibles ({_note(exc)})")
 

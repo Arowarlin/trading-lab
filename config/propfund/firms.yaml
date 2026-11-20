@@ -116,7 +116,7 @@ firms:
     website: https://fundingpips.com
     platforms: [mt5, matchtrader, ctrader]
     execution_providers: [mt5]
-    rules_version: "2026-11-19.1"
+    rules_version: "2026-11-20.1"
     automation:
       permission: conditional
       status: verified_official
@@ -126,9 +126,49 @@ firms:
         - "Prohibido copiar operaciones con otras personas o gestión por terceros."
       copy_trading: prohibited
       sources:
-        - {url: "https://intercom.help/fundingpips/en/articles/8536000-what-are-the-forbidden-strategies", consulted_at: 2026-11-19, kind: official}
+        - {url: "https://help.fundingpips.com/hc/en-us/articles/34505029138449-Trading-Conduct-and-Security-Standards", consulted_at: 2026-11-20, kind: official}
     programs:
       - {id: fundingpips_2step, name: 2-Step, phases: [evaluation, verification, funded], platforms: [mt5]}
+      - id: fundingpips_trial
+        name: Free Trial (2 Step Standard / 2 Step Pro)
+        phases: [evaluation]
+        platforms: [mt5]
+        sizes: [5000, 10000, 25000, 50000, 100000, 200000]
+        automation:
+          permission: conditional
+          status: verified_official
+          conditions:
+            - "Trial gratuito: 2 Step Standard o 2 Step Pro, 14 días naturales por fase, solo MT5, servidor FundingPips-Trial."
+            - "Sin Master Account ni recompensas; las reglas de pérdida y objetivo son las del modelo elegido."
+            - "EA de terceros solo como gestor de operaciones/riesgo; automatización completa solo con EA propio y prueba de propiedad."
+            - "Sin restricciones de noticias en evaluación; el overnight/weekend holding está permitido en evaluación."
+          allowed_phases: [evaluation]
+          copy_trading: prohibited
+          sources:
+            - {url: "https://help.fundingpips.com/hc/en-us/articles/45363484760209-Free-Trial", consulted_at: 2026-11-20, kind: official}
+            - {url: "https://help.fundingpips.com/hc/en-us/articles/34505029138449-Trading-Conduct-and-Security-Standards", consulted_at: 2026-11-20, kind: official}
+        rules:
+          - {key: trial_time_limit_days, value: 14, unit: calendar_days_per_phase, phase: evaluation, status: verified_official, source: {url: "https://help.fundingpips.com/hc/en-us/articles/45363484760209-Free-Trial", consulted_at: 2026-11-20, kind: official}}
+          - {key: server, value: FundingPips-Trial, phase: evaluation, status: verified_official, source: {url: "https://help.fundingpips.com/hc/en-us/articles/45363484760209-Free-Trial", consulted_at: 2026-11-20, kind: official}}
+          - {key: profit_target_pct, value: 0.08, unit: fraction, phase: evaluation, status: verified_official, source: {url: "https://help.fundingpips.com/hc/en-us/articles/45363484760209-Free-Trial", consulted_at: 2026-11-20, kind: official}, notes: "2 Step Standard Trial, Phase 1"}
+          - {key: profit_target_pct, value: 0.05, unit: fraction, phase: evaluation, status: verified_official, source: {url: "https://help.fundingpips.com/hc/en-us/articles/45363484760209-Free-Trial", consulted_at: 2026-11-20, kind: official}, notes: "2 Step Standard Trial, Phase 2"}
+          - {key: profit_target_pct, value: 0.06, unit: fraction, phase: evaluation, status: verified_official, source: {url: "https://help.fundingpips.com/hc/en-us/articles/45363484760209-Free-Trial", consulted_at: 2026-11-20, kind: official}, notes: "2 Step Pro Trial, Phase 1 y Phase 2"}
+          - {key: max_daily_loss_pct, value: 0.05, unit: fraction, phase: evaluation, status: verified_official, source: {url: "https://help.fundingpips.com/hc/en-us/articles/45363484760209-Free-Trial", consulted_at: 2026-11-20, kind: official}, notes: "2 Step Standard Trial; el modelo admite add-on de 3%"}
+          - {key: max_daily_loss_pct, value: 0.03, unit: fraction, phase: evaluation, status: verified_official, source: {url: "https://help.fundingpips.com/hc/en-us/articles/45363484760209-Free-Trial", consulted_at: 2026-11-20, kind: official}, notes: "2 Step Pro Trial"}
+          - {key: max_loss_pct, value: 0.10, unit: fraction, phase: evaluation, status: verified_official, source: {url: "https://help.fundingpips.com/hc/en-us/articles/45363484760209-Free-Trial", consulted_at: 2026-11-20, kind: official}, notes: "2 Step Standard Trial, estático"}
+          - {key: max_loss_pct, value: 0.06, unit: fraction, phase: evaluation, status: verified_official, source: {url: "https://help.fundingpips.com/hc/en-us/articles/45363484760209-Free-Trial", consulted_at: 2026-11-20, kind: official}, notes: "2 Step Pro Trial, estático"}
+          - {key: min_trading_days, value: 3, unit: days_per_phase, phase: evaluation, status: verified_official, source: {url: "https://help.fundingpips.com/hc/en-us/articles/45363484760209-Free-Trial", consulted_at: 2026-11-20, kind: official}, notes: "2 Step Standard Trial"}
+          - {key: min_trading_days, value: 0, unit: days_per_phase, phase: evaluation, status: verified_official, source: {url: "https://help.fundingpips.com/hc/en-us/articles/45363484760209-Free-Trial", consulted_at: 2026-11-20, kind: official}, notes: "2 Step Pro Trial"}
+          - {key: leverage_forex, value: 100, unit: ratio, phase: evaluation, status: verified_official, source: {url: "https://help.fundingpips.com/hc/en-us/articles/34501809112081-2-Step-Standard", consulted_at: 2026-11-20, kind: official}}
+          - {key: leverage_metals, value: 30, unit: ratio, phase: evaluation, status: verified_official, source: {url: "https://help.fundingpips.com/hc/en-us/articles/34501809112081-2-Step-Standard", consulted_at: 2026-11-20, kind: official}}
+          - {key: leverage_indices, value: 20, unit: ratio, phase: evaluation, status: verified_official, source: {url: "https://help.fundingpips.com/hc/en-us/articles/34501809112081-2-Step-Standard", consulted_at: 2026-11-20, kind: official}}
+          - {key: leverage_energies, value: 10, unit: ratio, phase: evaluation, status: verified_official, source: {url: "https://help.fundingpips.com/hc/en-us/articles/34501809112081-2-Step-Standard", consulted_at: 2026-11-20, kind: official}}
+          - {key: leverage_crypto, value: 2, unit: ratio, phase: evaluation, status: verified_official, source: {url: "https://help.fundingpips.com/hc/en-us/articles/34501809112081-2-Step-Standard", consulted_at: 2026-11-20, kind: official}}
+          - {key: news_evaluation, value: "Sin restricciones en evaluación; en Master, ventana de 5 min antes/después y excepción de 5 h", phase: evaluation, status: verified_official, source: {url: "https://help.fundingpips.com/hc/en-us/articles/34501809112081-2-Step-Standard", consulted_at: 2026-11-20, kind: official}}
+          - {key: weekend_holding_evaluation, value: true, phase: evaluation, status: verified_official, source: {url: "https://help.fundingpips.com/hc/en-us/articles/34501809112081-2-Step-Standard", consulted_at: 2026-11-20, kind: official}}
+          - {key: ea_policy, value: "Terceros solo gestor de trades/riesgo; automatización completa solo con EA propio y prueba de propiedad", phase: evaluation, status: verified_official, source: {url: "https://help.fundingpips.com/hc/en-us/articles/34505029138449-Trading-Conduct-and-Security-Standards", consulted_at: 2026-11-20, kind: official}}
+          - {key: rewards, value: false, phase: evaluation, status: verified_official, source: {url: "https://help.fundingpips.com/hc/en-us/articles/45363484760209-Free-Trial", consulted_at: 2026-11-20, kind: official}, notes: "El Trial no paga recompensas ni convierte a Master"}
+          - {key: concurrent_accounts, value: 1, unit: trial, phase: evaluation, status: verified_official, source: {url: "https://help.fundingpips.com/hc/en-us/articles/45363484760209-Free-Trial", consulted_at: 2026-11-20, kind: official}}
 
   - id: fxify
     name: FXIFY

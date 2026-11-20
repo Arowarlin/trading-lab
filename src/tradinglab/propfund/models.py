@@ -185,6 +185,7 @@ class AccountLimits(_Strict):
     max_loss: float | None = None
     drawdown_mode: Literal["static", "trailing_eod", "trailing_intraday", "unknown"] = "unknown"
     profit_target: float | None = None
+    min_trading_days: int | None = None
     max_contracts: int | None = None
     max_lots: float | None = None
 
@@ -207,6 +208,12 @@ class PropAccount(_Strict):
     risk: RiskPolicy = Field(default_factory=RiskPolicy)
     automation_acknowledged: bool = False  # el operador confirmó las condiciones de la firma
     credentials_ref: str | None = None     # nombre en keyring, nunca el secreto
+    # Identidad del terminal para cuentas MT5 no FTMO (nunca password).
+    terminal_path: str | None = None
+    login: int | None = Field(default=None, gt=0)
+    server: str | None = None
+    broker_symbols: dict[str, str] = Field(default_factory=dict)
+    spread_source: str | None = None
     notes: str = ""
 
 

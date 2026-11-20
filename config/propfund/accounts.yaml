@@ -85,6 +85,39 @@ accounts:
     allowed_instruments: [EURUSD, GBPUSD, XAUUSD, US30]
     notes: "Plantilla. EA solo < 50K y con add-on de EA."
 
+  # --- FundingPips Free Trial (terminal Darwinex, cuenta real de demo) ------
+  - id: CFD-006
+    firm: fundingpips
+    program: fundingpips_trial
+    market: cfd
+    phase: evaluation
+    nominal_size: 100000
+    platform: mt5
+    execution_provider: mt5
+    connection_state: DEMO
+    legacy_account: null
+    template: false
+    protected: false
+    terminal_path: 'C:\Program Files\Darwinex MetaTrader 5\terminal64.exe'
+    login: 40000453530
+    server: FundingPips-Trial
+    allowed_instruments: [US100, US500, XAUUSD, EURUSD, GBPUSD, USDJPY]
+    broker_symbols: {US100: NDX100, US500: SPX500, XAUUSD: XAUUSD, EURUSD: EURUSD, GBPUSD: GBPUSD, USDJPY: USDJPY}
+    spread_source: broker:CFD-006
+    limits: {daily_loss: 3000, max_loss: 6000, drawdown_mode: static, profit_target: 6000, min_trading_days: 0, max_lots: 20}
+    risk: {per_trade_risk_pct: 0.005, daily_risk_pct: 0.02, max_trades_per_day: 3, max_open_positions: 3, buffer_vs_firm_pct: 0.20, max_cost_r: 0.20}
+    automation_acknowledged: false
+    notes: >
+      FundingPips Free Trial, cuenta 40000453530, servidor FundingPips-Trial,
+      100.000 USD, DEMO. El account_info no identifica si el modelo es 2 Step
+      Standard o 2 Step Pro (nombre "Guest U", leverage 100); se usan los límites
+      conservadores del Pro (daily 3%, max 6%, target 6%). Si el dashboard
+      confirma Standard, aplicar 5%/10%/8% P1 y 5% P2. Trial: 14 días por fase,
+      sin Master ni recompensas; EAs de terceros solo como gestor y
+      automatización completa solo con EA propio y prueba de propiedad; sin
+      restricciones de noticias en evaluación y overnight/weekend permitido.
+      Solo snapshot/spreads de lectura: no se enrutan órdenes a esta cuenta.
+
   # --- Plantillas Futures ---------------------------------------------------
   - id: FUT-001
     firm: topstep

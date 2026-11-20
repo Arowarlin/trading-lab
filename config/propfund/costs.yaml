@@ -45,6 +45,49 @@ accounts:
         measured_at: '2026-11-19T20:10:49+00:00'
         needs_verification: false
         slippage_price: 0.005
+  CFD-006:
+    symbols:
+      US100:
+        spread_price: 0.976485
+        spread_p75_price: 2.097528
+        needs_verification: false
+        source: 'spread: broker_spreads[broker:CFD-006] · NDX100 · p50 de medianas horarias y p75 de p75 horarios (23 h) · slippage: Sin datos'
+        slippage_price: null
+        measured_at: '2026-11-20T16:51:20+00:00'
+      US500:
+        spread_price: 1.279594
+        spread_p75_price: 1.282791
+        needs_verification: false
+        source: 'spread: broker_spreads[broker:CFD-006] · SPX500 · p50 de medianas horarias y p75 de p75 horarios (23 h) · slippage: Sin datos'
+        measured_at: '2026-11-20T16:51:21+00:00'
+      XAUUSD:
+        spread_price: 0.239329
+        spread_p75_price: 0.28961
+        needs_verification: false
+        source: 'spread: broker_spreads[broker:CFD-006] · XAUUSD · p50 de medianas horarias y p75 de p75 horarios (23 h) · slippage: Sin datos'
+        measured_at: '2026-11-20T16:51:21+00:00'
+        slippage_price: null
+      EURUSD:
+        spread_price: 0.00001
+        spread_p75_price: 0.00002
+        needs_verification: false
+        source: 'spread: broker_spreads[broker:CFD-006] · EURUSD · p50 de medianas horarias y p75 de p75 horarios (24 h) · slippage: Sin datos'
+        measured_at: '2026-11-20T16:51:19+00:00'
+        slippage_price: null
+      GBPUSD:
+        spread_price: 0.00001
+        spread_p75_price: 0.00005
+        needs_verification: false
+        source: 'spread: broker_spreads[broker:CFD-006] · GBPUSD · p50 de medianas horarias y p75 de p75 horarios (24 h) · slippage: Sin datos'
+        measured_at: '2026-11-20T16:51:21+00:00'
+        slippage_price: null
+      USDJPY:
+        spread_price: 0.000999
+        spread_p75_price: 0.004983
+        needs_verification: false
+        source: 'spread: broker_spreads[broker:CFD-006] · USDJPY · p50 de medianas horarias y p75 de p75 horarios (24 h) · slippage: Sin datos'
+        measured_at: '2026-11-20T16:51:21+00:00'
+        slippage_price: null
   FUT-001:
     symbols:
       MNQ: {commission_value: null, exchange_fee_per_side: null, clearing_fee_per_side: null, nfa_fee_per_side: null, slippage_ticks: 1, source: "Comisiones Topstep Sin datos: verificar en el contrato"}

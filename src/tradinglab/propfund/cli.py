@@ -10,7 +10,13 @@ from rich.table import Table
 
 from . import protected
 from .console import payload
-from .measure import sync_spreads as sync_spreads_report
+from .measure import (
+    compare_spreads,
+    measure_account_spreads,
+)
+from .measure import (
+    sync_spreads as sync_spreads_report,
+)
 from .registry import load_registry
 from .router import Signal, log_decisions, route
 
@@ -242,18 +248,57 @@ def sync_spreads_cmd(
         False, "--write",
         help="Escribe en config/propfund/costs.yaml. Sin esta opción solo simula.",
     ),
+    measure: bool = typer.Option(
+        False, "--measure",
+        help="Mide ticks del terminal de la cuenta antes de sincronizar.",
+    ),
+    days: int = typer.Option(
+        1, "--days", min=1, max=30,
+        help="Días de ticks a medir con --measure.",
+    ),
+    vs: str = typer.Option(
+        None, "--vs",
+        help="Cuenta para la tabla comparativa (p. ej. CFD-001).",
+    ),
     as_json: bool = typer.Option(False, "--json"),
 ) -> None:
     """Mide spreads desde broker_spreads y los convierte a precio (dry-run)."""
+    measured = None
+    close_prices = None
+    if measure:
+        try:
+            measured = measure_account_spreads(account, days=days)
+            close_prices = measured.get("close_prices") or {}
+        except Exception as exc:
+            console.print(f"[red]No se pudo medir el terminal de {account}:[/red] {exc}")
+            raise typer.Exit(2) from exc
     try:
-        report = sync_spreads_report(account, write=write)
+        if close_prices is None:
+            report = sync_spreads_report(account, write=write)
+        else:
+            report = sync_spreads_report(account, write=write, close_prices=close_prices)
     except (ValueError, KeyError) as exc:
         console.print(f"[red]{exc}[/red]")
         raise typer.Exit(2) from exc
+    if measured is not None:
+        report["measurement"] = measured
+    if vs:
+        try:
+            report["comparison"] = compare_spreads([account, vs])
+        except (ValueError, KeyError) as exc:
+            console.print(f"[red]Comparativa:[/red] {exc}")
+            raise typer.Exit(2) from exc
     if as_json:
         console.print_json(json.dumps(report, default=str))
         return
     out = Console(width=150)
+    if measured is not None:
+        identity = measured.get("identity") or {}
+        out.print(
+            f"[bold]Medición {account}:[/bold] {measured.get('source')} · "
+            f"{measured.get('days')} días · login={identity.get('login')} "
+            f"server={identity.get('server')} · sin shutdown"
+        )
     t = Table(title=f"Spreads medidos · {account} · {'ESCRITURA' if write else 'dry-run'}")
     for col in ("Símbolo", "Bróker", "Horas", "p50 bps", "p75 bps", "Cierre", "Spread", "Spread p75", "Estado"):
         t.add_column(col, no_wrap=True)
@@ -269,6 +314,35 @@ def sync_spreads_cmd(
     out.print(t)
     for warning in report["warnings"]:
         out.print(f"[yellow]Aviso:[/yellow] {warning}")
+    comparison = report.get("comparison")
+    if comparison:
+        t2 = Table(title=f"Comparativa p50/p75 · {account} vs {vs}")
+        t2.add_column("Símbolo", no_wrap=True)
+        t2.add_column(f"{account} p50", no_wrap=True)
+        t2.add_column(f"{vs} p50", no_wrap=True)
+        t2.add_column("Δ p50", no_wrap=True)
+        t2.add_column(f"{account} p75", no_wrap=True)
+        t2.add_column(f"{vs} p75", no_wrap=True)
+        for symbol in comparison["symbols"]:
+            rows = {row["account"]: row for row in comparison["rows"] if row["symbol"] == symbol}
+            left = rows.get(account) or {}
+            right = rows.get(vs) or {}
+            left_p50 = left.get("p50_bps")
+            right_p50 = right.get("p50_bps")
+            delta = (
+                f"{float(left_p50) - float(right_p50):+.4f}"
+                if left_p50 is not None and right_p50 is not None
+                else "Sin datos"
+            )
+            t2.add_row(
+                symbol,
+                _fmt_bps(left_p50),
+                _fmt_bps(right_p50),
+                delta,
+                _fmt_bps(left.get("p75_bps")),
+                _fmt_bps(right.get("p75_bps")),
+            )
+        out.print(t2)
     if write:
         written = ", ".join(report["planned"]) or "ninguno"
         out.print(f"Escrito en {report['costs_path']} · símbolos: {written}")

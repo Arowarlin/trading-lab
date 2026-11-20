@@ -252,6 +252,141 @@ def test_cuenta_sin_bloque_en_costs_se_rechaza(tmp_path):
         )
 
 
+# ---------------------------------------------------------------- multi-terminal
+def test_sync_spreads_usa_alias_y_source_de_la_cuenta(tmp_path):
+    costs = tmp_path / "costs.yaml"
+    costs.write_text(
+        "accounts:\n  CFD-006:\n    symbols:\n"
+        "      US100: {spread_price: null, spread_p75_price: null}\n",
+        encoding="utf-8",
+    )
+    db = tmp_path / "lab.db"
+    persist_spreads(
+        [
+            {
+                "symbol": "NDX100", "hour_utc": 0, "median_bps": 10.0,
+                "p75_bps": 12.0, "n_ticks": 10,
+                "from_ts": "2026-11-20T00:00:00+00:00",
+                "to_ts": "2026-11-20T00:30:00+00:00",
+                "source": "broker:CFD-006",
+            }
+        ],
+        db_path=db,
+    )
+    account = SimpleNamespace(
+        id="CFD-006", firm="fundingpips", market=Market.CFD,
+        allowed_instruments=["US100"],
+        spread_source="broker:CFD-006",
+        broker_symbols={"US100": "NDX100"},
+    )
+    registry = SimpleNamespace(accounts={"CFD-006": account})
+    report = measure.sync_spreads(
+        "CFD-006",
+        db_path=db,
+        costs_path=costs,
+        ai_trader_path=_ai_trader(tmp_path),
+        registry=registry,
+        close_prices={"US100": 20000.0},
+    )
+
+    row = report["symbols"][0]
+    assert row["broker_symbol"] == "NDX100"
+    assert row["p50_bps"] == pytest.approx(10.0)
+    assert "broker:CFD-006" in row["source"]
+    assert row["spread_price"] == pytest.approx(20.0)
+
+
+class _FakeMeasureBroker:
+    def __init__(self):
+        self.shutdown_called = False
+
+    def connect(self):
+        return {"login": 40000453530, "server": "FundingPips-Trial", "mode": "demo", "connected": True}
+
+    def copy_ticks(self, symbol, start, end):
+        return pd.DataFrame(
+            {
+                "ts": [
+                    pd.Timestamp("2026-11-20T10:00:00Z"),
+                    pd.Timestamp("2026-11-20T10:30:00Z"),
+                ],
+                "bid": [19999.0, 19999.0],
+                "ask": [20019.0, 20019.0],
+            }
+        )
+
+    def rates(self, symbol, timeframe="M5", count=10):
+        index = pd.DatetimeIndex(
+            [pd.Timestamp("2026-11-20T11:50:00Z"), pd.Timestamp("2026-11-20T11:55:00Z")]
+        )
+        return pd.DataFrame({"close": [20000.0, 20010.0]}, index=index)
+
+    def shutdown(self):  # pragma: no cover - no debe llamarse
+        self.shutdown_called = True
+        raise AssertionError("measure_account_spreads no debe llamar a shutdown")
+
+
+def test_measure_account_spreads_inyecta_broker_sin_shutdown(tmp_path):
+    account = SimpleNamespace(
+        id="CFD-006", firm="fundingpips", market=Market.CFD,
+        allowed_instruments=["US100"],
+        spread_source="broker:CFD-006",
+        broker_symbols={"US100": "NDX100"},
+    )
+    registry = SimpleNamespace(accounts={"CFD-006": account})
+    broker = _FakeMeasureBroker()
+    db = tmp_path / "lab.db"
+    report = measure.measure_account_spreads(
+        "CFD-006",
+        db_path=db,
+        broker=broker,
+        registry=registry,
+        now=datetime(2026, 11, 20, 11, 58, tzinfo=timezone.utc),
+    )
+
+    assert broker.shutdown_called is False
+    assert report["source"] == "broker:CFD-006"
+    assert report["close_prices"]["US100"] == pytest.approx(20000.0)
+    assert report["symbols"][0]["p50_bps"] == pytest.approx(10.0, rel=1e-3)
+    rows = load_spreads(db, symbol="NDX100", source="broker:CFD-006")
+    assert len(rows) == 1
+
+
+def test_compare_spreads_ftmo_vs_fundingpips(tmp_path):
+    db = tmp_path / "lab.db"
+    persist_spreads(_rows(), db_path=db)
+    persist_spreads(
+        [
+            {
+                "symbol": "NDX100", "hour_utc": 0, "median_bps": 10.0,
+                "p75_bps": 12.0, "n_ticks": 10,
+                "from_ts": "2026-11-20T00:00:00+00:00",
+                "to_ts": "2026-11-20T00:30:00+00:00",
+                "source": "broker:CFD-006",
+            }
+        ],
+        db_path=db,
+    )
+    ftmo = SimpleNamespace(
+        id="CFD-001", firm="ftmo", allowed_instruments=["US100"],
+        spread_source=None, broker_symbols={},
+    )
+    funding = SimpleNamespace(
+        id="CFD-006", firm="fundingpips", allowed_instruments=["US100"],
+        spread_source="broker:CFD-006", broker_symbols={"US100": "NDX100"},
+    )
+    registry = SimpleNamespace(accounts={"CFD-001": ftmo, "CFD-006": funding})
+    report = measure.compare_spreads(
+        ["CFD-001", "CFD-006"], symbols=["US100"], db_path=db, registry=registry
+    )
+
+    assert report["symbols"] == ["US100"]
+    by_account = {row["account"]: row for row in report["rows"]}
+    assert by_account["CFD-001"]["p50_bps"] == pytest.approx(25.0)
+    assert by_account["CFD-006"]["p50_bps"] == pytest.approx(10.0)
+    assert by_account["CFD-006"]["broker_symbol"] == "NDX100"
+
+
 # ---------------------------------------------------------------- CLI
 def test_cli_dry_run_por_defecto(monkeypatch):
     from typer.testing import CliRunner

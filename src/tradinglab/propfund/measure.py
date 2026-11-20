@@ -20,13 +20,20 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pandas as pd
 import yaml
 
-from ..broker_costs import DB_PATH, SOURCE_BROKER, load_spreads
+from ..broker_costs import (
+    DB_PATH,
+    SOURCE_BROKER,
+    hourly_spreads,
+    load_spreads,
+    persist_spreads,
+    spread_summary,
+)
 from ..config import ROOT
 from .costs import PROPFUND_COSTS_PATH, broker_symbol
 from .instruments import resolve
@@ -268,6 +275,178 @@ def _apply_updates(text: str, account_id: str, updates: dict[str, dict]) -> str:
     return newline.join(lines)
 
 
+# --------------------------------------------------------- medición multi-terminal
+def _last_close_from_terminal(broker, broker_name: str, now_ts: pd.Timestamp) -> dict | None:
+    """Último cierre M5 completado leído del terminal de la cuenta.
+
+    Intenta ``broker.rates`` (que infiere offsets semanales) y, si el bróker no
+    encaja en esa inferencia, lee ``copy_rates_from_pos`` directamente. El
+    precio no depende del offset; solo se usa para convertir bps a precio.
+    """
+    try:
+        frame = broker.rates(broker_name, "M5", 10)
+    except Exception:
+        frame = None
+    if frame is not None and len(frame):
+        index = pd.DatetimeIndex(pd.to_datetime(frame.index, utc=True))
+        for position in range(len(index) - 1, -1, -1):
+            close_ts = index[position] + pd.Timedelta(minutes=5)
+            if close_ts > now_ts:
+                continue
+            price = float(frame["close"].iloc[position])
+            if math.isfinite(price) and price > 0:
+                return {
+                    "price": price,
+                    "close_ts": close_ts.isoformat(),
+                    "timeframe": "M5",
+                }
+    try:
+        import MetaTrader5 as mt5
+
+        rates = mt5.copy_rates_from_pos(broker_name, mt5.TIMEFRAME_M5, 0, 5)
+    except Exception:
+        return None
+    if rates is None or len(rates) < 2:
+        return None
+    bar = rates[-2]
+    price = float(bar["close"])
+    if not math.isfinite(price) or price <= 0:
+        return None
+    stamp = pd.Timestamp(int(bar["time"]), unit="s", tz="UTC")
+    return {
+        "price": price,
+        "close_ts": stamp.isoformat(),
+        "timeframe": "M5",
+    }
+
+
+def measure_account_spreads(
+    account_id: str,
+    *,
+    days: int = 1,
+    db_path: str | Path = DB_PATH,
+    broker=None,
+    now=None,
+    registry=None,
+) -> dict:
+    """Mide ticks del terminal de la cuenta y los guarda en ``broker_spreads``.
+
+    Usa ``source = account.spread_source`` (p. ej. ``broker:CFD-006``) para no
+    mezclar las mediciones con las de FTMO. No pasa credenciales a MT5 y no
+    llama a ``shutdown``: solo adjunta el terminal y lee.
+    """
+    if days <= 0:
+        raise ValueError("days debe ser > 0")
+    reg = registry or load_registry()
+    account = reg.accounts.get(account_id)
+    if account is None:
+        raise ValueError(f"{account_id}: cuenta no registrada en config/propfund/accounts.yaml")
+    if account.market is not Market.CFD:
+        raise ValueError(f"{account_id}: measure-spreads solo aplica a cuentas CFD")
+    source = getattr(account, "spread_source", None) or SOURCE_BROKER
+    broker_symbols = getattr(account, "broker_symbols", {}) or {}
+    if broker is None:
+        from .snapshots import default_broker_factory
+
+        broker = default_broker_factory(account)
+    health = broker.connect()
+    now_ts = _utc(now or datetime.now(timezone.utc))
+    start = now_ts - timedelta(days=int(days))
+    rows: list[dict] = []
+    close_prices: dict[str, float] = {}
+    for symbol in account.allowed_instruments:
+        item = resolve(symbol)
+        if item.market is not Market.CFD:
+            continue
+        broker_name = broker_symbols.get(item.id) or broker_symbol(item.id)
+        try:
+            frame = broker.copy_ticks(
+                broker_name,
+                start.to_pydatetime(),
+                now_ts.to_pydatetime(),
+            )
+            summary = spread_summary(frame, broker_name, source=source)
+            spread_rows = hourly_spreads(frame, broker_name, source=source)
+            if len(spread_rows):
+                persist_spreads(spread_rows, db_path)
+            last = _last_close_from_terminal(broker, broker_name, now_ts)
+        except Exception as exc:
+            rows.append(
+                {
+                    "symbol": item.id,
+                    "broker_symbol": broker_name,
+                    "status": "Sin datos",
+                    "error": str(exc)[:200],
+                }
+            )
+            continue
+        if last:
+            close_prices[item.id] = float(last["price"])
+        rows.append(
+            {
+                "symbol": item.id,
+                "broker_symbol": broker_name,
+                "status": summary["status"],
+                "hours": summary["hours_with_data"],
+                "ticks": summary["n_ticks"],
+                "p50_bps": summary["median_bps"],
+                "p75_bps": summary["p75_bps"],
+                "last_close": last["price"] if last else None,
+                "last_close_ts": last["close_ts"] if last else None,
+            }
+        )
+    return {
+        "account": account_id,
+        "source": source,
+        "days": int(days),
+        "window": {"from": start.isoformat(), "to": now_ts.isoformat()},
+        "identity": health,
+        "symbols": rows,
+        "close_prices": close_prices,
+        "read_only": True,
+    }
+
+
+def compare_spreads(
+    account_ids: list[str],
+    *,
+    symbols: list[str] | None = None,
+    db_path: str | Path = DB_PATH,
+    registry=None,
+) -> dict:
+    """Compara p50/p75 de ``broker_spreads`` entre cuentas, sin MT5."""
+    reg = registry or load_registry()
+    accounts = []
+    for account_id in account_ids:
+        account = reg.accounts.get(account_id)
+        if account is None:
+            raise ValueError(f"{account_id}: cuenta no registrada")
+        accounts.append(account)
+    canonical = list(
+        symbols
+        or sorted({symbol for account in accounts for symbol in account.allowed_instruments})
+    )
+    rows: list[dict] = []
+    for symbol in canonical:
+        item = resolve(symbol)
+        for account in accounts:
+            source = getattr(account, "spread_source", None) or SOURCE_BROKER
+            broker_symbols = getattr(account, "broker_symbols", {}) or {}
+            broker_name = broker_symbols.get(item.id) or broker_symbol(item.id)
+            stats = spread_stats(load_spreads(db_path, symbol=broker_name, source=source))
+            rows.append(
+                {
+                    "symbol": item.id,
+                    "account": account.id,
+                    "firm": account.firm,
+                    "broker_symbol": broker_name,
+                    "source": source,
+                    **stats,
+                }
+            )
+    return {"symbols": canonical, "accounts": [account.id for account in accounts], "rows": rows}
+
+
 # ------------------------------------------------------------------ sincronización
 def sync_spreads(
     account_id: str,
@@ -277,7 +456,7 @@ def sync_spreads(
     costs_path: str | Path = PROPFUND_COSTS_PATH,
     cache_dir: str | Path = MT5_CACHE_DIR,
     ai_trader_path: str | Path = AI_TRADER_PATH,
-    source: str = SOURCE_BROKER,
+    source: str | None = None,
     now=None,
     close_prices: dict[str, float] | None = None,
     registry=None,
@@ -286,7 +465,7 @@ def sync_spreads(
 
     Dry-run por defecto. Devuelve el informe con un registro por símbolo.
     ``close_prices`` permite inyectar cierres en tests; en producción se leen
-    de la caché local de MT5.
+    de la caché local de MT5 o del terminal de la cuenta.
     """
     reg = registry or load_registry()
     account = reg.accounts.get(account_id)
@@ -294,6 +473,10 @@ def sync_spreads(
         raise ValueError(f"{account_id}: cuenta no registrada en config/propfund/accounts.yaml")
     if account.market is not Market.CFD:
         raise ValueError(f"{account_id}: sync-spreads solo aplica a cuentas CFD")
+    source = source or getattr(account, "spread_source", None) or SOURCE_BROKER
+    broker_symbols = getattr(account, "broker_symbols", {}) or {}
+    # El slippage de ai_trader.yaml es del carril FTMO; no se copia a otras firmas.
+    use_ai_slippage = str(getattr(account, "firm", "")).lower() == "ftmo"
 
     costs_file = Path(costs_path)
     with costs_file.open("r", encoding="utf-8", newline="") as handle:
@@ -323,22 +506,28 @@ def sync_spreads(
             continue
         if item.market is not Market.CFD:
             continue
-        broker = broker_symbol(item.id)
+        broker_name = broker_symbols.get(item.id) or broker_symbol(item.id)
         current = dict(existing.get(item.id) or {})
-        stats = spread_stats(load_spreads(db_path, symbol=broker, source=source))
+        stats = spread_stats(load_spreads(db_path, symbol=broker_name, source=source))
 
         if close_prices is not None:
             price = close_prices.get(item.id)
             last = {"price": float(price), "close_ts": None, "timeframe": "inyectado"} if price else None
         else:
-            last = read_last_close(cache_dir, broker, now=now_ts)
+            last = read_last_close(cache_dir, broker_name, now=now_ts)
 
-        slippage = slippages.get(item.id)
-        if slippage is None and current.get("slippage_price") is not None:
+        slippage = slippages.get(item.id) if use_ai_slippage else None
+        existing_source = str(current.get("source") or "")
+        if (
+            slippage is None
+            and current.get("slippage_price") is not None
+            and (use_ai_slippage or "ai_trader" not in existing_source)
+        ):
             slippage = float(current["slippage_price"])
         slippage_source = (
             "config/ai_trader.yaml global.slippage_price"
-            if item.id in slippages else ("costs.yaml" if slippage is not None else "Sin datos")
+            if use_ai_slippage and item.id in slippages
+            else ("costs.yaml" if slippage is not None else "Sin datos")
         )
 
         status = "sin datos"
@@ -346,13 +535,13 @@ def sync_spreads(
         spread_p75_price = None
         if stats["p50_bps"] is None or stats["p75_bps"] is None:
             source_text = (
-                f"spread: Sin datos (broker_spreads sin filas para {broker}) "
+                f"spread: Sin datos (broker_spreads[{source}] sin filas para {broker_name}) "
                 f"· slippage: {slippage_source}"
             )
         elif last is None:
             status = "sin cierre"
             source_text = (
-                f"spread: Sin datos de cierre local para convertir bps ({broker}) "
+                f"spread: Sin datos de cierre local para convertir bps ({broker_name}) "
                 f"· slippage: {slippage_source}"
             )
         else:
@@ -360,14 +549,14 @@ def sync_spreads(
             spread_price = price_from_bps(stats["p50_bps"], last["price"])
             spread_p75_price = price_from_bps(stats["p75_bps"], last["price"])
             source_text = (
-                f"spread: broker_spreads · {broker} · p50 de medianas horarias y "
+                f"spread: broker_spreads[{source}] · {broker_name} · p50 de medianas horarias y "
                 f"p75 de p75 horarios ({stats['hours']} h) "
                 f"· slippage: {slippage_source}"
             )
 
         measure = SymbolMeasure(
             symbol=item.id,
-            broker_symbol=broker,
+            broker_symbol=broker_name,
             status=status,
             hours=stats["hours"],
             ticks=stats["ticks"],
@@ -397,6 +586,8 @@ def sync_spreads(
             }
             if slippage is not None:
                 update["slippage_price"] = slippage
+            elif not use_ai_slippage and current.get("slippage_price") is not None:
+                update["slippage_price"] = None
             updates[item.id] = update
         else:
             warnings.append(f"{item.id}: {'Sin datos' if status == 'sin datos' else 'sin cierre local'}")
@@ -409,6 +600,8 @@ def sync_spreads(
                 }
                 if slippage is not None:
                     update["slippage_price"] = slippage
+                elif not use_ai_slippage and current.get("slippage_price") is not None:
+                    update["slippage_price"] = None
                 updates[item.id] = update
 
         if measure.stale_hours is not None and measure.stale_hours > STALE_HOURS:
@@ -448,7 +641,9 @@ __all__ = [
     "MT5_CACHE_DIR",
     "STALE_HOURS",
     "SymbolMeasure",
+    "compare_spreads",
     "load_slippage_prices",
+    "measure_account_spreads",
     "price_from_bps",
     "read_last_close",
     "spread_stats",
