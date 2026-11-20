@@ -74,6 +74,7 @@ CREATE TABLE IF NOT EXISTS disc_strategies (
     level INTEGER NOT NULL DEFAULT 1,
     status TEXT NOT NULL DEFAULT 'generated',
     reject_reason TEXT,
+    selection_reason TEXT,
     created_at TEXT NOT NULL,
     UNIQUE(campaign_id, strategy_hash)
 );
@@ -87,7 +88,11 @@ CREATE TABLE IF NOT EXISTS disc_lineage (
     parent_b INTEGER,
     operator TEXT,
     param_diff_json TEXT,
-    generation INTEGER NOT NULL DEFAULT 0
+    generation INTEGER NOT NULL DEFAULT 0,
+    fitness_json TEXT,
+    rank INTEGER,
+    crowding REAL,
+    reason TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_disc_lineage_strategy
     ON disc_lineage(strategy_id);
@@ -208,6 +213,24 @@ def _migrate_campaigns(con: sqlite3.Connection) -> None:
     ):
         if column not in columns:
             con.execute(f"ALTER TABLE disc_campaigns ADD COLUMN {column} {kind}")
+    strategy_columns = [
+        row["name"]
+        for row in con.execute("PRAGMA table_info(disc_strategies)").fetchall()
+    ]
+    if "selection_reason" not in strategy_columns:
+        con.execute("ALTER TABLE disc_strategies ADD COLUMN selection_reason TEXT")
+    lineage_columns = [
+        row["name"]
+        for row in con.execute("PRAGMA table_info(disc_lineage)").fetchall()
+    ]
+    for column, kind in (
+        ("fitness_json", "TEXT"),
+        ("rank", "INTEGER"),
+        ("crowding", "REAL"),
+        ("reason", "TEXT"),
+    ):
+        if column not in lineage_columns:
+            con.execute(f"ALTER TABLE disc_lineage ADD COLUMN {column} {kind}")
     con.execute(
         "CREATE TRIGGER IF NOT EXISTS disc_campaigns_n_total_immutable "
         "BEFORE UPDATE OF n_total ON disc_campaigns "
@@ -615,6 +638,46 @@ def set_status(
         )
 
 
+def set_strategy_selection(
+    strategy_id: int,
+    status: str,
+    reason: str,
+    *,
+    db_path: str | Path | None = None,
+    con: sqlite3.Connection | None = None,
+) -> None:
+    """Estado final y motivo de selección/descarte de un candidato."""
+
+    target = _resolve_target(db_path, con)
+    with _connection(target, con) as opened:
+        opened.execute(
+            "UPDATE disc_strategies SET status = ?, selection_reason = ? WHERE id = ?",
+            (str(status), str(reason)[:2000], int(strategy_id)),
+        )
+
+
+def set_campaign_counts(
+    campaign_id: str,
+    *,
+    n_evaluated: int | None = None,
+    n_effective: int | None = None,
+    db_path: str | Path | None = None,
+    con: sqlite3.Connection | None = None,
+) -> None:
+    target = _resolve_target(db_path, con)
+    with _connection(target, con) as opened:
+        opened.execute(
+            "UPDATE disc_campaigns SET"
+            " n_evaluated = COALESCE(?, n_evaluated),"
+            " n_effective = COALESCE(?, n_effective) WHERE id = ?",
+            (
+                None if n_evaluated is None else int(n_evaluated),
+                None if n_effective is None else int(n_effective),
+                str(campaign_id),
+            ),
+        )
+
+
 def add_lineage(
     strategy_id: int,
     *,
@@ -623,6 +686,10 @@ def add_lineage(
     operator: str | None,
     param_diff: dict[str, Any] | None = None,
     generation: int = 0,
+    fitness: dict[str, Any] | None = None,
+    rank: int | None = None,
+    crowding: float | None = None,
+    reason: str | None = None,
     db_path: str | Path | None = None,
     con: sqlite3.Connection | None = None,
 ) -> int:
@@ -631,12 +698,18 @@ def add_lineage(
         if param_diff is None
         else json.dumps(param_diff, sort_keys=True, ensure_ascii=False)
     )
+    fitness_payload = (
+        None
+        if fitness is None
+        else json.dumps(fitness, sort_keys=True, ensure_ascii=False, allow_nan=True)
+    )
     target = _resolve_target(db_path, con)
     with _connection(target, con) as opened:
         cursor = opened.execute(
             "INSERT INTO disc_lineage"
-            "(strategy_id, parent_a, parent_b, operator, param_diff_json, generation) "
-            "VALUES(?,?,?,?,?,?)",
+            "(strategy_id, parent_a, parent_b, operator, param_diff_json,"
+            " generation, fitness_json, rank, crowding, reason) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?)",
             (
                 int(strategy_id),
                 None if parent_a is None else int(parent_a),
@@ -644,6 +717,10 @@ def add_lineage(
                 operator,
                 payload,
                 int(generation),
+                fitness_payload,
+                None if rank is None else int(rank),
+                crowding,
+                reason,
             ),
         )
         return int(cursor.lastrowid)
@@ -665,6 +742,7 @@ def lineage(
     for row in rows:
         data = dict(row)
         data["param_diff"] = json.loads(data.pop("param_diff_json") or "{}")
+        data["fitness"] = json.loads(data.pop("fitness_json") or "{}")
         result.append(data)
     return result
 
@@ -768,5 +846,7 @@ __all__ = [
     "list_strategies",
     "set_campaign_rejected",
     "set_campaign_status",
+    "set_campaign_counts",
     "set_status",
+    "set_strategy_selection",
 ]

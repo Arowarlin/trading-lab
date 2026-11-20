@@ -32,6 +32,10 @@ validation:
   finalists_max: 5
   corr_cluster: 0.7
 
+fitness:
+  # Restricción dura: mediana de (coste ida y vuelta / distancia del stop) en R.
+  cost_r_max: 0.10
+
 data_quality:
   # Un hueco es un salto entre velas consecutivas > gap_factor × timeframe.
   gap_factor: 3

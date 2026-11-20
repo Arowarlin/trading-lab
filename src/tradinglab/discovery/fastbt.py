@@ -137,6 +137,7 @@ class RunLimits:
     max_trades_per_day: int | None = None
     cooldown_bars: int = 0
     close_at_end: bool = True
+    end_index: int | None = None
     execution: str = "open_next"  # open_next | close_signal
     series_ledger: bool = False
 
@@ -553,6 +554,7 @@ def _core(
     close_at_end,
     market_cfd,
     start_idx,
+    end_idx,
 ):
     n = close.shape[0]
     ent_i = np.full(n, -1, dtype=np.int64)
@@ -584,7 +586,7 @@ def _core(
     last_entry_i = -1_000_000_000
 
     if close_mode == 1:
-        for i in range(n):
+        for i in range(end_idx + 1):
             if pos == 0:
                 if i >= start_idx and allowed_entry[i] and (long_sig[i] or short_sig[i]):
                     pos = 1 if long_sig[i] else -1
@@ -606,8 +608,8 @@ def _core(
                 held[count] = i - entry_i
                 count += 1
                 pos = 0
-        if close_at_end == 1 and pos != 0 and n > 0:
-            last = n - 1
+        if close_at_end == 1 and pos != 0 and end_idx >= 0:
+            last = end_idx
             if last > entry_i:
                 ex_i[count] = last
                 ent_i[count] = entry_i
@@ -647,7 +649,7 @@ def _core(
     cur_day = -1
     day_count = 0
 
-    for i in range(n):
+    for i in range(end_idx + 1):
         if day_id[i] != cur_day:
             cur_day = day_id[i]
             day_count = 0
@@ -858,8 +860,8 @@ def _core(
         else:
             pending = 0
 
-    if close_at_end == 1 and pos != 0 and n > 0:
-        last = n - 1
+    if close_at_end == 1 and pos != 0 and end_idx >= 0:
+        last = end_idx
         if last > entry_i:
             ex_b = stop_bps[last]
             px = close[last]
@@ -1099,6 +1101,13 @@ def _prepare(
     if prepared is not None and prepared.bars is not bars:
         raise FastBtError("prepared no corresponde a estas barras")
     n = len(bars)
+    if limits.end_index is None:
+        end_idx = n - 1
+    else:
+        end_idx = int(limits.end_index)
+        if end_idx < 0:
+            raise FastBtError("end_index no puede ser negativo")
+        end_idx = min(end_idx, n - 1)
     long_arr, short_arr, start = _signal_arrays(signals, n)
     if limits.execution not in {"open_next", "close_signal"}:
         raise FastBtError(f"execution inválido: {limits.execution!r}")
@@ -1182,6 +1191,7 @@ def _prepare(
         "close_at_end": 1 if limits.close_at_end else 0,
         "market_cfd": 1 if market == "cfd" else 0,
         "start_idx": start,
+        "end_idx": int(end_idx),
     }
     return payload, n, 1 if limits.execution == "close_signal" else 0
 
@@ -1246,6 +1256,7 @@ def run(
         payload["close_at_end"],
         payload["market_cfd"],
         payload["start_idx"],
+        payload["end_idx"],
     )
     (
         count,

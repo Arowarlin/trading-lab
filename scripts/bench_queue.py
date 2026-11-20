@@ -9,8 +9,6 @@ reales, no escribe en el repo y no se registra como tarea.
 from __future__ import annotations
 
 import copy
-import subprocess
-import sys
 import tempfile
 import time
 from pathlib import Path
@@ -62,6 +60,50 @@ def _strategies(count: int) -> list[dict]:
     return result
 
 
+def _measure(
+    db: Path,
+    frame: pd.DataFrame,
+    strategies: list[dict],
+    *,
+    campaign_id: str,
+    cache_limit_bytes: int | None,
+    workers: int,
+) -> dict:
+    campaigns.register_synthetic(
+        frame,
+        template="ny_open_vol_filter",
+        profile="small",
+        segments=SEGMENTS,
+        campaign_id=campaign_id,
+        db_path=db,
+    )
+    added = jobs.enqueue(campaign_id, strategies, db_path=db)
+    started = time.perf_counter()
+    summary = jobs.run_queue(
+        campaign_id,
+        workers,
+        bars=frame,
+        db_path=db,
+        batch_size=32,
+        cache_limit_bytes=cache_limit_bytes,
+    )
+    elapsed = time.perf_counter() - started
+    written = databank.list_strategies(
+        campaign_id=campaign_id, limit=None, db_path=db
+    )
+    evaluations = sum(
+        len(databank.list_evaluations(row["id"], db_path=db))
+        for row in written
+    )
+    return {
+        "added": added,
+        "elapsed": elapsed,
+        "summary": summary,
+        "strategies": len(written),
+        "evaluations": evaluations,
+    }
+
+
 def main() -> int:
     bars = BARS_PER_YEAR_M5 * FRAME_YEARS
     count = 120
@@ -73,64 +115,40 @@ def main() -> int:
         f"frame: {bars:,} barras M5 ({bars / BARS_PER_YEAR_M5:.2f} años) · "
         f"IS: 3 años · workers: {workers} · jobs: {count}"
     )
+    rows = []
     with tempfile.TemporaryDirectory() as tmp:
         db = Path(tmp) / "discovery.db"
-        campaigns.register(
-            "US100",
-            "M5",
-            "ny_open_vol_filter",
-            "small",
-            segments=SEGMENTS,
-            frame=frame,
-            campaign_id="bench",
-            db_path=db,
-        )
-        subprocess.run(
-            [
-                sys.executable,
-                "-m",
-                "tradinglab.cli",
-                "discovery",
-                "approve",
-                "bench",
-                "--approved-by-operator",
-                "--db",
-                str(db),
-            ],
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-        added = jobs.enqueue("bench", strategies, db_path=db)
-        started = time.perf_counter()
-        summary = jobs.run_queue(
-            "bench", workers, bars=frame, db_path=db, batch_size=32
-        )
-        elapsed = time.perf_counter() - started
-        strategies_written = databank.list_strategies(
-            campaign_id="bench", limit=None, db_path=db
-        )
-        evaluations = sum(
-            len(databank.list_evaluations(row["id"], db_path=db))
-            for row in strategies_written
-        )
-    jobs_per_minute = summary["done"] / elapsed * 60.0 if elapsed > 0 else 0.0
-    print(f"encoladas: {added} · estrategias: {len(strategies_written)} · "
-          f"evaluaciones: {evaluations}")
-    print(
-        f"resultado: done={summary['done']} failed={summary['failed']} "
-        f"queued={summary['queued']} running={summary['running']} "
-        f"cancelled={summary['cancelled']}"
-    )
-    print(
-        f"preparación por worker (máx): {summary['prep_max_s']:.3f} s · "
-        f"motor: {summary['backend']} · prioridad: {summary['priority']}"
-    )
-    print(
-        f"medido: {summary['done']} jobs en {elapsed:.2f} s -> "
-        f"{jobs_per_minute:.1f} jobs/min"
-    )
-    return 0 if summary["failed"] == 0 else 1
+        for label, limit, cid in (
+            ("sin caché", 0, "bench-before"),
+            ("con LRU", None, "bench-after"),
+        ):
+            measured = _measure(
+                db,
+                frame,
+                strategies,
+                campaign_id=cid,
+                cache_limit_bytes=limit,
+                workers=workers,
+            )
+            summary = measured["summary"]
+            per_minute = (
+                summary["done"] / measured["elapsed"] * 60.0
+                if measured["elapsed"] > 0
+                else 0.0
+            )
+            rows.append((label, measured, per_minute))
+            print(
+                f"{label:9s}: {summary['done']} jobs en {measured['elapsed']:.2f} s "
+                f"-> {per_minute:.1f} jobs/min · "
+                f"cache hits {summary['cache_hits']:,} "
+                f"misses {summary['cache_misses']:,} "
+                f"bytes {summary['cache_bytes']:,} · "
+                f"prep {summary['prep_max_s']:.3f} s"
+            )
+    before, after = rows[0][2], rows[1][2]
+    if before > 0:
+        print(f"aceleración medida: {after / before:.2f}×")
+    return 0 if all(row[1]["summary"]["failed"] == 0 for row in rows) else 1
 
 
 if __name__ == "__main__":

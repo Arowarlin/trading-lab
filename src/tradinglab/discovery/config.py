@@ -54,6 +54,12 @@ class ValidationConfig(BaseModel):
     corr_cluster: float = Field(ge=-1.0, le=1.0)
 
 
+class FitnessConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    cost_r_max: float = Field(default=0.10, gt=0.0, le=1.0)
+
+
 class SourceConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -143,6 +149,7 @@ class EngineConfig(BaseModel):
     genetics: GeneticsConfig
     limits: LimitsConfig
     validation: ValidationConfig
+    fitness: FitnessConfig = Field(default_factory=FitnessConfig)
     data_quality: DataQualityConfig
 
     @field_validator("profiles")
@@ -180,6 +187,7 @@ def load_engine_config(path: str | Path | None = None) -> EngineConfig:
         "genetics": raw.get("genetics") or {},
         "limits": raw.get("limits") or {},
         "validation": raw.get("validation") or {},
+        "fitness": raw.get("fitness") or {},
         "data_quality": raw.get("data_quality") or {},
     }
     return EngineConfig.model_validate(payload)
@@ -189,6 +197,7 @@ __all__ = [
     "DataQualityConfig",
     "ENGINE_PATH",
     "EngineConfig",
+    "FitnessConfig",
     "GeneticsConfig",
     "LimitsConfig",
     "ProfileConfig",

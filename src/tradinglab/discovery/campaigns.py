@@ -238,6 +238,7 @@ def register(
         "n_total": n_total,
         "cost": {"account": account, "firm": firm, "use_p75": bool(use_p75)},
         "session": session,
+        "point": 0.01,
         "limits": {
             "weekdays": [0, 1, 2, 3, 4],
             "stop_n": 14,
@@ -305,6 +306,45 @@ def register(
     return campaign
 
 
+def register_synthetic(
+    frame: pd.DataFrame,
+    *,
+    instrument: str = "US100",
+    timeframe: str = "M5",
+    template: str = "ny_open_vol_filter",
+    profile: str = "small",
+    segments: dict[str, Any] | None = None,
+    seed: int = 0,
+    campaign_id: str | None = None,
+    account: str = "CFD-001",
+    firm: str | None = "ftmo",
+    db_path: str | Path | None = None,
+) -> dict[str, Any]:
+    """Campaña sintética: nunca se aprueba ni cuenta en el DSR."""
+
+    campaign = register(
+        instrument,
+        timeframe,
+        template,
+        profile,
+        segments=segments,
+        seed=seed,
+        campaign_id=campaign_id,
+        account=account,
+        firm=firm,
+        frame=frame,
+        dry_run=False,
+        db_path=db_path,
+    )
+    identifier = str(campaign["campaign_id"])
+    databank.set_campaign_status(identifier, "synthetic", db_path=db_path)
+    result = databank.get_campaign(identifier, db_path=db_path)
+    if result is None:  # pragma: no cover
+        raise CampaignError("no se pudo registrar la campaña sintética")
+    result["campaign_id"] = result["id"]
+    return result
+
+
 def approve(
     campaign_id: str,
     *,
@@ -328,7 +368,7 @@ def mark_done(
         raise CampaignError(f"campaña no registrada: {campaign_id}")
     if campaign["status"] == "draft":
         raise CampaignError("un borrador no se puede marcar done")
-    if campaign["status"] not in {"registered", "running", "done"}:
+    if campaign["status"] not in {"registered", "running", "done", "synthetic"}:
         raise CampaignError(
             f"la campaña está {campaign['status']}; no se puede marcar done"
         )
@@ -492,5 +532,6 @@ __all__ = [
     "mark_done",
     "read_holdout",
     "register",
+    "register_synthetic",
     "total_tests",
 ]

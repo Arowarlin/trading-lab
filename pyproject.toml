@@ -58,4 +58,5 @@ markers = [
     "lmstudio: requiere LM Studio local",
     "alpaca: requiere credenciales o red de Alpaca",
     "credentials: requiere Windows Credential Manager real",
+    "slow: prueba lenta (ruido sintético); corre en pytest -q",
 ]

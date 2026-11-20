@@ -35,6 +35,8 @@ from . import campaigns, databank, dsl, fastbt
 from .compiler import compile as compile_strategy
 from .config import load_engine_config
 from .data_sources import load_source
+from .indicator_cache import IndicatorCache
+from .specs import exit_spec_from_strategy, run_limits_from_strategy
 
 DEFAULT_SEGMENT = "is_full"
 _QUEUE_STATES = ("queued", "running", "done", "failed", "cancelled")
@@ -70,6 +72,8 @@ class QueueSetup:
     trail_n: int = 14
     template: str | None = None
     seed: int = 0
+    point: float = 0.01
+    cache_limit_bytes: int = 0
     bars: pd.DataFrame | None = None  # solo tests/benchmark sintéticos
 
     def as_dict(self, *, include_bars: bool = False) -> dict[str, Any]:
@@ -113,6 +117,8 @@ class QueueSetup:
             trail_n=int(limits.get("trail_n", 14)),
             template=campaign.get("template") or config.get("template"),
             seed=int(config.get("seed", 0)),
+            point=float(config.get("point", 0.01)),
+            cache_limit_bytes=int(config.get("cache_limit_bytes", 0)),
             bars=bars,
         ).validated()
 
@@ -208,7 +214,7 @@ def _claim(target: Path, campaign_id: str, limit: int) -> list[dict[str, Any]]:
     claimed: list[dict[str, Any]] = []
     with connect(target) as con:
         rows = con.execute(
-            "SELECT id, payload_json, strategy_hash FROM disc_jobs"
+            "SELECT id, payload_json, strategy_hash, kind FROM disc_jobs"
             " WHERE campaign_id = ? AND state = 'queued' ORDER BY id LIMIT ?",
             (campaign_id, int(limit)),
         ).fetchall()
@@ -313,62 +319,19 @@ def _init_worker(payload: dict[str, Any]) -> None:
         atr_windows=(setup.stop_n, setup.trail_n),
         sessions=(limits,),
     )
+    cache = IndicatorCache(setup.cache_limit_bytes, dataset_token=id(bars))
     _WORKER = {
         "setup": setup,
         "bars": bars,
         "cost": cost,
         "prepared": prepared,
+        "cache": cache,
         "prep_s": time.perf_counter() - started,
     }
 
 
-def _exit_spec(model: dsl.Strategy) -> fastbt.ExitSpec:
-    stop = model.exit.stop
-    if stop.type == "atr":
-        stop_kwargs = {"stop": "atr", "stop_mult": stop.mult, "stop_n": stop.n}
-    elif stop.type == "pct":
-        percentage = stop.value if stop.value is not None else stop.mult
-        stop_kwargs = {"stop": "pct", "stop_mult": float(percentage)}
-    else:
-        stop_kwargs = {"stop": "fixed", "stop_price": stop.value}
-    target = model.exit.target
-    if target.type == "rr":
-        target_kwargs = {"target": "rr", "target_rr": target.rr}
-    elif target.type == "pct":
-        percentage = target.value if target.value is not None else target.rr
-        target_kwargs = {"target": "pct", "target_pct": float(percentage)}
-    else:
-        target_kwargs = {"target": "fixed", "target_price": target.value}
-    breakeven = model.exit.breakeven or {}
-    trailing = model.exit.trailing or {}
-    trail_mult = trailing.get("atr_mult", trailing.get("mult"))
-    return fastbt.ExitSpec(
-        **stop_kwargs,
-        **target_kwargs,
-        breakeven_at_r=breakeven.get("at_r"),
-        trail_atr_mult=trail_mult,
-        trail_n=int(trailing.get("n", 14)),
-        time_exit_bars=model.exit.time_exit_bars,
-        opposite_signal=model.exit.opposite_signal,
-    )
-
-
-def _run_limits(model: dsl.Strategy, setup: QueueSetup) -> fastbt.RunLimits:
-    session = model.session
-    return fastbt.RunLimits(
-        session_tz=session.tz or setup.session_tz,
-        session_start=session.start,
-        session_end=session.end,
-        flat_at=session.flat_at,
-        weekdays=setup.weekdays,
-        max_trades_per_day=model.limits.max_trades_per_day,
-        cooldown_bars=model.limits.cooldown_bars,
-        close_at_end=True,
-    )
-
-
-def _evaluate_job(task: tuple[int, str]) -> dict[str, Any]:
-    job_id, payload_json = task
+def _evaluate_job(task: tuple[int, str, str]) -> dict[str, Any]:
+    job_id, payload_json, kind = task
     state = _WORKER
     if not state:
         return {"job_id": job_id, "error": "worker sin preparación", "metrics": None}
@@ -387,25 +350,58 @@ def _evaluate_job(task: tuple[int, str]) -> dict[str, Any]:
             raise QueueError(
                 f"timeframe {model.timeframe} != {setup.timeframe} de la campaña"
             )
-        signals = compile_strategy(model, state["bars"])
+        cache = state.get("cache")
+        if kind == "fitness":
+            from .fitness import evaluate as fitness_evaluate
+
+            fit = fitness_evaluate(
+                model,
+                state["bars"],
+                state["cost"],
+                setup,
+                state["prepared"],
+                cache=cache,
+            )
+            series = fit["daily_returns"]
+            return {
+                "job_id": job_id,
+                "strategy_hash": dsl.strategy_hash(model),
+                "metrics": fit["metrics"],
+                "trades": fit["trades_count"],
+                "returns": series.to_numpy(dtype=float).tolist(),
+                "return_dates": [stamp.isoformat() for stamp in series.index],
+                "error": None,
+                "fitness": fit["fitness"],
+                "feasible": fit["feasible"],
+                "violations": fit["violations"],
+                "cost_r": fit["cost_r"],
+                "complexity": fit["complexity"],
+                "folds": fit["folds"],
+                "backend": fastbt.backend(),
+                "prep_s": float(state.get("prep_s", 0.0)),
+                "cache": cache.stats() if cache is not None else {},
+            }
+        signals = compile_strategy(model, state["bars"], cache=cache)
         result = fastbt.run(
             signals,
             state["bars"],
-            _exit_spec(model),
+            exit_spec_from_strategy(model),
             state["cost"],
-            _run_limits(model, setup),
+            run_limits_from_strategy(model, setup),
             prepared=state["prepared"],
         )
-        returns = result.daily_r.to_numpy(dtype=float).tolist()
+        returns = result.daily_r
         return {
             "job_id": job_id,
             "strategy_hash": dsl.strategy_hash(model),
             "metrics": result.metrics,
             "trades": len(result.trades),
-            "returns": returns,
+            "returns": returns.to_numpy(dtype=float).tolist(),
+            "return_dates": [stamp.isoformat() for stamp in returns.index],
             "error": None,
             "backend": result.backend,
             "prep_s": float(state.get("prep_s", 0.0)),
+            "cache": cache.stats() if cache is not None else {},
         }
     except Exception as exc:  # noqa: BLE001 - el error se guarda por job
         return {
@@ -414,6 +410,7 @@ def _evaluate_job(task: tuple[int, str]) -> dict[str, Any]:
             "metrics": None,
             "trades": 0,
             "returns": [],
+            "return_dates": [],
             "backend": fastbt.backend(),
             "prep_s": float(state.get("prep_s", 0.0)),
         }
@@ -443,7 +440,11 @@ def _flush(
                 )
                 databank.add_evaluation(
                     strategy_id,
-                    segment=DEFAULT_SEGMENT,
+                    segment=(
+                        "fitness_is"
+                        if str(job.get("kind")) == "fitness"
+                        else DEFAULT_SEGMENT
+                    ),
                     cost_profile=setup.cost_profile(),
                     metrics=result.get("metrics"),
                     trades_count=result.get("trades"),
@@ -470,6 +471,92 @@ def _flush(
                 )
 
 
+def _cache_limit(workers: int, override: int | None) -> int:
+    if override is not None:
+        return max(0, int(override))
+    engine = load_engine_config()
+    return int(engine.ram_limit_gb * 1024 ** 3 / max(1, int(workers)))
+
+
+class BatchEvaluator:
+    """Pool persistente con preparación y caché de indicadores por worker."""
+
+    def __init__(
+        self,
+        setup: QueueSetup,
+        frame: pd.DataFrame,
+        *,
+        workers: int = 1,
+        cache_limit_bytes: int | None = None,
+    ) -> None:
+        configured = int(load_engine_config().workers)
+        self.workers = max(1, min(int(workers), configured))
+        self.setup = replace(
+            setup,
+            bars=frame,
+            cache_limit_bytes=_cache_limit(self.workers, cache_limit_bytes),
+        )
+        self.pool = ProcessPoolExecutor(
+            max_workers=self.workers,
+            initializer=_init_worker,
+            initargs=(self.setup.as_dict(include_bars=True),),
+        )
+        self._next = 0
+
+    def evaluate(
+        self, strategies: Iterable[dict[str, Any]], kind: str = "fitness"
+    ) -> list[dict[str, Any]]:
+        futures: dict[Any, int] = {}
+        for strategy in strategies:
+            payload = json.dumps(strategy, sort_keys=True, ensure_ascii=False)
+            self._next += 1
+            task_id = self._next
+            futures[
+                self.pool.submit(_evaluate_job, (task_id, payload, kind))
+            ] = task_id
+        results: dict[int, dict[str, Any]] = {}
+        for future in as_completed(futures):
+            task_id = futures[future]
+            try:
+                results[task_id] = future.result()
+            except Exception as exc:  # noqa: BLE001
+                results[task_id] = {
+                    "job_id": task_id,
+                    "error": f"{type(exc).__name__}: {exc}",
+                    "metrics": None,
+                    "trades": 0,
+                    "returns": [],
+                }
+        return [results[key] for key in sorted(results)]
+
+    def close(self) -> None:
+        self.pool.shutdown(wait=True)
+
+    def __enter__(self) -> "BatchEvaluator":
+        return self
+
+    def __exit__(self, *exc_info) -> None:
+        self.close()
+
+
+def evaluate_batch(
+    strategies: Iterable[dict[str, Any]],
+    *,
+    setup: QueueSetup,
+    frame: pd.DataFrame,
+    workers: int = 1,
+    kind: str = "fitness",
+    cache_limit_bytes: int | None = None,
+) -> list[dict[str, Any]]:
+    with BatchEvaluator(
+        setup,
+        frame,
+        workers=workers,
+        cache_limit_bytes=cache_limit_bytes,
+    ) as evaluator:
+        return evaluator.evaluate(strategies, kind)
+
+
 def run_queue(
     campaign_id: str,
     workers: int | None = None,
@@ -477,6 +564,7 @@ def run_queue(
     bars: pd.DataFrame | None = None,
     db_path: str | Path | None = None,
     batch_size: int = 32,
+    cache_limit_bytes: int | None = None,
 ) -> dict[str, Any]:
     """Ejecuta los jobs ``queued`` de una campaña. Devuelve el recuento."""
 
@@ -540,8 +628,15 @@ def run_queue(
 
     prep_max = 0.0
     backend = fastbt.backend()
+    cache_hits = 0
+    cache_misses = 0
+    cache_bytes = 0
     if counts["queued"]:
         pool_workers = min(workers, max(1, counts["queued"]))
+        setup = replace(
+            setup,
+            cache_limit_bytes=_cache_limit(pool_workers, cache_limit_bytes),
+        )
         try:
             with ProcessPoolExecutor(
                 max_workers=pool_workers,
@@ -557,7 +652,14 @@ def run_queue(
                         break
                     jobs = {int(job["id"]): job for job in claimed}
                     futures = {
-                        pool.submit(_evaluate_job, (int(job["id"]), job["payload_json"])): job
+                        pool.submit(
+                            _evaluate_job,
+                            (
+                                int(job["id"]),
+                                job["payload_json"],
+                                str(job.get("kind") or "backtest_is"),
+                            ),
+                        ): job
                         for job in claimed
                     }
                     results: list[dict[str, Any]] = []
@@ -576,6 +678,10 @@ def run_queue(
                         results.append(result)
                         prep_max = max(prep_max, float(result.get("prep_s", 0.0)))
                         backend = str(result.get("backend") or backend)
+                        stats = result.get("cache") or {}
+                        cache_hits += int(stats.get("hits") or 0)
+                        cache_misses += int(stats.get("misses") or 0)
+                        cache_bytes = max(cache_bytes, int(stats.get("bytes") or 0))
                     _flush(target, identifier, results, jobs, setup)
         except Exception as exc:  # noqa: BLE001 - pool caído: no perder estados
             raise QueueError(f"cola abortada: {type(exc).__name__}: {exc}") from exc
@@ -591,6 +697,9 @@ def run_queue(
         "priority": priority,
         "backend": backend,
         "prep_max_s": prep_max,
+        "cache_hits": cache_hits,
+        "cache_misses": cache_misses,
+        "cache_bytes": cache_bytes,
         **final,
     }
 
@@ -603,11 +712,13 @@ def queue_status(
 
 
 __all__ = [
+    "BatchEvaluator",
     "DEFAULT_SEGMENT",
     "QueueError",
     "QueueSetup",
     "cancel_campaign",
     "enqueue",
+    "evaluate_batch",
     "queue_status",
     "run_queue",
 ]

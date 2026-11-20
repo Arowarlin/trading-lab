@@ -33,6 +33,24 @@ Campaña `small` con `dry_run: true` sobre **datos sintéticos** (paseo aleatori
 **no encontrar nada** (ningún nivel ≥ 3). Si "encuentra" estrategias en ruido, el diseño está roto.
 Es la prueba de aceptación más importante.
 
+**Criterio corregido (Fase 6, decisión del operador).** La versión anterior —"media OOS-1 de los
+finalistas ≤ 0"— era circular: la regla del doc 05 §5 exige OOS-1 > 0 y PF > 1,1 para ser finalista,
+así que su media es positiva por construcción. La prueba de Fase 6 usa 5 campañas sintéticas (perfil
+`small`, 0,9 años M5, costes reales de US100) y exige:
+
+1. individuos factibles > 0 en cada campaña (si no, la prueba no vale);
+2. media OOS-1 **agregada de todos los candidatos pre-selección** ≤ 0;
+3. Spearman medio entre fitness IS (expectativa) y expectativa OOS-1 de los candidatos ≤ 0,3;
+4. los finalistas (número y media OOS-1) se reportan solo como diagnóstico.
+
+La corrida de Fase 6 dio 43 candidatos, media OOS-1 **−0,174** y Spearman medio **−0,173**; 0
+finalistas en las 5 campañas de 0,9 años.
+
+**Fixture para la Fase 7.** Los 3 finalistas sintéticos de la semilla 2 de la corrida de 1 año están en
+`tests/fixtures/discovery_noise_seed2_finalists.json`. En la Fase 7, la prueba de ruido completa
+exigirá que **ninguno** llegue a nivel 4: lectura OOS-2 (una por estrategia), DSR de confirmación y
+test contra el azar. Es el criterio de aceptación final del MVP.
+
 ## 4. Aceptación final del MVP (fases 0–7)
 
 - Paridad verde; prueba de ruido sin falsos positivos.

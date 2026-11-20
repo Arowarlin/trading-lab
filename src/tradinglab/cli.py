@@ -9908,5 +9908,97 @@ def discovery_cancel_cmd(
         )
 
 
+@discovery_app.command("run")
+def discovery_run_cmd(
+    campaign_id: str = typer.Argument(..., help="ID de la campaña"),
+    approved_by_operator: bool = typer.Option(
+        False, "--approved-by-operator", help="Ejecución real aprobada"
+    ),
+    synthetic: bool = typer.Option(
+        False, "--synthetic", help="Paseo aleatorio en una discovery.db temporal"
+    ),
+    workers: int = typer.Option(None, "--workers", help="Workers (máximo engine.yaml)"),
+    time_limit: float = typer.Option(
+        None, "--time-limit", help="Límite de tiempo en minutos"
+    ),
+    seed: int = typer.Option(42, "--seed", help="Semilla del paseo sintético"),
+    db: str = typer.Option(None, "--db", help="discovery.db alternativo"),
+) -> None:
+    """Ejecuta el GA. Real: registered + --approved-by-operator. Sintético: no cuenta."""
+
+    import tempfile
+    from pathlib import Path
+
+    from .discovery import campaigns, databank, engine
+
+    if synthetic:
+        with tempfile.TemporaryDirectory() as tmp:
+            sdb = Path(tmp) / "discovery.db"
+            frame = engine.synthetic_frame(years=1.0, seed=seed)
+            segments = {
+                "is": ["2023-01-02", "2023-09-30"],
+                "oos1": ["2023-10-01", "2023-11-30"],
+                "oos2": ["2023-12-01", None],
+            }
+            identifier = campaign_id or f"synthetic-{seed}"
+            campaigns.register_synthetic(
+                frame,
+                template="ny_open_vol_filter",
+                profile="small",
+                segments=segments,
+                seed=seed,
+                campaign_id=identifier,
+                db_path=sdb,
+            )
+            summary = engine.run_campaign(
+                identifier,
+                workers=workers,
+                time_limit=time_limit,
+                synthetic=True,
+                db_path=sdb,
+                bars=frame,
+            )
+        console.print(
+            f"[bold]Sintética {identifier}[/bold] · no cuenta en el DSR · "
+            f"n_total {summary['n_total']} · evaluados {summary['n_evaluated']} · "
+            f"n_effective {summary['n_effective']} · factibles {summary['feasible']} · "
+            f"frontera {summary['frontier']} · finalistas {len(summary['finalists'])}"
+        )
+        console.print(f"Tiempo {summary['elapsed_s']:.1f} s · semilla {summary['seed']}")
+        return
+
+    if not approved_by_operator:
+        console.print(
+            "Sin --approved-by-operator no se ejecuta una campaña real."
+        )
+        raise typer.Exit(1)
+    campaign = databank.get_campaign(campaign_id, db_path=db)
+    if campaign is None:
+        console.print(f"[red]Campaña no registrada:[/red] {campaign_id}")
+        raise typer.Exit(1)
+    if campaign["status"] != "registered":
+        console.print(
+            f"[red]La campaña debe estar registered (está {campaign['status']}).[/red]"
+        )
+        raise typer.Exit(1)
+    try:
+        summary = engine.run_campaign(
+            campaign_id,
+            workers=workers,
+            time_limit=time_limit,
+            db_path=db,
+        )
+    except campaigns.CampaignError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(1) from exc
+    console.print(
+        f"[bold]{campaign_id}[/bold] · n_total {summary['n_total']} · "
+        f"evaluados {summary['n_evaluated']} · n_effective {summary['n_effective']} · "
+        f"factibles {summary['feasible']} · frontera {summary['frontier']} · "
+        f"finalistas {len(summary['finalists'])} · "
+        f"OOS-1 medio {summary['oos1_mean']}"
+    )
+
+
 if __name__ == "__main__":
     main()

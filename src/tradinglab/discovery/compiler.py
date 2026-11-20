@@ -27,6 +27,7 @@ from .dsl import (
     resolved_session_tz,
     validate,
 )
+from .indicator_cache import MISSING, IndicatorCache
 
 _HTF_RULES = {
     "M15": ("15min", pd.Timedelta(minutes=15)),
@@ -134,7 +135,14 @@ def _align_htf(
 
 
 class _Evaluator:
-    def __init__(self, bars: pd.DataFrame, strategy: Strategy, tz: str) -> None:
+    def __init__(
+        self,
+        bars: pd.DataFrame,
+        strategy: Strategy,
+        tz: str,
+        *,
+        cache: IndicatorCache | None = None,
+    ) -> None:
         self.bars = bars
         self.strategy = strategy
         self.tz = tz
@@ -146,7 +154,8 @@ class _Evaluator:
             "end": self.session.end,
             "or_minutes": self.session.or_minutes,
         }
-        self.cache: dict[tuple, pd.Series] = {}
+        self.cache = cache
+        self.local_cache: dict[tuple, pd.Series] = {}
         self.close = bars["close"].astype(float)
         self.open = bars["open"].astype(float)
         self.high = bars["high"].astype(float)
@@ -170,9 +179,16 @@ class _Evaluator:
         )
 
     def _cached(self, key: tuple, builder) -> pd.Series:
-        if key not in self.cache:
-            self.cache[key] = self._series(builder())
-        return self.cache[key]
+        if self.cache is None:
+            if key not in self.local_cache:
+                self.local_cache[key] = self._series(builder())
+            return self.local_cache[key]
+        value = self.cache.get(key)
+        if value is not MISSING:
+            return value
+        series = self._series(builder())
+        self.cache.put(key, series)
+        return series
 
     def eval(self, expr: Expr | None) -> pd.Series:
         if expr is None:
@@ -368,16 +384,31 @@ def _warmup(expr: Expr | None, bars: pd.DataFrame, tz: str, strategy: Strategy) 
     return 0
 
 
-def compile(strategy: Strategy | dict, bars: pd.DataFrame) -> Signals:
-    """Compila la estrategia en señales booleanas alineadas a ``bars``."""
+def compile(
+    strategy: Strategy | dict,
+    bars: pd.DataFrame,
+    *,
+    cache: IndicatorCache | None = None,
+) -> Signals:
+    """Compila la estrategia en señales booleanas alineadas a ``bars``.
+
+    ``cache`` es la LRU del worker; si se pasa, debe pertenecer a este dataset.
+    """
+
     model = strategy if isinstance(strategy, Strategy) else Strategy.model_validate(strategy)
     errors = validate(model)
     if errors:
         raise DslError("; ".join(errors))
     bars = _require_bars(bars)
+    if cache is not None:
+        token = id(bars)
+        if cache.dataset_token is None:
+            cache.dataset_token = token
+        elif cache.dataset_token != token:
+            raise DslError("la caché de indicadores pertenece a otro dataset")
     config = load_engine_config()
     tz = resolved_session_tz(model, config)
-    evaluator = _Evaluator(bars, model, tz)
+    evaluator = _Evaluator(bars, model, tz, cache=cache)
     length = len(bars)
     zeros = np.zeros(length, dtype=bool)
     if model.long_entry is not None:
