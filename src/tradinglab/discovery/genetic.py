@@ -61,6 +61,80 @@ def configured_template(
     return strategy
 
 
+def template_symmetric(name: str) -> bool:
+    """Lee el flag ``symmetric`` de la plantilla (clave de nivel superior)."""
+
+    path = TEMPLATE_DIR / f"{name}.yaml"
+    if not path.exists():
+        raise FileNotFoundError(f"Sin datos: no existe la plantilla {name}")
+    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    return bool(data.get("symmetric", False))
+
+
+MIRROR_KIND = {
+    "gt": "lt",
+    "lt": "gt",
+    "ge": "le",
+    "le": "ge",
+    "cross_up": "cross_down",
+    "cross_down": "cross_up",
+}
+MIRROR_LEVEL = {
+    "opening_range_high": "opening_range_low",
+    "opening_range_low": "opening_range_high",
+    "prev_day_high": "prev_day_low",
+    "prev_day_low": "prev_day_high",
+    "prev_session_high": "prev_session_low",
+    "prev_session_low": "prev_session_high",
+    "donchian_high": "donchian_low",
+    "donchian_low": "donchian_high",
+}
+MIRROR_PRICE = {"high": "low", "low": "high"}
+MIRROR_PATTERN = {
+    "bos_up": "bos_down",
+    "bos_down": "bos_up",
+    "choch_up": "choch_down",
+    "choch_down": "choch_up",
+}
+
+
+def mirror_expr(expr: Any) -> Any:
+    """Espejo del AST: largo alcista → corto bajista.
+
+    ``gt↔lt``, ``ge↔le``, ``cross_up↔cross_down``, niveles ``*_high↔*_low``,
+    precios ``high↔low`` y patrones ``bos/choch``. ``between`` se mantiene tal
+    cual: no tiene una dirección única.
+    """
+
+    if not isinstance(expr, dict):
+        return copy.deepcopy(expr)
+    data = copy.deepcopy(expr)
+    kind = data.get("kind")
+    if kind in MIRROR_KIND:
+        data["kind"] = MIRROR_KIND[kind]
+    if kind == "price" and data.get("price") in MIRROR_PRICE:
+        data["price"] = MIRROR_PRICE[data["price"]]
+    if kind == "level" and data.get("level") in MIRROR_LEVEL:
+        data["level"] = MIRROR_LEVEL[data["level"]]
+    if kind == "indicator" and data.get("src") in MIRROR_PRICE:
+        data["src"] = MIRROR_PRICE[data["src"]]
+    if kind == "pattern" and data.get("pattern") in MIRROR_PATTERN:
+        data["pattern"] = MIRROR_PATTERN[data["pattern"]]
+    if "args" in data:
+        data["args"] = [mirror_expr(item) for item in data.get("args") or []]
+    for key in ("left", "right", "expr"):
+        if isinstance(data.get(key), dict):
+            data[key] = mirror_expr(data[key])
+    return data
+
+
+def _enforce_symmetry(strategy: dict[str, Any]) -> None:
+    long_entry = strategy.get("long_entry")
+    strategy["short_entry"] = (
+        mirror_expr(long_entry) if isinstance(long_entry, dict) else None
+    )
+
+
 def _valid(strategy: dict[str, Any]) -> bool:
     return not dsl.validate(strategy)
 
@@ -86,8 +160,15 @@ def _roots(strategy: dict[str, Any]):
             yield name, root
 
 
-def _bool_roots(strategy: dict[str, Any]):
+def _side_roots(strategy: dict[str, Any], symmetric: bool = False):
     for name, root in _roots(strategy):
+        if symmetric and name != "long_entry":
+            continue
+        yield name, root
+
+
+def _bool_roots(strategy: dict[str, Any], symmetric: bool = False):
+    for name, root in _side_roots(strategy, symmetric):
         for node, parent, slot in _iter_nodes(root):
             if node.get("kind") in BOOL_KINDS:
                 yield name, node, parent, slot
@@ -153,18 +234,14 @@ def _set_param(node: dict[str, Any], key: str, value: float) -> None:
     node["params"] = params
 
 
-def mutate_param(strategy: dict[str, Any], rng: random.Random) -> dict | None:
+def mutate_param(
+    strategy: dict[str, Any], rng: random.Random, *, symmetric: bool = False
+) -> dict | None:
     data = copy.deepcopy(strategy)
     nodes = [
         node
-        for node, _parent, _slot in _iter_nodes(
-            (data.get("long_entry") or {})
-        )
-    ] + [
-        node
-        for node, _parent, _slot in _iter_nodes(
-            (data.get("short_entry") or {})
-        )
+        for _name, root in _side_roots(data, symmetric)
+        for node, _parent, _slot in _iter_nodes(root)
     ]
     candidates = [
         node
@@ -178,19 +255,21 @@ def mutate_param(strategy: dict[str, Any], rng: random.Random) -> dict | None:
             continue
         key, value, _current = picked
         _set_param(node, key, value)
+        if symmetric:
+            _enforce_symmetry(data)
         if _valid(data):
             return data
     return None
 
 
-def mutate_block(strategy: dict[str, Any], rng: random.Random) -> dict | None:
+def mutate_block(
+    strategy: dict[str, Any], rng: random.Random, *, symmetric: bool = False
+) -> dict | None:
     data = copy.deepcopy(strategy)
     nodes = [
         node
-        for node, _parent, _slot in _iter_nodes(data.get("long_entry") or {})
-    ] + [
-        node
-        for node, _parent, _slot in _iter_nodes(data.get("short_entry") or {})
+        for _name, root in _side_roots(data, symmetric)
+        for node, _parent, _slot in _iter_nodes(root)
     ]
     indicators = [node for node in nodes if node.get("kind") == "indicator"]
     rng.shuffle(indicators)
@@ -210,16 +289,20 @@ def mutate_block(strategy: dict[str, Any], rng: random.Random) -> dict | None:
         node["params"] = {}
         node.pop("n", None)
         node.pop("lookback", None)
+        if symmetric:
+            _enforce_symmetry(data)
         if _valid(data):
             return data
     return None
 
 
-def mutate_threshold(strategy: dict[str, Any], rng: random.Random) -> dict | None:
+def mutate_threshold(
+    strategy: dict[str, Any], rng: random.Random, *, symmetric: bool = False
+) -> dict | None:
     data = copy.deepcopy(strategy)
     comparisons = [
         node
-        for _name, node, _parent, _slot in _bool_roots(data)
+        for _name, node, _parent, _slot in _bool_roots(data, symmetric)
         if node.get("kind") in {"gt", "lt", "ge", "le", "between"}
     ]
     rng.shuffle(comparisons)
@@ -241,6 +324,8 @@ def mutate_threshold(strategy: dict[str, Any], rng: random.Random) -> dict | Non
             current = float(node[side].get("value") or 0.0)
             step = max(abs(current) * 0.05, 0.01)
             node[side]["value"] = current + rng.choice([-step, step])
+        if symmetric:
+            _enforce_symmetry(data)
         if _valid(data):
             return data
     return None
@@ -289,11 +374,13 @@ def _bool_node(rng: random.Random) -> dict:
     return copy.deepcopy(rng.choice(choices))
 
 
-def mutate_logic(strategy: dict[str, Any], rng: random.Random) -> dict | None:
+def mutate_logic(
+    strategy: dict[str, Any], rng: random.Random, *, symmetric: bool = False
+) -> dict | None:
     data = copy.deepcopy(strategy)
     logical = [
         (name, node, parent, slot)
-        for name, node, parent, slot in _bool_roots(data)
+        for name, node, parent, slot in _bool_roots(data, symmetric)
         if node.get("kind") in {"and", "or", "not"}
     ]
     if not logical:
@@ -316,10 +403,14 @@ def mutate_logic(strategy: dict[str, Any], rng: random.Random) -> dict | None:
         node["args"].pop(rng.randrange(len(node["args"])))
     else:
         return None
+    if symmetric:
+        _enforce_symmetry(data)
     return data if _valid(data) else None
 
 
-def mutate_exit(strategy: dict[str, Any], rng: random.Random) -> dict | None:
+def mutate_exit(
+    strategy: dict[str, Any], rng: random.Random, *, symmetric: bool = False
+) -> dict | None:
     data = copy.deepcopy(strategy)
     exit_block = data.setdefault("exit", {})
     action = rng.choice(
@@ -353,10 +444,14 @@ def mutate_exit(strategy: dict[str, Any], rng: random.Random) -> dict | None:
         exit_block["time_exit_bars"] = rng.choice([12, 24, 36, 48, 72, 96])
     else:
         exit_block["opposite_signal"] = not bool(exit_block.get("opposite_signal"))
+    if symmetric:
+        _enforce_symmetry(data)
     return data if _valid(data) else None
 
 
-def mutate_session(strategy: dict[str, Any], rng: random.Random) -> dict | None:
+def mutate_session(
+    strategy: dict[str, Any], rng: random.Random, *, symmetric: bool = False
+) -> dict | None:
     data = copy.deepcopy(strategy)
     session = data.setdefault("session", {})
     start_h, start_m = (int(part) for part in str(session.get("start", "09:35")).split(":"))
@@ -369,15 +464,21 @@ def mutate_session(strategy: dict[str, Any], rng: random.Random) -> dict | None:
         return None
     session["start"] = f"{minutes_start // 60:02d}:{minutes_start % 60:02d}"
     session["end"] = f"{minutes_end // 60:02d}:{minutes_end % 60:02d}"
+    if symmetric:
+        _enforce_symmetry(data)
     return data if _valid(data) else None
 
 
 def crossover_subtree(
-    left: dict[str, Any], right: dict[str, Any], rng: random.Random
+    left: dict[str, Any],
+    right: dict[str, Any],
+    rng: random.Random,
+    *,
+    symmetric: bool = False,
 ) -> dict | None:
     data = copy.deepcopy(left)
-    left_nodes = list(_bool_roots(data))
-    right_nodes = list(_bool_roots(right))
+    left_nodes = list(_bool_roots(data, symmetric))
+    right_nodes = list(_bool_roots(right, symmetric))
     if not left_nodes or not right_nodes:
         return None
     kinds = {node.get("kind") for _n, node, _p, _s in right_nodes}
@@ -393,14 +494,22 @@ def crossover_subtree(
         [item for item in right_nodes if item[1].get("kind") == _node.get("kind")]
     )
     _replace(data, name, parent, slot, copy.deepcopy(replacement))
+    if symmetric:
+        _enforce_symmetry(data)
     return data if _valid(data) else None
 
 
 def crossover_exit(
-    left: dict[str, Any], right: dict[str, Any], rng: random.Random
+    left: dict[str, Any],
+    right: dict[str, Any],
+    rng: random.Random,
+    *,
+    symmetric: bool = False,
 ) -> dict | None:
     data = copy.deepcopy(left)
     data["exit"] = copy.deepcopy(right.get("exit") or data.get("exit"))
+    if symmetric:
+        _enforce_symmetry(data)
     return data if _valid(data) else None
 
 
@@ -418,15 +527,23 @@ def tournament_offspring(
     left: dict[str, Any],
     right: dict[str, Any] | None,
     rng: random.Random,
+    *,
+    symmetric: bool = False,
 ) -> tuple[dict | None, str]:
     """Aplica un operador aleatorio y devuelve (hijo, nombre)."""
 
     if right is not None and rng.random() < 0.6:
         if rng.random() < 0.5:
-            return crossover_subtree(left, right, rng), "crossover_subtree"
-        return crossover_exit(left, right, rng), "crossover_exit"
+            return (
+                crossover_subtree(left, right, rng, symmetric=symmetric),
+                "crossover_subtree",
+            )
+        return (
+            crossover_exit(left, right, rng, symmetric=symmetric),
+            "crossover_exit",
+        )
     operator = rng.choice(MUTATIONS)
-    return operator(left, rng), operator.__name__
+    return operator(left, rng, symmetric=symmetric), operator.__name__
 
 
 def random_strategy(
@@ -437,17 +554,22 @@ def random_strategy(
     instrument: str | None = None,
     timeframe: str | None = None,
     session: dict[str, Any] | None = None,
+    symmetric: bool | None = None,
 ) -> dict | None:
+    if symmetric is None:
+        symmetric = template_symmetric(template)
     model = configured_template(
         template,
         instrument=instrument,
         timeframe=timeframe,
         session=session,
     )
+    if symmetric:
+        _enforce_symmetry(model)
     for _ in range(attempts):
         data = copy.deepcopy(model)
         for _step in range(rng.randint(1, 3)):
-            data = rng.choice(MUTATIONS)(data, rng) or data
+            data = rng.choice(MUTATIONS)(data, rng, symmetric=symmetric) or data
         data["exit"] = {
             "stop": {
                 "type": "atr",
@@ -457,6 +579,8 @@ def random_strategy(
             "target": {"type": "rr", "rr": round(rng.uniform(1.0, 3.0), 2)},
             "time_exit_bars": rng.choice([24, 48, 72]),
         }
+        if symmetric:
+            _enforce_symmetry(data)
         if _valid(data):
             return data
     for _ in range(attempts):
@@ -477,6 +601,8 @@ def random_strategy(
             "target": {"type": "rr", "rr": round(rng.uniform(1.0, 3.0), 2)},
             "time_exit_bars": rng.choice([24, 48, 72]),
         }
+        if symmetric:
+            _enforce_symmetry(data)
         if _valid(data):
             return data
     return None
@@ -514,6 +640,7 @@ __all__ = [
     "crossover_exit",
     "crossover_subtree",
     "diff_strategies",
+    "mirror_expr",
     "mutate_block",
     "mutate_exit",
     "mutate_logic",
@@ -522,5 +649,6 @@ __all__ = [
     "mutate_threshold",
     "random_strategy",
     "template_strategy",
+    "template_symmetric",
     "tournament_offspring",
 ]

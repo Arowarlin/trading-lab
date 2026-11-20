@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import random
 from pathlib import Path
 
@@ -107,6 +108,23 @@ def test_engine_is_reproducible(tmp_path) -> None:
     }
     assert all(
         row["submitted"] <= row["slots"] for row in diagnostics["generations"]
+    )
+    assert all(
+        row["submitted"] + row["empty_slots"] == row["slots"]
+        for row in diagnostics["generations"]
+    )
+    assert all(
+        row["attempts"] >= row["slots"] for row in diagnostics["generations"]
+    )
+    assert all(
+        row["retried"] == row["attempts"] - row["slots"]
+        for row in diagnostics["generations"]
+    )
+    assert diagnostics["retried"] == sum(
+        row["retried"] for row in diagnostics["generations"]
+    )
+    assert diagnostics["empty_slots"] == sum(
+        row["empty_slots"] for row in diagnostics["generations"]
     )
     assert count_tests(lab, discovery_db=db) == 0
 
@@ -395,3 +413,70 @@ def test_noise_fixtures_have_valid_finalists() -> None:
         for item in payload["finalists"]:
             assert dsl.validate(item["dsl"]) == []
             assert "finalista" in item["selection_reason"]
+
+
+def _individual(strategy: dict) -> engine.Individual:
+    return engine.Individual(
+        strategy=strategy,
+        strategy_hash=dsl.strategy_hash(strategy),
+        rank=0,
+    )
+
+
+def test_draw_child_retries_invalid_and_duplicate(monkeypatch) -> None:
+    base = genetic.template_strategy("ny_open_vol_filter")
+    duplicate = copy.deepcopy(base)
+    valid = copy.deepcopy(base)
+    valid["limits"]["max_trades_per_day"] = 1
+    current = [_individual(base), _individual(base)]
+    known = {dsl.strategy_hash(duplicate): current[0]}
+    sequence = iter(
+        [
+            (None, "mutate_param"),
+            (duplicate, "mutate_param"),
+            (valid, "mutate_param"),
+        ]
+    )
+
+    def fake(left, right, rng, *, symmetric=False):
+        return next(sequence)
+
+    monkeypatch.setattr(engine.genetic, "tournament_offspring", fake)
+    draw = engine._draw_child(
+        current,
+        [0, 0],
+        {0: 0.0, 1: 0.0},
+        known,
+        set(),
+        random.Random(1),
+        symmetric=False,
+    )
+
+    assert draw["child"] is valid
+    assert draw["attempts"] == 3
+    assert draw["invalid"] == 1
+    assert draw["duplicates"] == 1
+
+
+def test_draw_child_leaves_empty_slot_after_ten_attempts(monkeypatch) -> None:
+    base = genetic.template_strategy("ny_open_vol_filter")
+    current = [_individual(base), _individual(base)]
+
+    def fake(left, right, rng, *, symmetric=False):
+        return None, "mutate_param"
+
+    monkeypatch.setattr(engine.genetic, "tournament_offspring", fake)
+    draw = engine._draw_child(
+        current,
+        [0, 0],
+        {0: 0.0, 1: 0.0},
+        {},
+        set(),
+        random.Random(2),
+        symmetric=False,
+    )
+
+    assert draw["child"] is None
+    assert draw["attempts"] == 10
+    assert draw["invalid"] == 10
+    assert draw["duplicates"] == 0

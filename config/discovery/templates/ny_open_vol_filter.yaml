@@ -1,4 +1,5 @@
 name: ny_open_vol_filter
+symmetric: true
 description: "Apertura NY: ruptura del rango de apertura con volatilidad alta."
 strategy:
   dsl_version: "1"

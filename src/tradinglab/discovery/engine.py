@@ -75,6 +75,7 @@ def initial_strategies(
     population: int,
     rng: random.Random,
     stats: dict[str, int] | None = None,
+    symmetric: bool | None = None,
 ) -> list[dict[str, Any]]:
     """Plantilla real + aleatorias, con el instrumento y la sesión de la campaña.
 
@@ -87,6 +88,8 @@ def initial_strategies(
     instrument = campaign.get("instrument") or config.get("instrument")
     timeframe = campaign.get("timeframe") or config.get("timeframe")
     session = dict(config.get("session") or {})
+    if symmetric is None:
+        symmetric = genetic.template_symmetric(template)
     strategies: list[dict[str, Any]] = []
     seen: set[str] = set()
     attempts = 0
@@ -101,6 +104,7 @@ def initial_strategies(
             instrument=instrument,
             timeframe=timeframe,
             session=session,
+            symmetric=symmetric,
         )
         if strategy is None:
             invalid += 1
@@ -446,6 +450,62 @@ def _select_finalists(
     return selected, discarded
 
 
+def _draw_child(
+    current: list[Individual],
+    ranks: list[int],
+    crowding: dict[int, float],
+    known: dict[str, Individual],
+    pending: set[str],
+    rng: random.Random,
+    *,
+    symmetric: bool,
+    max_attempts: int = 10,
+) -> dict[str, Any]:
+    """Un hueco de la generación, con hasta ``max_attempts`` reintentos.
+
+    Un hijo inválido o con hash ya visto no deja el hueco vacío en el primer
+    fallo: se vuelve a sortear el torneo. Tras 10 intentos el hueco queda
+    vacío. Devuelve también los contadores para ``diagnostics``.
+    """
+
+    attempts = 0
+    invalid = 0
+    duplicates = 0
+    while attempts < max_attempts:
+        attempts += 1
+        picks = nsga2.select(
+            list(range(len(current))), ranks, crowding, 2, rng
+        )
+        left = current[picks[0]]
+        right = current[picks[1]]
+        child, operator = genetic.tournament_offspring(
+            left.strategy, right.strategy, rng, symmetric=symmetric
+        )
+        if child is None:
+            invalid += 1
+            continue
+        digest = dsl.strategy_hash(child)
+        if digest in known or digest in pending:
+            duplicates += 1
+            continue
+        return {
+            "child": child,
+            "parents": (left, right),
+            "operator": operator,
+            "attempts": attempts,
+            "invalid": invalid,
+            "duplicates": duplicates,
+        }
+    return {
+        "child": None,
+        "parents": (None, None),
+        "operator": None,
+        "attempts": attempts,
+        "invalid": invalid,
+        "duplicates": duplicates,
+    }
+
+
 def run_campaign(
     campaign_id: str,
     *,
@@ -500,6 +560,7 @@ def run_campaign(
     requested = max(1, requested)
 
     known: dict[str, Individual] = {}
+    symmetric = genetic.template_symmetric(template)
     init_stats: dict[str, int] = {}
     initial_candidates = initial_strategies(
         campaign,
@@ -507,14 +568,19 @@ def run_campaign(
         population=int(profile.population),
         rng=rng,
         stats=init_stats,
+        symmetric=symmetric,
     )
     init_errors: list[str] = []
     diagnostics: dict[str, Any] = {
+        "symmetric": symmetric,
         "init": dict(init_stats),
         "generations": [],
         "submitted": len(initial_candidates),
         "evaluated": 0,
         "evaluation_errors": 0,
+        "attempts": 0,
+        "retried": 0,
+        "empty_slots": 0,
         "stop_reason": "generations",
     }
 
@@ -587,34 +653,42 @@ def run_campaign(
             gen_stats: dict[str, Any] = {
                 "generation": generation,
                 "slots": int(profile.population),
+                "attempts": 0,
+                "retried": 0,
                 "invalid": 0,
                 "duplicates": 0,
+                "empty_slots": 0,
                 "submitted": 0,
                 "errors": 0,
                 "evaluated": 0,
             }
             for _ in range(int(profile.population)):
-                picks = nsga2.select(
-                    list(range(len(current))), ranks, crowding, 2, rng
+                draw = _draw_child(
+                    current,
+                    ranks,
+                    crowding,
+                    known,
+                    pending,
+                    rng,
+                    symmetric=symmetric,
                 )
-                left = current[picks[0]]
-                right = current[picks[1]]
-                child, operator = genetic.tournament_offspring(
-                    left.strategy, right.strategy, rng
-                )
+                gen_stats["attempts"] += int(draw["attempts"])
+                gen_stats["retried"] += max(0, int(draw["attempts"]) - 1)
+                gen_stats["invalid"] += int(draw["invalid"])
+                gen_stats["duplicates"] += int(draw["duplicates"])
+                child = draw["child"]
                 if child is None:
-                    gen_stats["invalid"] += 1
+                    gen_stats["empty_slots"] += 1
                     continue
-                digest = dsl.strategy_hash(child)
-                if digest in known or digest in pending:
-                    gen_stats["duplicates"] += 1
-                    continue
-                pending.add(digest)
+                pending.add(dsl.strategy_hash(child))
                 offspring.append(child)
-                meta.append((left, right))
-                operators.append(operator)
+                meta.append(draw["parents"])
+                operators.append(draw["operator"])
             gen_stats["submitted"] = len(offspring)
             diagnostics["submitted"] += len(offspring)
+            diagnostics["attempts"] += int(gen_stats["attempts"])
+            diagnostics["retried"] += int(gen_stats["retried"])
+            diagnostics["empty_slots"] += int(gen_stats["empty_slots"])
             if not offspring:
                 diagnostics["generations"].append(gen_stats)
                 diagnostics["stop_reason"] = "empty_offspring"

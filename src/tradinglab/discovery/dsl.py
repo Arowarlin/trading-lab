@@ -297,6 +297,59 @@ def _validate_block_params(expr: Expr, spec, errors: list[str], path: str) -> No
         _validate_param(name, value, param_spec, errors, path)
 
 
+def _has_price(expr: Expr | None) -> bool:
+    if expr is None:
+        return False
+    if expr.kind == "price":
+        return True
+    for child in expr.args:
+        if _has_price(child):
+            return True
+    for child in (expr.left, expr.right, expr.expr):
+        if _has_price(child):
+            return True
+    return False
+
+
+def _price_direction(expr: Expr | None, *, negated: bool = False) -> str | None:
+    """Dirección de la primera condición que compara un precio.
+
+    ``gt``/``ge``/``cross_up`` son alcistas; ``lt``/``le``/``cross_down``
+    bajistas. ``not`` invierte la dirección. Sirve para impedir que largo y
+    corto compartan la misma condición de precio (p. ej. ambos ``close > ORH``).
+    """
+
+    if expr is None:
+        return None
+    if expr.kind == "not":
+        child = expr.args[0] if len(expr.args) == 1 else None
+        return _price_direction(child, negated=not negated)
+    if expr.kind == "htf":
+        return _price_direction(expr.expr, negated=negated)
+    if expr.kind in {"and", "or"}:
+        for child in expr.args:
+            direction = _price_direction(child, negated=negated)
+            if direction is not None:
+                return direction
+        return None
+    if expr.kind in {"held_for", "within_bars"}:
+        child = expr.args[0] if expr.args else None
+        return _price_direction(child, negated=negated)
+    if expr.kind in COMPARE or expr.kind in CROSS:
+        if not (_has_price(expr.left) or _has_price(expr.right)):
+            return None
+        if expr.kind in {"gt", "ge", "cross_up"}:
+            direction = "up"
+        elif expr.kind in {"lt", "le", "cross_down"}:
+            direction = "down"
+        else:
+            return None
+        if negated:
+            direction = "down" if direction == "up" else "up"
+        return direction
+    return None
+
+
 def _validate_expr(expr: Expr | None, errors: list[str], path: str = "expr") -> None:
     if expr is None:
         return
@@ -406,6 +459,13 @@ def validate(strategy: Strategy | dict) -> list[str]:
         errors.append("la estrategia no tiene entrada larga ni corta")
     _validate_expr(model.long_entry, errors, "long_entry")
     _validate_expr(model.short_entry, errors, "short_entry")
+    long_direction = _price_direction(model.long_entry)
+    short_direction = _price_direction(model.short_entry)
+    if long_direction is not None and short_direction == long_direction:
+        errors.append(
+            "short_entry: la condición de precio va en la misma dirección que "
+            f"long_entry ({long_direction})"
+        )
     session = model.session
     if session.start == session.end:
         errors.append("session: start y end no pueden ser iguales")

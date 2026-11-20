@@ -18,7 +18,7 @@ from ..prop.simulator import monte_carlo
 from ..propfund.registry import load_registry
 from ..propfund.snapshots import _rules_from_account
 from ..validation import cscv_pbo
-from ..walkforward import REQUIRED_REGIMES, regime_gate, regime_report, walk_forward
+from ..walkforward import regime_gate, regime_report, walk_forward
 from . import campaigns, compiler, databank, dsl, fastbt, jobs, optimizer, retester
 from .config import load_engine_config
 from .specs import exit_spec_from_strategy, run_limits_from_strategy
@@ -308,15 +308,78 @@ def _pbo_wf(campaign_id: str, db_path) -> tuple[dict[str, Any], dict[str, Any]]:
     return pbo_result, wf_result
 
 
-def _regime(daily: pd.Series) -> dict[str, Any]:
-    report = regime_report(daily, years=REQUIRED_REGIMES)
+def _risk_for_account(account_id: str) -> float | None:
+    try:
+        account = load_registry().accounts.get(str(account_id))
+    except Exception:  # noqa: BLE001 - registro no disponible
+        return None
+    if account is None:
+        return None
+    risk = account.risk.per_trade_risk_pct
+    if risk is None or float(risk) <= 0.0:
+        return None
+    return float(risk)
+
+
+def account_regime(
+    daily_r: pd.Series,
+    risk_pct: float,
+    *,
+    years: tuple[int, ...] | None = None,
+    min_obs: int = 20,
+) -> dict[str, Any]:
+    """Regímenes sobre retorno de cuenta, no sobre R.
+
+    Convierte la serie diaria de R a retorno de cuenta con
+    ``per_trade_risk_pct`` y solo exige los años que realmente tienen datos en
+    el tramo (nunca 2018/2020 si la campaña empieza en 2021). No modifica
+    ``walkforward.py``.
+    """
+
+    series = pd.to_numeric(daily_r, errors="coerce").dropna()
+    if not isinstance(series.index, pd.DatetimeIndex):
+        return {
+            "status": "Sin datos",
+            "passed": False,
+            "reasons": ["índice sin fechas"],
+            "years": {},
+            "missing": [],
+            "min_obs": int(min_obs),
+        }
+    account = series.astype(float) * float(risk_pct)
+    if years is None:
+        counts = account.groupby(account.index.year).size()
+        years = tuple(
+            sorted(
+                int(year)
+                for year, count in counts.items()
+                if int(count) >= int(min_obs)
+            )
+        )
+    report = regime_report(
+        account, years=tuple(int(year) for year in years), min_obs=int(min_obs)
+    )
     gate = regime_gate(report)
     return {
         "status": "Sin datos" if report.missing else "ok",
         "passed": bool(gate.passed),
         "reasons": list(gate.reasons),
+        "risk_per_trade_pct": float(risk_pct),
         **report.to_dict(),
     }
+
+
+def _regime(daily: pd.Series, risk_pct: float | None) -> dict[str, Any]:
+    if risk_pct is None or float(risk_pct) <= 0.0:
+        return {
+            "status": "Sin datos",
+            "passed": False,
+            "reasons": ["per_trade_risk_pct Sin datos"],
+            "years": {},
+            "missing": [],
+            "min_obs": 20,
+        }
+    return account_regime(daily, float(risk_pct))
 
 
 def _challenge(daily_r: pd.Series) -> dict[str, Any]:
@@ -541,7 +604,7 @@ def run(
         seed=int(campaign["config"].get("seed", 0)) + 3_000,
     )
     pbo, wf = _pbo_wf(campaign_id, db_path)
-    regime = _regime(base.daily_r)
+    regime = _regime(base.daily_r, _risk_for_account(setup.account))
     challenge = _challenge(base.daily_r)
     hour_weekday, streaks = _hour_streaks(base.trades, model.session.tz or setup.session_tz)
     prepared_is, _ = _prepared_for(model, is_frame, cost, setup)
@@ -593,4 +656,4 @@ def run(
     }
 
 
-__all__ = ["random_baseline", "run"]
+__all__ = ["account_regime", "random_baseline", "run"]

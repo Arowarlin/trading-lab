@@ -1,0 +1,114 @@
+{
+ "note": "Regla anomala del finalista 258: corto con close > opening_range_high, misma direccion que el largo.",
+ "strategy_id": 258,
+ "strategy_hash": "07093bb006501926d1e94fe4de1342beaf369387c06451688dd3261dba169b0b",
+ "dsl": {
+  "dsl_version": "1",
+  "exit": {
+   "opposite_signal": false,
+   "stop": {
+    "mult": 4.93,
+    "n": 14,
+    "type": "atr"
+   },
+   "target": {
+    "rr": 1.99,
+    "type": "rr"
+   },
+   "time_exit_bars": 24
+  },
+  "instrument": "US100.CASH",
+  "limits": {
+   "cooldown_bars": 5,
+   "max_trades_per_day": 2
+  },
+  "long_entry": {
+   "args": [
+    {
+     "args": [],
+     "days": [],
+     "kind": "gt",
+     "left": {
+      "args": [],
+      "days": [],
+      "kind": "price",
+      "params": {},
+      "price": "close"
+     },
+     "params": {},
+     "right": {
+      "args": [],
+      "days": [],
+      "kind": "level",
+      "level": "opening_range_high",
+      "params": {}
+     }
+    },
+    {
+     "args": [],
+     "days": [],
+     "kind": "regime",
+     "lookback": 100,
+     "n": 14,
+     "params": {
+      "pct": 0.8
+     },
+     "regime": "vol_high"
+    }
+   ],
+   "days": [],
+   "kind": "and",
+   "params": {}
+  },
+  "market": "cfd",
+  "session": {
+   "end": "11:20",
+   "flat_at": "15:45",
+   "or_minutes": 15,
+   "start": "09:35",
+   "tz": "America/New_York"
+  },
+  "short_entry": {
+   "args": [
+    {
+     "args": [],
+     "days": [],
+     "kind": "gt",
+     "left": {
+      "args": [],
+      "days": [],
+      "kind": "price",
+      "params": {},
+      "price": "close"
+     },
+     "params": {},
+     "right": {
+      "args": [],
+      "days": [],
+      "kind": "level",
+      "level": "opening_range_high",
+      "params": {}
+     }
+    },
+    {
+     "args": [],
+     "days": [],
+     "kind": "regime",
+     "lookback": 159,
+     "n": 14,
+     "params": {
+      "pct": 0.8
+     },
+     "regime": "vol_high"
+    }
+   ],
+   "days": [],
+   "kind": "and",
+   "params": {}
+  },
+  "sizing": {
+   "risk_per_trade_r": 1.0
+  },
+  "timeframe": "M5"
+ }
+}

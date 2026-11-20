@@ -78,3 +78,45 @@ def test_offspring_operator_names() -> None:
     assert operator in {item.__name__ for item in genetic.MUTATIONS}
     if child is not None:
         assert dsl.validate(child) == []
+
+
+def test_template_symmetry_flags() -> None:
+    assert genetic.template_symmetric("ny_open_vol_filter") is True
+    assert genetic.template_symmetric("asia_range_reversion") is True
+    assert genetic.template_symmetric("session_breakout_htf") is False
+
+
+def test_mirror_matches_template_short() -> None:
+    for name in ("ny_open_vol_filter", "asia_range_reversion"):
+        strategy = genetic.template_strategy(name)
+        assert (
+            genetic.mirror_expr(strategy["long_entry"])
+            == strategy["short_entry"]
+        )
+        assert dsl.validate(strategy) == []
+
+
+def test_symmetric_random_strategy_keeps_mirror() -> None:
+    for seed in range(6):
+        strategy = genetic.random_strategy(
+            random.Random(seed), "ny_open_vol_filter", symmetric=True
+        )
+        assert strategy is not None
+        assert (
+            strategy["short_entry"]
+            == genetic.mirror_expr(strategy["long_entry"])
+        )
+        assert dsl.validate(strategy) == []
+
+
+def test_symmetric_operators_keep_mirror() -> None:
+    base = genetic.template_strategy("ny_open_vol_filter")
+    for operator in genetic.MUTATIONS:
+        result = operator(copy.deepcopy(base), random.Random(3), symmetric=True)
+        if result is None:
+            continue
+        assert (
+            result["short_entry"]
+            == genetic.mirror_expr(result["long_entry"])
+        )
+

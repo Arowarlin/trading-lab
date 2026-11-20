@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -243,3 +245,26 @@ def test_vwap_rechaza_indice_sin_zona() -> None:
         ext.bollinger(frame["close"])
     with pytest.raises(ValueError, match="zona horaria"):
         ext.realized_vol(frame["close"])
+
+
+def test_validate_rechaza_corto_misma_direccion_258() -> None:
+    payload = json.loads(
+        (
+            ROOT
+            / "tests"
+            / "fixtures"
+            / "discovery_regla_anomala_258.json"
+        ).read_text(encoding="utf-8")
+    )
+    errors = validate(payload["dsl"])
+    assert any("misma dirección" in error for error in errors)
+
+
+def test_validate_acepta_corto_espejo() -> None:
+    from tradinglab.discovery import genetic
+
+    strategy = genetic.template_strategy("ny_open_vol_filter")
+    assert validate(strategy) == []
+    mirrored = genetic.mirror_expr(strategy["long_entry"])
+    assert mirrored == strategy["short_entry"]
+
