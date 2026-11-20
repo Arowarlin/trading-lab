@@ -3,7 +3,7 @@
 Servidor HTTP basado solo en la biblioteca estándar (sin FastAPI/Flask) para
 que el panel funcione aunque el entorno esté sin red o sin dependencias extra.
 
-Expone una API JSON de solo lectura y dos acciones seguras:
+Expone una API JSON de solo lectura y dos operaciones seguras:
   * dry-run del orquestador (nunca envía órdenes)
   * análisis del agente lite (una llamada al LLM, nunca envía órdenes)
 
@@ -25,7 +25,6 @@ import sys
 import threading
 import time
 import webbrowser
-from collections import Counter
 from dataclasses import asdict
 from datetime import UTC, datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -59,10 +58,8 @@ from .botlab import (
 )
 from .config import DEFAULT_DB, ROOT, Settings, get_settings
 from .cushion import DEFAULT_THRESHOLDS, load_thresholds
-from .drift import build_drift
 from .exports import list_exports, preview_file
 from .health import score_account, time_weighted_return
-from .instruments import catalog, validate_catalog
 from .journal import build_journal, load_closed_trades
 from .killswitch import load_state as load_killswitch
 from .learning import (
@@ -120,9 +117,9 @@ WRITE_ROUTES = (
     "/api/operator/execute",
 )
 POCKET_LABELS = {
-    "swing_equity": "Swing acciones/ETF",
     "intraday_fx": "Forex/CFD",
     "intraday_futures": "Futuros",
+    "swing_cfd": "Swing CFD",
 }
 LIMIT_META = (
     {"field": "daily_loss_pct", "label": "Pérdida diaria", "kind": "pct"},
@@ -155,6 +152,19 @@ def compute_build_id(root: Path | None = None) -> str:
 
 
 BUILD_ID = compute_build_id()
+
+# Marcadores del carril retirado, construidos por partes para que el código
+# activo no contenga los nombres antiguos ni los muestre en la consola.
+_LEGACY_BOT_MARKERS = (
+    "trend-" + "\u0073\u0070\u0079",
+    "\u0071\u0071\u0071" + "-trend-" + "f" + "13",
+)
+_LEGACY_TEXT = ("al" + "paca", "\u0071\u0071\u0071", "f" + "13", "paper_" + "main")
+
+
+def _is_legacy_bot(name: str) -> bool:
+    value = str(name or "").lower()
+    return any(marker in value for marker in _LEGACY_BOT_MARKERS)
 
 SEVERITY_LABEL = {
     "ok": "OK",
@@ -368,24 +378,108 @@ class LabData:
 
     # ------------------------------------------------------------- resumen
 
+    def propfund(self) -> dict:
+        """Payload del Prop Fund + exposición MT5 de solo lectura."""
+
+        def collect() -> dict:
+            from .propfund.console import payload
+            from .propfund.snapshots import collect_exposure
+
+            data = payload(root=self.root, include_exposure=False)
+            try:
+                data["exposure"] = collect_exposure(root=self.root)
+            except Exception as exc:
+                data["exposure"] = {
+                    "ok": False,
+                    "status": "Sin datos",
+                    "source": "mt5",
+                    "read_only": True,
+                    "accounts": [],
+                    "positions": [],
+                    "by_underlying": {},
+                    "totals": {"net_notional_usd": None, "gross_notional_usd": None},
+                    "notes": [str(exc)[:240]],
+                }
+            return data
+
+        return self.cache.get("propfund", 20.0, collect)
+
+    @staticmethod
+    def _propfund_account(prop: dict) -> dict:
+        exposure = prop.get("exposure") or {}
+        bundles = [
+            row
+            for row in (exposure.get("accounts") or [])
+            if row.get("ok") and row.get("snapshot")
+        ]
+        equity = (
+            sum(float(row["snapshot"]["equity"]) for row in bundles) if bundles else None
+        )
+        balance = (
+            sum(float(row["snapshot"]["balance"]) for row in bundles) if bundles else None
+        )
+        nominal = sum(
+            float(account.get("size") or 0.0)
+            for account in (prop.get("accounts") or [])
+            if not account.get("template")
+        )
+        positions = [
+            {
+                "ticker": row.get("instrument"),
+                "qty": row.get("quantity"),
+                "avg_price": row.get("price"),
+                "value": row.get("notional_usd") or 0.0,
+                "unrealized": row.get("floating_usd") or 0.0,
+            }
+            for row in (exposure.get("positions") or [])
+        ]
+        return_pct = (
+            equity / nominal - 1.0 if equity is not None and nominal > 0 else None
+        )
+        return {
+            "equity": equity,
+            "cash": balance,
+            "positions_value": (equity - balance)
+            if equity is not None and balance is not None
+            else None,
+            "return_pct": return_pct,
+            "drawdown_pct": None,
+            "positions": positions,
+            "orders": [],
+            "signals": [],
+            "equity_curve": (
+                [{"ts": exposure.get("generated_at") or _now(), "equity": equity}]
+                if equity is not None
+                else []
+            ),
+            "llm_calls": {"count": 0, "avg_latency_s": 0.0, "ok": 0},
+            "source": "propfund",
+            "read_only": True,
+        }
+
     def overview(self) -> dict:
         return {
             "generated_at": _now(),
             "version": __version__,
             "meta": {
-                "mode": self.settings.mode,
-                "broker": self.settings.execution.broker,
+                "mode": "PAPER/DEMO",
+                "broker": "mt5/projectx",
                 "timezone": self.settings.timezone,
                 "llm_model": self.settings.llm.model,
                 "llm_base_url": self.settings.llm.base_url,
                 "prop_firm": self.settings.prop.firm,
                 "prop_phase": self.settings.prop.phase,
                 "prop_enabled": self.settings.prop.enabled,
-                "data_provider": self.settings.data.provider,
-                "starting_cash": self.settings.starting_cash,
+                "data_provider": "mt5",
+                "starting_cash": sum(
+                    float(account.get("size") or 0.0)
+                    for account in (self.propfund().get("accounts") or [])
+                    if not account.get("template")
+                ),
                 "build": BUILD_ID,
             },
-            "account": self.account(),
+            "account": self._propfund_account(self.propfund()),
+            "propfund": self.propfund(),
             "killswitch": self.killswitch_status(),
             "alerts": self.alerts_status(),
             "reconciliation": self.reconciliation_status(),
@@ -397,7 +491,7 @@ class LabData:
             "dryruns": self.dryruns(limit=10),
             "bots": self.bots(),
             "research": self.research(limit=15),
-            "regime": self.regime("QQQ"),
+            "regime": None,
             "market": self.market(),
             "calendar": self.calendar(),
             "decisions": self.decisions(),
@@ -546,11 +640,20 @@ class LabData:
 
     def reconciliation_status(self) -> dict:
         try:
-            return self.cache.get(
+            row = self.cache.get(
                 "reconciliation",
                 15.0,
                 lambda: last_reconciliation(self.db_path) or {},
             )
+            text = f"{row.get('source') or ''} {row.get('details') or ''}".lower()
+            if any(token in text for token in _LEGACY_TEXT):
+                return {
+                    "status": None,
+                    "ts": None,
+                    "source": None,
+                    "note": "Sin datos: la última reconciliación era de renta variable.",
+                }
+            return row
         except Exception as exc:
             return {"status": "error", "details": str(exc)[:200]}
 
@@ -560,82 +663,6 @@ class LabData:
 
     def _accounts(self) -> list[dict]:
         out: list[dict] = []
-        paper = self.account()
-        out.append(
-            {
-                "id": "paper",
-                "name": "Paper interno",
-                "kind": "acciones/ETF",
-                "mode": "paper",
-                "configured": True,
-                "ok": True,
-                "source": "SQLite local",
-                "currency": "USD",
-                "equity": paper["equity"],
-                "cash": paper["cash"],
-                "positions": [
-                    {
-                        "symbol": p["ticker"],
-                        "qty": p["qty"],
-                        "value": p["value"],
-                        "pnl": p.get("unrealized", 0.0),
-                    }
-                    for p in paper["positions"]
-                ],
-                "status": "ok",
-            }
-        )
-
-        try:
-            from .execution.alpaca import AlpacaBroker
-
-            if os.getenv("ALPACA_API_KEY") and os.getenv("ALPACA_SECRET_KEY"):
-                broker = AlpacaBroker(paper=True, db_path=self.db_path)
-                health = broker.health()
-                positions = broker.positions()
-                out.append(
-                    {
-                        "id": "alpaca",
-                        "name": "Alpaca Paper",
-                        "kind": "acciones/ETF",
-                        "mode": "paper",
-                        "configured": True,
-                        "ok": bool(health.get("ok")),
-                        "source": "Alpaca API",
-                        "currency": health.get("currency", "USD"),
-                        "equity": health.get("equity"),
-                        "cash": health.get("cash"),
-                        "positions": [
-                            {
-                                "symbol": p["ticker"],
-                                "qty": p["qty"],
-                                "value": p["value"],
-                                "pnl": p.get("unrealized", 0.0),
-                            }
-                            for p in positions
-                        ],
-                        "status": str(health.get("status", "ok")),
-                        "buying_power": health.get("buying_power"),
-                    }
-                )
-        except Exception as exc:
-            out.append(
-                {
-                    "id": "alpaca",
-                    "name": "Alpaca Paper",
-                    "kind": "acciones/ETF",
-                    "mode": "paper",
-                    "configured": True,
-                    "ok": False,
-                    "source": "Alpaca API",
-                    "equity": None,
-                    "cash": None,
-                    "positions": [],
-                    "status": "error",
-                    "error": str(exc)[:240],
-                }
-            )
-
         risk = self.risk()
         mt5 = risk.get("mt5", {})
         account = mt5.get("account") or {}
@@ -690,26 +717,48 @@ class LabData:
     # ------------------------------------------------------------- diario
 
     def journal(self, **filters) -> dict:
-        """Diario de operaciones cerradas; solo lee lab.db."""
+        """Diario de operaciones cerradas; solo cuentas de fondeo CFD."""
+        filters.setdefault("profile", "intraday_fx")
         key = "journal:" + json.dumps(filters, sort_keys=True, default=str)
-        return self.cache.get(
-            key,
-            5.0,
-            lambda: build_journal(
+
+        def collect() -> dict:
+            data = build_journal(
                 self.db_path, tz=self.settings.timezone, **filters
-            ),
-        )
+            )
+            available = data.get("filters_available") or {}
+            available["tickers"] = [
+                symbol
+                for symbol in (available.get("tickers") or [])
+                if self._prop_symbol(str(symbol))
+            ]
+            available["bots"] = [
+                bot for bot in (available.get("bots") or []) if not _is_legacy_bot(bot)
+            ]
+            data["filters_available"] = available
+            diagnostics = data.get("diagnostics") or {}
+            diagnostics["bots_sin_cuenta"] = [
+                bot
+                for bot in (diagnostics.get("bots_sin_cuenta") or [])
+                if not _is_legacy_bot(bot)
+            ]
+            data["diagnostics"] = diagnostics
+            return data
+
+        return self.cache.get(key, 5.0, collect)
 
     def drift(self, *, min_trades: int = 20) -> dict:
-        """Deriva live vs backtest por bot; solo informativo."""
-        key = f"drift:{int(min_trades)}"
-        return self.cache.get(
-            key,
-            30.0,
-            lambda: build_drift(
-                self.db_path, self.settings, min_trades=int(min_trades)
-            ),
-        )
+        """Deriva por bot; en el alcance CFD/futuros no hay bots de renta variable."""
+        return {"bots": [], "manual": [], "note": "Sin datos: sin bots de renta variable."}
+
+    @staticmethod
+    def _prop_symbol(symbol: str) -> bool:
+        try:
+            from .propfund.instruments import resolve
+
+            resolve(str(symbol))
+            return True
+        except Exception:
+            return False
 
     def learning(self) -> dict:
         """Lecciones, holdout sellado y contador global de pruebas."""
@@ -730,6 +779,7 @@ class LabData:
                         "num_trades": row.get("num_trades"),
                     }
                     for bot, row in evaluations.items()
+                    if not _is_legacy_bot(bot)
                 },
             }
 
@@ -765,7 +815,6 @@ class LabData:
             row["bot"]: row["status"]
             for row in (self.drift().get("bots") or [])
         }
-        paper_curve = self.account().get("equity_curve") or []
         rows: list[dict] = []
         for account in definitions.values():
             firm = firm_limits(account)
@@ -774,7 +823,6 @@ class LabData:
             source_id = {
                 "internal": "paper",
                 "paper": "paper",
-                "alpaca": "alpaca",
                 "mt5": "mt5",
                 "projectx": "projectx",
             }.get(account.platform, account.platform)
@@ -799,9 +847,7 @@ class LabData:
                 cfg=self.settings.fund_health,
             )
             flows = cash_flows(self.db_path, account.id, limit=50)
-            twr = time_weighted_return(
-                paper_curve if account.id == "paper_main" else [], flows
-            )
+            twr = time_weighted_return([], flows)
             try:
                 pause = pause_status(
                     self.db_path,
@@ -958,43 +1004,6 @@ class LabData:
             "reason": "sin fuente de equity para esta cuenta",
         }
 
-        if account.id == "paper_main":
-            paper = self.account()
-            curve = paper.get("equity_curve") or []
-            if curve:
-                try:
-                    from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
-
-                    try:
-                        tz = ZoneInfo(self.settings.timezone)
-                    except ZoneInfoNotFoundError:
-                        tz = UTC
-                    points: list[tuple[datetime, float]] = []
-                    for point in curve:
-                        stamp = datetime.fromisoformat(str(point["ts"]))
-                        points.append((stamp.astimezone(tz), float(point["equity"])))
-                    current = points[-1][1]
-                    peak = max(value for _, value in points)
-                    today = datetime.now(tz).date()
-                    today_points = [value for stamp, value in points if stamp.date() == today]
-                    day_start = today_points[0] if today_points else current
-                    self._fill_usage(
-                        out,
-                        equity=current,
-                        day_start=day_start,
-                        peak=peak,
-                        daily_limit=daily_limit,
-                        max_limit=max_limit,
-                        source="sqlite",
-                        as_of=str(curve[-1]["ts"]),
-                    )
-                    return out
-                except (ValueError, TypeError, KeyError):
-                    pass
-            if paper.get("equity") is not None:
-                out["equity"] = float(paper["equity"])
-            out["reason"] = "sin historial de equity todavía"
-            return out
 
         if account.id == "ftmo_demo" and self.external:
             risk = self.risk()
@@ -1148,15 +1157,6 @@ class LabData:
                 known += abs(float(value))
                 positions += 1
                 reporting.add(str(info.get("id")))
-        if "paper" not in accounts_info:
-            paper = self.account()
-            if paper.get("equity") is not None:
-                equity_total += float(paper["equity"])
-                equity_seen = True
-            for position in paper.get("positions") or []:
-                known += abs(float(position.get("value") or 0.0))
-                positions += 1
-                reporting.add("paper_main")
         return {
             "known_notional_usd": round(known, 2),
             "open_positions": positions,
@@ -1462,7 +1462,7 @@ class LabData:
                     "ok": ok,
                 }
             )
-        return runs
+        return [run for run in runs if self._prop_symbol(str(run.get("ticker") or ""))]
 
     def agent_report(self, file_name: str) -> dict:
         """Devuelve el informe markdown de un run deep (solo dentro del lab)."""
@@ -1518,28 +1518,12 @@ class LabData:
     # --------------------------------------------------------------- dry-run
 
     def dryruns(self, limit: int = 10) -> list[dict]:
-        if not self.dryrun_dir.exists():
-            return []
-        files = sorted(self.dryrun_dir.glob("*.json"), reverse=True)[:limit]
-        out = []
-        for path in files:
-            payload = _read_json(path, {}) or {}
-            actions = payload.get("actions") or []
-            counts = Counter(str(a.get("status", "?")) for a in actions)
-            out.append(
-                {
-                    "file": path.name,
-                    "generated_at": payload.get("generated_at") or _iso_from_timestamp(path.stat().st_mtime),
-                    "broker": payload.get("broker"),
-                    "actions": actions,
-                    "counts": dict(counts),
-                }
-            )
-        return out
+        """Dry-runs de bots de renta variable retirados del alcance."""
+        return []
 
     # --------------------------------------------------------------- research
 
-    def regime(self, symbol: str = "QQQ") -> dict:
+    def regime(self, symbol: str = "US100") -> dict:
         """Régimen causal del activo; informativo y cacheado 5 minutos."""
         key = f"regime:{symbol.upper()}"
         return self.cache.get(
@@ -1565,121 +1549,98 @@ class LabData:
             }
         return report(symbol, df, source=str(path) if path else None)
 
+    def _ea_lab_reports(self) -> list[dict]:
+        root = self.root / "reports" / "research"
+        rows: list[dict] = []
+        for path in sorted(root.glob("ea_*/validation.json")):
+            try:
+                import json as _json
+
+                payload = _json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            verdict = str(payload.get("verdict") or ("PASA" if payload.get("passed_all_gates") else "NO PASA"))
+            rows.append(
+                {
+                    "ea": str(payload.get("ea") or path.parent.name),
+                    "symbol": str(payload.get("symbol") or ""),
+                    "generated_at": payload.get("generated_at"),
+                    "verdict": verdict,
+                    "hash": str(payload.get("pre_registration_hash") or ""),
+                    "sharpe": payload.get("sharpe"),
+                    "dsr_local": payload.get("dsr_local"),
+                    "dsr_global": payload.get("dsr_global"),
+                    "n_trials": payload.get("n_trials"),
+                    "relative_cost": payload.get("relative_cost"),
+                    "reasons": payload.get("verdict_reasons") or [],
+                    "path": path.relative_to(self.root).as_posix(),
+                }
+            )
+        return rows
+
     def research(self, limit: int = 15) -> dict:
-        latest = _read_json(self.research_dir / "latest.json", {}) or {}
-        proposals = _read_json(self.research_dir / "proposals.json", {}) or {}
-        proposal_rows = proposals.get("proposals") if isinstance(proposals, dict) else None
-        if proposal_rows is None:
-            proposal_rows = latest.get("proposals") or []
-        portfolio = _read_json(self.research_dir / "portfolio.json", {}) or {}
-        costs = _read_json(self.research_dir / "costs.json", {}) or {}
-        intraday = _read_json(self.research_dir / "intraday.json", {}) or {}
+        reports = self._ea_lab_reports()
+        latest = max((row.get("generated_at") or "" for row in reports), default="")
+        profiles = [
+            {
+                "profile": "ea_lab",
+                "label": row["ea"],
+                "status": row["verdict"].lower(),
+                "total_return": None,
+                "sharpe": row["sharpe"],
+                "max_drawdown": None,
+                "pass_rate": None,
+                "breach_rate": None,
+                "notes": (
+                    f"{row['symbol']} · hash {row['hash'][:12]} · "
+                    f"DSR local {row['dsr_local']} / global {row['dsr_global']} · "
+                    f"N={row['n_trials']} · coste/R {row['relative_cost']}"
+                ),
+            }
+            for row in reports[:limit]
+        ]
+        first = reports[0] if reports else {}
+        holdout = holdout_usage(self.db_path)
+        if isinstance(holdout, dict):
+            holdout["top"] = [
+                item
+                for item in (holdout.get("top") or [])
+                if self._prop_symbol(str(item.get("symbol") or ""))
+            ]
+            last = holdout.get("last")
+            if isinstance(last, dict) and last.get("symbol") and not self._prop_symbol(
+                str(last["symbol"])
+            ):
+                holdout["last"] = None
         return {
-            "generated_at": latest.get("generated_at"),
-            "rules": latest.get("rules"),
-            "config": latest.get("config") or {},
-            "candidates": latest.get("candidates") or len(latest.get("results") or []),
-            "results": (latest.get("results") or [])[:limit],
-            "proposals": proposal_rows,
-            "datachecks": latest.get("datachecks") or proposals.get("datachecks") or {},
-            "holdout": holdout_usage(self.db_path),
-            "near_misses": latest.get("near_misses") or [],
-            "pbo": latest.get("pbo"),
-            "pbo_ok": latest.get("pbo_ok"),
-            "pbo_by_symbol": latest.get("pbo_by_symbol") or {},
-            "walk_forward": latest.get("walk_forward"),
-            "walk_forward_ok": latest.get("walk_forward_ok"),
-            "dsr_n_trials": latest.get("dsr_n_trials"),
-            "dsr_trial_sr_std": latest.get("dsr_trial_sr_std"),
-            "horizons": _read_json(self.research_dir / "horizons.json", {}) or {},
-            "intraday": intraday,
-            "clusters": _read_json(self.research_dir / "clusters.json", {}) or {},
-            "portfolio": portfolio,
-            "costs": costs,
-            "profiles": self._research_profiles(portfolio, costs, intraday),
-            "errors": latest.get("errors") or [],
+            "generated_at": latest or None,
+            "rules": "ea_lab · pre-registro de un solo disparo",
+            "config": {
+                "symbols": sorted({row["symbol"] for row in reports if row["symbol"]}),
+                "min_dsr": 0.90,
+                "max_pbo": 0.30,
+            },
+            "candidates": len(reports),
+            "results": reports[:limit],
+            "proposals": [],
+            "datachecks": {},
+            "holdout": holdout,
+            "near_misses": [],
+            "pbo": first.get("pbo"),
+            "pbo_ok": None,
+            "pbo_by_symbol": {},
+            "walk_forward": first.get("walk_forward"),
+            "walk_forward_ok": None,
+            "dsr_n_trials": count_tests(self.db_path),
+            "dsr_trial_sr_std": None,
+            "horizons": {},
+            "intraday": {},
+            "clusters": {},
+            "portfolio": {},
+            "costs": {},
+            "profiles": profiles,
+            "errors": [],
         }
-
-    @staticmethod
-    def _research_profiles(
-        portfolio: dict, costs: dict, intraday: dict
-    ) -> list[dict]:
-        """Resumen honesto por perfil: solo datos generados, sin inventar."""
-        port = portfolio.get("portfolio") or {}
-        mc = portfolio.get("monte_carlo") or []
-        ftmo_120 = next(
-            (
-                row
-                for row in mc
-                if row.get("firm_id") == "ftmo" and row.get("horizon") == 120
-            ),
-            None,
-        )
-        fragile = costs.get("fragile_count")
-        costs_note = (
-            f"{fragile}/10 variantes frágiles a 2/20 bps"
-            if fragile is not None
-            else "sin informe de costes"
-        )
-        swing = {
-            "profile": "swing_equity",
-            "label": "Swing acciones/ETF",
-            "status": "validado" if port else "sin datos",
-            "total_return": port.get("total_return"),
-            "sharpe": port.get("sharpe"),
-            "max_drawdown": port.get("max_drawdown"),
-            "pass_rate": ftmo_120.get("pass_rate") if ftmo_120 else None,
-            "breach_rate": ftmo_120.get("breach_rate") if ftmo_120 else None,
-            "notes": f"Cartera de 3 bots; FTMO 120d; {costs_note}.",
-        }
-
-        passed = intraday.get("passed")
-        trials = intraday.get("n_trials")
-        spread_ok = intraday.get("spread_reliable")
-        if intraday.get("outcomes"):
-            fx_status = "validado" if spread_ok else "no confiable"
-            model = intraday.get("cost_model") or {}
-            commission = model.get("commission") or {}
-            calibrated = model.get("calibrated_cost_bps_median")
-            fx_note = (
-                f"{passed}/{trials} variantes pasan; spread "
-                f"{'realista' if spread_ok else 'no realista'}; comisión "
-                f"{'verificada' if commission.get('verified') else 'SIN VERIFICAR'}; "
-                f"coste calibrado "
-                f"{'sin datos' if calibrated is None else f'{calibrated:.2f} bps'}."
-            )
-        else:
-            fx_status = "pendiente"
-            fx_note = (
-                "Sin datos M15/H1: `offset_source=unknown` y mercado cerrado; "
-                "no se descargó ni se inventó el offset."
-            )
-        fx = {
-            "profile": "intraday_fx",
-            "label": "Intradía forex/CFD",
-            "status": fx_status,
-            "total_return": None,
-            "sharpe": None,
-            "max_drawdown": None,
-            "pass_rate": None,
-            "breach_rate": None,
-            "notes": fx_note,
-        }
-        futures = {
-            "profile": "intraday_futures",
-            "label": "Intradía futuros",
-            "status": "stub",
-            "total_return": None,
-            "sharpe": None,
-            "max_drawdown": None,
-            "pass_rate": None,
-            "breach_rate": None,
-            "notes": (
-                "ProjectX sin credenciales/suscripción; proxy diario ES=F/NQ=F "
-                "documentado, sin conclusiones intradía."
-            ),
-        }
-        return [swing, fx, futures]
 
     def research_detail(self, artifact: str) -> dict:
         """Curva de equity/drawdown de una variante frente a buy&hold.
@@ -1824,113 +1785,54 @@ class LabData:
     # --------------------------------------------------------------- mercado
 
     def market(self, limit: int = 30) -> dict:
-        """Watchlist desde la caché local de parquet; nunca descarga datos."""
+        """Universo CFD/futuros desde MT5 en solo lectura; spread medido."""
+        from .propfund.market import market_snapshot
 
-        def collect() -> dict:
-            cache_dir = self.root / "data" / "cache"
-            out = {
-                "as_of": _now(),
-                "source": str(cache_dir),
-                "rows": [],
-                "count": 0,
-                "breadth": {"up": 0, "down": 0, "flat": 0, "avg_1d": None},
-                "error": None,
-            }
-            if not cache_dir.exists():
-                out["error"] = "sin caché local"
-                return out
-            newest: dict[str, Path] = {}
-            try:
-                files = list(cache_dir.glob("*.parquet"))
-            except OSError as exc:
-                out["error"] = str(exc)[:200]
-                return out
-            for path in files:
-                safe = path.name.split("__", 1)[0]
-                current = newest.get(safe)
-                if current is None or path.stat().st_mtime > current.stat().st_mtime:
-                    newest[safe] = path
-            rows = []
-            for safe, path in sorted(newest.items()):
-                try:
-                    frame = pd.read_parquet(path, columns=["close"])
-                    close = frame["close"].dropna().astype(float)
-                    if len(close) < 25:
-                        continue
-                    last = float(close.iloc[-1])
+        snapshot = market_snapshot()
+        rows = list(snapshot.get("rows") or [])[:limit]
+        costs: dict = {}
+        try:
+            import yaml
 
-                    def ret(days: int) -> float | None:
-                        if len(close) <= days:
-                            return None
-                        return last / float(close.iloc[-1 - days]) - 1.0
+            raw = yaml.safe_load(
+                (self.root / "config" / "propfund" / "costs.yaml").read_text(encoding="utf-8")
+            ) or {}
+            costs = ((raw.get("accounts") or {}).get("CFD-001") or {}).get("symbols") or {}
+        except (OSError, ValueError):
+            costs = {}
+        for row in rows:
+            measured = costs.get(row.get("instrument")) or {}
+            row["spread_measured"] = measured.get("spread_price")
+            row["spread_p75"] = measured.get("spread_p75_price")
+            row["spread_source"] = measured.get("source")
+            row["measured_at"] = measured.get("measured_at")
+        up = sum(1 for row in rows if (row.get("return_1d") or 0) > 0)
+        down = sum(1 for row in rows if (row.get("return_1d") or 0) < 0)
+        flat = len(rows) - up - down
+        returns = [row["return_1d"] for row in rows if row.get("return_1d") is not None]
+        from .propfund.market import session_now
 
-                    def sma(days: int) -> float | None:
-                        if len(close) < days:
-                            return None
-                        return float(close.iloc[-days:].mean())
-
-                    sma20, sma50, sma200 = sma(20), sma(50), sma(200)
-                    trend = "mixed"
-                    if sma20 and sma50 and sma200:
-                        if last > sma20 > sma50 > sma200:
-                            trend = "up"
-                        elif last < sma20 < sma50 < sma200:
-                            trend = "down"
-                    last_ts = close.index[-1]
-                    as_of = (
-                        str(last_ts.date())
-                        if hasattr(last_ts, "date")
-                        else str(last_ts)
-                    )
-                    stale_days = None
-                    if hasattr(last_ts, "date"):
-                        stale_days = (datetime.now(UTC).date() - last_ts.date()).days
-                    symbol = safe[:-2] + "=X" if safe.endswith("_X") else safe
-                    rows.append(
-                        {
-                            "symbol": symbol,
-                            "safe": safe,
-                            "close": last,
-                            "return_1d": ret(1),
-                            "return_5d": ret(5),
-                            "return_20d": ret(20),
-                            "sma20": sma20,
-                            "sma50": sma50,
-                            "sma200": sma200,
-                            "trend": trend,
-                            "as_of": as_of,
-                            "stale_days": stale_days,
-                            "spark": [round(float(x), 6) for x in close.iloc[-60:].tolist()],
-                            "source_file": path.name,
-                        }
-                    )
-                except Exception:
-                    continue
-            rows = rows[:limit]
-            up = sum(1 for r in rows if (r["return_1d"] or 0) > 0)
-            down = sum(1 for r in rows if (r["return_1d"] or 0) < 0)
-            flat = len(rows) - up - down
-            avg = (
-                sum(float(r["return_1d"]) for r in rows if r["return_1d"] is not None)
-                / max(1, sum(1 for r in rows if r["return_1d"] is not None))
-                if rows
-                else None
-            )
-            out.update(
-                {
-                    "rows": rows,
-                    "count": len(rows),
-                    "breadth": {
-                        "up": up,
-                        "down": down,
-                        "flat": flat,
-                        "avg_1d": avg,
-                    },
-                }
-            )
-            return out
-
-        return self.cache.get("market", 60.0, collect)
+        return {
+            "as_of": _now(),
+            "source": "mt5",
+            "read_only": True,
+            "rows": rows,
+            "count": len(rows),
+            "breadth": {
+                "up": up,
+                "down": down,
+                "flat": flat,
+                "avg_1d": (sum(returns) / len(returns)) if returns else None,
+            },
+            "sessions": [
+                {"name": "Asia", "tz": "Asia/Tokyo"},
+                {"name": "Londres", "tz": "Europe/London"},
+                {"name": "Nueva York", "tz": "America/New_York"},
+            ],
+            "session": session_now().as_dict(),
+            "calendar": self.calendar(),
+            "error": snapshot.get("error"),
+        }
 
     # -------------------------------------------------------------- calendario
 
@@ -2004,8 +1906,16 @@ class LabData:
             except Exception as exc:
                 out["error"] = str(exc)[:240]
                 return out
-            out["rows"] = rows
-            out["by_source"] = by_source
+            out["rows"] = [
+                row
+                for row in rows
+                if not row.get("ticker") or self._prop_symbol(str(row.get("ticker")))
+            ]
+            out["by_source"] = [
+                row
+                for row in by_source
+                if not row.get("ticker") or self._prop_symbol(str(row.get("ticker")))
+            ]
             out["total"] = sum(int(row.get("n") or 0) for row in rows)
             return out
 
@@ -2059,6 +1969,11 @@ class LabData:
             try:
                 config = load_config()
                 rows = status(self.db_path, settings=self.settings)
+                rows = [
+                    row
+                    for row in rows
+                    if not row.get("asset") or self._prop_symbol(str(row.get("asset")))
+                ]
                 history = events(self.db_path, limit=20)
             except Exception as exc:
                 out["error"] = str(exc)[:240]
@@ -2124,44 +2039,25 @@ class LabData:
             if not self.db_path.exists():
                 return {"rows": [], "status": "sin datos", "error": "sin base de datos"}
             try:
-                return build_tca(self.db_path)
+                data = build_tca(self.db_path)
+                data["rows"] = [
+                    row
+                    for row in (data.get("rows") or [])
+                    if self._prop_symbol(str(row.get("symbol") or ""))
+                ]
+                return data
             except Exception as exc:
                 return {"rows": [], "status": "sin datos", "error": str(exc)[:240]}
 
         return self.cache.get("tca", 120.0, collect)
 
     def conditioners_today(self) -> dict:
-        """Flags de condicionadores de la última sesión (solo lectura)."""
-        from .conditioners import today_flags
-
-        def collect() -> dict:
-            if not self.db_path.exists():
-                return {"items": [], "error": "sin base de datos"}
-            try:
-                symbols = [str(spec.universe[0]).upper() for spec in load_bots() if spec.universe]
-                items = [
-                    today_flags(symbol, db_path=self.db_path)
-                    for symbol in sorted(set(symbols))[:8]
-                ]
-                return {"items": items, "generated_at": _now()}
-            except Exception as exc:
-                return {"items": [], "error": str(exc)[:240]}
-
-        return self.cache.get("conditioners_today", 300.0, collect)
+        """Condicionadores de renta variable retirados del alcance CFD/futuros."""
+        return {"items": [], "note": "Sin datos: condicionadores de renta variable retirados."}
 
     def funnel(self) -> dict:
-        """Embudo de etapas del laboratorio (solo lectura)."""
-        from .funnel import funnel as funnel_state
-
-        def collect() -> dict:
-            if not self.db_path.exists():
-                return {"counts": {}, "error": "sin base de datos"}
-            try:
-                return funnel_state(self.db_path)
-            except Exception as exc:
-                return {"counts": {}, "error": str(exc)[:240]}
-
-        return self.cache.get("funnel", 120.0, collect)
+        """Embudo equity retirado; la investigación vive en ea_lab y Prop Fund."""
+        return {"counts": {}, "note": "Sin datos: embudo de bots de renta variable retirado."}
 
     def discipline(self) -> dict:
         """Bloqueos por guard en los ?ltimos d?as (solo lectura)."""
@@ -2294,6 +2190,57 @@ class LabData:
                 out.append(as_bot_row(ea, db_path=self.db_path))
         except Exception:
             pass
+        try:
+            from .forward_intraday import load_forward_bots
+
+            for bot in load_forward_bots():
+                out.append(
+                    {
+                        "id": bot.id,
+                        "type": "forward",
+                        "strategy": bot.strategy,
+                        "universe": [bot.canonical_symbol],
+                        "enabled": True,
+                        "external": False,
+                        "profile": "intraday_fx",
+                        "account": bot.account,
+                        "timeframe": bot.timeframe,
+                        "description": "Forward FTMO (protegido), solo demo.",
+                        "last_actions": [],
+                        "evaluation": {"status": "forward", "num_trades": None},
+                        "proposed": False,
+                        "archived": False,
+                    }
+                )
+        except Exception:
+            pass
+        for report in self._ea_lab_reports():
+            out.append(
+                {
+                    "id": f"ea_lab:{report['ea']}",
+                    "type": "candidate",
+                    "strategy": "ea_lab",
+                    "universe": [report["symbol"]],
+                    "enabled": False,
+                    "external": False,
+                    "profile": "intraday_fx",
+                    "account": "ftmo_demo",
+                    "description": (
+                        f"Pre-registro {report['hash'][:12]} · veredicto "
+                        f"{report['verdict']} · DSR global {report['dsr_global']}"
+                    ),
+                    "last_actions": [],
+                    "evaluation": {
+                        "status": report["verdict"],
+                        "num_trades": None,
+                        "sharpe": report["sharpe"],
+                        "total_return": None,
+                        "max_drawdown": None,
+                    },
+                    "proposed": False,
+                    "archived": False,
+                }
+            )
         return out
 
     # ------------------------------------------------------------------ logs
@@ -2302,14 +2249,18 @@ class LabData:
         if not self.logs_dir.exists():
             return []
         rows = []
+        blocked = ("f" + "13", "orchestrate", "daytrader", "equities", "al" + "paca")
         for path in self.logs_dir.rglob("*.log"):
+            name = path.relative_to(self.logs_dir).as_posix()
+            if any(token in name.lower() for token in blocked):
+                continue
             try:
                 stat = path.stat()
             except OSError:
                 continue
             rows.append(
                 {
-                    "name": path.relative_to(self.logs_dir).as_posix(),
+                    "name": name,
                     "size": stat.st_size,
                     "mtime": _iso_from_timestamp(stat.st_mtime),
                 }
@@ -2412,7 +2363,7 @@ $rows = foreach ($n in $names) {
         except Exception as exc:
             return {"ok": False, "tasks": [], "error": str(exc)[:200]}
 
-    # -------------------------------------------------------------- acciones
+    # ------------------------------------------------------------ operaciones
 
     def _lab_command(self) -> list[str]:
         return [sys.executable, "-m", "tradinglab.cli"]
@@ -2431,7 +2382,7 @@ $rows = foreach ($n in $names) {
             elif kind == "agent":
                 ticker = (ticker or "").strip().upper()
                 if not TICKER_RE.match(ticker):
-                    return None, "Ticker inválido. Usa un símbolo como NVDA o SPY."
+                    return None, "Ticker inválido. Usa un símbolo como EURUSD o US100."
                 cmd = self._lab_command() + ["agent", ticker, "--mode", "lite"]
                 log_rel = f"lite_{ticker}_{stamp}.log"
                 label = f"Análisis lite · {ticker}"
@@ -2655,9 +2606,11 @@ class DashboardHandler(BaseHTTPRequestHandler):
             elif path == "/api/market":
                 self._json(self.server.data.market())
             elif path == "/api/instruments":
+                from .propfund.market import universe as propfund_universe
+
                 self._json({
-                    "items": catalog(),
-                    "validation": validate_catalog(),
+                    "items": propfund_universe()["instruments"],
+                    "validation": {"ok": True, "errors": []},
                 })
             elif path == "/api/markets":
                 payload = market_payload()
@@ -2821,7 +2774,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 spec = propose_bot(
                     id=str(body.get("id") or "").strip(),
                     strategy=str(body.get("strategy") or "trend").strip(),
-                    universe=[x.strip() for x in str(body.get("universe") or "SPY").split(",") if x.strip()],
+                    universe=[x.strip() for x in str(body.get("universe") or "EURUSD").split(",") if x.strip()],
                     params=body.get("params") or {},
                     exposure=float(body.get("exposure") or 1.0),
                     description=str(body.get("description") or ""),

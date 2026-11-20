@@ -1485,7 +1485,7 @@
       </div>
       <div class="hud-right">
         <span class="hud-chip" id="hud-killswitch"><span class="led" id="hud-killswitch-led"></span>Kill-switch <b>—</b></span>
-        <span class="hud-chip" id="hud-f13"><span class="hud-ico">◉</span>F13 <b>—</b></span>
+        <span class="hud-chip" id="hud-propfund"><span class="hud-ico">◉</span>Prop Fund <b>—</b></span>
         <span class="hud-chip" id="hud-data"><span class="hud-ico">▤</span>Datos <b>—</b></span>
         <span class="hud-chip" id="hud-slo-datos"><span class="led" id="hud-slo-datos-led"></span>DATOS <b>—</b></span>
         <span class="hud-chip" id="hud-slo-reloj"><span class="led" id="hud-slo-reloj-led"></span>RELOJ <b>—</b></span>
@@ -1501,7 +1501,7 @@
       <div class="top-actions">
         <button class="btn cmd-btn" id="cmd-open" title="Buscar o navegar (Ctrl+K)"><span class="kbd">Ctrl K</span> Buscar</button>
         <span class="badge" id="broker-badge">broker</span>
-        <span class="action-pill" id="action-pill">Sin acciones</span>
+        <span class="action-pill" id="action-pill">Sin operaciones</span>
         <button class="btn small ghost" id="density-toggle" title="Densidad de tablas" aria-pressed="false"><span id="density-label">Compacta</span></button>
         <button class="btn" id="refresh-btn"><span class="pulse-dot" id="refresh-pulse" aria-hidden="true"></span><span id="refresh-label">Actualizar</span></button>
       </div>
@@ -1546,7 +1546,7 @@
         <div class="panel">
           <div class="panel-head"><h2>Evaluaciones de backtest (no reales)</h2><span class="muted tiny">ordenadas por Sharpe</span></div>
           <div id="dashboard-performers"></div>
-          <div class="note tiny performers-note" id="performers-note">* Trades = eventos de PnL realizado; incluye rebalanceos diarios, no round-trips. qqq-trend-f13: 864 eventos por rebalanceo, no 864 operaciones redondas.</div>
+          <div class="note tiny performers-note" id="performers-note">* Trades = eventos de PnL realizado; incluye rebalanceos diarios, no round-trips.</div>
         </div>
       </div>
 
@@ -1776,7 +1776,7 @@
     <!-- ============================================================== CUENTAS -->
     <section class="view" id="view-accounts">
       <div class="note" style="margin:0 0 14px">
-        <strong>Solo paper/demo.</strong> Paper interno (SQLite), Alpaca paper, FTMO demo
+        <strong>Solo paper/demo.</strong> Cuentas de fondeo CFD/futuros (MT5 y ProjectX)
         y TopstepX. Ninguna cuenta real está conectada.
       </div>
       <div class="grid-2 equal" id="accounts-grid"></div>
@@ -1787,7 +1787,7 @@
       <div class="note" style="margin:0 0 14px">
         <strong>Límites del fondo.</strong> El límite de la firma (<code>prop.yaml</code>) es solo lectura;
         el propio se edita aquí y el efectivo es el menor de ambos. Apretar es inmediato.
-        Aflojar exige confirmación y aplica el siguiente día hábil. Con F13 congelado o iniciado
+        Aflojar exige confirmación y aplica el siguiente día hábil. Con cuentas protegidas
         solo se permite apretar. Cerrar o reducir nunca se bloquea.
       </div>
       <div class="stats" id="fund-summary"></div>
@@ -1952,9 +1952,9 @@
             <select class="input" id="operator-bot"></select>
           </div>
           <div class="grid-2 equal" id="operator-fields">
-            <label class="fund-field"><span>Ticker / ticket</span><input class="input" id="operator-ticker" placeholder="SPY o ticket" spellcheck="false"></label>
+            <label class="fund-field"><span>Ticker / ticket</span><input class="input" id="operator-ticker" placeholder="EURUSD o ticket" spellcheck="false"></label>
             <label class="fund-field"><span>Lado</span><select class="input" id="operator-side"><option value="buy">buy</option><option value="sell">sell</option></select></label>
-            <label class="fund-field"><span>Cantidad</span><input class="input" id="operator-qty" placeholder="entero en acciones" inputmode="decimal"></label>
+            <label class="fund-field"><span>Cantidad</span><input class="input" id="operator-qty" placeholder="lotes o contratos" inputmode="decimal"></label>
             <label class="fund-field"><span>Precio (vacío = último cierre)</span><input class="input" id="operator-price" inputmode="decimal"></label>
             <label class="fund-field"><span>SL obligatorio al abrir</span><input class="input" id="operator-sl" inputmode="decimal"></label>
             <label class="fund-field"><span>Motivo</span><input class="input" id="operator-reason" placeholder="motivo (sin secretos)"></label>
@@ -1998,7 +1998,7 @@
             <option value="meanrev">meanrev</option>
             <option value="trend-ls">trend-ls</option>
           </select>
-          <input class="input" id="new-bot-universe" value="SPY" style="width:130px" spellcheck="false">
+          <input class="input" id="new-bot-universe" value="EURUSD" style="width:130px" spellcheck="false">
           <input class="input" id="new-bot-params" value='{"fast":50,"slow":200,"regime":200}' style="width:240px; text-transform:none" spellcheck="false">
           <input class="input" id="new-bot-exposure" value="0.35" style="width:80px; text-transform:none">
           <button class="btn" id="propose-bot">Crear propuesta</button>
@@ -2020,7 +2020,7 @@
         <div class="action-bar" style="margin-bottom:0">
           <input class="input" id="agent-ticker" value="NVDA" maxlength="12" spellcheck="false" aria-label="Ticker">
           <button class="btn primary" id="run-lite-btn">Analizar con lite</button>
-          <span class="action-pill" id="action-status">Sin acciones en curso</span>
+          <span class="action-pill" id="action-status">Sin operaciones en curso</span>
           <span class="muted tiny">El agente lite tarda 1–3 min con qwen3.8-27b. El modo deep se lanza desde la CLI.</span>
         </div>
       </div>
@@ -2028,9 +2028,9 @@
       <div class="panel" style="margin-bottom:14px">
         <div class="panel-head"><h2>Agentes por mercado</h2><span class="muted tiny" id="market-agents-meta"></span></div>
         <div id="market-agents"></div>
-        <div class="panel-head" style="margin-top:14px"><h2>Pilotos / mini-F13</h2><span class="muted tiny" id="market-pilots-meta"></span></div>
+        <div class="panel-head" style="margin-top:14px"><h2>Pilotos por mercado</h2><span class="muted tiny" id="market-pilots-meta"></span></div>
         <div id="market-pilots"></div>
-        <div class="note">Un mercado a la vez: seleccionar un piloto no activa bots ni F13; solo limita aperturas. Los cierres siguen permitidos.</div>
+        <div class="note">Un mercado a la vez: seleccionar un piloto no activa bots; solo limita aperturas. Los cierres siguen permitidos.</div>
       </div>
 
       <div class="panel" style="margin-bottom:14px">
@@ -2310,7 +2310,7 @@
         </div>
       </div>
       <div class="panel" style="margin-top:14px">
-        <div class="panel-head"><h2>Auditoría de consola</h2><span class="muted tiny">acciones del modo operador</span></div>
+        <div class="panel-head"><h2>Auditoría de consola</h2><span class="muted tiny">operaciones del modo operador</span></div>
         <div id="console-audit"></div>
       </div>
       <div class="panel" style="margin-top:14px">
@@ -2400,7 +2400,7 @@ const TITLES = {
   "ai-trader": ["IA discrecional", "Operaciones del carril, sombra y lecciones"],
   research: ["Research", "PBO, walk-forward, regímenes y propuestas"],
   agents: ["Agentes", "TradingAgents lite/deep y sus decisiones"],
-  accounts: ["Cuentas", "Paper, Alpaca, MT5 y futuros"],
+  accounts: ["Cuentas", "Fondeo CFD/futuros"],
   fund: ["Fondo", "Límites por cuenta, bolsillos, clústeres y kill-switch"],
   journal: ["Diario", "Operaciones cerradas, métricas y concentración"],
   risk: ["Riesgo", "Guard de FTMO, cuenta MT5 y futuros"],
@@ -2766,35 +2766,20 @@ function updateHud() {
     ksChip.title = ks.reason || (ks.active ? "Kill-switch activo" : "Kill-switch inactivo");
   }
 
-  const bot = (S.operator?.bots || []).find((item) => item.id === "qqq-trend-f13");
-  const f13 = $("#hud-f13");
-  if (f13) {
-    let label = "—";
-    let tone = "";
-    let title = "F13 sin datos de operador";
-    if (bot) {
-      if (bot.enabled && bot.f13_locked) {
-        label = "activo";
-        tone = "ok";
-        title = "F13 activo en paper";
-      } else if (bot.f13_locked) {
-        label = "congelado";
-        tone = "warn";
-        title = "F13 congelado; bot aún no activo";
-      } else if (bot.enabled) {
-        label = "paper";
-        tone = "warn";
-        title = "Bot habilitado sin F13 congelado";
-      } else {
-        label = "inactivo";
-        tone = "";
-        title = "F13 inactivo";
-      }
+  const prop = S.propfund || S.overview?.propfund || {};
+  const chip = $("#hud-propfund");
+  if (chip) {
+    const protection = prop.protection || {};
+    const accounts = (prop.accounts || []).filter((item) => !item.template);
+    const demo = accounts.filter((item) => String(item.state || "").toUpperCase() === "DEMO").length;
+    const gross = prop.exposure?.totals?.gross_notional_usd;
+    const ok = protection.ok === true;
+    chip.className = "hud-chip " + (protection.status === "OK" ? "ok" : "warn");
+    const value = chip.querySelector("b");
+    if (value) {
+      value.textContent = `${ok ? "OK" : "ALTERADO"} · ${demo} DEMO · ${gross == null ? "Sin datos" : money(gross)}`;
     }
-    f13.className = "hud-chip " + tone;
-    const value = f13.querySelector("b");
-    if (value) value.textContent = label;
-    f13.title = title;
+    chip.title = `Protegidos: ${ok ? "OK" : "ALTERADO"} · cuentas DEMO: ${demo} · exposición bruta: ${gross == null ? "Sin datos" : money(gross)}`;
   }
 
   const market = S.overview?.market;
@@ -2844,6 +2829,7 @@ async function loadAll(manual = false) {
     const overviewChanged = overviewKey !== S.fp.overview;
     S.fp.overview = overviewKey;
     S.overview = overviewResult.value;
+    S.propfund = S.overview.propfund || S.propfund || null;
     S.market = S.overview.market || null;
     S.calendar = S.overview.calendar || null;
     S.decisions = S.overview.decisions || null;
@@ -3398,7 +3384,7 @@ function renderRiskGauges() {
   const host = $("#risk-gauges");
   if (!host) return;
   const accounts = S.fund?.accounts || [];
-  const account = accounts.find((item) => item.id === "paper_main")
+  const account = accounts.find((item) => !item.template)
     || accounts.find((item) => item.usage?.available);
   const usage = account?.usage || {};
   const limits = account?.effective_limits || {};
@@ -3680,7 +3666,7 @@ function renderOverview() {
       `<b>${esc(a.bot)}</b>`, esc(a.ticker), `<span class="tag ${a.status === "error" ? "red" : a.status === "bloqueado" ? "yellow" : a.status === "sin_cambios" ? "" : "blue"}">${esc(a.status)}</span>`, num(a.delta, 0), money(a.price),
     ]);
     $("#recent-dryrun").innerHTML = `<div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:9px">${pills}</div>` +
-      grid([{ label: "Bot" }, { label: "Ticker" }, { label: "Estado" }, { label: "Δ", num: true }, { label: "Precio", num: true }], rows, { empty: "Sin acciones." });
+      grid([{ label: "Bot" }, { label: "Ticker" }, { label: "Estado" }, { label: "Δ", num: true }, { label: "Precio", num: true }], rows, { empty: "Sin operaciones." });
   }
 
   const orders = (a.orders || []).slice(0, 8);
@@ -4835,7 +4821,7 @@ function renderOperator() {
     const current = botSelect.value;
     const bots = payload.bots || [];
     botSelect.innerHTML = bots.length
-      ? bots.map((bot) => `<option value="${esc(bot.id)}">${esc(bot.id)}${bot.f13_locked ? " · F13 bloqueado" : ""}</option>`).join("")
+      ? bots.map((bot) => `<option value="${esc(bot.id)}">${esc(bot.id)}</option>`).join("")
       : `<option value="">sin datos</option>`;
     if (bots.some((bot) => bot.id === current)) botSelect.value = current;
   }
@@ -5094,7 +5080,7 @@ function renderLearning() {
       `<span class="muted tiny">${esc(lesson.hypothesis)}</span><div class="muted tiny">${esc((lesson.evidence || "").slice(0, 180))}</div>`,
       actionText,
       `${num(lesson.tests, 0)}${lesson.applied_at ? ` · aplicada ${dateTime(lesson.applied_at)}` : ""}${lesson.reverted_at ? ` · revertida ${dateTime(lesson.reverted_at)}` : ""}`,
-      buttons.join(" ") || `<span class="muted">Sin acciones</span>`,
+      buttons.join(" ") || `<span class="muted">Sin operaciones</span>`,
     ];
   });
   const host = $("#learning-list");
@@ -5164,7 +5150,7 @@ function renderBots() {
   const bots = S.overview?.bots || [];
   if (!bots.length) {
     $("#bots-summary").innerHTML = "";
-    $("#bots-grid").innerHTML = `<div class="empty">No hay bots en config/bots.yaml.</div>`;
+    $("#bots-grid").innerHTML = `<div class="empty">No hay bots configurados.</div>`;
     return;
   }
   const active = bots.filter((b) => b.enabled && !b.archived).length;
@@ -5207,7 +5193,7 @@ function renderBots() {
         <div class="chips">${(bot.universe || []).map((t) => `<span class="chip">${esc(t)}</span>`).join("")}</div>
         <div class="bot-desc">${esc(bot.description || "Sin descripción.")}</div>
         ${metrics}
-        <div class="bot-actions">${actions || `<span class="muted tiny">${bot.external ? "Sin fills registrados." : "Sin acciones en el último dry-run."}</span>`}</div>
+        <div class="bot-actions">${actions || `<span class="muted tiny">${bot.external ? "Sin fills registrados." : "Sin operaciones en el último dry-run."}</span>`}</div>
         <div class="bot-buttons">
           ${bot.external ? `<span class="muted tiny">Solo lectura: lo ejecuta MT5.</span>` : bot.archived
             ? `<button class="btn small" data-bot-restore="${esc(bot.id)}">Restaurar</button>`
@@ -5893,11 +5879,11 @@ function renderMarketCatalog() {
       : `${validation.count || 0} instrumentos · ${ (validation.errors || []).length} errores`;
   }
   const rows = (payload.items || []).map((item) => [
-    `<b>${esc(item.symbol)}</b>`,
-    esc(item.asset_class),
-    esc(item.data_source || "Sin datos"),
-    esc(item.session || "Sin datos"),
-    esc(item.session_tz || "Sin datos"),
+    `<b>${esc(item.id || item.symbol)}</b>`,
+    esc(item.category || item.asset_class),
+    esc(item.data || item.data_source || "Sin datos"),
+    esc(item.session || "MT5"),
+    esc(item.session_tz || "—"),
     num(item.tick_size, 5),
     num(item.contract_size, 2),
     item.tick_value == null ? "variable" : money(item.tick_value),
@@ -6305,14 +6291,14 @@ function renderMarket() {
     { label: "Suben / bajan", value: `${breadth.up || 0} / ${breadth.down || 0}`, cls: (breadth.up || 0) >= (breadth.down || 0) ? "pos" : "neg" },
     { label: "Media 1d", value: pct(breadth.avg_1d, 2), cls: (breadth.avg_1d || 0) >= 0 ? "pos" : "neg" },
     { label: "Datos > 3d", value: fmtInt.format(stale), cls: stale ? "neg" : "" },
-    { label: "Fuente", value: "cache local", cls: "" },
+    { label: "Fuente", value: "MT5 lectura", cls: "" },
   ].map((s) => `<div class="stat"><div class="label">${esc(s.label)}</div><div class="value ${s.cls || ""}" style="font-size:${s.label === "Fuente" ? "13px" : "20px"}">${esc(s.value)}</div></div>`).join("");
 
   $("#market-meta").textContent = `${m.count || 0} activos · ${m.source || ""} · ${dateTime(m.as_of)}`;
   const alert = $("#market-alert");
   if (alert) {
     alert.innerHTML = m.error
-      ? `<div class="alert red" style="margin-bottom:14px"><b>Mercado sin datos:</b> ${esc(m.error)}. Ejecuta <code>lab fetch</code> para poblar la caché.</div>`
+      ? `<div class="alert red" style="margin-bottom:14px"><b>Mercado sin datos:</b> ${esc(m.error)}. Abre MT5 y verifica MT5_LOGIN/MT5_SERVER.</div>`
       : "";
   }
 
@@ -6321,14 +6307,16 @@ function renderMarket() {
     `<span class="quote">${money(r.close)}</span>`,
     heat(r.return_1d), heat(r.return_5d), heat(r.return_20d),
     `<span class="trend-${esc(r.trend || "mixed")}">${esc(r.trend || "mixed")}</span>`,
+    r.spread_measured == null ? "Sin datos" : num(r.spread_measured, 5),
     sparkline(r.spark),
     `<span class="muted tiny">${esc(r.as_of || "—")}${r.stale_days ? ` · ${r.stale_days}d` : ""}</span>`,
   ]);
   $("#market-table").innerHTML = grid([
     { label: "Activo" }, { label: "Precio", num: true }, { label: "1d", num: true },
     { label: "5d", num: true }, { label: "20d", num: true }, { label: "Tendencia" },
+    { label: "Spread medido", num: true },
     { label: "60 sesiones" }, { label: "Datos" },
-  ], tableRows, { empty: "Sin parquet en data/cache. Ejecuta lab fetch." });
+  ], tableRows, { empty: "Sin datos de MT5. Abre el terminal y verifica la cuenta demo." });
   $$("#market-table tbody tr").forEach((tr, i) => {
     if (!rows[i]) return;
     tr.style.cursor = "pointer";
@@ -6564,7 +6552,7 @@ function renderPropFund() {
       <td class="mono tiny">${esc(f.accounts.join(", ") || "—")}</td></tr>`)));
   setHTML("#pf-warnings", (d.warnings || []).length
     ? d.warnings.map((w) => `<div class="alert">${esc(w)}</div>`).join("")
-    : `<div class="note"><strong>Sin avisos.</strong> El registro es coherente: sin acciones ni ETF, sin capital propio, sin LIVE declarado, motores CFD y Futures separados y ninguna estrategia protegida asignada desde el Prop Fund.</div>
+    : `<div class="note"><strong>Sin avisos.</strong> El registro es coherente: sin renta variable, sin capital propio, sin LIVE declarado, motores CFD y Futures separados y ninguna estrategia protegida asignada desde el Prop Fund.</div>
        <div class="note"><strong>Apex y Take Profit Trader</strong> prohíben la automatización: el router solo emite alertas para sus cuentas. <strong>Tradeify</strong> exige que el bot sea exclusivo de la firma.</div>`);
 
   setHTML("#pf-firm-grid", d.firms.map((f) => {
@@ -7378,7 +7366,7 @@ async function pollAction(initial = false) {
 
 function renderAction(action) {
   const status = action?.status || "idle";
-  const labels = { idle: "Sin acciones", running: "Ejecutando…", done: "Completada", error: "Error" };
+  const labels = { idle: "Sin operaciones", running: "Ejecutando…", done: "Completada", error: "Error" };
   const pill = $("#action-pill");
   pill.className = "action-pill " + (status === "running" ? "running" : status === "done" ? "done" : status === "error" ? "error" : "");
   pill.textContent = labels[status] || status;
@@ -7397,7 +7385,7 @@ function renderAction(action) {
       box.textContent = `${action.label || "Acción"} falló (exit ${action.exit_code ?? "?"})`;
     } else {
       box.className = "action-pill";
-      box.textContent = "Sin acciones en curso";
+      box.textContent = "Sin operaciones en curso";
     }
   }
   const busy = status === "running";
@@ -7450,7 +7438,7 @@ function renderCommand(query) {
   S.commandIndex = Math.min(S.commandIndex, Math.max(0, filtered.length - 1));
   const box = $("#command-list");
   if (!filtered.length) {
-    box.innerHTML = `<div class="command-empty">Sin resultados. Prueba “research”, “SPY” o “riesgo”.</div>`;
+    box.innerHTML = `<div class="command-empty">Sin resultados. Prueba "research", "US100" o "riesgo".</div>`;
     return;
   }
   box.innerHTML = filtered.map((item, i) => `

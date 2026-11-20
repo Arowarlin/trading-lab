@@ -310,7 +310,7 @@ def test_hud_barra_operativa_presente() -> None:
         'id="hud"',
         'id="hud-killswitch"',
         'id="hud-killswitch-led"',
-        'id="hud-f13"',
+        'id="hud-propfund"',
         'id="hud-data"',
         'id="hud-operator"',
         'id="mode-badge"',

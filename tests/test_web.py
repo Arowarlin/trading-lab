@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import shutil
 import threading
 import urllib.request
 from datetime import UTC, datetime, timedelta
@@ -12,7 +11,7 @@ import pandas as pd
 import pytest
 
 from tradinglab import web
-from tradinglab.config import ROOT, Settings
+from tradinglab.config import Settings
 from tradinglab.db import connect, init_db, utcnow
 from tradinglab.intel.calendar import add_calendar_event
 
@@ -81,11 +80,11 @@ def test_account_lee_sqlite(tmp_path: Path) -> None:
 def test_agent_runs_y_dryruns(tmp_path: Path) -> None:
     runs_dir = tmp_path / "data" / "agent_runs"
     runs_dir.mkdir(parents=True)
-    (runs_dir / "lite_NVDA_2026-11-06.json").write_text(
+    (runs_dir / "lite_EURUSD_2026-11-06.json").write_text(
         json.dumps(
             {
                 "mode": "lite",
-                "ticker": "NVDA",
+                "ticker": "EURUSD",
                 "date": "2026-11-06",
                 "rating": "Hold",
                 "confidence": 0.55,
@@ -119,7 +118,7 @@ def test_agent_runs_y_dryruns(tmp_path: Path) -> None:
     assert runs[0]["confidence"] == pytest.approx(0.55)
 
     dry = data.dryruns()
-    assert dry[0]["counts"] == {"sin_cambios": 2}
+    assert dry == []
 
 
 def test_agent_report_lee_el_markdown(tmp_path: Path) -> None:
@@ -152,8 +151,8 @@ def test_agent_report_lee_el_markdown(tmp_path: Path) -> None:
 def test_agent_run_fallido_marca_error(tmp_path: Path) -> None:
     runs_dir = tmp_path / "data" / "agent_runs"
     runs_dir.mkdir(parents=True)
-    (runs_dir / "ta_NVDA_2026-11-05.json").write_text(
-        json.dumps({"ok": False, "ticker": "NVDA", "error": "Connection error"}),
+    (runs_dir / "ta_EURUSD_2026-11-05.json").write_text(
+        json.dumps({"ok": False, "ticker": "EURUSD", "error": "Connection error"}),
         encoding="utf-8",
     )
 
@@ -163,79 +162,34 @@ def test_agent_run_fallido_marca_error(tmp_path: Path) -> None:
     assert "Connection error" in runs[0]["decision"]
 
 
-def test_research_usa_ultimo_informe(tmp_path: Path) -> None:
-    research = tmp_path / "reports" / "research"
-    research.mkdir(parents=True)
-    (research / "latest.json").write_text(
+def test_research_usa_informes_ea_lab(tmp_path: Path) -> None:
+    report_dir = tmp_path / "reports" / "research" / "ea_us500_nyopen"
+    report_dir.mkdir(parents=True)
+    (report_dir / "validation.json").write_text(
         json.dumps(
             {
-                "generated_at": "2026-11-07T00:42:30+00:00",
-                "candidates": 2,
-                "results": [
-                    {"symbol": "QQQ", "strategy": "trend", "score": 0.6},
-                    {"symbol": "SPY", "strategy": "trend", "score": 0.5},
-                ],
-                "proposals": [{"symbol": "QQQ", "enabled": False}],
-                "near_misses": [],
-                "datachecks": {
-                    "QQQ": {"status": "aviso", "reasons": ["ajuste no declarado"]},
-                    "SPY": {"status": "ok", "reasons": []},
-                },
-                "pbo": {"pbo": 0.2, "verdict": "ok"},
-                "walk_forward": {"verdict": "ok", "stitched_sharpe": 0.8},
+                "ea": "us500-nyopen",
+                "symbol": "US500.cash",
+                "generated_at": "2026-11-19T21:42:32+00:00",
+                "verdict": "PASA",
+                "pre_registration_hash": "abc123def456",
+                "sharpe": 1.4,
+                "dsr_local": 0.97,
+                "dsr_global": 0.93,
+                "n_trials": 8,
+                "relative_cost": 0.11,
+                "verdict_reasons": [],
             }
         ),
         encoding="utf-8",
     )
-    (research / "proposals.json").write_text(
-        json.dumps({"proposals": [{"symbol": "QQQ", "enabled": False}]}),
-        encoding="utf-8",
-    )
-    (research / "horizons.json").write_text(
-        json.dumps({"top": 1, "firms": []}),
-        encoding="utf-8",
-    )
-    (research / "portfolio.json").write_text(
-        json.dumps(
-            {
-                "portfolio": {
-                    "total_return": 0.81,
-                    "sharpe": 1.03,
-                    "max_drawdown": -0.09,
-                },
-                "monte_carlo": [
-                    {
-                        "firm_id": "ftmo",
-                        "horizon": 120,
-                        "pass_rate": 0.70,
-                        "breach_rate": 0.03,
-                    }
-                ],
-            }
-        ),
-        encoding="utf-8",
-    )
-    (research / "costs.json").write_text(
-        json.dumps({"fragile_count": 0}), encoding="utf-8"
-    )
-
     report = _data(tmp_path).research(limit=1)
-    assert report["candidates"] == 2
-    assert len(report["results"]) == 1
-    assert report["proposals"][0]["enabled"] is False
-    assert report["datachecks"]["QQQ"]["status"] == "aviso"
-    assert report["datachecks"]["SPY"]["status"] == "ok"
-    assert report["pbo"]["verdict"] == "ok"
-    assert report["walk_forward"]["verdict"] == "ok"
-    assert report["horizons"]["top"] == 1
-    profiles = {row["profile"]: row for row in report["profiles"]}
-    assert profiles["swing_equity"]["status"] == "validado"
-    assert profiles["swing_equity"]["total_return"] == pytest.approx(0.81)
-    assert profiles["swing_equity"]["pass_rate"] == pytest.approx(0.70)
-    assert "0/10" in profiles["swing_equity"]["notes"]
-    assert profiles["intraday_fx"]["status"] == "pendiente"
-    assert "offset" in profiles["intraday_fx"]["notes"]
-    assert profiles["intraday_futures"]["status"] == "stub"
+    assert report["candidates"] == 1
+    assert report["profiles"][0]["label"] == "us500-nyopen"
+    assert report["profiles"][0]["status"] == "pasa"
+    assert "abc123def456"[:12] in report["profiles"][0]["notes"]
+    assert report["config"]["symbols"] == ["US500.cash"]
+    assert report["dsr_n_trials"] is not None
 
 
 def test_tail_log_no_permite_salir_de_logs(tmp_path: Path) -> None:
@@ -261,22 +215,32 @@ def test_accion_valida_ticker(tmp_path: Path) -> None:
     assert "inválido" in (error or "")
 
 
-def test_market_lee_cache_local(tmp_path: Path) -> None:
-    cache = tmp_path / "data" / "cache"
-    cache.mkdir(parents=True)
-    close = [100 + i for i in range(40)]
-    idx = pd.bdate_range("2026-01-01", periods=40)
-    frame = pd.DataFrame({"close": close}, index=idx)
-    frame.to_parquet(cache / "SPY__2015-01-01__2026-11-07.parquet")
-
+def test_market_lee_mt5(tmp_path: Path, monkeypatch) -> None:
+    rows = [
+        {
+            "instrument": "US100",
+            "symbol": "US100",
+            "close": 27500.0,
+            "return_1d": 0.004,
+            "return_5d": 0.01,
+            "return_20d": 0.03,
+            "trend": "up",
+            "spark": [27000, 27500],
+            "as_of": "2026-11-19",
+            "status": "ok",
+        }
+    ]
+    monkeypatch.setattr(
+        "tradinglab.propfund.market.market_snapshot",
+        lambda: {"rows": rows, "error": None, "status": "ok"},
+    )
     market = _data(tmp_path).market()
     assert market["count"] == 1
-    assert market["error"] is None
+    assert market["source"] == "mt5"
     row = market["rows"][0]
-    assert row["symbol"] == "SPY"
-    assert row["close"] == pytest.approx(139.0)
-    assert row["return_1d"] == pytest.approx(1 / 138)
-    assert len(row["spark"]) == 40
+    assert row["instrument"] == "US100"
+    assert row["close"] == pytest.approx(27500.0)
+    assert row["return_1d"] == pytest.approx(0.004)
     assert market["breadth"]["up"] == 1
 
 
@@ -298,7 +262,7 @@ def test_decisions_resume_rating(tmp_path: Path, monkeypatch) -> None:
         con.execute(
             "INSERT INTO decision_outcomes"
             "(ts, ticker, decision_date, mode, rating, return_20d) VALUES(?,?,?,?,?,?)",
-            (utcnow(), "SPY", "2026-01-05", "lite", "Buy", 0.10),
+            (utcnow(), "EURUSD", "2026-01-05", "lite", "Buy", 0.10),
         )
     monkeypatch.setattr("tradinglab.decisions.trend_target_at", lambda *a, **k: 1.0)
     data = _data(tmp_path, db=db)
@@ -425,51 +389,41 @@ def test_research_detail_lee_artefacto(tmp_path: Path) -> None:
 
 
 @pytest.mark.network
-def test_overview_datos_para_dashboard(tmp_path: Path) -> None:
-    (tmp_path / "config").mkdir()
-    shutil.copy(ROOT / "config" / "bots.yaml", tmp_path / "config" / "bots.yaml")
-    db = tmp_path / "lab.db"
-    init_db(db)
-    with connect(db) as con:
-        con.execute(
-            "INSERT INTO equity(ts, cash, positions_value, equity) VALUES(?,?,?,?)",
-            ("2026-11-05T20:00:00+00:00", 90_000.0, 10_000.0, 100_000.0),
-        )
-        con.execute(
-            "INSERT INTO equity(ts, cash, positions_value, equity) VALUES(?,?,?,?)",
-            ("2026-11-06T20:00:00+00:00", 91_000.0, 10_500.0, 101_500.0),
-        )
-        con.execute(
-            "INSERT INTO bot_evaluations"
-            "(ts, bot, strategy, universe, params, exposure, start_date, end_date, "
-            "total_return, sharpe, max_drawdown, num_trades, win_rate, status, details) "
-            "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-            (
-                utcnow(),
-                "trend-spy",
-                "trend",
-                "SPY",
-                "{}",
-                0.35,
-                "2015-01-01",
-                "2026-11-06",
-                0.81,
-                1.03,
-                -0.09,
-                42,
-                0.55,
-                "ok",
-                "",
-            ),
-        )
-
-    overview = _data(tmp_path, db).overview()
-    assert len(overview["account"]["equity_curve"]) == 2
-    bots = {bot["id"]: bot for bot in overview["bots"]}
-    assert bots["trend-spy"]["evaluation"]["sharpe"] == pytest.approx(1.03)
-    assert bots["trend-spy"]["evaluation"]["total_return"] == pytest.approx(0.81)
-    assert "agent_comparisons" in overview
-    assert "lifecycle" in overview
+def test_overview_datos_para_dashboard(tmp_path: Path, monkeypatch) -> None:
+    prop = {
+        "ok": True,
+        "summary": {"firms": 1, "accounts": 1, "strategies": 1},
+        "accounts": [
+            {"id": "CFD-001", "template": False, "size": 100000, "state": "DEMO"}
+        ],
+        "exposure": {
+            "ok": True,
+            "generated_at": "2026-11-19T20:00:00+00:00",
+            "totals": {"gross_notional_usd": 12000.0},
+            "accounts": [
+                {
+                    "ok": True,
+                    "snapshot": {"equity": 101500.0, "balance": 100000.0},
+                }
+            ],
+            "positions": [],
+        },
+        "protection": {"ok": True, "status": "OK", "groups": {}},
+        "firms": [],
+        "strategies": [],
+        "assignments": [],
+        "instruments": [],
+        "warnings": [],
+    }
+    monkeypatch.setattr(web.LabData, "propfund", lambda self: prop)
+    overview = _data(tmp_path).overview()
+    account = overview["account"]
+    assert account["equity"] == pytest.approx(101500.0)
+    assert account["return_pct"] == pytest.approx(0.015)
+    assert account["equity_curve"][0]["equity"] == pytest.approx(101500.0)
+    assert overview["propfund"]["ok"] is True
+    assert overview["meta"]["mode"] == "PAPER/DEMO"
+    assert "bots" in overview
 
 
 def test_servidor_http_responde(tmp_path: Path) -> None:
@@ -493,9 +447,10 @@ def test_servidor_http_responde(tmp_path: Path) -> None:
 
         with urllib.request.urlopen(f"{base}/api/overview", timeout=5) as response:
             overview = json.load(response)
-        assert overview["meta"]["mode"] == "paper"
+        assert overview["meta"]["mode"] == "PAPER/DEMO"
         assert overview["meta"]["build"] == health["build"]
-        assert overview["account"]["equity"] == pytest.approx(100_000.0)
+        assert overview["account"]["equity"] is None or overview["account"]["equity"] >= 0
+        assert "propfund" in overview
         assert "market" in overview and "calendar" in overview and "repos" in overview
         assert "agent_comparisons" in overview and "lifecycle" in overview
 

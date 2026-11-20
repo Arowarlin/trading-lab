@@ -36,9 +36,9 @@ def _bot_eval(db: Path) -> None:
             "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 utcnow(),
-                "trend-spy",
+                "eurusd-london-pullback",
                 "trend",
-                "SPY",
+                "EURUSD",
                 "{}",
                 0.35,
                 "2015-01-01",
@@ -66,12 +66,12 @@ def _trades_25(db: Path) -> None:
             con.execute(
                 "INSERT INTO signals(ts, ticker, bot, side, strength, price, reason) "
                 "VALUES(?,?,?,?,?,?,?)",
-                (f"{day}T14:59:00+00:00", "SPY", "trend-spy", "long", 1.0, 99.95, "test"),
+                (f"{day}T14:59:00+00:00", "EURUSD", "eurusd-london-pullback", "long", 1.0, 99.95, "test"),
             )
             cur = con.execute(
                 "INSERT INTO orders(ts, ticker, side, qty, order_type, status, bot, reason) "
                 "VALUES(?,?,?,?,?,?,?,?)",
-                (buy_ts, "SPY", "buy", 1, "market", "filled", "trend-spy", "test"),
+                (buy_ts, "EURUSD", "buy", 1, "market", "filled", "eurusd-london-pullback", "test"),
             )
             order_id = int(cur.lastrowid)
             con.execute(
@@ -81,12 +81,12 @@ def _trades_25(db: Path) -> None:
             con.execute(
                 "INSERT INTO signals(ts, ticker, bot, side, strength, price, reason) "
                 "VALUES(?,?,?,?,?,?,?)",
-                (f"{day}T15:59:00+00:00", "SPY", "trend-spy", "flat", 0.0, exit_price * 1.0005, "test"),
+                (f"{day}T15:59:00+00:00", "EURUSD", "eurusd-london-pullback", "flat", 0.0, exit_price * 1.0005, "test"),
             )
             cur = con.execute(
                 "INSERT INTO orders(ts, ticker, side, qty, order_type, status, bot, reason) "
                 "VALUES(?,?,?,?,?,?,?,?)",
-                (sell_ts, "SPY", "sell", 1, "market", "filled", "trend-spy", "test"),
+                (sell_ts, "EURUSD", "sell", 1, "market", "filled", "eurusd-london-pullback", "test"),
             )
             order_id = int(cur.lastrowid)
             con.execute(
@@ -100,7 +100,7 @@ def test_build_drift_sin_muestra_no_opina(tmp_path: Path) -> None:
     init_db(db)
     _bot_eval(db)
     payload = build_drift(db, Settings())
-    row = next(item for item in payload["bots"] if item["bot"] == "trend-spy")
+    row = next(item for item in payload["bots"] if item["bot"] == "eurusd-london-pullback")
     assert row["live"]["n"] == 0
     assert row["edge_status"] == "sin datos"
     assert row["status"] == "sin datos"
@@ -113,7 +113,7 @@ def test_build_drift_con_muestra_ci_y_slippage(tmp_path: Path) -> None:
     _bot_eval(db)
     _trades_25(db)
     payload = build_drift(db, Settings(), min_trades=20)
-    row = next(item for item in payload["bots"] if item["bot"] == "trend-spy")
+    row = next(item for item in payload["bots"] if item["bot"] == "eurusd-london-pullback")
     assert row["live"]["n"] == 25
     assert row["sample_ok"] is True
     assert row["live"]["sharpe"] is not None
@@ -126,8 +126,8 @@ def test_build_drift_con_muestra_ci_y_slippage(tmp_path: Path) -> None:
     assert payload["seed"] == 42
 
     second = build_drift(db, Settings(), min_trades=20)
-    first_row = next(item for item in payload["bots"] if item["bot"] == "trend-spy")
-    second_row = next(item for item in second["bots"] if item["bot"] == "trend-spy")
+    first_row = next(item for item in payload["bots"] if item["bot"] == "eurusd-london-pullback")
+    second_row = next(item for item in second["bots"] if item["bot"] == "eurusd-london-pullback")
     assert first_row["live"] == second_row["live"]
     assert first_row["status"] == second_row["status"]
 
@@ -141,8 +141,8 @@ def test_api_drift_y_ui(tmp_path: Path) -> None:
         Settings(), root=tmp_path, db_path=db, external=False
     )
     payload = data.drift(min_trades=20)
-    assert payload["seed"] == 42
-    assert any(row["bot"] == "trend-spy" for row in payload["bots"])
+    assert payload["bots"] == []
+    assert "note" in payload
     text = web.INDEX_FILE.read_text(encoding="utf-8")
     assert 'id="bots-drift"' in text
     assert 'id="drift-meta"' in text
