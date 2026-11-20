@@ -330,6 +330,27 @@ def _init_worker(payload: dict[str, Any]) -> None:
     }
 
 
+def strategy_gate(strategy: dict[str, Any], setup: QueueSetup) -> str | None:
+    """Motivo por el que el worker rechazaría la estrategia, o ``None``.
+
+    Es la misma puerta que aplica ``_evaluate_job`` antes de preparar barras:
+    AST válido, instrumento y timeframe de la campaña.
+    """
+
+    try:
+        errors = dsl.validate(strategy)
+        if errors:
+            return "estrategia inválida: " + "; ".join(errors)
+        model = dsl.Strategy.model_validate(strategy)
+    except Exception as exc:  # noqa: BLE001 - se informa tal cual
+        return f"{type(exc).__name__}: {exc}"
+    if model.instrument.upper() != setup.instrument.upper():
+        return f"instrumento {model.instrument} != {setup.instrument} de la campaña"
+    if model.timeframe.upper() != setup.timeframe.upper():
+        return f"timeframe {model.timeframe} != {setup.timeframe} de la campaña"
+    return None
+
+
 def _evaluate_job(task: tuple[int, str, str]) -> dict[str, Any]:
     job_id, payload_json, kind = task
     state = _WORKER
@@ -337,19 +358,11 @@ def _evaluate_job(task: tuple[int, str, str]) -> dict[str, Any]:
         return {"job_id": job_id, "error": "worker sin preparación", "metrics": None}
     try:
         strategy = json.loads(payload_json)
-        errors = dsl.validate(strategy)
-        if errors:
-            raise QueueError("estrategia inválida: " + "; ".join(errors))
-        model = dsl.Strategy.model_validate(strategy)
         setup: QueueSetup = state["setup"]
-        if model.instrument.upper() != setup.instrument.upper():
-            raise QueueError(
-                f"instrumento {model.instrument} != {setup.instrument} de la campaña"
-            )
-        if model.timeframe.upper() != setup.timeframe.upper():
-            raise QueueError(
-                f"timeframe {model.timeframe} != {setup.timeframe} de la campaña"
-            )
+        reason = strategy_gate(strategy, setup)
+        if reason:
+            raise QueueError(reason)
+        model = dsl.Strategy.model_validate(strategy)
         cache = state.get("cache")
         if kind == "fitness":
             from .fitness import evaluate as fitness_evaluate
@@ -721,4 +734,5 @@ __all__ = [
     "evaluate_batch",
     "queue_status",
     "run_queue",
+    "strategy_gate",
 ]

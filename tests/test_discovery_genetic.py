@@ -41,6 +41,28 @@ def test_random_strategy_is_reproducible() -> None:
     assert dsl.strategy_hash(first) == dsl.strategy_hash(second)
 
 
+def test_random_strategy_uses_campaign_instrument() -> None:
+    session = {
+        "tz": "America/New_York",
+        "start": "09:35",
+        "end": "11:30",
+        "flat_at": "15:45",
+        "or_minutes": 15,
+    }
+    strategy = genetic.random_strategy(
+        random.Random(7),
+        "ny_open_vol_filter",
+        instrument="US100.CASH",
+        timeframe="M5",
+        session=session,
+    )
+    assert strategy is not None
+    assert strategy["instrument"] == "US100.CASH"
+    assert strategy["timeframe"] == "M5"
+    assert strategy["session"]["tz"] == "America/New_York"
+    assert dsl.validate(strategy) == []
+
+
 def test_diff_detects_changes() -> None:
     base = genetic.template_strategy("ny_open_vol_filter")
     mutated = genetic.random_strategy(random.Random(5), "ny_open_vol_filter")

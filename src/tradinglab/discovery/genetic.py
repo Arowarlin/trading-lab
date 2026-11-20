@@ -33,6 +33,34 @@ def template_strategy(name: str) -> dict[str, Any]:
     return copy.deepcopy(strategy)
 
 
+def configured_template(
+    name: str,
+    *,
+    instrument: str | None = None,
+    timeframe: str | None = None,
+    session: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Plantilla real adaptada al instrumento, timeframe y sesión de la campaña.
+
+    Las plantillas YAML fijan ``instrument: US100``; una campaña sobre un
+    símbolo real (``US100.CASH``) debe generar AST con SU instrumento, porque
+    el worker rechaza cualquier estrategia que no coincida con la campaña.
+    """
+
+    strategy = template_strategy(name)
+    if instrument is not None:
+        strategy["instrument"] = str(instrument).strip().upper()
+    if timeframe is not None:
+        strategy["timeframe"] = str(timeframe).strip().upper()
+    if session:
+        merged = dict(strategy.get("session") or {})
+        merged.update(
+            {key: value for key, value in dict(session).items() if value is not None}
+        )
+        strategy["session"] = merged
+    return strategy
+
+
 def _valid(strategy: dict[str, Any]) -> bool:
     return not dsl.validate(strategy)
 
@@ -406,8 +434,16 @@ def random_strategy(
     template: str = "ny_open_vol_filter",
     *,
     attempts: int = 25,
+    instrument: str | None = None,
+    timeframe: str | None = None,
+    session: dict[str, Any] | None = None,
 ) -> dict | None:
-    model = template_strategy(template)
+    model = configured_template(
+        template,
+        instrument=instrument,
+        timeframe=timeframe,
+        session=session,
+    )
     for _ in range(attempts):
         data = copy.deepcopy(model)
         for _step in range(rng.randint(1, 3)):
@@ -474,6 +510,7 @@ def diff_strategies(left: dict[str, Any], right: dict[str, Any]) -> dict[str, An
 
 __all__ = [
     "MUTATIONS",
+    "configured_template",
     "crossover_exit",
     "crossover_subtree",
     "diff_strategies",

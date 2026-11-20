@@ -9855,6 +9855,50 @@ def discovery_register_cmd(
     )
 
 
+@discovery_app.command("preflight")
+def discovery_preflight_cmd(
+    campaign_id: str = typer.Argument(..., help="ID de la campaña"),
+    db: str = typer.Option(None, "--db", help="discovery.db alternativo"),
+) -> None:
+    """Solo inicialización: sin backtests ni OOS. Falla si faltan válidos."""
+
+    from .discovery import engine
+
+    try:
+        report = engine.preflight(campaign_id, db_path=db)
+    except Exception as exc:  # noqa: BLE001
+        console.print(f"[red]Preflight imposible:[/red] {exc}")
+        raise typer.Exit(1) from exc
+    table = Table(title=f"Discovery · preflight {campaign_id}")
+    table.add_column("Campo", style="bold")
+    table.add_column("Valor")
+    table.add_row("Estado", str(report["status"]))
+    table.add_row("Instrumento", f"{report['instrument']} {report['timeframe']}")
+    table.add_row("Plantilla", str(report["template"]))
+    table.add_row("Semilla", str(report["seed"]))
+    table.add_row("Población", str(report["population"]))
+    table.add_row("Generados", str(report["generated"]))
+    table.add_row("Válidos", str(report["valid"]))
+    table.add_row("Rechazados", str(report["rejected"]))
+    if report.get("last_error"):
+        table.add_row("Último error", str(report["last_error"]))
+    console.print(table)
+    for reason, count in sorted(
+        report["reasons"].items(), key=lambda item: (-item[1], item[0])
+    ):
+        console.print(f"  {count:4d}  {reason}")
+    if int(report["valid"]) < int(report["population"]):
+        console.print(
+            f"[red]Preflight FAIL:[/red] {report['valid']} válidos < "
+            f"población {report['population']}."
+        )
+        raise typer.Exit(1)
+    console.print(
+        f"[green]Preflight OK:[/green] {report['valid']} válidos "
+        f"para población {report['population']}."
+    )
+
+
 @discovery_app.command("approve")
 def discovery_approve_cmd(
     campaign_id: str = typer.Argument(..., help="ID de la campaña"),

@@ -68,6 +68,111 @@ def _series(values: list[float], dates: list[str]) -> pd.Series:
     return pd.Series(values, dtype=float)
 
 
+def initial_strategies(
+    campaign: dict[str, Any],
+    *,
+    template: str,
+    population: int,
+    rng: random.Random,
+    stats: dict[str, int] | None = None,
+) -> list[dict[str, Any]]:
+    """Plantilla real + aleatorias, con el instrumento y la sesión de la campaña.
+
+    La plantilla YAML puede decir ``US100``; los individuos deben llevar el
+    instrumento y la sesión registrados en la campaña o el worker los rechaza
+    antes de evaluar. ``stats`` acumula intentos, inválidos y duplicados.
+    """
+
+    config = campaign.get("config") or {}
+    instrument = campaign.get("instrument") or config.get("instrument")
+    timeframe = campaign.get("timeframe") or config.get("timeframe")
+    session = dict(config.get("session") or {})
+    strategies: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    attempts = 0
+    invalid = 0
+    duplicates = 0
+    limit = int(population) * 20
+    while len(strategies) < int(population) and attempts < limit:
+        attempts += 1
+        strategy = genetic.random_strategy(
+            rng,
+            template,
+            instrument=instrument,
+            timeframe=timeframe,
+            session=session,
+        )
+        if strategy is None:
+            invalid += 1
+            continue
+        digest = dsl.strategy_hash(strategy)
+        if digest in seen:
+            duplicates += 1
+            continue
+        seen.add(digest)
+        strategies.append(strategy)
+    if stats is not None:
+        stats.update(
+            {
+                "attempts": attempts,
+                "invalid": invalid,
+                "duplicates": duplicates,
+                "generated": len(strategies),
+            }
+        )
+    return strategies
+
+
+def preflight(campaign_id: str, *, db_path=None) -> dict[str, Any]:
+    """Solo inicialización: generados, válidos y rechazos del worker.
+
+    No carga barras, no ejecuta backtests y no lee OOS. Trabaja igual sobre un
+    borrador, para poder ejecutarlo antes de aprobar la campaña.
+    """
+
+    campaign = databank.get_campaign(campaign_id, db_path=db_path)
+    if campaign is None:
+        raise campaigns.CampaignError(f"campaña no registrada: {campaign_id}")
+    config = load_engine_config()
+    campaign_config = campaign.get("config") or {}
+    profile = config.profile(str(campaign_config.get("profile") or "small"))
+    template = str(
+        campaign.get("template")
+        or campaign_config.get("template")
+        or "ny_open_vol_filter"
+    )
+    seed = int(campaign_config.get("seed", 0))
+    strategies = initial_strategies(
+        campaign,
+        template=template,
+        population=int(profile.population),
+        rng=random.Random(seed),
+    )
+    setup = jobs.QueueSetup.from_campaign(campaign)
+    reasons: dict[str, int] = {}
+    valid = 0
+    for strategy in strategies:
+        reason = jobs.strategy_gate(strategy, setup)
+        if reason is None:
+            valid += 1
+        else:
+            reasons[reason] = reasons.get(reason, 0) + 1
+    return {
+        "campaign_id": campaign_id,
+        "status": campaign.get("status"),
+        "instrument": setup.instrument,
+        "timeframe": setup.timeframe,
+        "template": template,
+        "seed": seed,
+        "population": int(profile.population),
+        "generated": len(strategies),
+        "valid": valid,
+        "rejected": len(strategies) - valid,
+        "reasons": reasons,
+        "last_error": campaign.get("last_error"),
+    }
+
+
 def _individual(
     strategy: dict[str, Any],
     result: dict[str, Any],
@@ -199,6 +304,7 @@ def _evaluate(
     campaign_id: str,
     setup: jobs.QueueSetup,
     db_path,
+    errors: list[str] | None = None,
 ) -> list[Individual]:
     if not strategies:
         return []
@@ -206,6 +312,8 @@ def _evaluate(
     individuals: list[Individual] = []
     for index, (strategy, result) in enumerate(zip(strategies, results)):
         if result.get("error"):
+            if errors is not None:
+                errors.append(str(result["error"]))
             continue
         parent_a, parent_b = parent_items[index]
         diff = (
@@ -392,22 +500,23 @@ def run_campaign(
     requested = max(1, requested)
 
     known: dict[str, Individual] = {}
-    initial_strategies: list[dict[str, Any]] = []
-    seen: set[str] = set()
-    attempts = 0
-    while (
-        len(initial_strategies) < int(profile.population)
-        and attempts < int(profile.population) * 20
-    ):
-        attempts += 1
-        strategy = genetic.random_strategy(rng, template)
-        if strategy is None:
-            continue
-        digest = dsl.strategy_hash(strategy)
-        if digest in seen:
-            continue
-        seen.add(digest)
-        initial_strategies.append(strategy)
+    init_stats: dict[str, int] = {}
+    initial_candidates = initial_strategies(
+        campaign,
+        template=template,
+        population=int(profile.population),
+        rng=rng,
+        stats=init_stats,
+    )
+    init_errors: list[str] = []
+    diagnostics: dict[str, Any] = {
+        "init": dict(init_stats),
+        "generations": [],
+        "submitted": len(initial_candidates),
+        "evaluated": 0,
+        "evaluation_errors": 0,
+        "stop_reason": "generations",
+    }
 
     with jobs.BatchEvaluator(
         setup,
@@ -415,31 +524,57 @@ def run_campaign(
         workers=requested,
         cache_limit_bytes=None,
     ) as evaluator:
-        initial = _evaluate(
-            evaluator,
-            initial_strategies,
-            generation=0,
-            operators=["seed"] * len(initial_strategies),
-            origin="template",
-            parent_items=[(None, None) for _ in initial_strategies],
-            campaign_id=campaign_id,
-            setup=setup,
-            db_path=db_path,
-        )
-        for item in initial:
-            known[item.strategy_hash] = item
-        _assign_ranks(initial)
-        _niche(initial, float(config.validation.corr_cluster))
-        for item in initial:
-            _store_lineage(campaign_id, item, db_path)
-        current = initial
-        if not current:
-            raise campaigns.CampaignError("Sin datos: población inicial vacía")
+        try:
+            initial = _evaluate(
+                evaluator,
+                initial_candidates,
+                generation=0,
+                operators=["seed"] * len(initial_candidates),
+                origin="template",
+                parent_items=[(None, None) for _ in initial_candidates],
+                campaign_id=campaign_id,
+                setup=setup,
+                db_path=db_path,
+                errors=init_errors,
+            )
+            for item in initial:
+                known[item.strategy_hash] = item
+            diagnostics["evaluated"] = len(initial)
+            diagnostics["evaluation_errors"] = len(init_errors)
+            _assign_ranks(initial)
+            _niche(initial, float(config.validation.corr_cluster))
+            for item in initial:
+                _store_lineage(campaign_id, item, db_path)
+            current = initial
+            if not current:
+                detail = "; ".join(dict.fromkeys(init_errors[:3])) or "sin candidatos"
+                raise campaigns.CampaignError(
+                    "Sin datos: población inicial vacía "
+                    f"({len(initial_candidates)} candidatos, "
+                    f"{len(init_errors)} rechazados): {detail}"
+                )
+        except Exception as exc:
+            # Nada quedó evaluado: la campaña vuelve a registered con el
+            # motivo, sin tocar n_total ni approved_at. El reintento no se
+            # bloquea y el DSR sigue contando la campaña una sola vez.
+            if (
+                not synthetic
+                and databank.count_strategies(campaign_id, db_path=db_path) == 0
+            ):
+                databank.set_campaign_status(
+                    campaign_id,
+                    "registered",
+                    reason=f"{type(exc).__name__}: {exc}",
+                    db_path=db_path,
+                )
+            raise
 
         for generation in range(1, int(profile.generations) + 1):
             if time_limit is not None and time.monotonic() - started >= float(time_limit) * 60.0:
+                diagnostics["stop_reason"] = "time_limit"
                 break
             if len(known) >= total_budget:
+                diagnostics["stop_reason"] = "budget"
                 break
             _assign_ranks(current)
             _niche(current, 0.9)
@@ -449,6 +584,15 @@ def run_campaign(
             meta: list[tuple[Individual | None, Individual | None]] = []
             operators: list[str] = []
             pending: set[str] = set()
+            gen_stats: dict[str, Any] = {
+                "generation": generation,
+                "slots": int(profile.population),
+                "invalid": 0,
+                "duplicates": 0,
+                "submitted": 0,
+                "errors": 0,
+                "evaluated": 0,
+            }
             for _ in range(int(profile.population)):
                 picks = nsga2.select(
                     list(range(len(current))), ranks, crowding, 2, rng
@@ -459,16 +603,23 @@ def run_campaign(
                     left.strategy, right.strategy, rng
                 )
                 if child is None:
+                    gen_stats["invalid"] += 1
                     continue
                 digest = dsl.strategy_hash(child)
                 if digest in known or digest in pending:
+                    gen_stats["duplicates"] += 1
                     continue
                 pending.add(digest)
                 offspring.append(child)
                 meta.append((left, right))
                 operators.append(operator)
+            gen_stats["submitted"] = len(offspring)
+            diagnostics["submitted"] += len(offspring)
             if not offspring:
+                diagnostics["generations"].append(gen_stats)
+                diagnostics["stop_reason"] = "empty_offspring"
                 break
+            gen_errors: list[str] = []
             new_items = _evaluate(
                 evaluator,
                 offspring,
@@ -479,7 +630,13 @@ def run_campaign(
                 campaign_id=campaign_id,
                 setup=setup,
                 db_path=db_path,
+                errors=gen_errors,
             )
+            gen_stats["errors"] = len(gen_errors)
+            gen_stats["evaluated"] = len(new_items)
+            diagnostics["evaluation_errors"] += len(gen_errors)
+            diagnostics["evaluated"] += len(new_items)
+            diagnostics["generations"].append(gen_stats)
             for item in new_items:
                 known[item.strategy_hash] = item
             if not new_items:
@@ -506,6 +663,7 @@ def run_campaign(
                 _store_lineage(campaign_id, item, db_path)
             current = [combined[index] for index in chosen_indices]
             if len(known) >= total_budget:
+                diagnostics["stop_reason"] = "budget"
                 break
 
     _assign_ranks(current)
@@ -665,7 +823,14 @@ def run_campaign(
         "spearman_is_oos1": float(spearman_value),
         "elapsed_s": time.monotonic() - started,
         "seed": campaign_seed,
+        "diagnostics": diagnostics,
     }
 
 
-__all__ = ["Individual", "run_campaign", "synthetic_frame"]
+__all__ = [
+    "Individual",
+    "initial_strategies",
+    "preflight",
+    "run_campaign",
+    "synthetic_frame",
+]

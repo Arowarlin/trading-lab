@@ -58,7 +58,8 @@ CREATE TABLE IF NOT EXISTS disc_campaigns (
     approved_at TEXT,
     approved_by TEXT,
     quality_json TEXT,
-    reject_reason TEXT
+    reject_reason TEXT,
+    last_error TEXT
 );
 
 CREATE TABLE IF NOT EXISTS disc_strategies (
@@ -214,6 +215,7 @@ def _migrate_campaigns(con: sqlite3.Connection) -> None:
         ("quality_json", "TEXT"),
         ("reject_reason", "TEXT"),
         ("n_finalists", "INTEGER"),
+        ("last_error", "TEXT"),
     ):
         if column not in columns:
             con.execute(f"ALTER TABLE disc_campaigns ADD COLUMN {column} {kind}")
@@ -475,6 +477,7 @@ def set_campaign_status(
     campaign_id: str,
     status: str,
     *,
+    reason: str | None = None,
     db_path: str | Path | None = None,
     con: sqlite3.Connection | None = None,
 ) -> None:
@@ -483,9 +486,30 @@ def set_campaign_status(
     target = _resolve_target(db_path, con)
     with _connection(target, con) as opened:
         opened.execute(
-            "UPDATE disc_campaigns SET status = ? WHERE id = ?",
-            (str(status), str(campaign_id)),
+            "UPDATE disc_campaigns SET status = ?, last_error = ? WHERE id = ?",
+            (
+                str(status),
+                None if reason is None else str(reason)[:2000],
+                str(campaign_id),
+            ),
         )
+
+
+def count_strategies(
+    campaign_id: str,
+    *,
+    db_path: str | Path | None = None,
+    con: sqlite3.Connection | None = None,
+) -> int:
+    """Estrategias guardadas de una campaña (cualquier estado)."""
+
+    target = _resolve_target(db_path, con)
+    with _connection(target, con) as opened:
+        row = opened.execute(
+            "SELECT COUNT(*) AS n FROM disc_strategies WHERE campaign_id = ?",
+            (str(campaign_id),),
+        ).fetchone()
+    return int(row["n"])
 
 
 def add_strategy(
@@ -962,6 +986,7 @@ __all__ = [
     "add_validation",
     "approve_campaign",
     "count_holdout_reads",
+    "count_strategies",
     "decode_returns",
     "encode_returns",
     "frontier",

@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import random
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from tradinglab.cli import app
 from tradinglab.config import ROOT
-from tradinglab.discovery import campaigns, databank, engine
+from tradinglab.discovery import campaigns, databank, dsl, engine, genetic
+from tradinglab.discovery.config import load_engine_config
 from tradinglab.discovery.engine import synthetic_frame
 from tradinglab.learning import count_tests
 
@@ -84,6 +87,27 @@ def test_engine_is_reproducible(tmp_path) -> None:
     assert [row["generation"] for row in rows_first] == [
         row["generation"] for row in rows_second
     ]
+    diagnostics = first["diagnostics"]
+    assert diagnostics["init"]["generated"] == load_engine_config().profile(
+        "small"
+    ).population
+    assert diagnostics["submitted"] == (
+        diagnostics["init"]["generated"]
+        + sum(row["submitted"] for row in diagnostics["generations"])
+    )
+    assert (
+        diagnostics["evaluated"] + diagnostics["evaluation_errors"]
+        == diagnostics["submitted"]
+    )
+    assert diagnostics["stop_reason"] in {
+        "generations",
+        "empty_offspring",
+        "budget",
+        "time_limit",
+    }
+    assert all(
+        row["submitted"] <= row["slots"] for row in diagnostics["generations"]
+    )
     assert count_tests(lab, discovery_db=db) == 0
 
 
@@ -122,6 +146,208 @@ def test_cli_run_requires_registered_and_flag(tmp_path) -> None:
     )
     assert with_flag.exit_code == 1
     assert databank.get_campaign("draft", db_path=db)["status"] == "draft"
+
+
+def test_initial_population_uses_real_instrument(tmp_path) -> None:
+    """Campaña sobre ``US100.CASH`` con barras sintéticas y la plantilla real."""
+
+    db = tmp_path / "discovery.db"
+    frame = synthetic_frame(years=0.5, seed=20261120)
+    campaigns.register(
+        "US100.CASH",
+        "M5",
+        "ny_open_vol_filter",
+        "small",
+        segments=SEGMENTS,
+        seed=20261120,
+        campaign_id="real-instrument",
+        frame=frame,
+        db_path=db,
+    )
+    campaigns.approve("real-instrument", db_path=db)
+    campaign = databank.get_campaign("real-instrument", db_path=db)
+    assert campaign is not None
+    profile = load_engine_config().profile("small")
+
+    strategies = engine.initial_strategies(
+        campaign,
+        template="ny_open_vol_filter",
+        population=profile.population,
+        rng=random.Random(20261120),
+    )
+
+    assert len(strategies) >= 40
+    for strategy in strategies:
+        assert dsl.validate(strategy) == []
+        assert strategy["instrument"] == "US100.CASH"
+        assert strategy["timeframe"] == "M5"
+        assert strategy["session"]["tz"] == "America/New_York"
+
+
+class _RejectedEvaluator:
+    """Evaluador falso: todos los candidatos fallan antes de tocar barras."""
+
+    def __init__(self, *args, **kwargs) -> None:
+        pass
+
+    def __enter__(self) -> "_RejectedEvaluator":
+        return self
+
+    def __exit__(self, *exc_info) -> bool:
+        return False
+
+    def evaluate(self, strategies, kind: str = "fitness") -> list[dict]:
+        return [
+            {"error": "QueueError: instrumento US100 != US100.CASH de la campaña"}
+            for _strategy in strategies
+        ]
+
+
+class _BrokenEvaluator:
+    """Evaluador falso: el arranque del worker falla antes de evaluar nada."""
+
+    def __init__(self, *args, **kwargs) -> None:
+        pass
+
+    def __enter__(self) -> "_BrokenEvaluator":
+        return self
+
+    def __exit__(self, *exc_info) -> bool:
+        return False
+
+    def evaluate(self, strategies, kind: str = "fitness") -> list[dict]:
+        raise RuntimeError("Sin datos: menos de 100 barras en el tramo IS")
+
+
+def _register_real(db, campaign_id: str, seed: int, frame) -> None:
+    campaigns.register(
+        "US100.CASH",
+        "M5",
+        "ny_open_vol_filter",
+        "small",
+        segments=SEGMENTS,
+        seed=seed,
+        campaign_id=campaign_id,
+        frame=frame,
+        db_path=db,
+    )
+    campaigns.approve(campaign_id, db_path=db)
+
+
+def test_failed_initialization_restores_registered(tmp_path, monkeypatch) -> None:
+    db = tmp_path / "discovery.db"
+    lab = tmp_path / "lab.db"
+    frame = synthetic_frame(years=0.5, seed=5)
+    _register_real(db, "real-instrument-fail", 5, frame)
+    monkeypatch.setattr(engine.jobs, "BatchEvaluator", _RejectedEvaluator)
+    before = count_tests(lab, discovery_db=db)
+    approved_at = databank.get_campaign(
+        "real-instrument-fail", db_path=db
+    )["approved_at"]
+
+    for _attempt in range(2):
+        with pytest.raises(campaigns.CampaignError) as excinfo:
+            engine.run_campaign(
+                "real-instrument-fail", workers=1, db_path=db, bars=frame
+            )
+        message = str(excinfo.value)
+        assert "población inicial vacía" in message
+        assert "instrumento US100 != US100.CASH" in message
+        row = databank.get_campaign("real-instrument-fail", db_path=db)
+        assert row is not None
+        assert row["status"] == "registered"
+        assert not row["n_evaluated"]
+        assert row["n_total"] == 440
+        assert row["approved_at"] == approved_at
+        assert "población inicial vacía" in row["last_error"]
+
+    # Dos intentos fallidos: el DSR sigue contando la campaña una sola vez.
+    assert before == 440
+    assert count_tests(lab, discovery_db=db) == before
+
+
+def test_startup_error_restores_registered_with_reason(
+    tmp_path, monkeypatch
+) -> None:
+    db = tmp_path / "discovery.db"
+    frame = synthetic_frame(years=0.5, seed=6)
+    _register_real(db, "real-startup-fail", 6, frame)
+    monkeypatch.setattr(engine.jobs, "BatchEvaluator", _BrokenEvaluator)
+    approved_at = databank.get_campaign(
+        "real-startup-fail", db_path=db
+    )["approved_at"]
+
+    with pytest.raises(RuntimeError):
+        engine.run_campaign(
+            "real-startup-fail", workers=1, db_path=db, bars=frame
+        )
+
+    row = databank.get_campaign("real-startup-fail", db_path=db)
+    assert row is not None
+    assert row["status"] == "registered"
+    assert row["n_total"] == 440
+    assert row["approved_at"] == approved_at
+    assert not row["n_evaluated"]
+    assert "menos de 100 barras" in row["last_error"]
+    assert databank.count_strategies("real-startup-fail", db_path=db) == 0
+
+
+def test_preflight_counts_generated_valid_and_rejected(tmp_path) -> None:
+    db = tmp_path / "discovery.db"
+    frame = synthetic_frame(years=0.5, seed=20261120)
+    campaigns.register(
+        "US100.CASH",
+        "M5",
+        "ny_open_vol_filter",
+        "small",
+        segments=SEGMENTS,
+        seed=20261120,
+        campaign_id="real-preflight",
+        frame=frame,
+        db_path=db,
+    )
+
+    report = engine.preflight("real-preflight", db_path=db)
+
+    assert report["status"] == "draft"
+    assert report["instrument"] == "US100.CASH"
+    assert report["population"] == 40
+    assert report["generated"] >= 40
+    assert report["valid"] >= 40
+    assert report["rejected"] == 0
+    assert report["reasons"] == {}
+    # Sin efectos: el borrador sigue igual y no hay estrategias guardadas.
+    assert databank.get_campaign("real-preflight", db_path=db)["status"] == "draft"
+    assert databank.count_strategies("real-preflight", db_path=db) == 0
+
+
+def test_cli_preflight_fails_below_population(tmp_path, monkeypatch) -> None:
+    db = tmp_path / "discovery.db"
+    frame = synthetic_frame(years=0.5, seed=7)
+    campaigns.register(
+        "US100.CASH",
+        "M5",
+        "ny_open_vol_filter",
+        "small",
+        segments=SEGMENTS,
+        seed=7,
+        campaign_id="real-preflight-fail",
+        frame=frame,
+        db_path=db,
+    )
+
+    def _only_template(campaign, **kwargs):
+        return [genetic.template_strategy("ny_open_vol_filter")]
+
+    monkeypatch.setattr(engine, "initial_strategies", _only_template)
+    result = CliRunner().invoke(
+        app, ["discovery", "preflight", "real-preflight-fail", "--db", str(db)]
+    )
+
+    assert result.exit_code == 1
+    assert "instrumento US100 != US100.CASH" in result.output
+    assert "Preflight FAIL" in result.output
+    assert databank.count_strategies("real-preflight-fail", db_path=db) == 0
 
 
 def test_finalist_rule_requires_positive_full_is() -> None:
