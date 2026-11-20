@@ -1,6 +1,6 @@
 {
-  "origin": "Fase 6 · prueba de ruido sintética (0,9 años)",
-  "note": "Finalistas de la corrida de 0,9 años, semilla 2. En la Fase 7 NINGUNO debe llegar a nivel 4 (OOS-2 + DSR de confirmación + azar).",
+  "origin": "Fase 7b · prueba de ruido sintética",
+  "note": "Finalistas de la corrida sintética con la regla de Fase 7b (IS completa > 0 y OOS-1 > 0). NINGUNO debe llegar a nivel 4.",
   "seed": 2,
   "frame": {
     "years": 0.9,
@@ -26,7 +26,7 @@
     "account": "CFD-001",
     "firm": "ftmo"
   },
-  "campaign_id": "noise-09y-2",
+  "campaign_id": "noise-09y-seed2",
   "summary": {
     "n_total": 440,
     "n_evaluated": 241,

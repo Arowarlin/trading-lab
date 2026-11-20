@@ -239,6 +239,12 @@ def _rank1_candidates(
     candidates: list[Individual] = []
     discarded: list[tuple[Individual, str]] = []
     for item in feasible_rank1:
+        full_is = (item.metrics.get("is") or {}).get("expectancy_r")
+        if full_is is None or float(full_is) <= 0:
+            discarded.append(
+                (item, f"descartado: IS completa {full_is} <= 0")
+            )
+            continue
         positive = sum(
             1
             for row in item.folds
@@ -600,7 +606,12 @@ def run_campaign(
                 "strategy_hash": item.strategy_hash,
                 "oos1_expectancy_r": metrics.get("expectancy_r"),
                 "oos1_profit_factor": metrics.get("profit_factor"),
-                "is_expectancy_r": item.metrics.get("raw", {}).get("expectancy_r"),
+                "is_expectancy_r": (
+                    item.metrics.get("is") or {}
+                ).get("expectancy_r"),
+                "is_median_expectancy_r": item.metrics.get("raw", {}).get(
+                    "expectancy_r"
+                ),
                 "cost_r": item.cost_r,
             }
         )

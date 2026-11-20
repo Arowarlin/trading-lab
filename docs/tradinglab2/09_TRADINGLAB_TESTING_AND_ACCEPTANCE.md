@@ -46,22 +46,31 @@ así que su media es positiva por construcción. La prueba de Fase 6 usa 5 campa
 La corrida de Fase 6 dio 43 candidatos, media OOS-1 **−0,174** y Spearman medio **−0,173**; 0
 finalistas en las 5 campañas de 0,9 años.
 
-**Fixture para la Fase 7.** Los 3 finalistas sintéticos de la semilla 2 de la corrida de 1 año están en
-`tests/fixtures/discovery_noise_seed2_finalists.json`. En la Fase 7, la prueba de ruido completa
-exigirá que **ninguno** llegue a nivel 4: lectura OOS-2 (una por estrategia), DSR de confirmación y
-test contra el azar. Es el criterio de aceptación final del MVP.
+**Corrección de la Fase 7b (2026-11-20).** El `test_vs_random` que se calculaba sobre IS+OOS-1 dio
+percentiles 98,9–100 a finalistas de ruido: esos tramos ya se habían usado para seleccionarlos, así que
+la comparación estaba sesgada. Ahora se llama `test_vs_random_insample`, es **informativo** y no decide
+nivel ni veredicto. El requisito es `test_vs_random_oos2`: se calcula dentro de `confirm` con la misma
+lectura única de OOS-2, N=1000 entradas aleatorias con la misma sesión, salidas y número de entradas, y
+exige percentil ≥95 para el nivel 4. Si OOS-2 tiene menos de `min_trades_oos2` (30 por defecto)
+operaciones, tanto `test_vs_random_oos2` como el DSR de confirmación quedan **Sin datos** y no se pasa
+el nivel 4.
 
-**Resultado de la Fase 7 (2026-11-20).** Se regeneraron las dos campañas sintéticas con su semilla
-(1 año y 0,9 años), se usó la frontera final completa para PBO/WF (PBO ≥ 8 estrategias) y se pasó
-cada finalista por retest, robustness, niveles y la lectura OOS-2 sintética. Ninguno llegó a nivel 4.
+**Fixtures de la Fase 7b.** Con la regla de finalistas corregida (IS completa >0), la corrida de 1 año
+bajó de **K=3 a K=1**; la de 0,9 años se mantiene en **K=2**. Los fixtures son
+`tests/fixtures/discovery_noise_seed2_finalists.json` (1 finalista) y
+`tests/fixtures/discovery_noise_09y_seed2_finalists.json` (2 finalistas).
 
-| Campaña | Finalista | test_vs_random | OOS-2 | DSR confirmación | PBO | Nivel | Veredicto |
-|---|---|---|---|---|---|---|---|
-| 1 año | 2176864fe713 | 98,9 | −0,3156 | 0,1279 | 0,4604 | 3 | SOBREAJUSTADA |
-| 1 año | abac3df63e13 | 100,0 | −0,3149 | 0,0703 | 0,4604 | 3 | SOBREAJUSTADA |
-| 1 año | 50678dea2570 | 99,0 | no leído | Sin datos | 0,4604 | 1 | FRÁGIL |
-| 0,9 años | cf187a0037c7 | 100,0 | −0,0367 | 0,4120 | 0,1901 | 3 | SOBREAJUSTADA |
-| 0,9 años | 45bb81729134 | 100,0 | −0,0075 | 0,4502 | 0,1901 | 3 | SOBREAJUSTADA |
+| Campaña | Finalista | test_vs_random_insample | test_vs_random_oos2 | Ops OOS-2 | OOS-2 | DSR confirmación | PBO | Nivel | Veredicto |
+|---|---|---|---|---|---|---|---|---|---|
+| 1 año | 7f0bf5962f12 | 95,7 | Sin datos | 12 | −0,2715 | Sin datos | 0,4604 | 3 | SOBREAJUSTADA |
+| 0,9 años | cf187a0037c7 | 99,9 | Sin datos | 20 | −0,0367 | Sin datos | 0,1901 | 3 | SOBREAJUSTADA |
+| 0,9 años | 45bb81729134 | 99,3 | Sin datos | 21 | −0,0075 | Sin datos | 0,1901 | 3 | SOBREAJUSTADA |
+
+Los tres tramos OOS-2 sintéticos tienen menos de 30 operaciones, así que el nuevo mínimo bloquea
+`test_vs_random_oos2` y el DSR (Sin datos). Aun así, **ninguno llega a nivel 4**. El cálculo del test
+OOS-2 con ≥30 operaciones se verifica en `tests/test_discovery_levels.py`: en la corrida sintética de
+control con 65 operaciones OOS-2 el percentil fue **38,5** (no 99) y el DSR de confirmación **0,0012**.
+El test OOS-2 no infla el ruido.
 
 ## 4. Aceptación final del MVP (fases 0–7)
 

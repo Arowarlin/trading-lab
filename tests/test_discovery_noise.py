@@ -91,7 +91,7 @@ def test_noise_seed2_finalists_fixture() -> None:
     path = ROOT / "tests" / "fixtures" / "discovery_noise_seed2_finalists.json"
     payload = json.loads(path.read_text(encoding="utf-8"))
     assert payload["seed"] == 2
-    assert len(payload["finalists"]) == 3
+    assert len(payload["finalists"]) == 1
     for item in payload["finalists"]:
         assert dsl.validate(item["dsl"]) == []
         assert item["strategy_hash"] == dsl.strategy_hash(item["dsl"])

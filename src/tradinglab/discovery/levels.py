@@ -13,7 +13,8 @@ import pandas as pd
 
 from ..config import DEFAULT_DB
 from ..stats import dsr_from_returns, period_sharpe
-from . import campaigns, databank, dsl, fastbt, jobs
+from . import campaigns, databank, dsl, fastbt, jobs, robustness
+from .config import load_engine_config
 from .specs import exit_spec_from_strategy, run_limits_from_strategy
 
 
@@ -41,6 +42,8 @@ def _verdict(
     oos1: float | None,
     oos2: float | None,
     pbo_value: float | None,
+    *,
+    is_finalist: bool,
 ) -> str:
     if level >= 4:
         return "ROBUSTA"
@@ -54,7 +57,8 @@ def _verdict(
         )
     ):
         return "SOBREAJUSTADA"
-    random_pct = (tests.get("test_vs_random") or {}).get("percentile")
+    if not is_finalist:
+        return "SIN VEREDICTO"
     cost15 = (
         (tests.get("retest") or {}).get("cost_x1_5") or {}
     ).get("expectancy_r")
@@ -64,16 +68,14 @@ def _verdict(
     challenge_ok = (tests.get("challenge") or {}).get("passed")
     wf_ok = (tests.get("wf") or {}).get("ok")
     regime_ok = (tests.get("regime") or {}).get("passed")
+    random_oos2 = (tests.get("test_vs_random_oos2") or {}).get("percentile")
     fragile = (
-        random_pct is None
-        or float(random_pct) < 95.0
-        or cost15 is None
-        or float(cost15) <= 0.0
-        or slip2 is None
-        or float(slip2) <= 0.0
-        or challenge_ok is not True
-        or wf_ok is not True
-        or regime_ok is not True
+        (cost15 is not None and float(cost15) <= 0.0)
+        or (slip2 is not None and float(slip2) <= 0.0)
+        or challenge_ok is False
+        or wf_ok is False
+        or regime_ok is False
+        or (random_oos2 is not None and float(random_oos2) < 95.0)
     )
     if fragile:
         return "FRÁGIL"
@@ -101,11 +103,12 @@ def evaluate(
     is_metrics = _evaluation_metrics(strategy_id, "fitness_is", db_path=db_path)
     oos1_metrics = _evaluation_metrics(strategy_id, "oos1", db_path=db_path)
     oos2_metrics = _evaluation_metrics(strategy_id, "oos2", db_path=db_path)
-    is_expectancy = (
-        (is_metrics or {}).get("raw", {}).get("expectancy_r")
+    is_full = (
+        (is_metrics or {}).get("is", {}).get("expectancy_r")
         if isinstance(is_metrics, dict)
         else None
     )
+    is_expectancy = is_full
     oos1 = (oos1_metrics or {}).get("expectancy_r")
     oos2 = (oos2_metrics or {}).get("expectancy_r")
     pbo_value = (tests.get("pbo") or {}).get("pbo")
@@ -114,9 +117,18 @@ def evaluate(
     wf_ok = (tests.get("wf") or {}).get("ok")
     regime_ok = (tests.get("regime") or {}).get("passed")
     retest = tests.get("retest") or {}
-    random_pct = (tests.get("test_vs_random") or {}).get("percentile")
+    random_insample = (tests.get("test_vs_random_insample") or {}).get(
+        "percentile"
+    )
+    random_oos2 = (tests.get("test_vs_random_oos2") or {}).get("percentile")
     cost15 = (retest.get("cost_x1_5") or {}).get("expectancy_r")
     slip2 = (retest.get("slippage_plus_2") or {}).get("expectancy_r")
+    is_finalist = str(strategy["status"]) == "finalist"
+    min_trades_oos2 = int(load_engine_config().robustness.min_trades_oos2)
+    oos2_trades = (oos2_metrics or {}).get("trades")
+    enough_oos2 = (
+        oos2_trades is not None and int(oos2_trades) >= min_trades_oos2
+    )
 
     level = 1
     if (
@@ -126,16 +138,17 @@ def evaluate(
     ):
         level = 2
     level3 = (
-        is_expectancy is not None
+        is_finalist
+        and is_expectancy is not None
         and float(is_expectancy) > 0.0
-        and str(strategy["status"]) == "finalist"
-        and oos1 is not None
-        and float(oos1) > 0.0
+        and cost15 is not None
+        and float(cost15) > 0.0
     )
     if level3:
         level = 3
     level4 = (
         level3
+        and enough_oos2
         and oos2 is not None
         and float(oos2) > 0.0
         and dsr_confirm is not None
@@ -147,20 +160,31 @@ def evaluate(
         and slip2 is not None
         and float(slip2) > 0.0
         and challenge_ok is True
+        and random_oos2 is not None
+        and float(random_oos2) >= 95.0
     )
     if level4:
         level = 4
-    verdict = _verdict(level, tests, is_expectancy, oos1, oos2, pbo_value)
+    verdict = _verdict(
+        level,
+        tests,
+        is_expectancy,
+        oos1,
+        oos2,
+        pbo_value,
+        is_finalist=is_finalist,
+    )
     databank.set_strategy_verdict(strategy_id, level, verdict, db_path=db_path)
 
     missing = [
         name
         for name, value in (
-            ("test_vs_random", random_pct),
+            ("test_vs_random_oos2", random_oos2),
             ("cost_x1_5", cost15),
             ("slippage_plus_2", slip2),
             ("oos2", oos2),
             ("dsr_confirm", dsr_confirm),
+            ("min_trades_oos2", min_trades_oos2 if enough_oos2 else None),
         )
         if value is None
     ]
@@ -181,12 +205,15 @@ def evaluate(
         "is_expectancy_r": is_expectancy,
         "oos1_expectancy_r": oos1,
         "oos2_expectancy_r": oos2,
+        "trades_oos2": oos2_trades,
+        "min_trades_oos2": min_trades_oos2,
         "dsr_confirm": dsr_confirm,
         "pbo": pbo_value,
         "wf_ok": wf_ok,
         "regime_ok": regime_ok,
         "challenge_ok": challenge_ok,
-        "test_vs_random_pct": random_pct,
+        "test_vs_random_insample_pct": random_insample,
+        "test_vs_random_oos2_pct": random_oos2,
         "cost_x1_5_expectancy_r": cost15,
         "slippage_plus_2_expectancy_r": slip2,
         "level3": level3,
@@ -311,51 +338,109 @@ def confirm(
         returns=result.daily_r,
         db_path=db_path,
     )
-    trial_srs = _trial_srs(strategy_id, campaign_id, k, db_path=db_path)
-    if k > 1 and len(trial_srs) < k:
+    config = load_engine_config().robustness
+    min_trades = int(config.min_trades_oos2)
+    trades_oos2 = len(result.trades)
+    enough_trades = trades_oos2 >= min_trades
+
+    if enough_trades:
+        random_oos2 = robustness.random_baseline(
+            model,
+            oos2_frame,
+            cost,
+            setup,
+            prepared,
+            trials=int(config.random_trials),
+            seed=int(campaign["config"].get("seed", 0)) + 4_000,
+            real_expectancy=result.metrics.get("expectancy_r"),
+            real_trades=result.trades,
+        )
+    else:
+        random_oos2 = {
+            "status": "Sin datos",
+            "percentile": None,
+            "reason": (
+                f"operaciones OOS-2 {trades_oos2} < min_trades_oos2 "
+                f"{min_trades}"
+            ),
+            "trades_oos2": trades_oos2,
+            "min_trades_oos2": min_trades,
+            "note": "no cuenta como trial del DSR",
+        }
+    random_oos2["scope"] = "oos2"
+    random_oos2["trades_oos2"] = trades_oos2
+    random_oos2["min_trades_oos2"] = min_trades
+
+    if not enough_trades:
         dsr = {
             "status": "Sin datos",
             "dsr": None,
             "kind": "Sin datos",
             "reason": (
-                f"faltan series IS+OOS-1 de finalistas "
-                f"({len(trial_srs)} de {k})"
+                f"operaciones OOS-2 {trades_oos2} < min_trades_oos2 "
+                f"{min_trades}"
             ),
             "k_finalists": k,
-            "trial_srs_available": len(trial_srs),
+            "trades_oos2": trades_oos2,
+            "min_trades_oos2": min_trades,
         }
+        trial_srs = []
     else:
-        try:
-            if k == 1:
-                dsr = dsr_from_returns(
-                    result.daily_r.to_numpy(dtype=float),
-                    [],
-                    n_trials=1,
-                    periods_per_year=252.0,
-                    benchmark_sr=0.0,
-                )
-                dsr["kind"] = "psr_sr0"
-                dsr["note"] = "K=1: PSR frente a SR 0"
-            else:
-                dsr = dsr_from_returns(
-                    result.daily_r.to_numpy(dtype=float),
-                    trial_srs,
-                    n_trials=k,
-                    periods_per_year=252.0,
-                )
-                dsr["kind"] = "dsr_k_finalists"
-        except Exception as exc:  # noqa: BLE001 - Sin datos, no se aprueba
+        trial_srs = _trial_srs(strategy_id, campaign_id, k, db_path=db_path)
+        if k > 1 and len(trial_srs) < k:
             dsr = {
                 "status": "Sin datos",
                 "dsr": None,
                 "kind": "Sin datos",
-                "reason": f"{type(exc).__name__}: {exc}",
+                "reason": (
+                    f"faltan series IS+OOS-1 de finalistas "
+                    f"({len(trial_srs)} de {k})"
+                ),
                 "k_finalists": k,
+                "trial_srs_available": len(trial_srs),
             }
+        else:
+            try:
+                if k == 1:
+                    dsr = dsr_from_returns(
+                        result.daily_r.to_numpy(dtype=float),
+                        [],
+                        n_trials=1,
+                        periods_per_year=252.0,
+                        benchmark_sr=0.0,
+                    )
+                    dsr["kind"] = "psr_sr0"
+                    dsr["note"] = "K=1: PSR frente a SR 0"
+                else:
+                    dsr = dsr_from_returns(
+                        result.daily_r.to_numpy(dtype=float),
+                        trial_srs,
+                        n_trials=k,
+                        periods_per_year=252.0,
+                    )
+                    dsr["kind"] = "dsr_k_finalists"
+            except Exception as exc:  # noqa: BLE001 - Sin datos, no se aprueba
+                dsr = {
+                    "status": "Sin datos",
+                    "dsr": None,
+                    "kind": "Sin datos",
+                    "reason": f"{type(exc).__name__}: {exc}",
+                    "k_finalists": k,
+                }
     dsr["k_finalists"] = k
     dsr["trial_srs_available"] = len(trial_srs)
+    dsr["trades_oos2"] = trades_oos2
+    dsr["min_trades_oos2"] = min_trades
     databank.add_validation(
         strategy_id, "oos2", oos2_metrics, float(oos2_metrics.get("expectancy_r") or 0.0) > 0.0,
+        db_path=db_path,
+    )
+    databank.add_validation(
+        strategy_id,
+        "test_vs_random_oos2",
+        random_oos2,
+        (random_oos2.get("percentile") is not None)
+        and float(random_oos2["percentile"]) >= 95.0,
         db_path=db_path,
     )
     databank.add_validation(
@@ -374,6 +459,7 @@ def confirm(
     updated["global_dsr_tests"] = int(global_tests)
     updated["oos2"] = oos2_metrics
     updated["dsr_confirm"] = dsr
+    updated["test_vs_random_oos2"] = random_oos2
     return updated
 
 

@@ -10037,7 +10037,7 @@ def discovery_show_cmd(
             )
             tests.add_row(
                 row["test"],
-                "sí" if row["passed"] else "no",
+                "—" if row["passed"] is None else ("sí" if row["passed"] else "no"),
                 str(status),
             )
         console.print(tests)
@@ -10136,7 +10136,7 @@ def discovery_robustness_cmd(
     strategy_id: int = typer.Argument(..., help="ID de la estrategia"),
     db: str = typer.Option(None, "--db", help="discovery.db alternativo"),
 ) -> None:
-    """Robustness Lab completo sobre IS+OOS-1; actualiza nivel 3 y veredicto."""
+    """Robustness Lab completo sobre IS+OOS-1; actualiza niveles y veredicto."""
 
     from .discovery import levels, robustness
 
@@ -10149,11 +10149,25 @@ def discovery_robustness_cmd(
     table = Table(title=f"Discovery · robustness {strategy_id}")
     table.add_column("Prueba")
     table.add_column("Resultado")
-    table.add_column("¿Pasa?")
+    table.add_column("Estado")
     table.add_row(
-        "test_vs_random",
-        f"percentil {result['validations']['test_vs_random'].get('percentile')}",
-        "sí" if result["passed"]["test_vs_random"] else "no",
+        "test_vs_random_insample",
+        f"percentil {result['validations']['test_vs_random_insample'].get('percentile')}",
+        "informativo",
+    )
+    random_oos2 = evaluation.get("test_vs_random_oos2_pct")
+    table.add_row(
+        "test_vs_random_oos2",
+        (
+            f"percentil {random_oos2}"
+            if random_oos2 is not None
+            else "no leído (confirm)"
+        ),
+        (
+            "nivel 4"
+            if random_oos2 is not None and float(random_oos2) >= 95.0
+            else "no decide aquí"
+        ),
     )
     table.add_row(
         "coste ×1,5",
@@ -10211,10 +10225,18 @@ def discovery_confirm_cmd(
     except Exception as exc:  # noqa: BLE001
         console.print(f"[red]Confirmación no disponible:[/red] {exc}")
         raise typer.Exit(1) from exc
+    random_oos2 = result.get("test_vs_random_oos2") or {}
+    random_pct = random_oos2.get("percentile")
+    random_text = (
+        f"{random_pct}" if random_pct is not None else "Sin datos"
+    )
     console.print(
         f"Estrategia {strategy_id} · OOS-2 expectativa "
         f"{result['oos2_expectancy_r']} · DSR confirmación "
         f"{result['dsr_confirm'].get('dsr')} (K={result['dsr_confirm'].get('k_finalists')}) "
+        f"· azar OOS-2 {random_text} "
+        f"({random_oos2.get('trades_oos2', 'Sin datos')} ops, "
+        f"mín {random_oos2.get('min_trades_oos2', 'Sin datos')}) "
         f"· DSR global {result.get('global_dsr_tests')} · nivel {result['level']} "
         f"· veredicto {result['verdict']}"
     )

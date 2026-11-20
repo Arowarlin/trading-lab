@@ -63,7 +63,11 @@ def _finalist(db, campaign_id: str, *, status: str = "finalist") -> int:
         strategy_id,
         segment="fitness_is",
         cost_profile="CFD-001:US100",
-        metrics={"raw": {"expectancy_r": 0.2}, "return_dates": dates},
+        metrics={
+            "is": {"expectancy_r": 0.2},
+            "raw": {"expectancy_r": 0.2},
+            "return_dates": dates,
+        },
         trades_count=120,
         returns=returns,
         db_path=db,
@@ -78,7 +82,11 @@ def _finalist(db, campaign_id: str, *, status: str = "finalist") -> int:
         db_path=db,
     )
     databank.add_validation(
-        strategy_id, "test_vs_random", {"percentile": 99.0}, True, db_path=db
+        strategy_id,
+        "test_vs_random_insample",
+        {"percentile": 99.0},
+        None,
+        db_path=db,
     )
     databank.add_validation(
         strategy_id,
@@ -111,9 +119,16 @@ def _level4_tests(db, strategy_id: int) -> None:
         strategy_id,
         segment="oos2",
         cost_profile="CFD-001:US100",
-        metrics={"expectancy_r": 0.1},
-        trades_count=20,
+        metrics={"expectancy_r": 0.1, "trades": 40},
+        trades_count=40,
         returns=[0.01] * 20,
+        db_path=db,
+    )
+    databank.add_validation(
+        strategy_id,
+        "test_vs_random_oos2",
+        {"percentile": 99.0, "trades_oos2": 40, "min_trades_oos2": 30},
+        True,
         db_path=db,
     )
     databank.add_validation(
@@ -166,12 +181,13 @@ def test_missing_level4_test_is_sin_datos_and_no_pass(tmp_path) -> None:
     assert evaluation["level"] == 3
     assert evaluation["level4"] is False
     assert "wf" in evaluation["sin_datos"]
-    assert evaluation["verdict"] == "FRÁGIL"
+    assert evaluation["verdict"] == "MODERADA"
 
 
 def test_verdict_table() -> None:
     base = {
-        "test_vs_random": {"percentile": 99.0},
+        "test_vs_random_insample": {"percentile": 99.0},
+        "test_vs_random_oos2": {"percentile": 99.0},
         "retest": {
             "cost_x1_5": {"expectancy_r": 0.1},
             "slippage_plus_2": {"expectancy_r": 0.1},
@@ -180,12 +196,63 @@ def test_verdict_table() -> None:
         "wf": {"ok": True},
         "regime": {"passed": True},
     }
-    assert levels._verdict(4, base, 0.2, 0.1, 0.1, 0.2) == "ROBUSTA"
-    assert levels._verdict(3, base, 0.2, 0.1, -0.1, 0.2) == "SOBREAJUSTADA"
-    fragile = {**base, "test_vs_random": {"percentile": 90.0}}
-    assert levels._verdict(3, fragile, 0.2, 0.1, None, 0.2) == "FRÁGIL"
-    assert levels._verdict(3, base, 0.2, 0.1, None, 0.2) == "MODERADA"
-    assert levels._verdict(2, base, -0.1, -0.1, None, 0.2) == "SIN VEREDICTO"
+    assert (
+        levels._verdict(4, base, 0.2, 0.1, 0.1, 0.2, is_finalist=True)
+        == "ROBUSTA"
+    )
+    assert (
+        levels._verdict(3, base, 0.2, 0.1, -0.1, 0.2, is_finalist=True)
+        == "SOBREAJUSTADA"
+    )
+    fragile = {**base, "test_vs_random_oos2": {"percentile": 90.0}}
+    assert (
+        levels._verdict(3, fragile, 0.2, 0.1, None, 0.2, is_finalist=True)
+        == "FRÁGIL"
+    )
+    assert (
+        levels._verdict(3, base, 0.2, 0.1, None, 0.2, is_finalist=True)
+        == "MODERADA"
+    )
+    assert (
+        levels._verdict(1, base, -0.1, -0.1, None, 0.2, is_finalist=False)
+        == "SIN VEREDICTO"
+    )
+
+
+def test_level1_non_finalist_is_sin_veredicto(tmp_path) -> None:
+    db = tmp_path / "discovery.db"
+    campaign_id = _campaign(db)
+    strategy_id = databank.add_strategy(
+        campaign_id,
+        _strategy(),
+        status="evaluated",
+        db_path=db,
+    )
+    dates = pd.date_range("2023-01-03", periods=40, freq="D").strftime("%Y-%m-%d").tolist()
+    databank.add_evaluation(
+        strategy_id,
+        segment="fitness_is",
+        cost_profile="CFD-001:US100",
+        metrics={
+            "is": {"expectancy_r": -0.1},
+            "raw": {"expectancy_r": -0.1},
+            "return_dates": dates,
+        },
+        trades_count=100,
+        returns=[-0.01] * 40,
+        db_path=db,
+    )
+    databank.add_validation(
+        strategy_id,
+        "test_vs_random_insample",
+        {"percentile": 10.0},
+        None,
+        db_path=db,
+    )
+    evaluation = levels.evaluate(strategy_id, db_path=db)
+    assert evaluation["level"] == 1
+    assert evaluation["verdict"] == "SIN VEREDICTO"
+    assert evaluation["verdict"] != "FRÁGIL"
 
 
 def test_pbo_needs_minimum_strategies(tmp_path) -> None:
@@ -226,7 +293,13 @@ def test_pbo_needs_minimum_strategies(tmp_path) -> None:
     assert pbo["pbo_min_strategies"] == 8
 
 
-def _confirm_db(tmp_path, name: str, *, count: int = 2):
+def _confirm_db(
+    tmp_path,
+    name: str,
+    *,
+    count: int = 2,
+    entry_threshold: float = 0.0,
+):
     db = tmp_path / f"{name}.db"
     frame = synthetic_frame(years=0.5, seed=7)
     campaign_id = f"confirm-{name}"
@@ -243,6 +316,7 @@ def _confirm_db(tmp_path, name: str, *, count: int = 2):
     ids = []
     for index in range(count):
         strategy = _strategy()
+        strategy["long_entry"]["right"]["value"] = entry_threshold
         strategy["limits"] = {
             "max_trades_per_day": 2,
             "cooldown_bars": index,
@@ -260,7 +334,11 @@ def _confirm_db(tmp_path, name: str, *, count: int = 2):
             strategy_id,
             segment="fitness_is",
             cost_profile="CFD-001:US100",
-            metrics={"raw": {"expectancy_r": 0.2}, "return_dates": dates},
+            metrics={
+                "is": {"expectancy_r": 0.2},
+                "raw": {"expectancy_r": 0.2},
+                "return_dates": dates,
+            },
             trades_count=100,
             returns=values,
             db_path=db,
@@ -275,7 +353,11 @@ def _confirm_db(tmp_path, name: str, *, count: int = 2):
             db_path=db,
         )
         databank.add_validation(
-            strategy_id, "test_vs_random", {"percentile": 99.0}, True, db_path=db
+            strategy_id,
+            "test_vs_random_insample",
+            {"percentile": 99.0},
+            None,
+            db_path=db,
         )
         databank.add_validation(
             strategy_id,
@@ -334,6 +416,37 @@ def test_confirm_single_finalist_uses_psr_vs_zero(tmp_path) -> None:
     assert dsr["dsr"] is not None
     assert dsr["sr0_period"] == 0.0
     assert "PSR" in dsr["note"]
+    random_oos2 = result["test_vs_random_oos2"]
+    assert random_oos2["status"] == "ok", random_oos2
+    assert random_oos2["percentile"] is not None
+    assert random_oos2["percentile"] < 95.0
+    assert random_oos2["trades_oos2"] >= 30
+    assert dsr["dsr"] < 0.90
+
+
+def test_confirm_min_trades_oos2_blocks_random_and_dsr(tmp_path) -> None:
+    db, frame, _campaign_id, ids = _confirm_db(
+        tmp_path, "few", count=1, entry_threshold=1e9
+    )
+    result = levels.confirm(
+        ids[0],
+        approved_by_operator=True,
+        frame=frame,
+        db_path=db,
+        learning_db=tmp_path / "lab.db",
+    )
+    assert result["test_vs_random_oos2"]["status"] == "Sin datos"
+    assert result["test_vs_random_oos2"]["percentile"] is None
+    assert "reason" in result["test_vs_random_oos2"], result["test_vs_random_oos2"]
+    assert "min_trades_oos2" in result["test_vs_random_oos2"]["reason"]
+    assert result["dsr_confirm"]["status"] == "Sin datos"
+    assert result["dsr_confirm"]["dsr"] is None
+    assert "min_trades_oos2" in result["dsr_confirm"]["reason"]
+    assert result["level"] == 3
+    assert result["level4"] is False
+    assert "test_vs_random_oos2" in result["sin_datos"]
+    assert "dsr_confirm" in result["sin_datos"]
+    assert databank.count_holdout_reads(db_path=db) == 1
 
 
 def test_confirm_without_flag_does_not_read(tmp_path) -> None:

@@ -52,8 +52,10 @@ arrancar), cancelación limpia (`lab discovery cancel <campaña>`), errores guar
 |---|---|---|
 | 1 Exploration | AST válido | Evaluarse en IS |
 | 2 Experimental | Factible, frontera de Pareto IS, expectativa neta > 0 | Retester, informe de regímenes |
-| 3 Validation | Finalista (doc 05 §5) y OOS-1 positivo | Robustness Lab completo, **una** lectura del holdout |
-| 4 Production/Prop | DSR de confirmación ≥ 0,90, PBO ≤ 0,30, WF ok, regímenes ok, +2 puntos > 0, MC challenge aceptable | Matriz por firma, forward demo, exportación |
+| 3 Validation | Finalista (doc 05 §5), expectativa IS completa > 0 y estrés de coste ×1,5 > 0 | Robustness Lab completo, **una** lectura del holdout |
+| 4 Production/Prop | Nivel 3 + OOS-2 > 0, DSR de confirmación ≥ 0,90, PBO ≤ 0,30, WF ok, regímenes ok, slippage +2 > 0, `test_vs_random_oos2` ≥ 95 y challenge MC aceptable (con al menos `min_trades_oos2` operaciones en OOS-2) | Matriz por firma, forward demo, exportación |
+
+El test contra entradas aleatorias sobre IS+OOS-1 es **informativo** (`test_vs_random_insample`): no decide nivel ni veredicto. El requisito es el de OOS-2 (`test_vs_random_oos2`), calculado con la única lectura del holdout.
 
 Ningún nivel habilita trading real. Expectativa neta negativa → nunca "rentable".
 

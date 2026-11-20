@@ -124,14 +124,48 @@ def test_cli_run_requires_registered_and_flag(tmp_path) -> None:
     assert databank.get_campaign("draft", db_path=db)["status"] == "draft"
 
 
-def test_noise_fixture_has_valid_finalists() -> None:
+def test_finalist_rule_requires_positive_full_is() -> None:
+    folds = [{"expectancy_r": 0.1}] * 3 + [{"expectancy_r": -0.1}]
+    negative = engine.Individual(
+        strategy={},
+        strategy_hash="neg",
+        feasible=True,
+        rank=0,
+        folds=folds,
+        metrics={"is": {"expectancy_r": -0.01}},
+    )
+    candidates, discarded = engine._rank1_candidates([negative], 4)
+    assert candidates == []
+    assert "IS completa" in discarded[0][1]
+
+    positive = engine.Individual(
+        strategy={},
+        strategy_hash="pos",
+        feasible=True,
+        rank=0,
+        folds=folds,
+        metrics={"is": {"expectancy_r": 0.01}},
+    )
+    candidates, discarded = engine._rank1_candidates([positive], 4)
+    assert candidates == [positive]
+    assert discarded == []
+
+
+def test_noise_fixtures_have_valid_finalists() -> None:
     import json
 
     from tradinglab.discovery import dsl
 
-    path = ROOT / "tests" / "fixtures" / "discovery_noise_seed2_finalists.json"
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    assert len(payload["finalists"]) == 3
-    for item in payload["finalists"]:
-        assert dsl.validate(item["dsl"]) == []
-        assert "finalista" in item["selection_reason"]
+    cases = {
+        ROOT / "tests" / "fixtures" / "discovery_noise_seed2_finalists.json": 1,
+        ROOT
+        / "tests"
+        / "fixtures"
+        / "discovery_noise_09y_seed2_finalists.json": 2,
+    }
+    for path, expected in cases.items():
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        assert len(payload["finalists"]) == expected
+        for item in payload["finalists"]:
+            assert dsl.validate(item["dsl"]) == []
+            assert "finalista" in item["selection_reason"]

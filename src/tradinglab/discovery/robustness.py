@@ -1,8 +1,9 @@
 """Robustness Lab: todas las pruebas sobre IS+OOS-1 (OOS-2 solo en confirm).
 
-Reutiliza stats/validation/walkforward/prop.simulator. Los test_vs_random no
-cuentan como trials del DSR; cualquier prueba no calculable se reporta como
-"Sin datos" y no aprueba el nivel 4.
+Reutiliza stats/validation/walkforward/prop.simulator. El test contra entradas
+aleatorias sobre IS+OOS-1 es informativo y no cuenta como trial del DSR;
+cualquier prueba no calculable se reporta como "Sin datos" y no aprueba el
+nivel 4.
 """
 
 from __future__ import annotations
@@ -50,7 +51,7 @@ def _prepared_for(
     return prepared, limits
 
 
-def _test_vs_random(
+def random_baseline(
     model: dsl.Strategy,
     bars: pd.DataFrame,
     cost,
@@ -59,19 +60,33 @@ def _test_vs_random(
     *,
     trials: int,
     seed: int,
+    real_expectancy: float | None = None,
+    real_trades: list | None = None,
     cache=None,
 ) -> dict[str, Any]:
+    """Compara la estrategia con entradas aleatorias en el mismo tramo.
+
+    Es informativo para IS+OOS-1 y requisito de nivel 4 cuando se aplica al
+    holdout OOS-2. No cuenta como trial del DSR.
+    """
+
     signals = compiler.compile(model, bars, cache=cache)
     limits = run_limits_from_strategy(model, setup, close_at_end=True)
-    base = fastbt.run(
-        signals,
-        bars,
-        exit_spec_from_strategy(model),
-        cost,
-        limits,
-        prepared=prepared,
-    )
-    real = base.metrics.get("expectancy_r")
+    if real_expectancy is None or real_trades is None:
+        base = fastbt.run(
+            signals,
+            bars,
+            exit_spec_from_strategy(model),
+            cost,
+            limits,
+            prepared=prepared,
+        )
+        if real_expectancy is None:
+            real_expectancy = base.metrics.get("expectancy_r")
+        if real_trades is None:
+            real_trades = base.trades
+    real = real_expectancy
+    trades = list(real_trades or [])
     if real is None:
         return {
             "status": "Sin datos",
@@ -79,19 +94,36 @@ def _test_vs_random(
             "real_expectancy_r": None,
             "trials": 0,
             "valid_trials": 0,
+            "note": "no cuenta como trial del DSR",
         }
-    mask = next(iter(prepared.masks.values())).allowed_entry
-    positions = np.arange(len(bars))
-    eligible = np.flatnonzero(mask & (positions >= signals.valid_from))
-    n_long = int(signals.long_entry.sum())
-    n_short = int(signals.short_entry.sum())
-    if n_long + n_short > len(eligible) or n_long + n_short == 0:
+    n_long = sum(1 for trade in trades if trade.side == "long")
+    n_short = sum(1 for trade in trades if trade.side == "short")
+    if n_long + n_short == 0:
         return {
             "status": "Sin datos",
             "percentile": None,
             "real_expectancy_r": float(real),
             "trials": 0,
             "valid_trials": 0,
+            "entries_long": 0,
+            "entries_short": 0,
+            "reason": "sin operaciones reales en el tramo",
+            "note": "no cuenta como trial del DSR",
+        }
+    mask = next(iter(prepared.masks.values())).allowed_entry
+    positions = np.arange(len(bars))
+    eligible = np.flatnonzero(mask & (positions >= signals.valid_from))
+    if n_long + n_short > len(eligible):
+        return {
+            "status": "Sin datos",
+            "percentile": None,
+            "real_expectancy_r": float(real),
+            "trials": 0,
+            "valid_trials": 0,
+            "entries_long": int(n_long),
+            "entries_short": int(n_short),
+            "reason": "entradas reales > barras elegibles",
+            "note": "no cuenta como trial del DSR",
         }
     rng = random.Random(seed)
     values: list[float] = []
@@ -119,6 +151,9 @@ def _test_vs_random(
             "real_expectancy_r": float(real),
             "trials": int(trials),
             "valid_trials": 0,
+            "entries_long": int(n_long),
+            "entries_short": int(n_short),
+            "note": "no cuenta como trial del DSR",
         }
     percentile = float(np.mean(np.asarray(values) < float(real)) * 100.0)
     return {
@@ -128,6 +163,8 @@ def _test_vs_random(
         "random_expectancy_mean": float(np.mean(values)),
         "trials": int(trials),
         "valid_trials": len(values),
+        "entries_long": int(n_long),
+        "entries_short": int(n_short),
         "seed": int(seed),
         "note": "no cuenta como trial del DSR",
     }
@@ -447,6 +484,7 @@ def run(
         metrics={
             **dict(is_result.metrics),
             "raw": {"expectancy_r": is_result.metrics.get("expectancy_r")},
+            "is": dict(is_result.metrics),
             "return_dates": [stamp.isoformat() for stamp in is_result.daily_r.index],
         },
         trades_count=len(is_result.trades),
@@ -483,7 +521,7 @@ def run(
     resampled = retester.retest(
         model, is_frame, oos1_frame, cost, setup
     )
-    random_result = _test_vs_random(
+    random_result = random_baseline(
         model,
         bars,
         cost,
@@ -513,7 +551,7 @@ def run(
 
     validations = {
         "retest": resampled,
-        "test_vs_random": random_result,
+        "test_vs_random_insample": random_result,
         "mc_trades": mc_trades,
         "bootstrap": bootstrap,
         "pbo": pbo,
@@ -527,9 +565,6 @@ def run(
     passed = {
         "retest": bool(resampled.get("stress_cost_x1_5_ok"))
         and bool(resampled.get("slippage_plus_2_ok")),
-        "test_vs_random": bool(
-            (random_result.get("percentile") or 0.0) >= 95.0
-        ),
         "pbo": bool(pbo.get("pbo") is not None and float(pbo["pbo"]) <= 0.30),
         "wf": bool(wf.get("ok")),
         "regime": bool(regime.get("passed")),
@@ -558,4 +593,4 @@ def run(
     }
 
 
-__all__ = ["run"]
+__all__ = ["random_baseline", "run"]

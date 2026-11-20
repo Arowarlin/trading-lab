@@ -94,7 +94,7 @@ de evaluaciones: el que llegue antes detiene la campaña de forma limpia.
 ## 5. Regla de finalistas (fija y pre-registrada)
 
 Tras la última generación, sobre la frontera de rango 1 en IS:
-1. Filtrar factibles con expectativa IS > 0 en ≥ 3 de 4 pliegues.
+1. Filtrar factibles con **expectativa IS completa > 0** y expectativa IS > 0 en ≥ 3 de 4 pliegues.
 2. Evaluar en OOS-1 (sin tocar parámetros). Quedan los de expectativa OOS-1 > 0 y PF > 1,1.
 3. Ordenar por expectativa OOS-1 penalizada por complejidad y elegir **K ≤ 5** con correlación entre sí < 0,7.
 4. Robustness Lab (doc 07) sobre IS+OOS-1. Los que lo pasan → **una** lectura del holdout sellado.

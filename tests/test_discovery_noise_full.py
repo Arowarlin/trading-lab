@@ -135,6 +135,8 @@ def test_full_noise_pipeline_never_level4(tmp_path) -> None:
             result = robust[item["strategy_hash"]]
             evaluation = evaluations[item["strategy_hash"]]
             oos2 = None
+            random_oos2 = None
+            trades_oos2 = None
             dsr = None
             level = evaluation["level"]
             verdict = evaluation["verdict"]
@@ -147,6 +149,12 @@ def test_full_noise_pipeline_never_level4(tmp_path) -> None:
                     learning_db=tmp_path / "lab.db",
                 )
                 oos2 = confirmed["oos2_expectancy_r"]
+                random_oos2 = confirmed["test_vs_random_oos2"].get(
+                    "percentile"
+                )
+                trades_oos2 = confirmed["test_vs_random_oos2"].get(
+                    "trades_oos2"
+                )
                 dsr = confirmed["dsr_confirm"].get("dsr")
                 level = confirmed["level"]
                 verdict = confirmed["verdict"]
@@ -154,9 +162,11 @@ def test_full_noise_pipeline_never_level4(tmp_path) -> None:
                 {
                     "label": label,
                     "hash": item["strategy_hash"][:12],
-                    "random": result["validations"]["test_vs_random"].get(
-                        "percentile"
-                    ),
+                    "random_insample": result["validations"][
+                        "test_vs_random_insample"
+                    ].get("percentile"),
+                    "random_oos2": random_oos2,
+                    "trades_oos2": trades_oos2,
                     "oos2": oos2,
                     "dsr": dsr,
                     "pbo": result["validations"]["pbo"].get("pbo"),
@@ -166,12 +176,15 @@ def test_full_noise_pipeline_never_level4(tmp_path) -> None:
                 }
             )
     print(
-        "finalista | test_vs_random | OOS-2 | DSR confirm | PBO | nivel | veredicto"
+        "finalista | test_vs_random_insample | test_vs_random_oos2 | "
+        "ops OOS-2 | OOS-2 | DSR confirm | PBO | nivel | veredicto"
     )
     for row in rows:
         print(
             f"{row['label']} {row['hash']} | "
-            f"{row['random']} | "
+            f"{row['random_insample']} | "
+            f"{row['random_oos2'] if row['random_oos2'] is not None else 'Sin datos'} | "
+            f"{row['trades_oos2'] if row['trades_oos2'] is not None else 'no leído'} | "
             f"{row['oos2'] if row['oos2'] is not None else 'no leído'} | "
             f"{row['dsr'] if row['dsr'] is not None else 'Sin datos'} | "
             f"{row['pbo']} | {row['level']} | {row['verdict']}"
@@ -179,11 +192,12 @@ def test_full_noise_pipeline_never_level4(tmp_path) -> None:
     config = load_engine_config().robustness
     assert rows
     assert all(row["pbo"] is not None for row in rows)
+    assert all(row["random_insample"] is not None for row in rows)
     assert all(row["level"] < 4 for row in rows)
     assert all(row["verdict"] != "ROBUSTA" for row in rows)
     assert any(row["level"] >= 3 for row in rows)
     assert any(row["oos2"] is not None for row in rows)
-    assert any(row["dsr"] is not None for row in rows)
     assert config.pbo_min_strategies == 8
+    assert config.min_trades_oos2 == 30
     # Las lecturas de OOS-2 sintéticas no cuentan: campañas sin approved_at.
     assert campaigns.discovery_tests(db)["total"] == 0

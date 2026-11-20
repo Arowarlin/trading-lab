@@ -1,6 +1,6 @@
 {
-  "origin": "Fase 6 · prueba de ruido sintética",
-  "note": "Finalistas de la corrida de 1 año, semilla 2. En la Fase 7 NINGUNO debe llegar a nivel 4 (OOS-2 + DSR de confirmación + test contra el azar).",
+  "origin": "Fase 7b · prueba de ruido sintética",
+  "note": "Finalistas de la corrida sintética con la regla de Fase 7b (IS completa > 0 y OOS-1 > 0). NINGUNO debe llegar a nivel 4.",
   "seed": 2,
   "frame": {
     "years": 1.0,
@@ -26,36 +26,37 @@
     "account": "CFD-001",
     "firm": "ftmo"
   },
-  "campaign_id": "noise-2",
+  "campaign_id": "noise-1y-seed2",
   "summary": {
     "n_total": 440,
-    "n_evaluated": 256,
-    "n_effective": 57,
-    "feasible": 161,
-    "frontier": 31,
-    "candidates": 12,
-    "oos1_mean": 0.050592702950307385,
-    "oos1_positive": 3
+    "n_evaluated": 253,
+    "n_effective": 49,
+    "n_finalists": 1,
+    "feasible": 179,
+    "frontier": 38,
+    "candidates": 20,
+    "oos1_mean": 0.11899813468087514,
+    "oos1_positive": 1
   },
   "finalists": [
     {
-      "strategy_id": 148,
-      "strategy_hash": "2176864fe71366371e3563ef6348eca75c037f5bbb201d5fb58e7cae175e9a07",
-      "selection_reason": "finalista: OOS-1 expectativa 0.05112485245497875 PF 1.1683004109303747",
+      "strategy_id": 249,
+      "strategy_hash": "7f0bf5962f123cb62866917badb6057f73ee2cd89e8b5c7be2db0026f80c6875",
+      "selection_reason": "finalista: OOS-1 expectativa 0.11899813468087514 PF 1.4348314475238844",
       "dsl": {
         "dsl_version": "1",
         "exit": {
           "opposite_signal": false,
           "stop": {
-            "mult": 4.72,
+            "mult": 4.91,
             "n": 14,
             "type": "atr"
           },
           "target": {
-            "rr": 2.51,
+            "rr": 2.94,
             "type": "rr"
           },
-          "time_exit_bars": 48
+          "time_exit_bars": 72
         },
         "instrument": "US100",
         "limits": {
@@ -102,10 +103,10 @@
         },
         "market": "cfd",
         "session": {
-          "end": "12:00",
+          "end": "11:25",
           "flat_at": "15:45",
           "or_minutes": 15,
-          "start": "09:45"
+          "start": "09:30"
         },
         "short_entry": {
           "args": [
@@ -128,245 +129,12 @@
                 "level": "opening_range_low",
                 "params": {}
               }
-            },
-            {
-              "args": [],
-              "days": [],
-              "kind": "regime",
-              "lookback": 100,
-              "n": 14,
-              "params": {
-                "pct": 0.8
-              },
-              "regime": "vol_high"
-            }
-          ],
-          "days": [],
-          "kind": "and",
-          "params": {}
-        },
-        "sizing": {
-          "risk_per_trade_r": 1.0
-        },
-        "timeframe": "M5"
-      }
-    },
-    {
-      "strategy_id": 215,
-      "strategy_hash": "abac3df63e13f975032dfeb3f9f458f6ff5b9d3367a3fd3a204950f09042ed7c",
-      "selection_reason": "finalista: OOS-1 expectativa 0.045377817641873396 PF 1.209171283665805",
-      "dsl": {
-        "dsl_version": "1",
-        "exit": {
-          "opposite_signal": false,
-          "stop": {
-            "mult": 4.66,
-            "n": 20,
-            "type": "atr"
-          },
-          "target": {
-            "rr": 1.24,
-            "type": "rr"
-          },
-          "time_exit_bars": 24
-        },
-        "instrument": "US100",
-        "limits": {
-          "cooldown_bars": 5,
-          "max_trades_per_day": 2
-        },
-        "long_entry": {
-          "args": [
-            {
-              "args": [],
-              "days": [],
-              "kind": "gt",
-              "left": {
-                "args": [],
-                "days": [],
-                "kind": "price",
-                "params": {},
-                "price": "close"
-              },
-              "params": {},
-              "right": {
-                "args": [],
-                "days": [],
-                "kind": "level",
-                "level": "opening_range_high",
-                "params": {}
-              }
-            },
-            {
-              "args": [],
-              "days": [],
-              "kind": "regime",
-              "lookback": 100,
-              "n": 14,
-              "params": {
-                "pct": 0.8
-              },
-              "regime": "vol_high"
-            }
-          ],
-          "days": [],
-          "kind": "and",
-          "params": {}
-        },
-        "market": "cfd",
-        "session": {
-          "end": "11:45",
-          "flat_at": "15:45",
-          "or_minutes": 15,
-          "start": "09:50"
-        },
-        "short_entry": {
-          "args": [
-            {
-              "args": [],
-              "days": [],
-              "kind": "lt",
-              "left": {
-                "args": [],
-                "days": [],
-                "kind": "price",
-                "params": {},
-                "price": "close"
-              },
-              "params": {},
-              "right": {
-                "args": [],
-                "days": [],
-                "kind": "level",
-                "level": "opening_range_low",
-                "params": {}
-              }
-            },
-            {
-              "args": [],
-              "days": [],
-              "kind": "regime",
-              "lookback": 100,
-              "n": 14,
-              "params": {
-                "pct": 0.8
-              },
-              "regime": "vol_high"
-            }
-          ],
-          "days": [],
-          "kind": "and",
-          "params": {}
-        },
-        "sizing": {
-          "risk_per_trade_r": 1.0
-        },
-        "timeframe": "M5"
-      }
-    },
-    {
-      "strategy_id": 227,
-      "strategy_hash": "50678dea25707b20f0e6393587f7880e635e5ae4d86e4d36d5dd1d0d4edcb388",
-      "selection_reason": "finalista: OOS-1 expectativa 0.055275438754070025 PF 1.1662482728272665",
-      "dsl": {
-        "dsl_version": "1",
-        "exit": {
-          "opposite_signal": false,
-          "stop": {
-            "mult": 4.61,
-            "n": 20,
-            "type": "atr"
-          },
-          "target": {
-            "rr": 1.93,
-            "type": "rr"
-          },
-          "time_exit_bars": 48
-        },
-        "instrument": "US100",
-        "limits": {
-          "cooldown_bars": 5,
-          "max_trades_per_day": 2
-        },
-        "long_entry": {
-          "args": [
-            {
-              "args": [
-                {
-                  "args": [],
-                  "days": [],
-                  "kind": "lt",
-                  "left": {
-                    "args": [],
-                    "days": [],
-                    "kind": "price",
-                    "params": {},
-                    "price": "close"
-                  },
-                  "params": {},
-                  "right": {
-                    "args": [],
-                    "days": [],
-                    "kind": "level",
-                    "level": "opening_range_low",
-                    "params": {}
-                  }
-                }
-              ],
-              "days": [],
-              "kind": "not",
-              "params": {}
             },
             {
               "args": [],
               "days": [],
               "kind": "regime",
               "lookback": 337,
-              "n": 89,
-              "params": {
-                "pct": 0.8
-              },
-              "regime": "vol_high"
-            }
-          ],
-          "days": [],
-          "kind": "and",
-          "params": {}
-        },
-        "market": "cfd",
-        "session": {
-          "end": "12:00",
-          "flat_at": "15:45",
-          "or_minutes": 15,
-          "start": "09:45"
-        },
-        "short_entry": {
-          "args": [
-            {
-              "args": [],
-              "days": [],
-              "kind": "lt",
-              "left": {
-                "args": [],
-                "days": [],
-                "kind": "price",
-                "params": {},
-                "price": "close"
-              },
-              "params": {},
-              "right": {
-                "args": [],
-                "days": [],
-                "kind": "level",
-                "level": "opening_range_low",
-                "params": {}
-              }
-            },
-            {
-              "args": [],
-              "days": [],
-              "kind": "regime",
-              "lookback": 100,
               "n": 14,
               "params": {
                 "pct": 0.8

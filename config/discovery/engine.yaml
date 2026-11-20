@@ -39,6 +39,7 @@ fitness:
 robustness:
   random_trials: 1000
   pbo_min_strategies: 8
+  min_trades_oos2: 30
   wf_min_oos_sharpe: 0.0
   wf_min_efficiency: 0.3
   wf_train_days: 60

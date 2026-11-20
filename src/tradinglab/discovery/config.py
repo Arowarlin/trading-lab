@@ -65,6 +65,7 @@ class RobustnessConfig(BaseModel):
 
     random_trials: int = Field(default=1000, ge=10, le=100_000)
     pbo_min_strategies: int = Field(default=8, ge=2, le=100)
+    min_trades_oos2: int = Field(default=30, ge=1, le=10_000)
     wf_min_oos_sharpe: float = Field(default=0.0, ge=-5.0, le=5.0)
     wf_min_efficiency: float = Field(default=0.3, ge=0.0, le=5.0)
     wf_train_days: int = Field(default=60, ge=10, le=1000)
