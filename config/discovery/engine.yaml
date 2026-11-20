@@ -1,0 +1,33 @@
+# TradingLab 2.0 · Discovery Lab
+# Límites del motor genético. No activa nada: solo configura el proceso de
+# descubrimiento. Los cambios de este archivo no tocan el carril protegido.
+engine:
+  workers: 12
+  ram_limit_gb: 8
+
+profiles:
+  small:
+    population: 40
+    generations: 10
+  medium:
+    population: 100
+    generations: 25
+  large:
+    population: 200
+    generations: 60
+
+genetics:
+  mutation_rate: 0.3
+  crossover_rate: 0.6
+  elite_frac: 0.1
+
+limits:
+  max_nodes: 12
+  max_depth: 4
+
+validation:
+  min_trades_is: 100
+  min_trades_fold: 15
+  folds: 4
+  finalists_max: 5
+  corr_cluster: 0.7
