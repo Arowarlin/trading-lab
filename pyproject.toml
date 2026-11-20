@@ -38,6 +38,7 @@ packages = ["src/tradinglab"]
 [tool.ruff]
 line-length = 110
 target-version = "py312"
+extend-exclude = ["legacy"]
 
 [tool.ruff.lint]
 # Lint base del proyecto: errores reales + imports. Evita ruido de reglas
@@ -45,13 +46,11 @@ target-version = "py312"
 select = ["E4", "E7", "E9", "F", "I", "DTZ"]
 
 [tool.ruff.lint.per-file-ignores]
-# f13.py: excluido hasta 2027-01-08 (fin del piloto F13).
-"src/tradinglab/f13.py" = ["DTZ"]
 "tests/**" = ["DTZ"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-norecursedirs = ["vendor", ".venv*", "data", "reports", "logs"]
+norecursedirs = ["vendor", ".venv*", "data", "reports", "logs", "legacy"]
 markers = [
     "network: usa red real o loopback; se salta en CI",
     "mt5: requiere MetaTrader5 o un terminal MT5",
