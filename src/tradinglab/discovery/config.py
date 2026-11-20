@@ -6,6 +6,7 @@ Solo lee el YAML: no escribe archivos, no consulta MT5 y no arranca workers.
 from __future__ import annotations
 
 from pathlib import Path
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -53,6 +54,23 @@ class ValidationConfig(BaseModel):
     corr_cluster: float = Field(ge=-1.0, le=1.0)
 
 
+class SourceConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    path: str
+    timezone: str = "UTC"
+    calendar: str | None = None
+
+    @field_validator("timezone")
+    @classmethod
+    def _valid_timezone(cls, value: str) -> str:
+        try:
+            ZoneInfo(str(value))
+        except (ZoneInfoNotFoundError, ValueError) as exc:
+            raise ValueError(f"zona inválida: {value}") from exc
+        return value
+
+
 class DataQualityConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -61,6 +79,59 @@ class DataQualityConfig(BaseModel):
     scheduled_gap_share: float = Field(ge=0.0, le=1.0)
     warn_if_gaps_gt: int = Field(ge=0)
     fail_if_gap_pct_gt: float = Field(ge=0.0, le=1.0)
+    session_tz: dict[str, str] = Field(default_factory=lambda: {"default": "America/New_York"})
+    default_segments: dict[str, tuple[str | None, str | None]] = Field(
+        default_factory=lambda: {
+            "is": ("2021-10-01", "2024-06-30"),
+            "oos1": ("2024-07-01", "2025-06-30"),
+            "oos2": ("2025-07-01", None),
+        }
+    )
+    sources: dict[str, "SourceConfig"] = Field(
+        default_factory=lambda: {
+            "default": SourceConfig(
+                path="data/cache/mt5/{symbol}_{tf}.parquet",
+                timezone="UTC",
+                calendar=None,
+            )
+        }
+    )
+
+    @field_validator("session_tz")
+    @classmethod
+    def _valid_timezones(cls, value: dict[str, str]) -> dict[str, str]:
+        for name, tz in value.items():
+            try:
+                ZoneInfo(str(tz))
+            except (ZoneInfoNotFoundError, ValueError) as exc:
+                raise ValueError(f"zona inválida para {name}: {tz}") from exc
+        return value
+
+    @field_validator("default_segments")
+    @classmethod
+    def _required_segments(
+        cls, value: dict[str, tuple[str | None, str | None]]
+    ) -> dict[str, tuple[str | None, str | None]]:
+        missing = {"is", "oos1", "oos2"} - set(value)
+        if missing:
+            raise ValueError(f"faltan tramos: {', '.join(sorted(missing))}")
+        return value
+
+    def tz_for(self, symbol: str) -> str:
+        key = str(symbol or "").strip().lower()
+        for name, tz in self.session_tz.items():
+            if name.lower() == key:
+                return tz
+        return self.session_tz.get("default", "America/New_York")
+
+    def source_for(self, symbol: str) -> "SourceConfig":
+        key = str(symbol or "").strip().lower()
+        for name, source in self.sources.items():
+            if name.lower() == key:
+                return source
+        return self.sources.get("default") or SourceConfig(
+            path="data/cache/mt5/{symbol}_{tf}.parquet", timezone="UTC", calendar=None
+        )
 
 
 class EngineConfig(BaseModel):
@@ -121,6 +192,7 @@ __all__ = [
     "GeneticsConfig",
     "LimitsConfig",
     "ProfileConfig",
+    "SourceConfig",
     "ValidationConfig",
     "load_engine_config",
 ]

@@ -68,7 +68,7 @@ def test_pausa_diaria_recurrente_no_avisa() -> None:
     assert report.status == "ok"
     assert report.non_scheduled_gaps == 0
     assert report.scheduled_pauses
-    assert report.scheduled_pauses[0]["start_hhmm"] == "12:00"
+    assert report.scheduled_pauses[0]["start_hhmm"] == "07:00"
     assert report.scheduled_pauses[0]["count"] == 10
 
 
@@ -85,9 +85,9 @@ def test_hueco_no_recurrente_avisa() -> None:
 
 
 def test_demasiados_huecos_falla() -> None:
-    frame = _frame(days=6, sessions=((8, 0, 16, 20),))
+    frame = _frame(days=6, start="2024-01-08", sessions=((8, 0, 16, 20),))
     for hour in (9, 10, 13, 14):
-        start = pd.Timestamp("2024-01-01 00:00", tz="UTC") + pd.Timedelta(hours=hour)
+        start = pd.Timestamp("2024-01-08 00:00", tz="UTC") + pd.Timedelta(hours=hour)
         drop = (frame.index >= start) & (frame.index < start + pd.Timedelta(minutes=15))
         frame = frame.loc[~drop]
     report = check_dataset(
@@ -95,9 +95,9 @@ def test_demasiados_huecos_falla() -> None:
         "US100.cash",
         "M5",
         segments={
-            "is": ("2024-01-01", "2024-01-03"),
-            "oos1": ("2024-01-04", "2024-01-05"),
-            "oos2": ("2024-01-06", None),
+            "is": ("2024-01-08", "2024-01-10"),
+            "oos1": ("2024-01-11", "2024-01-12"),
+            "oos2": ("2024-01-13", None),
         },
     )
     assert report.non_scheduled_gaps == 4
@@ -146,3 +146,133 @@ def test_reutiliza_datacheck(monkeypatch) -> None:
     )
     report = check_dataset(frame, "US100.cash", "M5")
     assert report.datacheck == {"status": "ok", "sentinel": True}
+
+
+def _mixed_granularity() -> pd.DataFrame:
+    stamps = []
+    stamps.extend(pd.date_range("2024-01-01 16:00", periods=10, freq="1D", tz="UTC"))
+    stamps.extend(pd.date_range("2024-02-01 09:00", periods=10, freq="1h", tz="UTC"))
+    for day in range(1, 11):
+        begin = pd.Timestamp(f"2024-03-{day:02d} 08:00", tz="UTC")
+        stamps.extend(pd.date_range(begin, periods=24, freq="5min"))
+    close = np.arange(len(stamps), dtype=float) + 100.0
+    return pd.DataFrame(
+        {"open": close, "high": close + 0.5, "low": close - 0.5, "close": close},
+        index=pd.DatetimeIndex(stamps),
+    )
+
+
+def test_granularidad_mixta_marca_inicio_util() -> None:
+    frame = _mixed_granularity()
+    report = check_dataset(
+        frame,
+        "US100.cash",
+        "M5",
+        segments={
+            "is": ("2024-03-01", "2024-03-05"),
+            "oos1": ("2024-03-06", "2024-03-08"),
+            "oos2": ("2024-03-09", None),
+        },
+    )
+    assert report.granularity["useful_start"].startswith("2024-03-01")
+    assert {item["month"] for item in report.granularity["bad_months"]} == {
+        "2024-01",
+        "2024-02",
+    }
+    assert report.status == "ok"
+
+
+def test_tramo_antes_del_inicio_util_falla() -> None:
+    frame = _mixed_granularity()
+    report = check_dataset(
+        frame,
+        "US100.cash",
+        "M5",
+        segments={
+            "is": ("2024-02-01", "2024-02-28"),
+            "oos1": ("2024-03-01", "2024-03-05"),
+            "oos2": ("2024-03-06", None),
+        },
+    )
+    assert report.status == "fail"
+    assert any("inicio útil" in issue for issue in report.issues)
+
+
+def _frame_with_pause(days: list[str], pause_utc: str) -> pd.DataFrame:
+    frames = []
+    for day in days:
+        begin = pd.Timestamp(f"{day} 00:00", tz="UTC")
+        index = pd.date_range(begin, begin + pd.Timedelta(days=1), freq="5min", inclusive="left")
+        start = pd.Timestamp(f"{day} {pause_utc}", tz="UTC")
+        drop = (index >= start) & (index < start + pd.Timedelta(minutes=80))
+        index = index[~drop]
+        close = np.arange(len(index), dtype=float) + 100.0
+        frames.append(
+            pd.DataFrame(
+                {"open": close, "high": close + 0.5, "low": close - 0.5, "close": close},
+                index=index,
+            )
+        )
+    return pd.concat(frames).sort_index()
+
+
+def test_pausa_16_50_ny_con_dst_es_la_misma() -> None:
+    summer = [f"2024-07-{day:02d}" for day in range(1, 11)]
+    winter = [f"2024-01-{day:02d}" for day in range(8, 18)]
+    frame = pd.concat(
+        [
+            _frame_with_pause(summer, "20:50"),
+            _frame_with_pause(winter, "21:50"),
+        ]
+    ).sort_index()
+    report = check_dataset(
+        frame,
+        "US100.cash",
+        "M5",
+        segments={
+            "is": ("2024-01-08", "2024-01-17"),
+            "oos1": ("2024-07-01", "2024-07-10"),
+            "oos2": ("2024-07-01", None),
+        },
+    )
+    assert report.status == "ok"
+    assert report.non_scheduled_gaps == 0
+    assert report.scheduled_pauses
+    assert report.scheduled_pauses[0]["start_hhmm"] == "16:50"
+    assert report.scheduled_pauses[0]["count"] == 20
+
+
+def test_hueco_en_cierre_temprano_es_informativo() -> None:
+    days = [f"2024-11-{day:02d}" for day in range(18, 30)]
+    frames = []
+    for day in days:
+        begin = pd.Timestamp(f"{day} 08:00", tz="UTC")
+        index = pd.date_range(begin, begin + pd.Timedelta(hours=12), freq="5min", inclusive="left")
+        if day == "2024-11-29":
+            drop = (index >= pd.Timestamp(f"{day} 17:00", tz="UTC")) & (
+                index < pd.Timestamp(f"{day} 19:00", tz="UTC")
+            )
+            index = index[~drop]
+        close = np.arange(len(index), dtype=float) + 100.0
+        frames.append(
+            pd.DataFrame(
+                {"open": close, "high": close + 0.5, "low": close - 0.5, "close": close},
+                index=index,
+            )
+        )
+    frame = pd.concat(frames).sort_index()
+    report = check_dataset(
+        frame,
+        "US100.cash",
+        "M5",
+        segments={
+            "is": ("2024-11-18", "2024-11-25"),
+            "oos1": ("2024-11-26", "2024-11-28"),
+            "oos2": ("2024-11-29", None),
+        },
+    )
+    assert report.status == "ok"
+    assert report.non_scheduled_gaps == 0
+    assert report.calendar_gaps
+    assert "cierre temprano" in report.calendar_gaps[0]["reason"]
+

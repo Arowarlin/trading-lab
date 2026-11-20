@@ -1,0 +1,132 @@
+"""Fuentes de datos del Discovery Lab: solo lectura, sin MT5 ni red.
+
+* ``US100.cash`` se lee de la caché del EA (``data/cache/ea/...``), **nunca se
+  escribe ni se refresca**. Su índice es hora de Nueva York sin zona; se
+  localiza en ``America/New_York`` y se convierte a UTC.
+* El resto usa ``data/cache/mt5/<SYMBOL>_<TF>.parquet`` (o el mapa
+  ``data_quality.sources`` de ``config/discovery/engine.yaml``).
+* Los timestamps ambiguos o inexistentes nunca se inventan: se eligen con
+  ``ambiguous="infer"`` cuando es posible y los inexistentes se descartan,
+  informando cuántos se ajustaron/descartaron.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from pathlib import Path
+
+import pandas as pd
+
+from ..config import ROOT
+from .config import DataQualityConfig, SourceConfig, load_engine_config
+
+
+class DataSourceError(RuntimeError):
+    pass
+
+
+@dataclass(frozen=True)
+class LoadedSource:
+    symbol: str
+    timeframe: str
+    path: str
+    timezone: str
+    calendar: str | None
+    rows_raw: int
+    rows: int
+    adjusted: int
+    dropped: int
+    frame: pd.DataFrame = field(repr=False, compare=False)
+
+    def as_dict(self) -> dict:
+        return {
+            "path": self.path,
+            "timezone": self.timezone,
+            "calendar": self.calendar,
+            "rows_raw": self.rows_raw,
+            "rows": self.rows,
+            "adjusted": self.adjusted,
+            "dropped": self.dropped,
+            "read_only": True,
+        }
+
+
+def _safe_symbol(symbol: str) -> str:
+    return "".join(c if c.isalnum() or c in "-_." else "_" for c in str(symbol)).upper()
+
+
+def resolve_path(spec: SourceConfig, symbol: str, timeframe: str, *, root: Path = ROOT) -> Path:
+    raw = spec.path.format(
+        symbol=_safe_symbol(symbol),
+        tf=str(timeframe).upper(),
+    )
+    path = Path(raw)
+    return path if path.is_absolute() else root / path
+
+
+def _localize(index: pd.DatetimeIndex, timezone: str) -> tuple[pd.DatetimeIndex, int, int]:
+    """Localiza un índice naive sin inventar velas. Devuelve (índice, ajustados, descartados)."""
+    if index.tz is not None:
+        return index.tz_convert(timezone), 0, 0
+    probe = index.tz_localize(timezone, ambiguous="NaT", nonexistent="NaT")
+    special = int(probe.isna().sum())
+    try:
+        localized = index.tz_localize(timezone, ambiguous="infer", nonexistent="NaT")
+    except Exception:
+        localized = index.tz_localize(timezone, ambiguous=False, nonexistent="NaT")
+    dropped = int(localized.isna().sum())
+    adjusted = max(0, special - dropped)
+    return localized, adjusted, dropped
+
+
+def load_source(
+    symbol: str,
+    timeframe: str = "M5",
+    *,
+    config: DataQualityConfig | None = None,
+    root: Path = ROOT,
+) -> LoadedSource:
+    """Carga una fuente configurada y la devuelve en UTC. Nunca escribe."""
+    config = config or load_engine_config().data_quality
+    spec = config.source_for(symbol)
+    path = resolve_path(spec, symbol, timeframe, root=root)
+    if not path.exists():
+        raise DataSourceError(f"Sin datos: no existe {path}")
+    try:
+        frame = pd.read_parquet(path)
+    except Exception as exc:
+        raise DataSourceError(
+            f"Sin datos: no se pudo leer {path} ({type(exc).__name__}: {exc})"
+        ) from exc
+    frame = frame.copy()
+    frame.columns = [str(column).lower() for column in frame.columns]
+    rows_raw = int(len(frame))
+    index = pd.DatetimeIndex(pd.to_datetime(frame.index))
+    localized, adjusted, dropped = _localize(index, spec.timezone)
+    mask = ~localized.isna()
+    frame = frame.loc[mask]
+    frame.index = localized[mask]
+    frame.index.name = "ts"
+    frame = frame.sort_index()
+    utc = frame.copy()
+    utc.index = utc.index.tz_convert("UTC")
+    return LoadedSource(
+        symbol=str(symbol).upper(),
+        timeframe=str(timeframe).upper(),
+        path=path.relative_to(root).as_posix() if path.is_relative_to(root) else str(path),
+        timezone=spec.timezone,
+        calendar=spec.calendar,
+        rows_raw=int(rows_raw),
+        rows=int(len(utc)),
+        adjusted=int(adjusted),
+        dropped=int(dropped),
+        frame=utc,
+    )
+
+
+__all__ = [
+    "DataSourceError",
+    "LoadedSource",
+    "load_source",
+    "resolve_path",
+]

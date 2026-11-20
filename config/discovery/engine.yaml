@@ -1,6 +1,6 @@
 # TradingLab 2.0 · Discovery Lab
-# Límites del motor genético. No activa nada: solo configura el proceso de
-# descubrimiento. Los cambios de este archivo no tocan el carril protegido.
+# Límites del motor genético y reglas de calidad de datos.
+# No activa nada: solo configura el proceso de descubrimiento.
 engine:
   workers: 12
   ram_limit_gb: 8
@@ -37,9 +37,43 @@ data_quality:
   gap_factor: 3
   # Huecos >= max_gap_hours son cierres de sesión/fin de semana/festivo: no cuentan.
   max_gap_hours: 4
-  # Pausa programada: el mismo HH:MM UTC de reanudación en >= esta fracción de días.
+  # Pausa programada: el mismo HH:MM LOCAL de reanudación en >= esta fracción
+  # de días con datos. La hora local sale de session_tz, no de UTC.
   scheduled_gap_share: 0.2
   # warn si hay más de warn_if_gaps_gt huecos no programados.
   warn_if_gaps_gt: 0
   # fail si los huecos no programados superan esta fracción de velas esperadas.
   fail_if_gap_pct_gt: 0.005
+
+  # Zona de sesión por símbolo (case-insensitive); default America/New_York.
+  session_tz:
+    default: America/New_York
+    US100.cash: America/New_York
+    US500.cash: America/New_York
+    US30.cash: America/New_York
+    XAUUSD: America/New_York
+    EURUSD: Europe/London
+    GBPUSD: Europe/London
+    USDJPY: Asia/Tokyo
+
+  # Tramos por defecto. OOS-2 termina en la última vela disponible.
+  default_segments:
+    is: ["2021-10-01", "2024-06-30"]
+    oos1: ["2024-07-01", "2025-06-30"]
+    oos2: ["2025-07-01", null]
+
+  # Fuente de datos por símbolo. `default` usa la caché MT5 estándar.
+  # `calendar: nyse` activa festivos/cierres tempranos de EE. UU.
+  sources:
+    US100.cash:
+      path: data/cache/ea/US100_CASH_M5_NY.parquet
+      timezone: America/New_York
+      calendar: nyse
+    US500.cash:
+      path: data/cache/mt5/US500.CASH_M5.parquet
+      timezone: UTC
+      calendar: nyse
+    default:
+      path: data/cache/mt5/{symbol}_{tf}.parquet
+      timezone: UTC
+      calendar: null

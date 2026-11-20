@@ -9685,22 +9685,22 @@ def discovery_data_check_cmd(
     symbol: str = typer.Argument(..., help="Símbolo CFD, p. ej. US100.cash"),
     tf: str = typer.Option("M5", "--tf", help="Timeframe de la caché MT5"),
     is_range: str = typer.Option(
-        "2018-01-01:2023-12-31",
+        None,
         "--is",
-        help="Tramo IS como inicio:fin (YYYY-MM-DD)",
+        help="Tramo IS como inicio:fin (por defecto, engine.yaml)",
     ),
     oos1_range: str = typer.Option(
-        "2024-01-01:2025-06-30",
+        None,
         "--oos1",
-        help="Tramo OOS-1 como inicio:fin",
+        help="Tramo OOS-1 como inicio:fin (por defecto, engine.yaml)",
     ),
     oos2_range: str = typer.Option(
-        "2025-07-01:",
+        None,
         "--oos2",
         help="Tramo OOS-2 como inicio:fin; fin vacío = última vela",
     ),
 ) -> None:
-    """Informe de calidad de un dataset CFD desde la caché local. Solo lectura."""
+    """Informe de calidad de un dataset CFD desde la fuente configurada. Solo lectura."""
     from .discovery.data_quality import load_and_check
 
     def _range(value: str, name: str):
@@ -9709,12 +9709,11 @@ def discovery_data_check_cmd(
             raise typer.BadParameter(f"{name}: falta la fecha de inicio")
         return (start, end or None)
 
-    segments = {
-        "is": _range(is_range, "--is"),
-        "oos1": _range(oos1_range, "--oos1"),
-        "oos2": _range(oos2_range, "--oos2"),
-    }
-    report = load_and_check(symbol, tf, segments=segments)
+    segments = {}
+    for name, value in (("is", is_range), ("oos1", oos1_range), ("oos2", oos2_range)):
+        if value:
+            segments[name] = _range(value, f"--{name}")
+    report = load_and_check(symbol, tf, segments=segments or None)
     data = report.as_dict()
 
     summary = Table(title=f"Discovery · calidad de datos · {data['symbol']} {data['timeframe']}")
@@ -9724,8 +9723,30 @@ def discovery_data_check_cmd(
     summary.add_row("Filas", f"{data['rows']:,}")
     summary.add_row("Inicio", data["start"] or "Sin datos")
     summary.add_row("Fin", data["end"] or "Sin datos")
+    summary.add_row(
+        "Inicio útil",
+        (data.get("granularity") or {}).get("useful_start") or "Sin datos",
+    )
     summary.add_row("Hash", data["dataset_hash"][:16] + "…" if data["dataset_hash"] else "Sin datos")
     summary.add_row("Huecos no programados", str(data["non_scheduled_gaps"]))
+    summary.add_row(
+        "Huecos de calendario",
+        str(len(data.get("calendar_gaps") or [])),
+    )
+    source = data.get("source") or {}
+    summary.add_row("Fuente", source.get("path") or "Sin datos")
+    summary.add_row(
+        "Zona fuente / ajustes",
+        f"{source.get('timezone') or 'Sin datos'} · "
+        f"{source.get('adjusted', 0)} ajustadas · {source.get('dropped', 0)} descartadas",
+    )
+    bad_months = (data.get("granularity") or {}).get("bad_months") or []
+    summary.add_row(
+        "Meses no homogéneos",
+        ", ".join(item["month"] for item in bad_months[:6]) + ("…" if len(bad_months) > 6 else "")
+        if bad_months
+        else "ninguno",
+    )
     console.print(summary)
 
     segment_table = Table(title="Tramos IS / OOS-1 / OOS-2 (solo cobertura)")
@@ -9743,8 +9764,8 @@ def discovery_data_check_cmd(
     console.print(segment_table)
 
     if data["scheduled_pauses"]:
-        pauses = Table(title="Pausas programadas (informativas)")
-        pauses.add_column("Hora UTC")
+        pauses = Table(title="Pausas programadas (hora local de sesión)")
+        pauses.add_column("Hora local")
         pauses.add_column("Veces", justify="right")
         pauses.add_column("Minutos", justify="right")
         for item in data["scheduled_pauses"]:

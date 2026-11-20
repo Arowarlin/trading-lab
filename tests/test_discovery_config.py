@@ -64,6 +64,14 @@ def test_config_real_tiene_los_valores_de_la_fase_0() -> None:
     assert config.data_quality.scheduled_gap_share == pytest.approx(0.2)
     assert config.data_quality.warn_if_gaps_gt == 0
     assert config.data_quality.fail_if_gap_pct_gt == pytest.approx(0.005)
+    assert config.data_quality.session_tz["default"] == "America/New_York"
+    assert config.data_quality.tz_for("US100.cash") == "America/New_York"
+    assert config.data_quality.tz_for("EURUSD") == "Europe/London"
+    assert config.data_quality.default_segments["is"] == ("2021-10-01", "2024-06-30")
+    assert config.data_quality.default_segments["oos1"] == ("2024-07-01", "2025-06-30")
+    assert config.data_quality.default_segments["oos2"] == ("2025-07-01", None)
+    assert config.data_quality.source_for("US100.cash").calendar == "nyse"
+    assert config.data_quality.source_for("US500.cash").path == "data/cache/mt5/US500.CASH_M5.parquet"
     assert ENGINE_PATH.exists()
 
 
