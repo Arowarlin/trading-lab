@@ -150,11 +150,15 @@ def _store(
         db_path=db_path,
     )
     item.strategy_id = sid
+    metrics = dict(item.metrics)
+    metrics["return_dates"] = [
+        stamp.isoformat() for stamp in item.daily_returns.index
+    ]
     databank.add_evaluation(
         sid,
         segment="fitness_is",
         cost_profile=setup.cost_profile(),
-        metrics=item.metrics,
+        metrics=metrics,
         trades_count=item.trades,
         returns=item.daily_returns,
         db_path=db_path,
@@ -499,6 +503,16 @@ def run_campaign(
                 break
 
     _assign_ranks(current)
+    databank.reset_lineage_final(campaign_id, db_path=db_path)
+    for item in current:
+        if item.strategy_id is not None:
+            databank.set_lineage_rank(
+                item.strategy_id,
+                item.rank,
+                item.crowding,
+                final=True,
+                db_path=db_path,
+            )
     feasible_count = sum(1 for item in known.values() if item.feasible)
     candidates, discarded = _rank1_candidates(current, int(config.validation.folds))
     campaigns.mark_done(campaign_id, db_path=db_path)
@@ -527,7 +541,10 @@ def run_campaign(
                     item.strategy_id,
                     segment="oos1",
                     cost_profile=setup.cost_profile(),
-                    metrics=result.get("metrics"),
+                    metrics={
+                        **dict(result.get("metrics") or {}),
+                        "return_dates": result.get("return_dates") or [],
+                    },
                     trades_count=result.get("trades"),
                     returns=result.get("returns") or (),
                     db_path=db_path,
@@ -570,6 +587,7 @@ def run_campaign(
         campaign_id,
         n_evaluated=len(known),
         n_effective=int(n_effective),
+        n_finalists=len(selected),
         db_path=db_path,
     )
     finalist_rows = []
@@ -618,6 +636,7 @@ def run_campaign(
         "n_total": total_budget,
         "n_evaluated": len(known),
         "n_effective": int(n_effective),
+        "n_finalists": len(selected),
         "feasible": feasible_count,
         "frontier": len(frontier_items),
         "frontier_fitness_mean": frontier_fitness,

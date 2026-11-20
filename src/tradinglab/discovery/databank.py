@@ -52,6 +52,7 @@ CREATE TABLE IF NOT EXISTS disc_campaigns (
     n_total INTEGER,
     n_evaluated INTEGER NOT NULL DEFAULT 0,
     n_effective INTEGER,
+    n_finalists INTEGER,
     status TEXT NOT NULL DEFAULT 'registered',
     engine_version TEXT,
     approved_at TEXT,
@@ -75,6 +76,7 @@ CREATE TABLE IF NOT EXISTS disc_strategies (
     status TEXT NOT NULL DEFAULT 'generated',
     reject_reason TEXT,
     selection_reason TEXT,
+    verdict TEXT,
     created_at TEXT NOT NULL,
     UNIQUE(campaign_id, strategy_hash)
 );
@@ -92,7 +94,8 @@ CREATE TABLE IF NOT EXISTS disc_lineage (
     fitness_json TEXT,
     rank INTEGER,
     crowding REAL,
-    reason TEXT
+    reason TEXT,
+    final INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_disc_lineage_strategy
     ON disc_lineage(strategy_id);
@@ -210,6 +213,7 @@ def _migrate_campaigns(con: sqlite3.Connection) -> None:
         ("approved_by", "TEXT"),
         ("quality_json", "TEXT"),
         ("reject_reason", "TEXT"),
+        ("n_finalists", "INTEGER"),
     ):
         if column not in columns:
             con.execute(f"ALTER TABLE disc_campaigns ADD COLUMN {column} {kind}")
@@ -219,6 +223,8 @@ def _migrate_campaigns(con: sqlite3.Connection) -> None:
     ]
     if "selection_reason" not in strategy_columns:
         con.execute("ALTER TABLE disc_strategies ADD COLUMN selection_reason TEXT")
+    if "verdict" not in strategy_columns:
+        con.execute("ALTER TABLE disc_strategies ADD COLUMN verdict TEXT")
     lineage_columns = [
         row["name"]
         for row in con.execute("PRAGMA table_info(disc_lineage)").fetchall()
@@ -228,6 +234,7 @@ def _migrate_campaigns(con: sqlite3.Connection) -> None:
         ("rank", "INTEGER"),
         ("crowding", "REAL"),
         ("reason", "TEXT"),
+        ("final", "INTEGER NOT NULL DEFAULT 0"),
     ):
         if column not in lineage_columns:
             con.execute(f"ALTER TABLE disc_lineage ADD COLUMN {column} {kind}")
@@ -661,6 +668,7 @@ def set_campaign_counts(
     *,
     n_evaluated: int | None = None,
     n_effective: int | None = None,
+    n_finalists: int | None = None,
     db_path: str | Path | None = None,
     con: sqlite3.Connection | None = None,
 ) -> None:
@@ -669,13 +677,89 @@ def set_campaign_counts(
         opened.execute(
             "UPDATE disc_campaigns SET"
             " n_evaluated = COALESCE(?, n_evaluated),"
-            " n_effective = COALESCE(?, n_effective) WHERE id = ?",
+            " n_effective = COALESCE(?, n_effective),"
+            " n_finalists = COALESCE(?, n_finalists) WHERE id = ?",
             (
                 None if n_evaluated is None else int(n_evaluated),
                 None if n_effective is None else int(n_effective),
+                None if n_finalists is None else int(n_finalists),
                 str(campaign_id),
             ),
         )
+
+
+def set_strategy_verdict(
+    strategy_id: int,
+    level: int,
+    verdict: str,
+    *,
+    db_path: str | Path | None = None,
+    con: sqlite3.Connection | None = None,
+) -> None:
+    target = _resolve_target(db_path, con)
+    with _connection(target, con) as opened:
+        opened.execute(
+            "UPDATE disc_strategies SET level = ?, verdict = ? WHERE id = ?",
+            (int(level), str(verdict), int(strategy_id)),
+        )
+
+
+def set_lineage_rank(
+    strategy_id: int,
+    rank: int,
+    crowding: float,
+    *,
+    final: bool = False,
+    db_path: str | Path | None = None,
+    con: sqlite3.Connection | None = None,
+) -> None:
+    """Actualiza el rango final en la última fila de genealogía."""
+
+    target = _resolve_target(db_path, con)
+    with _connection(target, con) as opened:
+        opened.execute(
+            "UPDATE disc_lineage SET rank = ?, crowding = ?, final = ? WHERE id = ("
+            " SELECT id FROM disc_lineage WHERE strategy_id = ?"
+            " ORDER BY id DESC LIMIT 1)",
+            (int(rank), float(crowding), int(bool(final)), int(strategy_id)),
+        )
+
+
+def reset_lineage_final(
+    campaign_id: str,
+    *,
+    db_path: str | Path | None = None,
+    con: sqlite3.Connection | None = None,
+) -> None:
+    """Quita la marca de frontera final a toda la campaña."""
+
+    target = _resolve_target(db_path, con)
+    with _connection(target, con) as opened:
+        opened.execute(
+            "UPDATE disc_lineage SET final = 0 WHERE strategy_id IN ("
+            " SELECT id FROM disc_strategies WHERE campaign_id = ?)",
+            (str(campaign_id),),
+        )
+
+
+def list_validations(
+    strategy_id: int,
+    *,
+    db_path: str | Path | None = None,
+    con: sqlite3.Connection | None = None,
+) -> list[dict[str, Any]]:
+    target = _resolve_target(db_path, con)
+    with _connection(target, con) as opened:
+        rows = opened.execute(
+            "SELECT * FROM disc_validations WHERE strategy_id = ? ORDER BY id",
+            (int(strategy_id),),
+        ).fetchall()
+    result = []
+    for row in rows:
+        data = dict(row)
+        data["result"] = json.loads(data.pop("result_json") or "{}")
+        result.append(data)
+    return result
 
 
 def add_lineage(
@@ -824,6 +908,49 @@ def list_evaluations(
     return result
 
 
+def frontier(
+    campaign_id: str,
+    *,
+    db_path: str | Path | None = None,
+    con: sqlite3.Connection | None = None,
+) -> list[dict[str, Any]]:
+    """Estrategias con rango final 0 y su serie diaria de IS (para PBO/WF)."""
+
+    target = _resolve_target(db_path, con)
+    rows = list_strategies(campaign_id=campaign_id, limit=None, db_path=target)
+    result = []
+    for row in rows:
+        history = lineage(row["id"], db_path=target)
+        if not history:
+            continue
+        last = history[-1]
+        if not last.get("final"):
+            continue
+        final_rank = last.get("rank")
+        if final_rank is None or int(final_rank) != 0:
+            continue
+        evaluations = [
+            item
+            for item in list_evaluations(row["id"], db_path=target)
+            if item["segment"] == "fitness_is"
+        ]
+        if not evaluations:
+            continue
+        evaluation = evaluations[0]
+        metrics = evaluation["metrics"]
+        result.append(
+            {
+                "strategy_id": row["id"],
+                "strategy_hash": row["strategy_hash"],
+                "status": row["status"],
+                "returns": evaluation["returns"].tolist(),
+                "dates": metrics.get("return_dates") or [],
+                "metrics": metrics,
+            }
+        )
+    return result
+
+
 __all__ = [
     "DEFAULT_DISCOVERY_DB",
     "DatabankError",
@@ -837,6 +964,7 @@ __all__ = [
     "count_holdout_reads",
     "decode_returns",
     "encode_returns",
+    "frontier",
     "get_campaign",
     "get_holdout_read",
     "get_strategy",
@@ -844,9 +972,13 @@ __all__ = [
     "lineage",
     "list_evaluations",
     "list_strategies",
+    "list_validations",
     "set_campaign_rejected",
     "set_campaign_status",
     "set_campaign_counts",
+    "set_lineage_rank",
+    "reset_lineage_final",
     "set_status",
     "set_strategy_selection",
+    "set_strategy_verdict",
 ]

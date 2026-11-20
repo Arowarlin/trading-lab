@@ -51,6 +51,18 @@ finalistas en las 5 campañas de 0,9 años.
 exigirá que **ninguno** llegue a nivel 4: lectura OOS-2 (una por estrategia), DSR de confirmación y
 test contra el azar. Es el criterio de aceptación final del MVP.
 
+**Resultado de la Fase 7 (2026-11-20).** Se regeneraron las dos campañas sintéticas con su semilla
+(1 año y 0,9 años), se usó la frontera final completa para PBO/WF (PBO ≥ 8 estrategias) y se pasó
+cada finalista por retest, robustness, niveles y la lectura OOS-2 sintética. Ninguno llegó a nivel 4.
+
+| Campaña | Finalista | test_vs_random | OOS-2 | DSR confirmación | PBO | Nivel | Veredicto |
+|---|---|---|---|---|---|---|---|
+| 1 año | 2176864fe713 | 98,9 | −0,3156 | 0,1279 | 0,4604 | 3 | SOBREAJUSTADA |
+| 1 año | abac3df63e13 | 100,0 | −0,3149 | 0,0703 | 0,4604 | 3 | SOBREAJUSTADA |
+| 1 año | 50678dea2570 | 99,0 | no leído | Sin datos | 0,4604 | 1 | FRÁGIL |
+| 0,9 años | cf187a0037c7 | 100,0 | −0,0367 | 0,4120 | 0,1901 | 3 | SOBREAJUSTADA |
+| 0,9 años | 45bb81729134 | 100,0 | −0,0075 | 0,4502 | 0,1901 | 3 | SOBREAJUSTADA |
+
 ## 4. Aceptación final del MVP (fases 0–7)
 
 - Paridad verde; prueba de ruido sin falsos positivos.

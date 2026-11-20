@@ -234,6 +234,64 @@ def test_n_total_immutable_trigger(tmp_path: Path) -> None:
         ).fetchone()[0] == 440
 
 
+def test_final_frontier_verdict_and_campaign_counts(tmp_path: Path) -> None:
+    db = tmp_path / "discovery.db"
+    databank.add_campaign(
+        "camp",
+        {"instrument": "US100", "timeframe": "M5", "n_total": 10},
+        db_path=db,
+    )
+    dates = ["2024-01-02", "2024-01-03", "2024-01-04"]
+    ids = []
+    for index, rank in enumerate((0, 1, 0)):
+        strategy_id = databank.add_strategy(
+            "camp", _strategy(100.0 + index), db_path=db
+        )
+        ids.append(strategy_id)
+        databank.add_evaluation(
+            strategy_id,
+            segment="fitness_is",
+            cost_profile="CFD-001:US100",
+            metrics={
+                "raw": {"expectancy_r": 0.1 + index},
+                "return_dates": dates,
+            },
+            trades_count=10,
+            returns=[0.01, 0.02, -0.01],
+            db_path=db,
+        )
+        databank.add_lineage(
+            strategy_id,
+            parent_a=None,
+            parent_b=None,
+            operator="seed",
+            db_path=db,
+        )
+        databank.set_lineage_rank(
+            strategy_id,
+            rank,
+            0.0,
+            final=index != 2,
+            db_path=db,
+        )
+    frontier = databank.frontier("camp", db_path=db)
+    assert [row["strategy_id"] for row in frontier] == [ids[0]]
+    assert frontier[0]["dates"] == dates
+
+    databank.set_strategy_verdict(ids[0], 3, "MODERADA", db_path=db)
+    row = databank.get_strategy(ids[0], db_path=db)
+    assert row["level"] == 3
+    assert row["verdict"] == "MODERADA"
+
+    databank.set_campaign_counts(
+        "camp", n_evaluated=5, n_effective=4, n_finalists=1, db_path=db
+    )
+    campaign = databank.get_campaign("camp", db_path=db)
+    assert campaign["n_evaluated"] == 5
+    assert campaign["n_effective"] == 4
+    assert campaign["n_finalists"] == 1
+
+
 def test_holdout_read_is_unique(tmp_path: Path) -> None:
     db = tmp_path / "discovery.db"
     strategy_id = databank.add_strategy("camp", _strategy(), db_path=db)

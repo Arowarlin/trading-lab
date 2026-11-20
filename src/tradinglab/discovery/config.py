@@ -60,6 +60,24 @@ class FitnessConfig(BaseModel):
     cost_r_max: float = Field(default=0.10, gt=0.0, le=1.0)
 
 
+class RobustnessConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    random_trials: int = Field(default=1000, ge=10, le=100_000)
+    pbo_min_strategies: int = Field(default=8, ge=2, le=100)
+    wf_min_oos_sharpe: float = Field(default=0.0, ge=-5.0, le=5.0)
+    wf_min_efficiency: float = Field(default=0.3, ge=0.0, le=5.0)
+    wf_train_days: int = Field(default=60, ge=10, le=1000)
+    wf_test_days: int = Field(default=20, ge=5, le=500)
+    pbo_slices: int = Field(default=16, ge=4, le=64)
+    mc_paths: int = Field(default=5000, ge=100, le=100_000)
+    bootstrap_paths: int = Field(default=5000, ge=100, le=100_000)
+    challenge_paths: int = Field(default=5000, ge=100, le=100_000)
+    challenge_accounts: list[str] = Field(
+        default_factory=lambda: ["CFD-001", "CFD-006"]
+    )
+
+
 class SourceConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -150,6 +168,7 @@ class EngineConfig(BaseModel):
     limits: LimitsConfig
     validation: ValidationConfig
     fitness: FitnessConfig = Field(default_factory=FitnessConfig)
+    robustness: RobustnessConfig = Field(default_factory=RobustnessConfig)
     data_quality: DataQualityConfig
 
     @field_validator("profiles")
@@ -188,6 +207,7 @@ def load_engine_config(path: str | Path | None = None) -> EngineConfig:
         "limits": raw.get("limits") or {},
         "validation": raw.get("validation") or {},
         "fitness": raw.get("fitness") or {},
+        "robustness": raw.get("robustness") or {},
         "data_quality": raw.get("data_quality") or {},
     }
     return EngineConfig.model_validate(payload)
@@ -201,6 +221,7 @@ __all__ = [
     "GeneticsConfig",
     "LimitsConfig",
     "ProfileConfig",
+    "RobustnessConfig",
     "SourceConfig",
     "ValidationConfig",
     "load_engine_config",

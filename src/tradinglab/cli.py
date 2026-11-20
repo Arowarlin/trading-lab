@@ -10000,5 +10000,225 @@ def discovery_run_cmd(
     )
 
 
+@discovery_app.command("show")
+def discovery_show_cmd(
+    strategy_id: int = typer.Argument(..., help="ID de la estrategia"),
+    db: str = typer.Option(None, "--db", help="discovery.db alternativo"),
+) -> None:
+    """Muestra estrategia, nivel, veredicto y validaciones (solo lectura)."""
+
+    from .discovery import databank
+
+    strategy = databank.get_strategy(strategy_id, db_path=db)
+    if strategy is None:
+        console.print(f"[red]Estrategia no encontrada:[/red] {strategy_id}")
+        raise typer.Exit(1)
+    table = Table(title=f"Discovery · estrategia {strategy_id}")
+    table.add_column("Campo", style="bold")
+    table.add_column("Valor")
+    table.add_row("Hash", strategy["strategy_hash"][:20] + "…")
+    table.add_row("Campaña", str(strategy["campaign_id"]))
+    table.add_row("Instrumento", f"{strategy['instrument']} {strategy['timeframe']}")
+    table.add_row("Nivel", str(strategy["level"]))
+    table.add_row("Veredicto", strategy.get("verdict") or "Sin datos")
+    table.add_row("Estado", str(strategy["status"]))
+    table.add_row("Selección", strategy.get("selection_reason") or "Sin datos")
+    console.print(table)
+    validations = databank.list_validations(strategy_id, db_path=db)
+    if validations:
+        tests = Table(title="Validaciones")
+        tests.add_column("Prueba")
+        tests.add_column("Pasó")
+        tests.add_column("Estado")
+        for row in validations:
+            result = row.get("result") or {}
+            status = result.get("status") or (
+                "Sin datos" if result.get("pbo") is None else "ok"
+            )
+            tests.add_row(
+                row["test"],
+                "sí" if row["passed"] else "no",
+                str(status),
+            )
+        console.print(tests)
+
+
+@discovery_app.command("retest")
+def discovery_retest_cmd(
+    strategy_id: int = typer.Argument(..., help="ID de la estrategia"),
+    transfer: str = typer.Option(
+        None, "--transfer", help="Símbolo extra (solo informativo: transfer)"
+    ),
+    db: str = typer.Option(None, "--db", help="discovery.db alternativo"),
+) -> None:
+    """Costes ×1,5/×2 y slippage +1/+2 sobre IS+OOS-1 (sin OOS-2)."""
+
+    from dataclasses import replace
+
+    from .discovery import campaigns, databank, dsl, fastbt, jobs, retester
+    from .propfund.costs import load_profile
+
+    strategy = databank.get_strategy(strategy_id, db_path=db)
+    if strategy is None:
+        console.print(f"[red]Estrategia no encontrada:[/red] {strategy_id}")
+        raise typer.Exit(1)
+    campaign = databank.get_campaign(strategy["campaign_id"], db_path=db)
+    if campaign is None:
+        console.print("[red]Campaña no registrada.[/red]")
+        raise typer.Exit(1)
+    model = dsl.Strategy.model_validate(strategy["dsl"])
+    setup = jobs.QueueSetup.from_campaign(campaign)
+    profile = load_profile(setup.account, setup.instrument, firm=setup.firm)
+    cost = fastbt.cost_from_profile(profile, use_p75=bool(setup.use_p75))
+    try:
+        is_frame = campaigns.load_segment(
+            strategy["campaign_id"], "is", db_path=db
+        )
+        oos1_frame = campaigns.load_segment(
+            strategy["campaign_id"], "oos1", db_path=db
+        )
+        result = retester.retest(model, is_frame, oos1_frame, cost, setup)
+        if transfer:
+            from .discovery.data_sources import load_source
+
+            source = load_source(transfer, campaign["timeframe"]).frame
+            other_setup = replace(setup, instrument=transfer.upper())
+            other_cost = fastbt.cost_from_profile(
+                load_profile(setup.account, transfer.upper(), firm=setup.firm),
+                use_p75=bool(setup.use_p75),
+            )
+            is_mask = source.index < oos1_frame.index[0]
+            other_is = source[is_mask & (source.index >= is_frame.index[0])]
+            other_oos1 = source[
+                (source.index >= oos1_frame.index[0])
+                & (source.index <= oos1_frame.index[-1])
+            ]
+            result["transfer"] = retester.transfer(
+                model,
+                {transfer.upper(): (other_is, other_oos1)},
+                {transfer.upper(): other_cost},
+                {transfer.upper(): other_setup},
+            )
+        databank.add_validation(
+            strategy_id,
+            "retest",
+            result,
+            bool(result.get("stress_cost_x1_5_ok")),
+            db_path=db,
+        )
+    except Exception as exc:  # noqa: BLE001
+        console.print(f"[red]Retest no disponible:[/red] {exc}")
+        raise typer.Exit(1) from exc
+    table = Table(title=f"Discovery · retest {strategy_id} (IS+OOS-1)")
+    table.add_column("Escenario")
+    table.add_column("Expectativa R", justify="right")
+    table.add_column("PF", justify="right")
+    table.add_column("Ops", justify="right")
+    for name in ("base", "cost_x1_5", "cost_x2", "slippage_plus_1", "slippage_plus_2"):
+        row = result.get(name) or {}
+        table.add_row(
+            name,
+            f"{row.get('expectancy_r'):.4f}"
+            if row.get("expectancy_r") is not None
+            else "Sin datos",
+            f"{row.get('profit_factor'):.2f}"
+            if row.get("profit_factor") is not None
+            else "Sin datos",
+            str(row.get("trades") or 0),
+        )
+    console.print(table)
+    if result.get("transfer"):
+        console.print("[dim]Transfer: informativo, no cuenta como validación.[/dim]")
+
+
+@discovery_app.command("robustness")
+def discovery_robustness_cmd(
+    strategy_id: int = typer.Argument(..., help="ID de la estrategia"),
+    db: str = typer.Option(None, "--db", help="discovery.db alternativo"),
+) -> None:
+    """Robustness Lab completo sobre IS+OOS-1; actualiza nivel 3 y veredicto."""
+
+    from .discovery import levels, robustness
+
+    try:
+        result = robustness.run(strategy_id, db_path=db)
+        evaluation = levels.evaluate(strategy_id, db_path=db)
+    except Exception as exc:  # noqa: BLE001
+        console.print(f"[red]Robustness no disponible:[/red] {exc}")
+        raise typer.Exit(1) from exc
+    table = Table(title=f"Discovery · robustness {strategy_id}")
+    table.add_column("Prueba")
+    table.add_column("Resultado")
+    table.add_column("¿Pasa?")
+    table.add_row(
+        "test_vs_random",
+        f"percentil {result['validations']['test_vs_random'].get('percentile')}",
+        "sí" if result["passed"]["test_vs_random"] else "no",
+    )
+    table.add_row(
+        "coste ×1,5",
+        str(result["validations"]["retest"].get("cost_x1_5", {}).get("expectancy_r")),
+        "sí" if result["validations"]["retest"].get("stress_cost_x1_5_ok") else "no",
+    )
+    table.add_row(
+        "PBO",
+        str(result["validations"]["pbo"].get("pbo")),
+        "sí" if result["passed"]["pbo"] else "no",
+    )
+    table.add_row(
+        "WF",
+        str(result["validations"]["wf"].get("verdict")),
+        "sí" if result["passed"]["wf"] else "no",
+    )
+    table.add_row(
+        "Regímenes",
+        str(result["validations"]["regime"].get("passed")),
+        "sí" if result["passed"]["regime"] else "no",
+    )
+    table.add_row(
+        "Challenge MC",
+        str(result["validations"]["challenge"].get("passed")),
+        "sí" if result["passed"]["challenge"] else "no",
+    )
+    console.print(table)
+    console.print(
+        f"Nivel {evaluation['level']} · veredicto {evaluation['verdict']} · "
+        f"Sin datos: {', '.join(evaluation['sin_datos']) or 'ninguno'}"
+    )
+
+
+@discovery_app.command("confirm")
+def discovery_confirm_cmd(
+    strategy_id: int = typer.Argument(..., help="ID de la estrategia"),
+    approved_by_operator: bool = typer.Option(
+        False, "--approved-by-operator", help="Lectura única de OOS-2 aprobada"
+    ),
+    db: str = typer.Option(None, "--db", help="discovery.db alternativo"),
+) -> None:
+    """Lectura única de OOS-2 y DSR de confirmación (solo nivel 3)."""
+
+    if not approved_by_operator:
+        console.print(
+            "Sin --approved-by-operator no se lee OOS-2; no se hace nada."
+        )
+        return
+    from .discovery import levels
+
+    try:
+        result = levels.confirm(
+            strategy_id, approved_by_operator=True, db_path=db
+        )
+    except Exception as exc:  # noqa: BLE001
+        console.print(f"[red]Confirmación no disponible:[/red] {exc}")
+        raise typer.Exit(1) from exc
+    console.print(
+        f"Estrategia {strategy_id} · OOS-2 expectativa "
+        f"{result['oos2_expectancy_r']} · DSR confirmación "
+        f"{result['dsr_confirm'].get('dsr')} (K={result['dsr_confirm'].get('k_finalists')}) "
+        f"· DSR global {result.get('global_dsr_tests')} · nivel {result['level']} "
+        f"· veredicto {result['verdict']}"
+    )
+
+
 if __name__ == "__main__":
     main()

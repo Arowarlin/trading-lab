@@ -504,7 +504,9 @@ def discovery_tests(
             campaigns = 0
         try:
             row = con.execute(
-                "SELECT COUNT(*) AS n FROM disc_holdout_reads"
+                "SELECT COUNT(*) AS n FROM disc_holdout_reads r"
+                " JOIN disc_campaigns c ON c.id = r.campaign_id"
+                " WHERE c.approved_at IS NOT NULL"
             ).fetchone()
             reads = int(row[0] or 0)
         except sqlite3.OperationalError:

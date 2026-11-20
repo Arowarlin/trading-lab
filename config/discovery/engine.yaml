@@ -36,6 +36,19 @@ fitness:
   # Restricción dura: mediana de (coste ida y vuelta / distancia del stop) en R.
   cost_r_max: 0.10
 
+robustness:
+  random_trials: 1000
+  pbo_min_strategies: 8
+  wf_min_oos_sharpe: 0.0
+  wf_min_efficiency: 0.3
+  wf_train_days: 60
+  wf_test_days: 20
+  pbo_slices: 16
+  mc_paths: 5000
+  bootstrap_paths: 5000
+  challenge_paths: 5000
+  challenge_accounts: [CFD-001, CFD-006]
+
 data_quality:
   # Un hueco es un salto entre velas consecutivas > gap_factor × timeframe.
   gap_factor: 3

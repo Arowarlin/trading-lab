@@ -1,0 +1,269 @@
+{
+  "origin": "Fase 6 · prueba de ruido sintética (0,9 años)",
+  "note": "Finalistas de la corrida de 0,9 años, semilla 2. En la Fase 7 NINGUNO debe llegar a nivel 4 (OOS-2 + DSR de confirmación + azar).",
+  "seed": 2,
+  "frame": {
+    "years": 0.9,
+    "sigma": 0.0004,
+    "price": 20000.0,
+    "start": "2023-01-02"
+  },
+  "segments": {
+    "is": [
+      "2023-01-02",
+      "2023-08-31"
+    ],
+    "oos1": [
+      "2023-09-01",
+      "2023-10-15"
+    ],
+    "oos2": [
+      "2023-10-16",
+      null
+    ]
+  },
+  "cost": {
+    "account": "CFD-001",
+    "firm": "ftmo"
+  },
+  "campaign_id": "noise-09y-2",
+  "summary": {
+    "n_total": 440,
+    "n_evaluated": 241,
+    "n_effective": 46,
+    "n_finalists": 2,
+    "feasible": 156,
+    "frontier": 22,
+    "candidates": 17,
+    "oos1_mean": 0.1496769400308674,
+    "oos1_positive": 2
+  },
+  "finalists": [
+    {
+      "strategy_id": 134,
+      "strategy_hash": "cf187a0037c7d1bd53ee60522a4d808a91e7bc90a804a020eb0132306f3af64f",
+      "selection_reason": "finalista: OOS-1 expectativa 0.18088414451644802 PF 1.5002659283764905",
+      "dsl": {
+        "dsl_version": "1",
+        "exit": {
+          "opposite_signal": true,
+          "stop": {
+            "mult": 4.13,
+            "n": 20,
+            "type": "atr"
+          },
+          "target": {
+            "rr": 1.88,
+            "type": "rr"
+          },
+          "time_exit_bars": 72
+        },
+        "instrument": "US100",
+        "limits": {
+          "cooldown_bars": 5,
+          "max_trades_per_day": 2
+        },
+        "long_entry": {
+          "args": [
+            {
+              "args": [],
+              "days": [],
+              "kind": "gt",
+              "left": {
+                "args": [],
+                "days": [],
+                "kind": "price",
+                "params": {},
+                "price": "close"
+              },
+              "params": {},
+              "right": {
+                "args": [],
+                "days": [],
+                "kind": "level",
+                "level": "opening_range_high",
+                "params": {}
+              }
+            },
+            {
+              "args": [],
+              "days": [],
+              "kind": "regime",
+              "lookback": 100,
+              "n": 14,
+              "params": {
+                "pct": 0.8
+              },
+              "regime": "vol_high"
+            }
+          ],
+          "days": [],
+          "kind": "and",
+          "params": {}
+        },
+        "market": "cfd",
+        "session": {
+          "end": "11:30",
+          "flat_at": "15:45",
+          "or_minutes": 15,
+          "start": "09:35"
+        },
+        "short_entry": {
+          "args": [
+            {
+              "args": [],
+              "days": [],
+              "kind": "lt",
+              "left": {
+                "args": [],
+                "days": [],
+                "kind": "price",
+                "params": {},
+                "price": "close"
+              },
+              "params": {},
+              "right": {
+                "args": [],
+                "days": [],
+                "kind": "level",
+                "level": "opening_range_low",
+                "params": {}
+              }
+            },
+            {
+              "args": [],
+              "days": [],
+              "kind": "regime",
+              "lookback": 100,
+              "n": 5,
+              "params": {
+                "pct": 0.8
+              },
+              "regime": "vol_high"
+            }
+          ],
+          "days": [],
+          "kind": "and",
+          "params": {}
+        },
+        "sizing": {
+          "risk_per_trade_r": 1.0
+        },
+        "timeframe": "M5"
+      }
+    },
+    {
+      "strategy_id": 167,
+      "strategy_hash": "45bb81729134c3b65e33a54b945db9bc6db0fe8f197b077a0cdfdde245606ef3",
+      "selection_reason": "finalista: OOS-1 expectativa 0.1184697355452868 PF 1.3517684222627613",
+      "dsl": {
+        "dsl_version": "1",
+        "exit": {
+          "opposite_signal": true,
+          "stop": {
+            "mult": 4.91,
+            "n": 14,
+            "type": "atr"
+          },
+          "target": {
+            "rr": 1.69,
+            "type": "rr"
+          },
+          "time_exit_bars": 72
+        },
+        "instrument": "US100",
+        "limits": {
+          "cooldown_bars": 5,
+          "max_trades_per_day": 2
+        },
+        "long_entry": {
+          "args": [
+            {
+              "args": [],
+              "days": [],
+              "kind": "gt",
+              "left": {
+                "args": [],
+                "days": [],
+                "kind": "price",
+                "params": {},
+                "price": "close"
+              },
+              "params": {},
+              "right": {
+                "args": [],
+                "days": [],
+                "kind": "level",
+                "level": "opening_range_high",
+                "params": {}
+              }
+            },
+            {
+              "args": [],
+              "days": [],
+              "kind": "regime",
+              "lookback": 319,
+              "n": 14,
+              "params": {
+                "pct": 0.8
+              },
+              "regime": "vol_high"
+            }
+          ],
+          "days": [],
+          "kind": "and",
+          "params": {}
+        },
+        "market": "cfd",
+        "session": {
+          "end": "11:30",
+          "flat_at": "15:45",
+          "or_minutes": 15,
+          "start": "09:35"
+        },
+        "short_entry": {
+          "args": [
+            {
+              "args": [],
+              "days": [],
+              "kind": "lt",
+              "left": {
+                "args": [],
+                "days": [],
+                "kind": "price",
+                "params": {},
+                "price": "close"
+              },
+              "params": {},
+              "right": {
+                "args": [],
+                "days": [],
+                "kind": "level",
+                "level": "opening_range_low",
+                "params": {}
+              }
+            },
+            {
+              "args": [],
+              "days": [],
+              "kind": "regime",
+              "lookback": 100,
+              "n": 14,
+              "params": {
+                "pct": 0.6
+              },
+              "regime": "vol_high"
+            }
+          ],
+          "days": [],
+          "kind": "and",
+          "params": {}
+        },
+        "sizing": {
+          "risk_per_trade_r": 1.0
+        },
+        "timeframe": "M5"
+      }
+    }
+  ]
+}

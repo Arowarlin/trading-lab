@@ -67,21 +67,32 @@ def deflated_sharpe(
     kurtosis: float,
     trial_sr_std: float,
     n_trials: int,
+    *,
+    benchmark_sr: float | None = None,
 ) -> float | None:
     """Fórmula interna del DSR con todas las entradas por periodo.
 
     No se exporta como API pública de cálculo: las llamadas deben pasar por
-    `dsr_from_returns`, que además valida las unidades.
+    `dsr_from_returns`, que además valida las unidades. ``benchmark_sr``
+    sustituye el SR0 deflactado por un umbral fijo; con 0 se obtiene el PSR
+    frente a SR 0 (caso K=1).
     """
-    if n_trials < 2 or n_obs < 3 or trial_sr_std <= 0:
+    if n_obs < 3:
         return None
     if not math.isfinite(sharpe):
         return None
     nd = NormalDist()
-    sr0 = trial_sr_std * (
-        (1.0 - EULER_GAMMA) * nd.inv_cdf(1.0 - 1.0 / n_trials)
-        + EULER_GAMMA * nd.inv_cdf(1.0 - 1.0 / (n_trials * math.e))
-    )
+    if benchmark_sr is not None:
+        if not math.isfinite(float(benchmark_sr)):
+            return None
+        sr0 = float(benchmark_sr)
+    else:
+        if n_trials < 2 or trial_sr_std <= 0:
+            return None
+        sr0 = trial_sr_std * (
+            (1.0 - EULER_GAMMA) * nd.inv_cdf(1.0 - 1.0 / n_trials)
+            + EULER_GAMMA * nd.inv_cdf(1.0 - 1.0 / (n_trials * math.e))
+        )
     denom = 1.0 - skew * sharpe + ((kurtosis - 1.0) / 4.0) * sharpe * sharpe
     if denom <= 0:
         return None
@@ -94,13 +105,16 @@ def dsr_from_returns(
     trial_srs_per_period,
     n_trials: int,
     periods_per_year: float | None = None,
+    *,
+    benchmark_sr: float | None = None,
 ) -> dict:
     """Calcula el DSR v2 a partir de retornos por periodo.
 
     `trial_srs_per_period` son los Sharpes por periodo de las demás pruebas.
     `periods_per_year` solo añade `annualized_sr` para el informe; no cambia
     el DSR. Un Sharpe por periodo mayor que 1 en valor absoluto se rechaza:
-    casi siempre significa que la serie llegó anualizada.
+    casi siempre significa que la serie llegó anualizada. Con ``benchmark_sr``
+    se calcula el PSR frente a ese umbral (0 = PSR frente a SR 0).
     """
     values = _returns_array(returns)
     sr_period = period_sharpe(values)
@@ -130,6 +144,7 @@ def dsr_from_returns(
         kurt,
         trial_std,
         int(n_trials),
+        benchmark_sr=benchmark_sr,
     )
     annualized = None
     if periods_per_year is not None:
@@ -143,15 +158,19 @@ def dsr_from_returns(
         "n_series": int(trial_values.size),
         "sr_period": sr_period,
         "sr0_period": (
-            trial_std
-            * (
-                (1.0 - EULER_GAMMA)
-                * NormalDist().inv_cdf(1.0 - 1.0 / int(n_trials))
-                + EULER_GAMMA
-                * NormalDist().inv_cdf(1.0 - 1.0 / (int(n_trials) * math.e))
+            float(benchmark_sr)
+            if benchmark_sr is not None
+            else (
+                trial_std
+                * (
+                    (1.0 - EULER_GAMMA)
+                    * NormalDist().inv_cdf(1.0 - 1.0 / int(n_trials))
+                    + EULER_GAMMA
+                    * NormalDist().inv_cdf(1.0 - 1.0 / (int(n_trials) * math.e))
+                )
+                if n_trials >= 2 and trial_std > 0
+                else None
             )
-            if n_trials >= 2 and trial_std > 0
-            else None
         ),
         "skew": skew,
         "kurt": kurt,
@@ -159,6 +178,9 @@ def dsr_from_returns(
         "trial_sr_std_period": trial_std,
         "annualized_sr": annualized,
         "periods_per_year": periods_per_year,
+        "benchmark_sr_period": (
+            None if benchmark_sr is None else float(benchmark_sr)
+        ),
         "metric_version": METRIC_VERSION,
     }
 

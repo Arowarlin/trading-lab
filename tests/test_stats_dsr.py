@@ -81,6 +81,29 @@ def test_local_y_global_no_mezclan_n_con_dispersion():
     assert "29" in missing["global"]["reason"]
 
 
+def test_psr_vs_cero_para_un_solo_finalista():
+    rng = np.random.default_rng(13)
+    returns = rng.normal(0.004, 0.01, 400)
+    without = dsr_from_returns(returns, [], 1)
+    assert without["dsr"] is None
+    assert without["status"] == "Sin datos"
+
+    payload = dsr_from_returns(returns, [], 1, benchmark_sr=0.0)
+    assert payload["status"] == "ok"
+    assert payload["dsr"] is not None
+    assert payload["sr0_period"] == 0.0
+    direct = deflated_sharpe(
+        period_sharpe(returns),
+        len(returns),
+        payload["skew"],
+        payload["kurt"],
+        0.0,
+        1,
+        benchmark_sr=0.0,
+    )
+    assert payload["dsr"] == pytest.approx(direct)
+
+
 def test_periods_per_year_solo_anualiza_para_el_informe():
     rng = np.random.default_rng(5)
     returns = rng.normal(0.001, 0.01, 400)
