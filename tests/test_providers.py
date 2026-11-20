@@ -40,7 +40,7 @@ def test_verify_finnhub_ok_y_sin_clave():
     result = verify_finnhub("test-key", client=client)
     assert result["ok"] is True
     assert result["status"] == "ok"
-    assert client.params["symbol"] == "SPY"
+    assert client.params["symbol"] == "EURUSD"
     assert client.params["token"] == "test-key"
 
     missing = verify_finnhub(None)

@@ -31,15 +31,6 @@ from .execution import (
     get_mt5_broker,
     get_projectx_broker,
 )
-from .f13 import activate as f13_activate
-from .f13 import config_check as f13_config_check
-from .f13 import daily_report as f13_daily_report
-from .f13 import execution_metrics as f13_execution
-from .f13 import freeze as f13_freeze
-from .f13 import load_criteria as f13_criteria
-from .f13 import migrate_account as f13_migrate_account
-from .f13 import signal_check as f13_signal_check
-from .f13 import status as f13_status
 from .indicators import atr as atr_indicator
 from .instruments import get_instrument, list_instruments
 from .intel.calendar import (
@@ -51,7 +42,6 @@ from .intel.calendar import (
 )
 from .intel.fred import FredCalendarProvider
 from .intel.news import fetch_rss, news_count, recent_news, store_news
-from .intel.sec import SecClient
 from .killswitch import allows_order
 from .killswitch import ensure as ensure_killswitch
 from .killswitch import evaluate as evaluate_killswitch
@@ -61,9 +51,7 @@ from .llm import LLMClient
 from .orchestrator import load_bots, run_all, write_dry_run_log
 from .prop import AccountState, PropGuard, PropRules, from_yaml, ftmo, monte_carlo
 from .prop.defense import FlattenClock, TrailingDrawdown
-from .reconciliation import last_reconciliation
 from .reconciliation import reconcile as reconcile_broker
-from .reconciliation import reconcile_account as reconcile_account_broker
 from .reporting import build_dashboard
 from .risk import check_order, size_position
 from .session import flatten_required, session_block
@@ -95,7 +83,6 @@ alerts_app = typer.Typer(
 heartbeat_app = typer.Typer(
     no_args_is_help=True, help="Latidos Healthchecks.io: setup, ping y estado."
 )
-f13_app = typer.Typer(no_args_is_help=True, help="F13: pilot operativo de paper y criterios.")
 bots_app = typer.Typer(no_args_is_help=True, help="Bots: listar, evaluar, proponer, archivar.")
 decisions_app = typer.Typer(no_args_is_help=True, help="Decisiones LLM: resultados y líneas base.")
 fund_app = typer.Typer(no_args_is_help=True, help="Fondo: cuentas, límites e historial.")
@@ -115,7 +102,6 @@ reports_app = typer.Typer(no_args_is_help=True, help="Reportes CSV/HTML con vali
 markets_app = typer.Typer(no_args_is_help=True, help="Agentes por mercado y coordinador determinista.")
 models_app = typer.Typer(no_args_is_help=True, help="Modelos walk-forward, registry y campeón/retador.")
 intel_app = typer.Typer(no_args_is_help=True, help="Información continua: RSS, saneado y estado.")
-sec_app = typer.Typer(no_args_is_help=True, help="SEC EDGAR: CIK, filings y company facts.")
 telegram_app = typer.Typer(
     no_args_is_help=True,
     help="Telegram remoto: setup, estado y puente de control.",
@@ -135,14 +121,6 @@ slippage_app = typer.Typer(
 intraday_app = typer.Typer(
     no_args_is_help=True,
     help="Forward intradía: dos candidatos fijos, dry-run por defecto.",
-)
-daytrader_app = typer.Typer(
-    no_args_is_help=True,
-    help="Day trading de acciones desde JSON externo, con guards del lab.",
-)
-tradestation_app = typer.Typer(
-    no_args_is_help=True,
-    help="TradeStation SIM: OAuth, cuentas y posiciones en solo lectura.",
 )
 llm_app = typer.Typer(
     no_args_is_help=True,
@@ -172,7 +150,6 @@ app.add_typer(guardian_app, name="guardian")
 app.add_typer(audit_app, name="audit")
 app.add_typer(alerts_app, name="alerts")
 app.add_typer(heartbeat_app, name="heartbeat")
-app.add_typer(f13_app, name="f13")
 app.add_typer(bots_app, name="bots")
 app.add_typer(decisions_app, name="decisions")
 app.add_typer(fund_app, name="fund")
@@ -194,14 +171,11 @@ app.add_typer(slippage_app, name="slippage")
 app.add_typer(intraday_app, name="intraday")
 ea_app = typer.Typer(no_args_is_help=True, help="EAs externos MT5: registro, estado y filtros.")
 app.add_typer(ea_app, name="ea")
-app.add_typer(daytrader_app, name="daytrader")
-app.add_typer(tradestation_app, name="tradestation")
 app.add_typer(lessons_app, name="lessons")
 app.add_typer(reports_app, name="reports")
 app.add_typer(markets_app, name="markets")
 app.add_typer(models_app, name="models")
 app.add_typer(intel_app, name="intel")
-app.add_typer(sec_app, name="sec")
 app.add_typer(telegram_app, name="telegram")
 app.add_typer(library_app, name="library")
 from .propfund.cli import app as propfund_app  # noqa: E402  (capa Prop Fund aislada)
@@ -484,19 +458,6 @@ def doctor(network: bool = typer.Option(False, "--network", help="Probar descarg
         table.add_row("Secretos", WARN, str(exc)[:160])
 
     # Integraciones opcionales: solo estado, nunca valores.
-    try:
-        from .config import sec_user_agent_status
-
-        sec = sec_user_agent_status()
-        if sec["format_ok"]:
-            table.add_row("SEC EDGAR", OK, "User-Agent con contacto configurado")
-        elif sec["configured"]:
-            table.add_row("SEC EDGAR", WARN, "User-Agent sin formato/contacto válido")
-        else:
-            table.add_row("SEC EDGAR", WARN, "falta SEC_USER_AGENT")
-    except Exception as exc:
-        table.add_row("SEC EDGAR", WARN, str(exc)[:160])
-
     fred_ok = bool(os.getenv("FRED_API_KEY"))
     table.add_row(
         "FRED",
@@ -571,24 +532,6 @@ def doctor(network: bool = typer.Option(False, "--network", help="Probar descarg
 
     bun = shutil.which("bun")
     table.add_row("bun", OK if bun else WARN, bun or "no instalado (necesario para la TUI de Trading-R1)")
-
-    # Alpaca
-    key = os.getenv("ALPACA_API_KEY")
-    secret = os.getenv("ALPACA_SECRET_KEY")
-    if key and secret:
-        try:
-            from .execution import AlpacaBroker
-
-            health = AlpacaBroker(paper=(settings.mode != "live") if settings else True).health()
-            table.add_row(
-                "Alpaca",
-                OK,
-                f"paper={health['paper']} · equity={health['equity']:,.2f} · status={health['status']}",
-            )
-        except Exception as exc:
-            table.add_row("Alpaca", FAIL, str(exc)[:160])
-    else:
-        table.add_row("Alpaca keys", WARN, "faltan en .env (paper trading)")
 
     # LM Studio
     if settings:
@@ -1289,10 +1232,15 @@ def _agent_decision(
     raise typer.BadParameter("--mode debe ser 'lite' o 'deep'")
 
 
-@app.command("premarket")
-def premarket_cmd(
+@app.command("briefing")
+def briefing_cmd(
     tickers: str = typer.Option(
-        "SPY,QQQ,NVDA", "--tickers", help="Watchlist separada por comas"
+        "", "--tickers", help="Activos separados por comas (por defecto universo CFD)"
+    ),
+    session: str = typer.Option(
+        "auto",
+        "--session",
+        help="auto | pre_london | pre_ny (hora de Londres y Nueva York)",
     ),
     hours: int = typer.Option(48, "--hours", help="Ventana de calendario macro"),
     no_llm: bool = typer.Option(
@@ -1301,8 +1249,8 @@ def premarket_cmd(
     send: bool = typer.Option(False, "--send", help="Enviar el informe por Telegram"),
     out: Path = typer.Option(None, "--out", help="Archivo Markdown de salida"),
 ) -> None:
-    """Informe pre-market nativo con Qwen; no usa Trading-R1 ni envía órdenes."""
-    from .premarket import build_report, send_report
+    """Briefing pre-Londres y pre-NY del universo CFD; solo lectura."""
+    from .briefing import build_report, send_report
 
     settings = get_settings()
     init_db(DEFAULT_DB)
@@ -1310,76 +1258,30 @@ def premarket_cmd(
         report = build_report(
             DEFAULT_DB,
             settings,
-            tickers=[item.strip() for item in tickers.split(",") if item.strip()],
+            tickers=[
+                item.strip() for item in (tickers or "").split(",") if item.strip()
+            ]
+            or None,
             include_llm=not no_llm,
             hours=max(1, hours),
+            session=session,
         )
     except Exception as exc:
-        console.print(f"[red]No se pudo generar el pre-market:[/red] {exc}")
+        console.print(f"[red]No se pudo generar el briefing:[/red] {exc}")
         raise typer.Exit(1) from exc
     text = report["text"]
     console.print(text)
     if out is not None:
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(text, encoding="utf-8")
-        console.print(f"[green]Informe guardado:[/green] {out}")
+        console.print(f"[green]Briefing guardado:[/green] {out}")
     if send:
         try:
             send_report(text)
         except Exception as exc:
             console.print(f"[red]Telegram:[/red] {exc}")
             raise typer.Exit(1) from exc
-        console.print("[green]Informe enviado a Telegram.[/green]")
-
-
-@app.command("readiness")
-def readiness_cmd() -> None:
-    """Muestra si F13/decisiones ya tienen muestra suficiente. Solo lectura."""
-    from .readiness import readiness
-
-    data = readiness(DEFAULT_DB, settings=get_settings())
-    table = Table(title=f"Readiness · {data['date']}")
-    table.add_column("Bloque", style="bold")
-    table.add_column("Estado", overflow="fold")
-    f13 = data.get("f13") or {}
-    table.add_row(
-        "F13",
-        (
-            f"{f13.get('bot') or 'sin datos'} · inicio {f13.get('start_date') or '—'} "
-            f"· {data.get('days_in_paper') or 0} días en paper"
-        ),
-    )
-    decisions = data["decisions"]
-    table.add_row(
-        "Decisiones",
-        f"{decisions['total']} totales · {decisions['with_20d']} con retorno 20d "
-        f"· faltan {decisions['needed']} para 30",
-    )
-    schema = data["llm_schema"]
-    table.add_row(
-        "Esquema LLM",
-        f"{schema['failed']} fallos de {schema['checked']} validadas",
-    )
-    if data["calendar"]:
-        table.add_row(
-            "Macro 48h",
-            "; ".join(
-                f"{row['ts_utc'][:16]} {row['event']} ({row['importance']})"
-                for row in data["calendar"][:4]
-            ),
-        )
-    else:
-        table.add_row("Macro 48h", "Sin datos")
-    console.print(table)
-    if decisions["total"] == 0:
-        console.print("[yellow]Sin datos de decisiones todavía.[/yellow]")
-    elif decisions["needed"]:
-        console.print(
-            f"[yellow]Muestra insuficiente: faltan {decisions['needed']} retornos "
-            "a 20 días.[/yellow]"
-        )
-    else:
-        console.print("[green]Muestra mínima de 30 retornos alcanzada.[/green]")
+        console.print("[green]Briefing enviado a Telegram.[/green]")
 
 
 @app.command("agent-compare")
@@ -3186,7 +3088,7 @@ def reconcile_cmd(
     account: str = typer.Option(
         None,
         "--account",
-        help="Cuenta del laboratorio (p. ej. paper_main o alpaca_paper)",
+        help="Cuenta del laboratorio (p. ej. ftmo_demo)",
     ),
 ) -> None:
     """Compara posiciones/equity del broker con SQLite y alerta diferencias."""
@@ -3206,12 +3108,7 @@ def reconcile_cmd(
             if definition is None:
                 raise ValueError(f"cuenta desconocida: {account}")
             broker = get_broker_for_account(settings, definition, DEFAULT_DB)
-            if str(definition.platform).lower() == "alpaca":
-                result = reconcile_account_broker(
-                    broker, DEFAULT_DB, account_id=str(account)
-                )
-            else:
-                result = reconcile_broker(broker, DEFAULT_DB, source=source)
+            result = reconcile_broker(broker, DEFAULT_DB, source=source)
         else:
             broker = get_broker(settings, DEFAULT_DB)
             result = reconcile_broker(broker, DEFAULT_DB, source=source)
@@ -3239,539 +3136,6 @@ def reconcile_cmd(
     console.print(t)
     if result.status != "ok":
         raise typer.Exit(1)
-
-
-@f13_app.command("status")
-def f13_status_cmd() -> None:
-    """Estado del pilot F13 y hash de configuración."""
-    init_db(DEFAULT_DB)
-    row = f13_status(DEFAULT_DB)
-    criteria = f13_criteria()
-    t = Table(title="F13 · estado")
-    t.add_column("Campo", style="bold")
-    t.add_column("Valor", overflow="fold")
-    if row:
-        t.add_row("Bot", row["bot"])
-        t.add_row("Símbolo", row["symbol"])
-        t.add_row("Inicio", row["start_date"])
-        t.add_row("Congelado", row["frozen_at"])
-        t.add_row("Hash", row["config_hash"][:16] + "…")
-    else:
-        t.add_row("Estado", "no iniciado")
-        t.add_row("Ventana", f"{criteria['window_weeks']} semanas")
-        t.add_row("Trades esperados", f"{criteria['expected_trades_8w_low']}–{criteria['expected_trades_8w_high']}")
-        t.add_row("Extensión de edge", criteria["edge_extension"])
-    console.print(t)
-
-    check = f13_config_check(DEFAULT_DB)
-    if check["status"] == "changed":
-        console.print(
-            Panel(
-                "La configuración cambió respecto al hash congelado. "
-                "F13 queda invalidado hasta revisión humana.",
-                style="bold red",
-            )
-        )
-
-
-@f13_app.command("freeze")
-def f13_freeze_cmd(
-    bot: str = typer.Option("qqq-trend-f13", "--bot"),
-    start: str = typer.Option(None, "--start", help="YYYY-MM-DD (por defecto hoy)"),
-    yes: bool = typer.Option(False, "--yes", help="No pedir confirmación"),
-) -> None:
-    """Congela criterios y hash. No activa el bot."""
-    init_db(DEFAULT_DB)
-    specs = {spec.id: spec for spec in load_bots()}
-    spec = specs.get(bot)
-    if spec is None:
-        console.print(f"[red]Bot no encontrado:[/red] {bot}")
-        raise typer.Exit(2)
-    if spec.enabled:
-        console.print("[red]No se congela un bot enabled.[/red] F13 debe empezar con enabled:false.")
-        raise typer.Exit(2)
-    if not yes:
-        if not typer.confirm(f"¿Congelar F13 con {bot} desde {start or _today()}?"):
-            raise typer.Exit(1)
-    row = f13_freeze(
-        DEFAULT_DB,
-        bot=bot,
-        symbol=spec.universe[0],
-        start_date=start or _today(),
-    )
-    console.print(
-        f"[green]F13 congelado[/green] · bot={row['bot']} · hash={row['config_hash'][:16]}…"
-    )
-    console.print("[yellow]El bot sigue enabled:false; la activación requiere tu aprobación.[/yellow]")
-
-
-@f13_app.command("activate")
-def f13_activate_cmd(
-    bot: str = typer.Option("qqq-trend-f13", "--bot"),
-    yes: bool = typer.Option(False, "--yes", help="No pedir confirmación"),
-) -> None:
-    """Activa el bot F13 en paper y re-congela el hash. No live."""
-    init_db(DEFAULT_DB)
-    row = f13_status(DEFAULT_DB)
-    if not row:
-        console.print("[yellow]F13 no iniciado. Ejecuta `lab f13 freeze` primero.[/yellow]")
-        raise typer.Exit(2)
-    settings = get_settings()
-    if settings.mode == "live":
-        console.print("[red]F13 no se activa en live.[/red]")
-        raise typer.Exit(2)
-    check = f13_config_check(DEFAULT_DB)
-    if not check["ok"]:
-        console.print("[red]Hash de configuración distinto al congelado.[/red]")
-        console.print(
-            f"[dim]frozen={check['frozen'][:16]}… current={check['current'][:16]}…[/dim]"
-        )
-        raise typer.Exit(2)
-    specs = {spec.id: spec for spec in load_bots()}
-    spec = specs.get(bot)
-    if spec is None:
-        console.print(f"[red]Bot no encontrado:[/red] {bot}")
-        raise typer.Exit(2)
-    if spec.enabled:
-        console.print(f"[yellow]{bot} ya está enabled:true.[/yellow]")
-        raise typer.Exit(1)
-    if not yes:
-        console.print(
-            "Vas a activar F13 en [bold]paper[/bold]: el bot pasará a enabled:true "
-            "y el hash se re-congelará con la nueva configuración. No live."
-        )
-        if not typer.confirm(f"¿Activar {bot} desde {row['start_date']}?"):
-            raise typer.Exit(1)
-    try:
-        activated = f13_activate(DEFAULT_DB, bot=bot, settings=settings)
-    except ValueError as exc:
-        console.print(f"[red]{exc}[/red]")
-        raise typer.Exit(2) from exc
-    console.print(
-        f"[green]F13 activado en paper[/green] · bot={activated['bot']} · "
-        f"hash={activated['config_hash'][:16]}… · start={activated['start_date']}"
-    )
-    console.print("[yellow]No live. No se envían órdenes en esta activación.[/yellow]")
-    console.print(
-        "[dim]Registra la tarea con scripts/register_f13_task.ps1; no se registra sola.[/dim]"
-    )
-
-
-@f13_app.command("refreeze")
-def f13_refreeze_cmd(
-    reason: str = typer.Option(..., "--reason", help="Motivo del re-congelado"),
-    yes: bool = typer.Option(False, "--yes", help="No pedir confirmación"),
-    bot: str = typer.Option(None, "--bot", help="Bot F13 (por defecto, el congelado)"),
-) -> None:
-    """Re-congela el hash solo si el bot y los archivos protegidos no cambiaron."""
-    from .f13 import refreeze as f13_refreeze
-
-    init_db(DEFAULT_DB)
-    row = f13_status(DEFAULT_DB)
-    if not row:
-        console.print("[yellow]F13 no iniciado. Ejecuta `lab f13 freeze` primero.[/yellow]")
-        raise typer.Exit(2)
-    if not str(reason or "").strip():
-        console.print("[red]Falta --reason: el re-congelado exige un motivo.[/red]")
-        raise typer.Exit(2)
-    check = f13_config_check(DEFAULT_DB)
-    if check["ok"]:
-        console.print(
-            "[green]El hash ya coincide con el congelado: no hay nada que "
-            "re-congelar.[/green]"
-        )
-        raise typer.Exit(1)
-    if not yes:
-        console.print(
-            "Se va a re-congelar F13.\n"
-            f"  anterior: {check['frozen'][:16]}…\n"
-            f"  nuevo:    {check['current'][:16]}…\n"
-            f"  motivo:   {reason}"
-        )
-        console.print(
-            "[dim]Solo se acepta si bots.yaml, prop.yaml, f13.yaml y el bloque "
-            "del bot siguen iguales.[/dim]"
-        )
-        if not typer.confirm("¿Re-congelar?"):
-            raise typer.Exit(1)
-    try:
-        result = f13_refreeze(DEFAULT_DB, reason=reason, bot=bot)
-    except ValueError as exc:
-        console.print(f"[red]{exc}[/red]")
-        raise typer.Exit(2) from exc
-    console.print(
-        f"[green]F13 re-congelado[/green] · "
-        f"{result['previous_hash'][:16]}… → {result['new_hash'][:16]}…"
-    )
-    console.print(
-        f"[dim]Motivo: {result['reason']} · archivos cambiados: "
-        f"{', '.join(result['changed_files']) or 'ninguno'} · "
-        f"baseline: {result['source']}[/dim]"
-    )
-
-
-@f13_app.command("migrate-account")
-def f13_migrate_account_cmd(
-    account: str = typer.Option(..., "--account", help="Cuenta paper destino"),
-    start: str = typer.Option(None, "--start", help="YYYY-MM-DD (por defecto hoy)"),
-    reason: str = typer.Option(..., "--reason", help="Motivo del reinicio"),
-    yes: bool = typer.Option(False, "--yes", help="No pedir confirmación"),
-    bot: str = typer.Option("qqq-trend-f13", "--bot"),
-) -> None:
-    """Migra F13 a otra cuenta paper y re-congela. No live."""
-    init_db(DEFAULT_DB)
-    row = f13_status(DEFAULT_DB)
-    if not row:
-        console.print("[yellow]F13 no iniciado. Ejecuta `lab f13 freeze` primero.[/yellow]")
-        raise typer.Exit(2)
-    if not str(reason or "").strip():
-        console.print("[red]Falta --reason: la migración exige un motivo.[/red]")
-        raise typer.Exit(2)
-    settings = get_settings()
-    if settings.mode == "live":
-        console.print("[red]F13 no migra a live.[/red]")
-        raise typer.Exit(2)
-    if not yes:
-        console.print(
-            "Se va a migrar F13 y re-congelar.\n"
-            f"  bot:      {bot}\n"
-            f"  cuenta:   {account}\n"
-            f"  inicio:   {start or _today()}\n"
-            f"  motivo:   {reason}"
-        )
-        console.print(
-            "[dim]Solo se acepta si bots.yaml/f13.yaml están exactamente en el "
-            "freeze; el cambio se limita a account y start_date.[/dim]"
-        )
-        if not typer.confirm("¿Migrar y re-congelar?"):
-            raise typer.Exit(1)
-    try:
-        result = f13_migrate_account(
-            DEFAULT_DB,
-            bot=bot,
-            new_account=account,
-            start_date=start or _today(),
-            reason=reason,
-            settings=settings,
-        )
-    except ValueError as exc:
-        console.print(f"[red]{exc}[/red]")
-        raise typer.Exit(2) from exc
-    console.print(
-        f"[green]F13 migrado[/green] · {result['old_account']} → "
-        f"{result['new_account']} · inicio={result['start_date']}"
-    )
-    console.print(
-        f"[dim]Hash {result['previous_hash'][:16]}… → "
-        f"{result['new_hash'][:16]}… · motivo: {result['reason']}[/dim]"
-    )
-
-
-@f13_app.command("report")
-def f13_report_cmd() -> None:
-    """Genera el reporte diario F13 en reports/f13/ (solo lectura)."""
-    init_db(DEFAULT_DB)
-    row = f13_status(DEFAULT_DB)
-    if not row:
-        console.print("[yellow]F13 no iniciado. Criterios:[/yellow]")
-        console.print_json(data=f13_criteria())
-        return
-
-    report = f13_daily_report(DEFAULT_DB)
-    cycles = report["cycles"]
-    recs = report["reconciliations"]
-    slip = report["slippage"]
-    size = report["size"]
-    config = report["config"]
-
-    t = Table(title=f"F13 · reporte diario · {report['report_date']}")
-    t.add_column("Métrica", style="bold")
-    t.add_column("Valor", justify="right")
-    t.add_row("Estado", "OK" if report["status"] == "ok" else "CON AVISOS")
-    t.add_row("Hash", f"{config['short']}… · {'OK' if config['ok'] else 'CAMBIADO'}")
-    t.add_row(
-        "Ciclos",
-        f"{cycles['executed']}/{cycles['expected']} · "
-        f"{_fmt_pct(cycles['pct']) if cycles['pct'] is not None else '—'}",
-    )
-    t.add_row("Último ciclo", cycles.get("last_cycle_at") or "—")
-    monday = cycles.get("monday") or {}
-    t.add_row(
-        "Lunes",
-        f"{monday.get('date') or '—'} · {'OK' if monday.get('ok') else 'FALTA'}",
-    )
-    t.add_row(
-        "Reconciliaciones",
-        f"{recs['ok_count']}/{recs['count']} · "
-        f"{_fmt_pct(recs['ok_pct']) if recs['ok_pct'] is not None else '—'}",
-    )
-    t.add_row("Fills", str(slip["fills"]))
-    t.add_row(
-        "Slippage p50 / p95",
-        f"{slip['p50_bps'] if slip['p50_bps'] is not None else '—'} / "
-        f"{slip['p95_bps'] if slip['p95_bps'] is not None else '—'} bps",
-    )
-    t.add_row("Error tamaño máx.", f"{size['max_error_shares']:g}")
-    refreezes = report.get("refreezes") or []
-    t.add_row("Re-congelados", str(len(refreezes)))
-    try:
-        from .audit import chain_state
-
-        chain = chain_state(DEFAULT_DB)
-        for name, result in chain["tables"].items():
-            estado = "OK" if result["ok"] else "ROTA"
-            extra = (
-                f" (rotura id={result['first_break_id']})"
-                if result["first_break_id"] is not None
-                else ""
-            )
-            t.add_row(
-                f"Cadena {name}",
-                f"{estado} · {result['hashed']}/{result['n']} encadenadas{extra}",
-            )
-    except Exception as exc:  # pragma: no cover - la auditoría no bloquea el reporte
-        t.add_row("Cadena auditoría", f"Sin datos ({exc})")
-    console.print(t)
-    for item in refreezes[:5]:
-        console.print(
-            f"[dim]Re-congelado {str(item.get('ts') or '')[:19]} · "
-            f"{str(item.get('previous_hash') or '')[:8]}… → "
-            f"{str(item.get('new_hash') or '')[:8]}… · "
-            f"{item.get('reason') or '—'}[/dim]"
-        )
-    console.print(
-        f"[dim]JSON: {report['files']['json']} · MD: {report['files']['markdown']}[/dim]"
-    )
-    for alert in report.get("alerts") or []:
-        console.print(f"[yellow]{alert['id']}:[/yellow] {alert['message']}")
-    monday_alert = next(
-        (
-            alert
-            for alert in report.get("alerts") or []
-            if alert.get("id") == "f13_monday_missed"
-        ),
-        None,
-    )
-    if monday_alert:
-        send_alert("f13_monday_missed", monday_alert["message"], severity="error")
-    console.print(
-        "[dim]Solo lectura: no envía órdenes, no activa bots ni modifica SQLite.[/dim]"
-    )
-
-
-@f13_app.command("check")
-def f13_check_cmd() -> None:
-    """Comprueba las paradas duras de F13 y alerta si alguna falla."""
-    init_db(DEFAULT_DB)
-    row = f13_status(DEFAULT_DB)
-    if not row:
-        console.print("[yellow]F13 no iniciado; no hay paradas que comprobar.[/yellow]")
-        return
-
-    criteria = f13_criteria()
-    checks: list[tuple[str, bool, str]] = []
-    config = f13_config_check(DEFAULT_DB)
-    checks.append(("Hash de config", config["ok"], config["status"]))
-    ks = load_killswitch(DEFAULT_DB)
-    checks.append(("Kill-switch", not ks.active, ks.reason if ks.active else "inactivo"))
-    rec = last_reconciliation(DEFAULT_DB)
-    checks.append(
-        ("Reconciliación", bool(rec and rec.get("status") == "ok"), (rec or {}).get("status", "sin ejecutar"))
-    )
-    dryruns = sorted((ROOT / "data" / "dryrun").glob("dryrun_*.json"), reverse=True)
-    age_h = round((utc_now().timestamp() - dryruns[0].stat().st_mtime) / 3600) if dryruns else 999
-    checks.append(("Ciclo diario", age_h <= 72, f"último hace {age_h} h"))
-
-    exec_metrics = f13_execution(DEFAULT_DB, bot=row["bot"], start_date=row["start_date"])
-    if exec_metrics["fills"]:
-        p50 = exec_metrics["slippage_p50_bps"] or 0.0
-        p95 = exec_metrics["slippage_p95_bps"] or 0.0
-        checks.append(
-            ("Slippage", p50 <= criteria["max_slippage_bps_p50"] and p95 <= criteria["max_slippage_bps_p95"],
-             f"p50={p50:.1f} bps · p95={p95:.1f} bps")
-        )
-        checks.append(
-            ("Tamaño", exec_metrics["size_error_max"] <= criteria["max_size_error_shares"],
-             f"error máx={exec_metrics['size_error_max']:g}")
-        )
-
-    t = Table(title="F13 · paradas duras")
-    t.add_column("Chequeo", style="bold")
-    t.add_column("Estado")
-    t.add_column("Detalle", overflow="fold")
-    for name, ok, detail in checks:
-        t.add_row(name, "[green]OK[/green]" if ok else "[red]FALLO[/red]", detail)
-    console.print(t)
-
-    failed = [name for name, ok, _ in checks if not ok]
-    if failed:
-        send_alert("f13_stop", f"Paradas duras F13: {', '.join(failed)}", severity="critical")
-        raise typer.Exit(1)
-
-
-@f13_app.command("signal-check")
-def f13_signal_check_cmd(bot: str = typer.Option("qqq-trend-f13", "--bot")) -> None:
-    """Recalcula la señal del bot con los mismos datos y la compara con la última."""
-    settings = get_settings()
-    specs = {spec.id: spec for spec in load_bots()}
-    spec = specs.get(bot)
-    if spec is None:
-        console.print(f"[red]Bot no encontrado:[/red] {bot}")
-        raise typer.Exit(2)
-    result = f13_signal_check(settings, spec, DEFAULT_DB)
-    if not result.get("ok"):
-        console.print(f"[red]{result.get('error')}[/red]")
-        raise typer.Exit(1)
-    console.print(
-        f"{result['ticker']} · target={result['target']:.0%} · precio={result['price']:,.2f} "
-        f"· ATR={result['atr']:,.2f}"
-    )
-    if result.get("last_signal"):
-        console.print(f"Última señal: {result['last_signal']}")
-        console.print(
-            f"Coincide: {'sí' if result.get('match') else 'NO' if result.get('match') is False else 'sin datos'}"
-        )
-    else:
-        console.print("[yellow]Sin señales registradas todavía; ejecuta el bot en paper (no dry-run).[/yellow]")
-
-
-@f13_app.command("config-check")
-def f13_config_check_cmd() -> None:
-    """Comprueba que config/*.yaml no cambió desde el freeze."""
-    check = f13_config_check(DEFAULT_DB)
-    console.print(check)
-    if not check["ok"]:
-        raise typer.Exit(1)
-
-
-def _sec_client() -> SecClient:
-    settings = get_settings()
-    return SecClient(cache_dir=settings.data.cache_dir / "sec", db_path=DEFAULT_DB)
-
-
-@sec_app.command("status")
-def sec_status_cmd() -> None:
-    """Estado del cliente SEC, caché y últimas consultas."""
-    client = _sec_client()
-    try:
-        state = client.status()
-    finally:
-        client.close()
-    t = Table(title="SEC EDGAR · estado")
-    t.add_column("Campo", style="bold")
-    t.add_column("Valor", overflow="fold")
-    t.add_row("User-Agent", "válido" if state["user_agent_ok"] else "falta o inválido")
-    t.add_row("Caché", state["cache_dir"])
-    t.add_row("Rate limit", f"{state['min_interval_s']:.2f} s entre peticiones")
-    console.print(t)
-    if not state["user_agent_ok"]:
-        console.print("[yellow]Define SEC_USER_AGENT con contacto antes de consultar.[/yellow]")
-        return
-    if state["last"]:
-        last = Table(title="Últimas consultas SEC")
-        for col in ("Fecha", "Endpoint", "CIK", "Estado", "HTTP", "Caché", "Error"):
-            last.add_column(col)
-        for row in state["last"]:
-            last.add_row(
-                str(row["ts"])[:19],
-                str(row["endpoint"]),
-                str(row["cik"] or ""),
-                str(row["status"]),
-                str(row["http_status"] or ""),
-                "sí" if row["cache_hit"] else "no",
-                str(row["error"] or ""),
-            )
-        console.print(last)
-
-
-@sec_app.command("cik")
-def sec_cik_cmd(ticker: str = typer.Argument(..., help="Ticker, ej. NVDA")) -> None:
-    """Resuelve el CIK de un ticker usando company_tickers.json."""
-    client = _sec_client()
-    try:
-        result = client.cik_for_ticker(ticker)
-    finally:
-        client.close()
-    if result.status == "ok":
-        console.print(f"{result.data['ticker']} · CIK {result.data['cik']} · {result.data.get('title')}")
-        return
-    console.print(f"[yellow]SEC {result.status}:[/yellow] {result.error or 'sin resultado'}")
-    if result.status in {"error", "unconfigured"}:
-        raise typer.Exit(1)
-
-
-@sec_app.command("filings")
-def sec_filings_cmd(
-    ticker: str = typer.Argument(..., help="Ticker, ej. NVDA"),
-    forms: str = typer.Option("10-K,10-Q,8-K", "--forms"),
-    limit: int = typer.Option(20, "--limit"),
-) -> None:
-    """Lista filings recientes de SEC (10-K, 10-Q, 8-K)."""
-    client = _sec_client()
-    try:
-        result = client.submissions(
-            ticker,
-            forms=[x.strip().upper() for x in forms.split(",") if x.strip()],
-            limit=limit,
-        )
-    finally:
-        client.close()
-
-    if result.status == "empty":
-        console.print(f"[yellow]SEC respondió sin filings para {ticker.upper()}.[/yellow]")
-        return
-    if not result.usable and result.status != "stale":
-        console.print(f"[red]SEC {result.status}:[/red] {result.error}")
-        raise typer.Exit(1)
-    if result.stale:
-        console.print("[yellow]Aviso: datos de caché obsoletos; SEC no respondió.[/yellow]")
-    data = result.data or {}
-    t = Table(title=f"SEC filings · {data.get('ticker')} · CIK {data.get('cik')}")
-    for col in ("Form", "Filed", "Report", "Accession", "Documento"):
-        t.add_column(col)
-    for filing in data.get("filings") or []:
-        t.add_row(
-            str(filing.get("form") or ""),
-            str(filing.get("filingDate") or ""),
-            str(filing.get("reportDate") or ""),
-            str(filing.get("accessionNumber") or ""),
-            str(filing.get("primaryDocument") or ""),
-        )
-    console.print(t)
-
-
-@sec_app.command("facts")
-def sec_facts_cmd(ticker: str = typer.Argument(..., help="Ticker, ej. NVDA")) -> None:
-    """Extrae hechos XBRL clave de companyfacts."""
-    client = _sec_client()
-    try:
-        result = client.company_facts(ticker)
-    finally:
-        client.close()
-
-    if result.status == "empty":
-        console.print(f"[yellow]SEC respondió sin key facts para {ticker.upper()}.[/yellow]")
-        return
-    if not result.usable and result.status != "stale":
-        console.print(f"[red]SEC {result.status}:[/red] {result.error}")
-        raise typer.Exit(1)
-    if result.stale:
-        console.print("[yellow]Aviso: datos de caché obsoletos; SEC no respondió.[/yellow]")
-    data = result.data or {}
-    t = Table(title=f"SEC company facts · {data.get('ticker')} · CIK {data.get('cik')}")
-    for col in ("Tag", "Valor", "Unidad", "Periodo", "FY", "FP", "Form"):
-        t.add_column(col, justify="right" if col in {"Valor"} else "left")
-    for fact in data.get("key_facts") or []:
-        t.add_row(
-            str(fact.get("tag")),
-            str(fact.get("value")),
-            str(fact.get("unit")),
-            str(fact.get("end")),
-            str(fact.get("fy") or ""),
-            str(fact.get("fp") or ""),
-            str(fact.get("form") or ""),
-        )
-    console.print(t)
 
 
 @intel_app.command("fetch")
@@ -5824,211 +5188,6 @@ def mt5_fetch_cmd(
     )
 
 
-# ==================================================================== Fondeo
-
-@tradestation_app.command("setup")
-def tradestation_setup_cmd() -> None:
-    """Guarda API Key, refresh token y cuenta en keyring (nunca en .env)."""
-    import keyring
-
-    from .config import KEYRING_SERVICE
-
-    if not sys.stdin.isatty():
-        console.print("[red]Setup requiere una terminal interactiva.[/red]")
-        raise typer.Exit(2)
-    console.print(
-        "[yellow]TradeStation WebAPI: usa API Key, Client Secret y refresh token "
-        "con scope offline_access. No se validan contra la API todavía.[/yellow]"
-    )
-    values = {
-        "TRADESTATION_CLIENT_ID": typer.prompt("Client ID").strip(),
-        "TRADESTATION_CLIENT_SECRET": typer.prompt(
-            "Client Secret", hide_input=True
-        ).strip(),
-        "TRADESTATION_REFRESH_TOKEN": typer.prompt(
-            "Refresh token", hide_input=True
-        ).strip(),
-        "TRADESTATION_ACCOUNT_ID": typer.prompt(
-            "Account ID (opcional)", default=""
-        ).strip(),
-    }
-    if not values["TRADESTATION_CLIENT_ID"] or not values[
-        "TRADESTATION_CLIENT_SECRET"
-    ] or not values["TRADESTATION_REFRESH_TOKEN"]:
-        console.print("[red]Faltan Client ID, Client Secret o refresh token.[/red]")
-        raise typer.Exit(2)
-    for key, value in values.items():
-        if value:
-            keyring.set_password(KEYRING_SERVICE, key, value)
-    console.print(
-        "[green]Credenciales TradeStation guardadas en keyring.[/green] "
-        "No se escribió .env ni se envió ninguna orden."
-    )
-
-
-def _trade_station_broker():
-    from .execution import get_tradestation_broker
-
-    return get_tradestation_broker(get_settings(), DEFAULT_DB, dry_run=True)
-
-
-@tradestation_app.command("auth-url")
-def tradestation_auth_url_cmd(
-    redirect_uri: str = typer.Option(
-        "http://localhost:3000/callback", "--redirect-uri"
-    ),
-    state: str = typer.Option("tradinglab", "--state"),
-) -> None:
-    """Muestra la URL de autorización OAuth de TradeStation."""
-    import os
-
-    from .config import load_secrets
-    from .execution.tradestation import authorize_url
-
-    load_secrets()
-    try:
-        url = authorize_url(
-            os.getenv("TRADESTATION_CLIENT_ID", ""),
-            redirect_uri=redirect_uri,
-            state=state,
-        )
-    except Exception as exc:
-        console.print(f"[red]{exc}[/red]")
-        raise typer.Exit(2) from exc
-    console.print(url)
-
-
-@tradestation_app.command("exchange")
-def tradestation_exchange_cmd(
-    redirect_uri: str = typer.Option(
-        "http://localhost:3000/callback", "--redirect-uri"
-    ),
-) -> None:
-    """Intercambia el código OAuth y guarda el refresh token en keyring."""
-    import os
-
-    import keyring
-
-    from .config import KEYRING_SERVICE, load_secrets
-    from .execution.tradestation import exchange_code
-
-    load_secrets()
-    client_id = os.getenv("TRADESTATION_CLIENT_ID", "")
-    client_secret = os.getenv("TRADESTATION_CLIENT_SECRET", "")
-    if not client_id or not client_secret:
-        console.print("[red]Faltan Client ID/Secret; ejecuta setup o auth-url.[/red]")
-        raise typer.Exit(2)
-    code = typer.prompt("Authorization code", hide_input=True).strip()
-    try:
-        result = exchange_code(
-            client_id,
-            client_secret,
-            code,
-            redirect_uri=redirect_uri,
-        )
-    except Exception as exc:
-        console.print(f"[red]TradeStation OAuth:[/red] {exc}")
-        raise typer.Exit(1) from exc
-    keyring.set_password(
-        KEYRING_SERVICE,
-        "TRADESTATION_REFRESH_TOKEN",
-        result["refresh_token"],
-    )
-    console.print(
-        "[green]Refresh token guardado en keyring.[/green] "
-        "El access token no se persiste; expira en 20 minutos."
-    )
-
-
-@tradestation_app.command("status")
-def tradestation_status_cmd() -> None:
-    """Comprueba OAuth y cuenta SIM; solo lectura."""
-    from .execution.tradestation import (
-        TradeStationAuthError,
-        TradeStationError,
-    )
-
-    broker = _trade_station_broker()
-    try:
-        health = broker.health()
-    except TradeStationAuthError as exc:
-        console.print(f"[yellow]TradeStation sin credenciales:[/yellow] {exc}")
-        console.print(
-            "[dim]Ejecuta `lab tradestation setup` cuando tengas la API Key.[/dim]"
-        )
-        return
-    except TradeStationError as exc:
-        console.print(f"[red]TradeStation:[/red] {exc}")
-        raise typer.Exit(1) from exc
-    finally:
-        broker.close()
-    table = Table(title="TradeStation SIM")
-    table.add_column("Campo", style="bold")
-    table.add_column("Valor", overflow="fold")
-    for key, value in health.items():
-        table.add_row(str(key), str(value))
-    console.print(table)
-
-
-@tradestation_app.command("accounts")
-def tradestation_accounts_cmd() -> None:
-    """Lista las cuentas visibles para la API Key."""
-    from .execution.tradestation import TradeStationError
-
-    broker = _trade_station_broker()
-    try:
-        accounts = broker.accounts()
-    except TradeStationError as exc:
-        console.print(f"[red]TradeStation:[/red] {exc}")
-        raise typer.Exit(1) from exc
-    finally:
-        broker.close()
-    if not accounts:
-        console.print("[yellow]Sin datos: la API no devolvió cuentas.[/yellow]")
-        return
-    table = Table(title="Cuentas TradeStation")
-    for col in ("AccountID", "AccountType", "Currency", "Status"):
-        table.add_column(col, overflow="fold")
-    for row in accounts:
-        table.add_row(
-            str(row.get("AccountID") or row.get("AccountId") or "—"),
-            str(row.get("AccountType") or "—"),
-            str(row.get("Currency") or "—"),
-            str(row.get("Status") or "—"),
-        )
-    console.print(table)
-
-
-@tradestation_app.command("positions")
-def tradestation_positions_cmd() -> None:
-    """Posiciones de la cuenta SIM; solo lectura."""
-    from .execution.tradestation import TradeStationError
-
-    broker = _trade_station_broker()
-    try:
-        positions = broker.positions()
-    except TradeStationError as exc:
-        console.print(f"[red]TradeStation:[/red] {exc}")
-        raise typer.Exit(1) from exc
-    finally:
-        broker.close()
-    if not positions:
-        console.print("[yellow]Sin posiciones abiertas.[/yellow]")
-        return
-    table = Table(title="Posiciones TradeStation")
-    for col in ("Symbol", "Quantity", "AveragePrice", "Last", "MarketValue"):
-        table.add_column(col, overflow="fold")
-    for row in positions:
-        table.add_row(
-            str(row.get("Symbol") or "—"),
-            str(row.get("Quantity") or "—"),
-            str(row.get("AveragePrice") or "—"),
-            str(row.get("Last") or "—"),
-            str(row.get("MarketValue") or "—"),
-        )
-    console.print(table)
-
-
 @ticks_app.command("fetch")
 def ticks_fetch_cmd(
     symbol: str = typer.Argument("EURUSD", help="EURUSD, USDJPY, XAUUSD…"),
@@ -6455,159 +5614,6 @@ def intraday_forward_cmd(
     else:
         console.print(
             "[yellow]Sin --execute: dry-run; no se envía ninguna orden.[/yellow]"
-        )
-
-
-@daytrader_app.command("import")
-def daytrader_import_cmd(
-    execute: bool = typer.Option(
-        False,
-        "--execute",
-        help="Ejecutar solo si enabled=true y la cuenta es paper; sin esto, dry-run",
-    ),
-) -> None:
-    """Importa señales y previsualiza/ejecuta las órdenes del pipeline externo."""
-    from .daytrader import import_signals, plan_orders
-
-    settings = get_settings()
-    target = settings.daytrader.dir
-    init_db(DEFAULT_DB)
-    try:
-        with connect(DEFAULT_DB) as con:
-            imported = import_signals(settings, con, target)
-        plan = plan_orders(settings, target, execute=execute)
-    except Exception as exc:
-        console.print(Panel(str(exc)[-2000:], title="Daytrader detenido", style="bold red"))
-        raise typer.Exit(1) from exc
-
-    console.print(
-        f"Señales: [bold]{imported['inserted']}[/bold] nuevas · "
-        f"{imported['skipped']} ya existían · carpeta: {target}"
-    )
-    if not plan["orders_file"]:
-        console.print(
-            f"[yellow]No hay orders.json en {target}; solo se importaron señales.[/yellow]"
-        )
-        if not plan["risk_file"]:
-            console.print(
-                "[dim]state/risk.json tampoco existe; si hubiera órdenes, "
-                "se tratarían como BLOCK.[/dim]"
-            )
-        return
-
-    if not plan["risk_file"]:
-        console.print(
-            "[yellow]state/risk.json no existe: todas las órdenes se tratan "
-            "como BLOCK.[/yellow]"
-        )
-    if execute and not plan["enabled"]:
-        console.print(
-            "[yellow]daytrader.enabled=false: --execute no ejecuta; "
-            "se muestra dry-run.[/yellow]"
-        )
-    if not plan["orders"]:
-        console.print("[dim]orders.json existe pero no contiene órdenes.[/dim]")
-        return
-
-    table = Table(
-        title=(
-            f"Daytrader · {'EXECUTE' if execute else 'DRY-RUN'} · "
-            f"{plan['account']}"
-        )
-    )
-    for column in (
-        "Símbolo",
-        "Lado",
-        "Qty",
-        "Stop",
-        "Target",
-        "Veredicto externo",
-        "Guards lab",
-        "Acción",
-    ):
-        table.add_column(column, overflow="fold")
-    for item in plan["orders"]:
-        table.add_row(
-            item["symbol"],
-            item["side"],
-            f"{item['qty']:g}" if item.get("qty") is not None else "-",
-            f"{item['stop']:.2f}" if item.get("stop") is not None else "-",
-            f"{item['target']:.2f}" if item.get("target") is not None else "-",
-            str(item.get("external_verdict") or "-"),
-            str(item.get("guard_verdict") or "-"),
-            str(item.get("action") or "-"),
-        )
-    console.print(table)
-    for item in plan["orders"]:
-        if item.get("action") == "rechazada" and item.get("reason"):
-            console.print(f"  [red]{item['symbol']}[/red]: {item['reason']}")
-    if execute and not plan["can_execute"]:
-        console.print(
-            "[dim]Ejecución bloqueada: se requiere --execute + enabled=true + "
-            "cuenta paper.[/dim]"
-        )
-
-
-@daytrader_app.command("lane")
-def daytrader_lane_cmd() -> None:
-    """Carril de acciones: ticker fijo, estado del pipeline y si puede ejecutar."""
-    from .equities_lane import status
-
-    payload = status()
-    table = Table(title="Carril de acciones (paper)")
-    table.add_column("Campo", overflow="fold")
-    table.add_column("Valor", overflow="fold")
-    table.add_row("Ticker", str(payload.get("ticker") or "-"))
-    table.add_row("Setup", str(payload.get("setup") or "-"))
-    table.add_row("Intervalo", str(payload.get("interval") or "-"))
-    table.add_row("Cuenta", str(payload.get("account") or "-"))
-    table.add_row("Solo este ticker", "sí" if payload.get("only_ticker") else "no")
-    table.add_row("Carpeta del pipeline", str(payload.get("dir") or "-"))
-    table.add_row(
-        "daytrader.enabled", "sí" if payload.get("daytrader_enabled") else "no"
-    )
-    table.add_row("Cuenta paper", "sí" if payload.get("paper") else "no")
-    table.add_row(
-        "Puede ejecutar",
-        "sí" if payload.get("can_execute") else "no (dry-run)",
-    )
-    entry = payload.get("entry") or {}
-    table.add_row(
-        "Entrada pendiente",
-        (
-            f"{entry.get('symbol')} · {entry.get('setup')} · {entry.get('status')}"
-            f" · nivel {entry.get('level')}"
-            if entry.get("symbol")
-            else "-"
-        ),
-    )
-    table.add_row(
-        "Watchlist (hits del ticker)",
-        f"{payload.get('watchlist_hits', 0)}"
-        + (
-            f" · {payload.get('watchlist_as_of')}"
-            if payload.get("watchlist_as_of")
-            else ""
-        ),
-    )
-    table.add_row(
-        "Peso de referencia",
-        (
-            f"{payload.get('target_weight')} %"
-            if payload.get("target_weight") is not None
-            else "-"
-        ),
-    )
-    table.add_row("Órdenes del carril", str(payload.get("orders_in_lane", 0)))
-    console.print(table)
-    if payload.get("error"):
-        console.print(f"[red]{payload['error']}[/red]")
-    if payload.get("notes"):
-        console.print(f"[dim]{payload['notes']}[/dim]")
-    if not payload.get("can_execute"):
-        console.print(
-            "[dim]Sin órdenes: el carril no ejecuta hasta que "
-            "`daytrader.enabled` sea true y la cuenta sea paper.[/dim]"
         )
 
 

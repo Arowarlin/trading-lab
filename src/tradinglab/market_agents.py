@@ -12,8 +12,9 @@ import yaml
 
 from .agents.bridge import RATING_TO_TARGET
 from .config import ROOT, Settings
-from .instruments import get_instrument, list_instruments
 from .profiles import load_profiles
+from .propfund.instruments import CATALOG
+from .propfund.models import CfdCategory, Market
 
 MARKETS_FILE = ROOT / "config" / "market_agents.yaml"
 DEFAULT_MAX_GROSS = 0.90
@@ -55,11 +56,18 @@ def load_markets(path: str | Path | None = None) -> dict[str, MarketSpec]:
 
 
 def market_for_symbol(symbol: str) -> str:
+    """``forex``, ``cfd`` o ``futures`` para un id/alias del Prop Fund."""
+    from .propfund.instruments import resolve
+
     try:
-        instrument = get_instrument(symbol)
+        item = resolve(symbol)
     except Exception as exc:
         raise MarketAgentError(str(exc)) from exc
-    return instrument.asset_class
+    if item.market is Market.FUTURES:
+        return "futures"
+    if item.category == CfdCategory.FOREX.value:
+        return "forex"
+    return "cfd"
 
 
 def run_market_agent(
@@ -205,13 +213,16 @@ def coordinate(
 
 
 def market_payload() -> dict:
-    """Resumen para la consola: specs + instrumentos por mercado."""
+    """Resumen para la consola: specs + instrumentos CFD/futuros por mercado."""
     specs = load_markets()
     profiles = load_profiles()
-    instruments = list_instruments()
     rows = []
     for market, spec in sorted(specs.items()):
-        symbols = [item.symbol for item in instruments if item.asset_class == market]
+        symbols = []
+        for item in CATALOG.values():
+            if market_for_symbol(item.id) != market:
+                continue
+            symbols.append(item.id)
         profile = profiles.get(spec.profile)
         rows.append(
             {
@@ -222,7 +233,7 @@ def market_payload() -> dict:
                 "analysts": list(spec.analysts),
                 "max_weight": spec.max_weight,
                 "description": spec.description,
-                "symbols": symbols,
+                "symbols": sorted(symbols),
                 "count": len(symbols),
             }
         )
@@ -231,6 +242,7 @@ def market_payload() -> dict:
         "count": len(rows),
         "max_gross": DEFAULT_MAX_GROSS,
         "max_per_symbol": DEFAULT_MAX_PER_SYMBOL,
+        "universe": "CFD y futuros",
     }
 
 

@@ -1,26 +1,21 @@
 # Agentes por mercado y presupuesto del coordinador determinista.
+# Solo cuentas de fondeo CFD/futuros: no hay acciones ni ETF.
 markets:
-  equity:
-    label: "Acciones / ETF"
-    profile: swing_equity
-    analysts: ["market", "news", "fundamentals"]
-    max_weight: 0.50
-    description: "Swing de acciones/ETF; señal diaria."
   forex:
     label: "Forex / metales"
     profile: intraday_fx
     analysts: ["market", "news", "macro"]
     max_weight: 0.40
-    description: "Intradía FX/CFD; sesión europea/americana."
+    description: "Intradía FX/CFD; sesiones de Londres y Nueva York."
   futures:
     label: "Futuros"
     profile: intraday_futures
     analysts: ["market", "news", "macro"]
     max_weight: 0.30
-    description: "Intradía de futuros; RTH de Chicago."
+    description: "Intradía de futuros; RTH de Chicago. Sin datos hasta tener proveedor."
   cfd:
-    label: "CFD"
+    label: "Índices y metales CFD"
     profile: intraday_fx
     analysts: ["market", "news", "macro"]
-    max_weight: 0.20
-    description: "Solo con especificación verificada del bróker."
+    max_weight: 0.25
+    description: "US100, US500, GER40 y XAUUSD con especificación verificada del bróker."

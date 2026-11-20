@@ -18,7 +18,7 @@ $log = Join-Path $logDir ("agents_" + (Get-Date -Format "yyyyMMdd_HHmmss") + ".l
 . (Join-Path $root "scripts\llm_preflight.ps1")
 $llmReady = Ensure-LMStudio -Log $log
 
-$tickers = @("SPY", "QQQ", "NVDA")
+$tickers = @("US100", "XAUUSD", "EURUSD")
 $failed = @()
 if (-not $llmReady) {
     Add-Content -Path $log -Value "Sin datos: LM Studio no disponible; agentes omitidos." -Encoding utf8

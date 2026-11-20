@@ -1,36 +1,51 @@
-"""Informe pre-market nativo con Qwen local, sin Trading-R1 ni WSL.
+"""Briefing pre-Londres y pre-NY del universo CFD/futuros.
 
-Solo lee datos/caché y macro_events; opcionalmente envía el informe por
-Telegram. No envía órdenes, no activa bots y no cambia criterios.
+Solo lee datos de MT5 en modo adjunto (``AttachOnlyBroker``), la caché de
+``data/`` y ``macro_events``; opcionalmente envía el informe por Telegram.
+No envía órdenes, no activa bots y no cambia criterios. Si MT5 no está abierto
+o un activo no tiene datos, se escribe **Sin datos**.
 """
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
-from . import data as data_mod
+import pandas as pd
+
 from .config import Settings
 from .decisions import record_decision
 from .intel.calendar import DbCalendarProvider
 from .intel.news_scoring import scoring_config
+from .propfund.market import ACTIVE_UNIVERSE, CFD_UNIVERSE, briefing_slot
 from .time_utils import market_today
 
-WATCHLIST = ("SPY", "QQQ", "NVDA")
+WATCHLIST = CFD_UNIVERSE
+
+
+def _empty_frame() -> pd.DataFrame:
+    return pd.DataFrame(columns=["open", "high", "low", "close", "volume"])
+
+
+def _rates(ticker: str, settings: Settings):
+    """Barras D1 desde MT5 (solo lectura). ``None`` si no hay datos."""
+    try:
+        from .propfund.market import rates
+
+        frame = rates(ticker, timeframe="D1", count=800, settings=settings)
+    except Exception:
+        return None
+    if frame is None or len(frame) < 25:
+        return None
+    return frame
 
 
 def _snapshot(ticker: str, settings: Settings, today: date) -> dict:
-    start = (today.replace(year=today.year - 3)).isoformat()
-    try:
-        frame = data_mod.fetch(
-            ticker,
-            start,
-            today.isoformat(),
-            settings.data.cache_dir,
-        )
-    except Exception as exc:
-        return {"ticker": ticker, "error": str(exc)[:240]}
-    if len(frame) < 25:
-        return {"ticker": ticker, "error": f"histórico insuficiente: {len(frame)} barras"}
+    frame = _rates(ticker, settings)
+    if frame is None:
+        return {
+            "ticker": ticker,
+            "error": "Sin datos: MT5 no disponible o histórico insuficiente",
+        }
     close = frame["close"].astype(float)
     last = float(close.iloc[-1])
 
@@ -49,6 +64,13 @@ def _snapshot(ticker: str, settings: Settings, today: date) -> dict:
             trend = "up"
         elif last < sma20 < sma50 < sma200:
             trend = "down"
+    atr = None
+    if len(frame) >= 15:
+        high = frame["high"].astype(float)
+        low = frame["low"].astype(float)
+        prev = close.shift(1)
+        tr = pd.concat([high - low, (high - prev).abs(), (low - prev).abs()], axis=1).max(axis=1)
+        atr = float(tr.iloc[-14:].mean())
     return {
         "ticker": ticker,
         "price": last,
@@ -59,6 +81,7 @@ def _snapshot(ticker: str, settings: Settings, today: date) -> dict:
         "sma20": sma20,
         "sma50": sma50,
         "sma200": sma200,
+        "atr14": atr,
         "as_of": str(frame.index[-1])[:10],
         "error": None,
     }
@@ -102,23 +125,34 @@ def _confidence(result: dict | None) -> str:
     return "—" if value is None else f"{float(value):.0%}"
 
 
+def _slot_label(slot: str) -> str:
+    return {
+        "pre_london": "pre-Londres",
+        "pre_ny": "pre-Nueva York",
+    }.get(slot, "fuera de ventana")
+
+
 def build_report(
     db_path: str | Path,
     settings: Settings | None = None,
     *,
-    tickers: tuple[str, ...] | list[str] = WATCHLIST,
+    tickers: tuple[str, ...] | list[str] | None = None,
     include_llm: bool = True,
     hours: int = 48,
     client=None,
     agent_runner=None,
     day: date | None = None,
+    session: str = "auto",
 ) -> dict:
-    """Construye el informe; los fallos se muestran como Sin datos."""
+    """Construye el briefing; los fallos se muestran como Sin datos."""
     settings = settings or Settings()
     today = day or market_today()
-    symbols = [str(item).strip().upper() for item in tickers if str(item).strip()]
+    symbols = [
+        str(item).strip().upper() for item in (tickers or ACTIVE_UNIVERSE) if str(item).strip()
+    ]
     if not symbols:
         raise ValueError("watchlist vacía")
+    slot = session if session in {"pre_london", "pre_ny"} else briefing_slot()
     model = scoring_config(settings)["model"]
     if agent_runner is None:
         from .agents.lite import run_lite_agent
@@ -154,27 +188,28 @@ def build_report(
         rows.append({**snapshot, "result": result})
     calendar = _calendar(db_path, hours)
     lines = [
-        f"# TradingLab · Pre-market {today.isoformat()}",
+        f"# TradingLab · Briefing {_slot_label(slot)} · {today.isoformat()}",
         "",
-        f"- Modo: **{settings.mode}** · broker: **{settings.execution.broker}**",
+        f"- Modo: **{settings.mode}** · datos: **MT5 solo lectura**",
         f"- Generado: {datetime.now(timezone.utc).isoformat(timespec='minutes')}",
         "- Solo lectura: no envía órdenes ni activa bots.",
         "",
-        "## Watchlist",
+        "## Universo CFD",
         "",
-        "| Activo | Precio | 1d | 5d | 20d | Tendencia | Rating | Confianza |",
-        "|---|---:|---:|---:|---:|---|---|---:|",
+        "| Activo | Precio | 1d | 5d | 20d | ATR14 | Tendencia | Rating | Confianza |",
+        "|---|---:|---:|---:|---:|---:|---|---|---:|",
     ]
     for row in rows:
         if row.get("error"):
             lines.append(
-                f"| {row['ticker']} | Sin datos | — | — | — | — | — | — |"
+                f"| {row['ticker']} | Sin datos | — | — | — | — | — | — | — |"
             )
             continue
+        atr_text = "Sin datos" if row.get("atr14") is None else f"{row['atr14']:.4g}"
         lines.append(
-            f"| {row['ticker']} | {row['price']:.2f} | {_fmt_pct(row['return_1d'])} | "
+            f"| {row['ticker']} | {row['price']:.4g} | {_fmt_pct(row['return_1d'])} | "
             f"{_fmt_pct(row['return_5d'])} | {_fmt_pct(row['return_20d'])} | "
-            f"{row['trend']} | {_rating(row.get('result'))} | "
+            f"{atr_text} | {row['trend']} | {_rating(row.get('result'))} | "
             f"{_confidence(row.get('result'))} |"
         )
     lines += ["", f"## Próximos eventos macro ({hours} h)", ""]
@@ -210,6 +245,9 @@ def build_report(
         "model": model,
         "errors": errors,
         "tickers": symbols,
+        "session": slot,
+        "read_only": True,
+        "source": "mt5",
     }
 
 

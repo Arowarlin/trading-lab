@@ -9,7 +9,6 @@ from pathlib import Path
 import pandas as pd
 
 from ..config import DEFAULT_DB, ROOT, Settings
-from ..data import fetch
 from ..indicators import atr, rsi, sma
 from ..llm import LLMClient
 from ..time_utils import market_today
@@ -17,7 +16,7 @@ from .bridge import RATING_TO_TARGET, AgentError
 
 # Contexto compacto: una sola llamada al LLM con datos objetivos. En un 27B
 # local (~1-2 tok/s) un run multi-agente con herramientas tarda horas; esto
-# tarda minutos y mantiene la decisión diaria.
+# tarda minutos y mantiene la decisión de sesión.
 SCHEMA: dict = {
     "type": "object",
     "properties": {
@@ -28,20 +27,35 @@ SCHEMA: dict = {
         "confidence": {"type": "number", "minimum": 0, "maximum": 1},
         "thesis": {"type": "string", "maxLength": 600},
         "risks": {"type": "string", "maxLength": 400},
-        "horizon_days": {"type": "integer", "minimum": 1, "maximum": 120},
+        "horizon_days": {"type": "integer", "minimum": 1, "maximum": 5},
     },
     "required": ["rating", "confidence", "thesis", "risks", "horizon_days"],
     "additionalProperties": False,
 }
 
 SYSTEM = (
-    "Eres un analista cuantitativo disciplinado. Recibes SOLO datos técnicos "
-    "objetivos de un activo y debes emitir una decisión de swing (2-8 semanas). "
-    "No inventes noticias, fundamentales ni precios que no estén en los datos. "
+    "Eres un analista cuantitativo disciplinado de CFD y futuros "
+    "(índices, forex, metales). Recibes SOLO datos técnicos objetivos de un "
+    "activo y debes emitir una decisión de sesión (1-5 días). No inventes "
+    "noticias, fundamentales de empresas ni precios que no estén en los datos. "
     "Si la señal es ambigua o el riesgo/beneficio no está claro, elige Hold. "
     'Responde únicamente con el JSON del esquema: rating, confidence (0-1), '
     "thesis (máx. 600 caracteres), risks (máx. 400) y horizon_days."
 )
+
+
+def fetch(ticker: str, start: str, end: str, cache_dir) -> pd.DataFrame:
+    """Barras D1 desde MT5 en solo lectura. Sin MT5 → error explícito.
+
+    Se conserva el nombre ``fetch`` para no romper los llamadores; la fuente ya
+    no es Yahoo ni una caché de acciones.
+    """
+    from ..propfund.market import rates
+
+    frame = rates(ticker, timeframe="D1", count=800)
+    if frame is None or len(frame) < 25:
+        raise AgentError(f"Sin datos: MT5 no disponible para {ticker}")
+    return frame
 
 
 def _pct(value: float, base: float) -> float | None:
@@ -163,7 +177,7 @@ def run_lite_agent(
             "content": (
                 "Datos de mercado (JSON):\n"
                 + json.dumps(context, ensure_ascii=False)
-                + "\n\nEmite la decisión para un horizonte de swing."
+                + "\n\nEmite la decisión para una sesión de mercado."
             ),
         },
     ]

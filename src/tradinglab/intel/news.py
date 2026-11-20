@@ -25,7 +25,9 @@ _CTRL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
 _WS_RE = re.compile(r"\s+")
 
 DEFAULT_FEEDS = {
-    "yahoo-spy": "https://feeds.finance.yahoo.com/rss/2.0/headline?s=SPY&region=US&lang=en-US",
+    "yahoo-ndx": "https://feeds.finance.yahoo.com/rss/2.0/headline?s=%5ENDX&region=US&lang=en-US",
+    "yahoo-gold": "https://feeds.finance.yahoo.com/rss/2.0/headline?s=GC%3DF&region=US&lang=en-US",
+    "yahoo-eurusd": "https://feeds.finance.yahoo.com/rss/2.0/headline?s=EURUSD%3DX&region=US&lang=en-US",
 }
 
 

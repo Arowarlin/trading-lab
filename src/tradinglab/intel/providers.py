@@ -39,7 +39,7 @@ def _feed_status(path: str | Path | None = None) -> dict:
 def verify_finnhub(
     api_key: str | None,
     *,
-    symbol: str = "SPY",
+    symbol: str = "EURUSD",
     client: httpx.Client | None = None,
 ) -> dict:
     """Comprueba la clave con una lectura de cotización; no revela la clave."""

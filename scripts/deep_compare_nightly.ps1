@@ -70,7 +70,7 @@ if ($PreflightOnly) {
 }
 
 # Un activo por noche para no encadenar varios runs multi-agente.
-$watchlist = @("SPY", "QQQ", "NVDA")
+$watchlist = @("US100", "XAUUSD", "EURUSD")
 $index = [int](Get-Date).DayOfWeek % $watchlist.Count
 $ticker = $watchlist[$index]
 Write-Log "Ticker nocturno: $ticker"

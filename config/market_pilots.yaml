@@ -1,25 +1,25 @@
-# Pilotos por mercado. Seleccionar un piloto NO activa bots ni F13.
+# Pilotos por mercado CFD/futuros. Seleccionar un piloto NO activa bots.
 #
 # `status` es descriptivo (el panel lo muestra tal cual); `select_pilot` solo
-# rechaza los mercados en `blocked`. Sin piloto activo, TODOS los mercados
+# rechaza los mercados en `blocked`. Sin piloto activo, todos los mercados
 # pueden abrir por el operador; seleccionar uno limita las aperturas manuales a
 # ese mercado (cierres y reducciones nunca se bloquean).
 pilots:
-  equity:
-    label: "Acciones / ETF"
-    bot: qqq-trend-f13
-    profile: swing_equity
-    status: paper
-    reason: "F13 activo en paper desde 2026-11-09 (qqq-trend-f13 enabled:true); 2/2 ciclos diarios, 0 órdenes."
   forex:
     label: "Forex / CFD"
     bot: eurusd-london-pullback-forward
     profile: intraday_fx
     status: paper
     reason: "Forward demo activo (eurusd-london-pullback + usdjpy-tokyo-breakout); M15/H1 en caché y offset +2 detectado."
+  cfd:
+    label: "Índices y metales CFD"
+    bot: null
+    profile: swing_cfd
+    status: paper
+    reason: "US100, US500, GER40 y XAUUSD; solo señales y riesgo, sin bot automático."
   futures:
     label: "Futuros"
     bot: null
     profile: intraday_futures
     status: blocked
-    reason: "ProjectX sin credenciales/suscripción; solo proxy diario (ES=F/NQ=F)."
+    reason: "Sin datos: ProjectX sin credenciales/suscripción; no se inventan barras intradía."

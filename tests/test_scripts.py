@@ -46,16 +46,6 @@ def test_tareas_llm_usan_el_preflight_comun():
     assert "TRADINGLAB_AI_MODEL" in session
 
 
-def test_orchestrate_spy_solo_paper_y_ventana_et():
-    script = (ROOT / "scripts" / "orchestrate_spy_daily.ps1").read_text(encoding="utf-8")
-    assert "orchestrate --bot trend-spy" in script
-    assert "--dry-run" not in script
-    assert "Eastern Standard Time" in script
-    assert "9 * 60 + 30" in script
-    assert "9 * 60 + 59" in script
-    assert "TradingLab-OrchestrateSPY" in script  # mutex, no registro
-
-
 def test_calendar_csv_estructura():
     path = ROOT / "data" / "calendar" / "events.csv"
     header = path.read_text(encoding="utf-8").splitlines()[0]
@@ -128,7 +118,7 @@ def test_telegram_scripts_preparados_sin_registrar():
 
 def test_premarket_scripts_nativos_sin_trading_r1():
     daily = (ROOT / "scripts" / "premarket_daily.ps1").read_text(encoding="utf-8")
-    assert "premarket --send" in daily
+    assert "briefing --session" in daily
     assert "PreflightOnly" in daily
     assert "trading_r1" not in daily.lower()
     assert "orchestrate" not in daily.lower()
@@ -237,27 +227,6 @@ def test_deep_compare_scripts_preparados_sin_registrar():
     assert "02:30" in register
     assert "deep_compare_nightly.ps1" in register
     assert "no envia ordenes" in register.lower()
-
-
-def test_f13_scripts_preparados_sin_registrar():
-    daily = (ROOT / "scripts" / "f13_daily.ps1").read_text(encoding="utf-8")
-    assert "orchestrate" in daily and "qqq-trend-f13" in daily
-    assert "--dry-run" in daily
-    assert "reconcile" in daily
-    assert '"f13", "check"' in daily
-    assert "no iniciado" in daily
-    assert "PreflightOnly" in daily
-    assert "Register-ScheduledTask" not in daily
-    assert "[Console]::OutputEncoding" in daily
-    assert "PYTHONIOENCODING" in daily
-    assert "Out-File -FilePath $log -Encoding utf8" in daily
-    assert "*>>" not in daily
-
-    register = (ROOT / "scripts" / "register_f13_task.ps1").read_text(encoding="utf-8")
-    assert "Register-ScheduledTask" in register
-    assert "TradingLab-F13" in register
-    assert "22:20" in register
-    assert "f13_daily.ps1" in register
 
 
 def test_intraday_forward_scripts_signal_y_execute():

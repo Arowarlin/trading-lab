@@ -2,7 +2,7 @@
 # No cambia el modelo por defecto ni envia ordenes.
 param(
     [switch]$PreflightOnly,
-    [string]$Tickers = "SPY,QQQ,NVDA",
+    [string]$Tickers = "US100,XAUUSD,EURUSD",
     [string]$Actual = "qwen/qwen3.8-27b",
     [string]$Candidate = "qwen/qwen3-30b-a3b"
 )

@@ -1,4 +1,4 @@
-"""Informe de la reversión overnight (no activa nada)."""
+"""Informe de la reversión de sesión en CFD/futuros (no activa nada)."""
 
 from __future__ import annotations
 
@@ -10,23 +10,21 @@ import numpy as np
 import pandas as pd
 
 from tradinglab.config import ROOT, get_settings
-from tradinglab.data import fetch
 from tradinglab.prop.rules import from_yaml
 from tradinglab.prop.simulator import monte_carlo
+from tradinglab.propfund.market import rates
 from tradinglab.strategies.overnight_reversal import (
     overnight_returns,
     select_terciles,
     simulate_daily,
 )
 
-UNIVERSE = (
-    "SPY,QQQ,IWM,DIA,XLK,XLF,XLE,XLV,XLY,XLP,XLI,XLU,XLB,XLRE,XLC,TLT,GLD"
-)
+UNIVERSE = "US100,US500,GER40,XAUUSD,EURUSD,GBPUSD,USDJPY"
 COSTS_BPS = (0.0, 2.0, 5.0)
 
 
 def run(out_dir: Path | None = None) -> Path:
-    """Backtest diario del universo con la reversión overnight."""
+    """Backtest diario del universo CFD con la reversión de sesión."""
     settings = get_settings()
     target_dir = Path(out_dir) if out_dir else ROOT / "reports" / "research" / "overnight_reversal"
     target_dir.mkdir(parents=True, exist_ok=True)
@@ -34,14 +32,14 @@ def run(out_dir: Path | None = None) -> Path:
 
     frames: dict[str, pd.DataFrame] = {}
     for symbol in symbols:
-        try:
-            frames[symbol] = fetch(symbol, "2015-01-01", "", settings.data.cache_dir)
-        except Exception:
+        frame = rates(symbol, timeframe="D1", count=2000, settings=settings)
+        if frame is None or len(frame) < 60:
             continue
+        frames[symbol] = frame
     if not frames:
         path = target_dir / "report.md"
         path.write_text(
-            "# Reversión overnight\n\n- Sin datos: no se pudo descargar el universo.\n",
+            "# Reversión de sesión\n\n- Sin datos: MT5 no está abierto o no hay barras.\n",
             encoding="utf-8",
         )
         return path

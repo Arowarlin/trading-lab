@@ -1,5 +1,7 @@
 # Fuentes de información continua (solo lectura).
 # Finnhub usa FINNHUB_API_KEY desde keyring/.env; nunca se escribe aquí.
+# Los feeds cubren los subyacentes CFD/futuros (Nasdaq 100, oro y EURUSD),
+# no acciones individuales.
 scoring:
   # ID exacto cargado en LM Studio; no cambia el modelo por defecto del lab.
   # Alineado al MoE que el lab carga por defecto (30B-A3B, CPU): el 27B denso
@@ -8,9 +10,12 @@ scoring:
   limit: 20
   batch_size: 8
 feeds:
-  yahoo-spy:
-    url: "https://feeds.finance.yahoo.com/rss/2.0/headline?s=SPY&region=US&lang=en-US"
+  yahoo-ndx:
+    url: "https://feeds.finance.yahoo.com/rss/2.0/headline?s=%5ENDX&region=US&lang=en-US"
     enabled: true
-  yahoo-qqq:
-    url: "https://feeds.finance.yahoo.com/rss/2.0/headline?s=QQQ&region=US&lang=en-US"
+  yahoo-gold:
+    url: "https://feeds.finance.yahoo.com/rss/2.0/headline?s=GC%3DF&region=US&lang=en-US"
+    enabled: true
+  yahoo-eurusd:
+    url: "https://feeds.finance.yahoo.com/rss/2.0/headline?s=EURUSD%3DX&region=US&lang=en-US"
     enabled: true

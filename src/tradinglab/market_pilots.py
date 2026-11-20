@@ -17,9 +17,9 @@ from .market_agents import market_for_symbol
 
 PILOTS_FILE = ROOT / "config" / "market_pilots.yaml"
 PROFILE_MARKET = {
-    "swing_equity": "equity",
     "intraday_fx": "forex",
     "intraday_futures": "futures",
+    "swing_cfd": "cfd",
 }
 
 
@@ -218,9 +218,9 @@ def market_for_bot(spec) -> str | None:
 
 def market_for_account(account) -> str | None:
     return {
-        "swing_equity": "equity",
         "intraday_fx": "forex",
         "intraday_futures": "futures",
+        "swing_cfd": "cfd",
     }.get(getattr(account, "pocket", ""))
 
 

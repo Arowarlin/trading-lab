@@ -5,7 +5,6 @@ from pathlib import Path
 import pytest
 
 from tradinglab.accounts import load_accounts
-from tradinglab.f13 import config_hash
 from tradinglab.market_pilots import (
     PilotError,
     PilotSpec,
@@ -29,24 +28,25 @@ def test_pilotos_iniciales_y_bloqueos(tmp_path: Path) -> None:
     assert status["active_market"] is None
     assert status["count"] == 3
     rows = {row["market"]: row for row in status["pilots"]}
-    assert rows["equity"]["bot"] == "qqq-trend-f13"
-    assert rows["equity"]["status"] == "paper"
     assert rows["forex"]["bot"] == "eurusd-london-pullback-forward"
     assert rows["forex"]["status"] == "paper"
+    assert rows["cfd"]["status"] == "paper"
     # Futuros sigue bloqueado por ProjectX (sin credenciales): no se selecciona.
     assert rows["futures"]["status"] == "blocked"
     with pytest.raises(PilotError):
-        select_pilot(db, "equity", confirm=False)
+        select_pilot(db, "cfd", confirm=False)
     with pytest.raises(PilotError):
         select_pilot(db, "futures", confirm=True)
+    with pytest.raises(PilotError):
+        select_pilot(db, "equity", confirm=True)
 
 
 def test_un_mercado_a_la_vez_y_limpieza(tmp_path: Path) -> None:
     db = tmp_path / "lab.db"
     init_pilots(db)
-    select_pilot(db, "equity", confirm=True)
-    assert active_market(db) == "equity"
-    assert allows_market(db, "equity")[0] is True
+    select_pilot(db, "cfd", confirm=True)
+    assert active_market(db) == "cfd"
+    assert allows_market(db, "cfd")[0] is True
     assert allows_market(db, "forex")[0] is False
     specs = dict(load_pilots())
     specs["forex"] = PilotSpec(
@@ -61,7 +61,7 @@ def test_un_mercado_a_la_vez_y_limpieza(tmp_path: Path) -> None:
     assert active_market(db) == "forex"
     status = pilot_status(db)
     assert sum(1 for row in status["pilots"] if row["active"]) == 1
-    assert next(row for row in status["pilots"] if row["market"] == "equity")["active"] is False
+    assert next(row for row in status["pilots"] if row["market"] == "cfd")["active"] is False
     with pytest.raises(PilotError):
         clear_pilots(db, confirm=False)
     clear_pilots(db, confirm=True)
@@ -70,15 +70,15 @@ def test_un_mercado_a_la_vez_y_limpieza(tmp_path: Path) -> None:
 
 def test_clase_por_bot_y_cuenta() -> None:
     spec = BotSpec(
-        id="trend-spy",
+        id="cfd-index",
         type="deterministic",
         strategy="trend",
-        universe=["SPY"],
+        universe=["US100"],
         enabled=True,
-        profile="swing_equity",
-        account="paper_main",
+        profile="swing_cfd",
+        account="ftmo_demo",
     )
-    assert market_for_bot(spec) == "equity"
+    assert market_for_bot(spec) == "cfd"
     spec2 = BotSpec(
         id="fx",
         type="deterministic",
@@ -89,17 +89,15 @@ def test_clase_por_bot_y_cuenta() -> None:
     )
     assert market_for_bot(spec2) == "forex"
     accounts = load_accounts()
-    assert market_for_account(accounts["paper_main"]) == "equity"
     assert market_for_account(accounts["ftmo_demo"]) == "forex"
     assert market_for_account(accounts["topstep_template"]) == "futures"
+    assert "paper_main" not in accounts
 
 
-def test_piloto_no_cambia_bots_ni_hash_f13(tmp_path: Path) -> None:
+def test_piloto_no_cambia_bots(tmp_path: Path) -> None:
     db = tmp_path / "lab.db"
     init_pilots(db)
-    before_hash = config_hash()
     before_bots = {bot.id: bot.enabled for bot in load_bots()}
-    select_pilot(db, "equity", confirm=True)
+    select_pilot(db, "cfd", confirm=True)
     after_bots = {bot.id: bot.enabled for bot in load_bots()}
-    assert before_hash == config_hash()
     assert before_bots == after_bots
