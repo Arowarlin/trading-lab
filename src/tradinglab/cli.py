@@ -180,7 +180,13 @@ app.add_typer(telegram_app, name="telegram")
 app.add_typer(library_app, name="library")
 from .propfund.cli import app as propfund_app  # noqa: E402  (capa Prop Fund aislada)
 
+discovery_app = typer.Typer(
+    no_args_is_help=True,
+    help="Discovery Lab: calidad de datos CFD (solo lectura, sin MT5 ni red).",
+)
+
 app.add_typer(propfund_app, name="propfund")
+app.add_typer(discovery_app, name="discovery")
 
 
 def _harden_stdio() -> None:
@@ -9672,6 +9678,89 @@ def stats_recompute_dsr_cmd(
         f"[dim]JSON: {files['json']} · MD: {files['markdown']} · "
         f"N={payload['n_trials']} · {payload['n_sharpes']} Sharpes[/dim]"
     )
+
+
+@discovery_app.command("data-check")
+def discovery_data_check_cmd(
+    symbol: str = typer.Argument(..., help="Símbolo CFD, p. ej. US100.cash"),
+    tf: str = typer.Option("M5", "--tf", help="Timeframe de la caché MT5"),
+    is_range: str = typer.Option(
+        "2018-01-01:2023-12-31",
+        "--is",
+        help="Tramo IS como inicio:fin (YYYY-MM-DD)",
+    ),
+    oos1_range: str = typer.Option(
+        "2024-01-01:2025-06-30",
+        "--oos1",
+        help="Tramo OOS-1 como inicio:fin",
+    ),
+    oos2_range: str = typer.Option(
+        "2025-07-01:",
+        "--oos2",
+        help="Tramo OOS-2 como inicio:fin; fin vacío = última vela",
+    ),
+) -> None:
+    """Informe de calidad de un dataset CFD desde la caché local. Solo lectura."""
+    from .discovery.data_quality import load_and_check
+
+    def _range(value: str, name: str):
+        start, _, end = str(value or "").partition(":")
+        if not start:
+            raise typer.BadParameter(f"{name}: falta la fecha de inicio")
+        return (start, end or None)
+
+    segments = {
+        "is": _range(is_range, "--is"),
+        "oos1": _range(oos1_range, "--oos1"),
+        "oos2": _range(oos2_range, "--oos2"),
+    }
+    report = load_and_check(symbol, tf, segments=segments)
+    data = report.as_dict()
+
+    summary = Table(title=f"Discovery · calidad de datos · {data['symbol']} {data['timeframe']}")
+    summary.add_column("Campo", style="bold")
+    summary.add_column("Valor")
+    summary.add_row("Estado", data["status"].upper())
+    summary.add_row("Filas", f"{data['rows']:,}")
+    summary.add_row("Inicio", data["start"] or "Sin datos")
+    summary.add_row("Fin", data["end"] or "Sin datos")
+    summary.add_row("Hash", data["dataset_hash"][:16] + "…" if data["dataset_hash"] else "Sin datos")
+    summary.add_row("Huecos no programados", str(data["non_scheduled_gaps"]))
+    console.print(summary)
+
+    segment_table = Table(title="Tramos IS / OOS-1 / OOS-2 (solo cobertura)")
+    for column in ("Tramo", "Filas", "Inicio", "Fin", "Cobertura", "Sellado"):
+        segment_table.add_column(column)
+    for name, item in data["segments"].items():
+        segment_table.add_row(
+            name,
+            f"{item['rows']:,}",
+            item["start"] or "Sin datos",
+            item["end"] or "Sin datos",
+            "Sin datos" if item["coverage_pct"] is None else f"{item['coverage_pct']:.1f}%",
+            "sí" if item["sealed"] else "no",
+        )
+    console.print(segment_table)
+
+    if data["scheduled_pauses"]:
+        pauses = Table(title="Pausas programadas (informativas)")
+        pauses.add_column("Hora UTC")
+        pauses.add_column("Veces", justify="right")
+        pauses.add_column("Minutos", justify="right")
+        for item in data["scheduled_pauses"]:
+            pauses.add_row(
+                item["start_hhmm"],
+                str(item["count"]),
+                f"{item['minutes']:.1f}",
+            )
+        console.print(pauses)
+
+    if data["issues"]:
+        console.print("[bold]Motivos[/bold]")
+        for issue in data["issues"]:
+            console.print(f"- {issue}")
+    if report.status == "fail":
+        raise typer.Exit(1)
 
 
 if __name__ == "__main__":

@@ -26,6 +26,13 @@ def _base() -> dict:
             "finalists_max": 5,
             "corr_cluster": 0.7,
         },
+        "data_quality": {
+            "gap_factor": 3,
+            "max_gap_hours": 4,
+            "scheduled_gap_share": 0.2,
+            "warn_if_gaps_gt": 0,
+            "fail_if_gap_pct_gt": 0.005,
+        },
     }
 
 
@@ -52,6 +59,11 @@ def test_config_real_tiene_los_valores_de_la_fase_0() -> None:
     assert config.validation.folds == 4
     assert config.validation.finalists_max == 5
     assert config.validation.corr_cluster == pytest.approx(0.7)
+    assert config.data_quality.gap_factor == pytest.approx(3)
+    assert config.data_quality.max_gap_hours == pytest.approx(4)
+    assert config.data_quality.scheduled_gap_share == pytest.approx(0.2)
+    assert config.data_quality.warn_if_gaps_gt == 0
+    assert config.data_quality.fail_if_gap_pct_gt == pytest.approx(0.005)
     assert ENGINE_PATH.exists()
 
 

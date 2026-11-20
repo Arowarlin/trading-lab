@@ -53,6 +53,16 @@ class ValidationConfig(BaseModel):
     corr_cluster: float = Field(ge=-1.0, le=1.0)
 
 
+class DataQualityConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    gap_factor: float = Field(gt=1.0, le=100.0)
+    max_gap_hours: float = Field(gt=0.0, le=168.0)
+    scheduled_gap_share: float = Field(ge=0.0, le=1.0)
+    warn_if_gaps_gt: int = Field(ge=0)
+    fail_if_gap_pct_gt: float = Field(ge=0.0, le=1.0)
+
+
 class EngineConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -62,6 +72,7 @@ class EngineConfig(BaseModel):
     genetics: GeneticsConfig
     limits: LimitsConfig
     validation: ValidationConfig
+    data_quality: DataQualityConfig
 
     @field_validator("profiles")
     @classmethod
@@ -98,11 +109,13 @@ def load_engine_config(path: str | Path | None = None) -> EngineConfig:
         "genetics": raw.get("genetics") or {},
         "limits": raw.get("limits") or {},
         "validation": raw.get("validation") or {},
+        "data_quality": raw.get("data_quality") or {},
     }
     return EngineConfig.model_validate(payload)
 
 
 __all__ = [
+    "DataQualityConfig",
     "ENGINE_PATH",
     "EngineConfig",
     "GeneticsConfig",

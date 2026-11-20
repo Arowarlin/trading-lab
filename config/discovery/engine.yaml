@@ -31,3 +31,15 @@ validation:
   folds: 4
   finalists_max: 5
   corr_cluster: 0.7
+
+data_quality:
+  # Un hueco es un salto entre velas consecutivas > gap_factor × timeframe.
+  gap_factor: 3
+  # Huecos >= max_gap_hours son cierres de sesión/fin de semana/festivo: no cuentan.
+  max_gap_hours: 4
+  # Pausa programada: el mismo HH:MM UTC de reanudación en >= esta fracción de días.
+  scheduled_gap_share: 0.2
+  # warn si hay más de warn_if_gaps_gt huecos no programados.
+  warn_if_gaps_gt: 0
+  # fail si los huecos no programados superan esta fracción de velas esperadas.
+  fail_if_gap_pct_gt: 0.005
