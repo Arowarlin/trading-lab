@@ -40,7 +40,23 @@ _WEEKDAY = {"mon": 0, "tue": 1, "wed": 2, "thu": 3, "fri": 4, "sat": 5, "sun": 6
 class Signals:
     long_entry: np.ndarray
     short_entry: np.ndarray
-    valid_from: int
+    valid_from: int = 0
+
+    def arrays(self, n: int) -> tuple[np.ndarray, np.ndarray, int]:
+        """Copia, valida y enmascara las señales antes de ``valid_from``."""
+
+        long_arr = np.array(self.long_entry, dtype=bool).reshape(-1)
+        short_arr = np.array(self.short_entry, dtype=bool).reshape(-1)
+        if len(long_arr) != n or len(short_arr) != n:
+            raise ValueError(
+                f"señales de longitud {len(long_arr)}/{len(short_arr)} != barras {n}"
+            )
+        start = int(self.valid_from or 0)
+        if start < 0 or start > n:
+            raise ValueError(f"valid_from fuera de rango: {start}")
+        long_arr[:start] = False
+        short_arr[:start] = False
+        return long_arr, short_arr, start
 
 
 def _require_bars(bars: pd.DataFrame) -> pd.DataFrame:

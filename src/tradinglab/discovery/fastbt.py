@@ -25,7 +25,7 @@ se ignoran. La fecha de ``max_trades_per_day`` y los cortes de sesión,
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 from typing import Any, Mapping
 
@@ -36,6 +36,7 @@ from ..indicators import atr as atr_series
 from ..propfund.costs import CostProfile, estimate_cfd, estimate_futures
 from ..propfund.instruments import resolve
 from ..propfund.models import Market
+from .compiler import Signals
 from .metrics import summarize
 
 try:  # pragma: no cover - la rama depende del entorno
@@ -69,29 +70,6 @@ class MissingCostData(FastBtError):
 # ---------------------------------------------------------------------------
 # Entradas
 # ---------------------------------------------------------------------------
-
-
-@dataclass(frozen=True)
-class Signals:
-    """Señales vectorizadas. Mismo contrato que ``compiler.Signals``."""
-
-    long_entry: np.ndarray
-    short_entry: np.ndarray
-    valid_from: int = 0
-
-    def arrays(self, n: int) -> tuple[np.ndarray, np.ndarray, int]:
-        long_arr = np.array(self.long_entry, dtype=bool).reshape(-1)
-        short_arr = np.array(self.short_entry, dtype=bool).reshape(-1)
-        if len(long_arr) != n or len(short_arr) != n:
-            raise FastBtError(
-                f"señales de longitud {len(long_arr)}/{len(short_arr)} != barras {n}"
-            )
-        start = int(self.valid_from or 0)
-        if start < 0 or start > n:
-            raise FastBtError(f"valid_from fuera de rango: {start}")
-        long_arr[:start] = False
-        short_arr[:start] = False
-        return long_arr, short_arr, start
 
 
 @dataclass(frozen=True)
@@ -961,23 +939,14 @@ def set_backend(name: str) -> str:
 
 
 def _signal_arrays(signals: Any, n: int) -> tuple[np.ndarray, np.ndarray, int]:
-    """Acepta ``fastbt.Signals`` o ``compiler.Signals`` (mismo contrato)."""
+    """Normaliza ``compiler.Signals`` (única clase) a arrays de barras."""
 
-    helper = getattr(signals, "arrays", None)
-    if callable(helper):
-        return helper(n)
-    long_arr = np.array(signals.long_entry, dtype=bool).reshape(-1)
-    short_arr = np.array(signals.short_entry, dtype=bool).reshape(-1)
-    if len(long_arr) != n or len(short_arr) != n:
-        raise FastBtError(
-            f"señales de longitud {len(long_arr)}/{len(short_arr)} != barras {n}"
-        )
-    start = int(getattr(signals, "valid_from", 0) or 0)
-    if start < 0 or start > n:
-        raise FastBtError(f"valid_from fuera de rango: {start}")
-    long_arr[:start] = False
-    short_arr[:start] = False
-    return long_arr, short_arr, start
+    try:
+        return signals.arrays(n)
+    except FastBtError:
+        raise
+    except (AttributeError, TypeError, ValueError) as exc:
+        raise FastBtError(str(exc)) from exc
 
 
 def _parse_hhmm(value: str | None, name: str) -> int | None:
@@ -1016,33 +985,44 @@ def _validate_bars(bars: pd.DataFrame) -> None:
             raise FastBtError(f"precios no positivos en {column}")
 
 
-def _prepare(
-    signals: Signals,
-    bars: pd.DataFrame,
-    exit_spec: ExitSpec,
-    limits: RunLimits,
-    panel: CostPanel,
-    market: str,
-) -> tuple[dict[str, Any], int, int]:
-    _validate_bars(bars)
-    n = len(bars)
-    long_arr, short_arr, start = _signal_arrays(signals, n)
-    if limits.execution not in {"open_next", "close_signal"}:
-        raise FastBtError(f"execution inválido: {limits.execution!r}")
-    if limits.cooldown_bars < 0:
-        raise FastBtError("cooldown_bars no puede ser negativo")
-    if limits.max_trades_per_day is not None and limits.max_trades_per_day < 0:
-        raise FastBtError("max_trades_per_day no puede ser negativo")
-    if limits.execution == "open_next" and exit_spec.stop is None:
-        raise FastBtError("el motor de eventos necesita un stop (sin stop no hay R)")
+@dataclass(frozen=True)
+class SessionMask:
+    """Máscaras de sesión y día local para un ``RunLimits`` concreto."""
 
-    if limits.session_tz:
-        try:
-            local = bars.index.tz_convert(limits.session_tz)
-        except Exception as exc:  # noqa: BLE001
-            raise FastBtError(f"session_tz inválido: {limits.session_tz}") from exc
-    else:
+    allowed: np.ndarray
+    allowed_entry: np.ndarray
+    flat_flag: np.ndarray
+    day_id: np.ndarray
+
+
+@dataclass
+class PreparedBars:
+    """Barras y derivados que un worker reutiliza en todos sus jobs."""
+
+    bars: pd.DataFrame
+    panel: CostPanel
+    atr: dict[int, np.ndarray] = field(default_factory=dict)
+    masks: dict[tuple, SessionMask] = field(default_factory=dict)
+
+
+def _mask_key(limits: RunLimits) -> tuple:
+    return (
+        limits.session_tz,
+        limits.session_start,
+        limits.session_end,
+        limits.flat_at,
+        tuple(int(day) for day in limits.weekdays),
+    )
+
+
+def _session_mask(bars: pd.DataFrame, limits: RunLimits) -> SessionMask:
+    n = len(bars)
+    if not limits.session_tz:
         raise FastBtError("session_tz vacío")
+    try:
+        local = bars.index.tz_convert(limits.session_tz)
+    except Exception as exc:  # noqa: BLE001
+        raise FastBtError(f"session_tz inválido: {limits.session_tz}") from exc
 
     start_s = _parse_hhmm(limits.session_start, "session_start")
     end_s = _parse_hhmm(limits.session_end, "session_end")
@@ -1068,8 +1048,6 @@ def _prepare(
     weekday = np.isin(
         local.day_of_week.to_numpy(), np.asarray(limits.weekdays, dtype=int)
     )
-    allowed = manage_window & weekday
-    allowed_entry = entry_window & weekday
     flat_flag = np.zeros(n, dtype=bool) if flat_s is None else seconds >= flat_s
     day_id = (
         local.normalize()
@@ -1077,16 +1055,88 @@ def _prepare(
         .to_numpy(dtype="datetime64[D]")
         .astype(np.int64)
     )
+    return SessionMask(
+        allowed=manage_window & weekday,
+        allowed_entry=entry_window & weekday,
+        flat_flag=flat_flag,
+        day_id=day_id,
+    )
+
+
+def prepare(
+    bars: pd.DataFrame,
+    cost: Any,
+    *,
+    atr_windows: tuple[int, ...] | list[int] = (),
+    sessions: tuple[RunLimits, ...] | list[RunLimits] = (),
+) -> PreparedBars:
+    """Calcula una vez barras derivadas para reutilizarlas entre backtests."""
+
+    _validate_bars(bars)
+    panel = cost.panel(bars)
+    prepared = PreparedBars(bars=bars, panel=panel)
+    for window in atr_windows:
+        value = int(window)
+        if value > 0 and value not in prepared.atr:
+            prepared.atr[value] = atr_series(bars, value).to_numpy(dtype=float)
+    for limits in sessions:
+        key = _mask_key(limits)
+        if key not in prepared.masks:
+            prepared.masks[key] = _session_mask(bars, limits)
+    return prepared
+
+
+def _prepare(
+    signals: Signals,
+    bars: pd.DataFrame,
+    exit_spec: ExitSpec,
+    limits: RunLimits,
+    panel: CostPanel,
+    market: str,
+    prepared: PreparedBars | None = None,
+) -> tuple[dict[str, Any], int, int]:
+    _validate_bars(bars)
+    if prepared is not None and prepared.bars is not bars:
+        raise FastBtError("prepared no corresponde a estas barras")
+    n = len(bars)
+    long_arr, short_arr, start = _signal_arrays(signals, n)
+    if limits.execution not in {"open_next", "close_signal"}:
+        raise FastBtError(f"execution inválido: {limits.execution!r}")
+    if limits.cooldown_bars < 0:
+        raise FastBtError("cooldown_bars no puede ser negativo")
+    if limits.max_trades_per_day is not None and limits.max_trades_per_day < 0:
+        raise FastBtError("max_trades_per_day no puede ser negativo")
+    if limits.execution == "open_next" and exit_spec.stop is None:
+        raise FastBtError("el motor de eventos necesita un stop (sin stop no hay R)")
+
+    key = _mask_key(limits)
+    if prepared is not None:
+        mask = prepared.masks.get(key)
+        if mask is None:
+            mask = _session_mask(bars, limits)
+            prepared.masks[key] = mask
+    else:
+        mask = _session_mask(bars, limits)
+    allowed = mask.allowed
+    allowed_entry = mask.allowed_entry
+    flat_flag = mask.flat_flag
+    day_id = mask.day_id
+
+    def _atr_values(window: int) -> np.ndarray:
+        if prepared is not None:
+            cached = prepared.atr.get(int(window))
+            if cached is None:
+                cached = atr_series(bars, int(window)).to_numpy(dtype=float)
+                prepared.atr[int(window)] = cached
+            return cached
+        return atr_series(bars, int(window)).to_numpy(dtype=float)
 
     if exit_spec.stop == "atr":
-        atr_values = atr_series(bars, exit_spec.stop_n).to_numpy(dtype=float)
+        atr_values = _atr_values(exit_spec.stop_n)
     else:
         atr_values = np.zeros(n, dtype=float)
     if exit_spec.trail_atr_mult is not None:
-        trail_dist = (
-            atr_series(bars, exit_spec.trail_n).to_numpy(dtype=float)
-            * exit_spec.trail_atr_mult
-        )
+        trail_dist = _atr_values(exit_spec.trail_n) * exit_spec.trail_atr_mult
     else:
         trail_dist = np.zeros(n, dtype=float)
 
@@ -1142,6 +1192,8 @@ def run(
     exit_spec: ExitSpec,
     cost: CfdBpsCosts | CfdProfileCosts | FuturesCosts,
     limits: RunLimits | None = None,
+    *,
+    prepared: PreparedBars | None = None,
 ) -> FastResult:
     """Ejecuta las señales sobre barras ya cargadas (sin datos reales aquí)."""
 
@@ -1152,9 +1204,9 @@ def run(
         raise MissingCostData("Sin datos: modelo de coste sin mercado declarado")
     if not hasattr(cost, "panel"):
         raise MissingCostData("Sin datos: modelo de coste sin panel")
-    panel = cost.panel(bars)
+    panel = prepared.panel if prepared is not None else cost.panel(bars)
     payload, _n, _close_mode = _prepare(
-        signals, bars, exit_spec, limits, panel, market
+        signals, bars, exit_spec, limits, panel, market, prepared
     )
 
     result = _core_compiled(
@@ -1301,12 +1353,15 @@ __all__ = [
     "FuturesCosts",
     "HAVE_NUMBA",
     "MissingCostData",
+    "PreparedBars",
     "RunLimits",
+    "SessionMask",
     "Signals",
     "Trade",
     "backend",
     "cfd_costs_from_bps",
     "cost_from_profile",
+    "prepare",
     "run",
     "set_backend",
 ]

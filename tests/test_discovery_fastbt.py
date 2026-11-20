@@ -438,6 +438,69 @@ def test_compiler_signals_integration() -> None:
         assert trade.entry_index >= signals.valid_from
 
 
+def _bias_dataset(
+    n: int = 400_000, seed: int = 20261120
+) -> tuple[pd.DataFrame, Signals]:
+    rng = np.random.default_rng(seed)
+    index = pd.date_range("2023-01-02", periods=n, freq="5min", tz="UTC")
+    steps = rng.normal(0.0, 0.001, n)
+    close = 100.0 * np.exp(np.cumsum(steps))
+    open_ = np.r_[close[0], close[:-1]]
+    span = np.abs(rng.normal(0.0, 0.0005, n))
+    high = np.maximum(open_, close) * (1.0 + span)
+    low = np.minimum(open_, close) * (1.0 - span)
+    bars = pd.DataFrame(
+        {"open": open_, "high": high, "low": low, "close": close}, index=index
+    )
+    draw = rng.integers(0, 3, n)
+    return bars, Signals(draw == 1, draw == 2, 0)
+
+
+def _bias_stats(result) -> tuple[int, float, float]:
+    values = np.array(
+        [trade.r_net for trade in result.trades if trade.r_net is not None],
+        dtype=float,
+    )
+    count = int(values.size)
+    mean = float(values.mean())
+    std = float(values.std(ddof=1))
+    return count, mean, mean / (std / np.sqrt(count))
+
+
+def test_signals_is_compiler_alias() -> None:
+    from tradinglab.discovery import compiler, fastbt
+
+    assert fastbt.Signals is compiler.Signals
+
+
+def test_bias_zero_cost_random_walk() -> None:
+    bars, signals = _bias_dataset()
+    result = run(
+        signals,
+        bars,
+        ExitSpec(stop="pct", stop_mult=0.5, target="pct", target_pct=0.5),
+        cfd_costs_from_bps(commission_bps=0.0, slippage_bps=0.0, spread_bps=0.0),
+        RunLimits(session_tz="UTC", weekdays=WEEK, close_at_end=False),
+    )
+    count, _mean, t_stat = _bias_stats(result)
+    assert count >= 2_000
+    assert abs(t_stat) < 3.0
+
+
+def test_bias_costs_make_expectancy_negative() -> None:
+    bars, signals = _bias_dataset()
+    result = run(
+        signals,
+        bars,
+        ExitSpec(stop="pct", stop_mult=0.5, target="pct", target_pct=0.5),
+        cfd_costs_from_bps(commission_bps=0.5, slippage_bps=1.0, spread_bps=2.0),
+        RunLimits(session_tz="UTC", weekdays=WEEK, close_at_end=False),
+    )
+    count, mean, _t_stat = _bias_stats(result)
+    assert count >= 2_000
+    assert mean < 0.0
+
+
 def test_metrics_summary() -> None:
     trades = [
         SimpleNamespace(r_net=1.0, risk_price=2.0),
