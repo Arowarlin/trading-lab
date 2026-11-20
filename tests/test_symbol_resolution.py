@@ -77,8 +77,9 @@ def test_symbol_spec_resuelve_mayusculas(monkeypatch):
 
 def test_clock_mt5_offset_resuelve_mayusculas(monkeypatch):
     calls: list[str] = []
+    calls_init: list[dict] = []
     fake = types.ModuleType("MetaTrader5")
-    fake.initialize = lambda: True
+    fake.initialize = lambda **kwargs: (calls_init.append(kwargs) or True)
     fake.symbols_get = lambda: [SimpleNamespace(name="US100.cash")]
     fake.symbol_info_tick = lambda name: (
         calls.append(str(name))
@@ -93,5 +94,16 @@ def test_clock_mt5_offset_resuelve_mayusculas(monkeypatch):
         mt5_mod, "server_offset_from_tick", lambda tick_time, now: 0.0
     )
 
-    assert clock.mt5_offset_s("US100.CASH") == pytest.approx(0.0)
+    path = "C:/FTMO/terminal64.exe"
+    assert clock.mt5_offset_s("US100.CASH", path=path) == pytest.approx(0.0)
+    assert calls_init == [{"path": path}]
     assert calls == ["US100.cash"]
+
+
+def test_clock_sin_path_no_inicializa(monkeypatch):
+    called: list[dict] = []
+    fake = types.ModuleType("MetaTrader5")
+    fake.initialize = lambda **kwargs: (called.append(kwargs) or True)
+    monkeypatch.setitem(sys.modules, "MetaTrader5", fake)
+    assert clock.mt5_offset_s("US100.CASH", path="") is None
+    assert called == []

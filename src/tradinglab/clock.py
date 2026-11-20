@@ -58,17 +58,30 @@ def ntp_offset_s(
         return None
 
 
-def mt5_offset_s(symbol: str = "EURUSD") -> float | None:
+def mt5_offset_s(symbol: str = "EURUSD", *, path: str | None = None) -> float | None:
     """Offset UTC del servidor MT5 (en segundos), no una desviación.
 
     El servidor va en GMT+X: eso **no** es desincronización. Solo sirve como
     referencia si además se conoce el offset esperado (configurado o ya
     detectado); si no, la fuente MT5 no aporta señal de reloj.
+
+    ``path`` debe ser el ``terminal64.exe`` del carril FTMO. Si no se indica, se
+    lee ``settings.mt5.terminal_path``; sin path no se inicializa MT5 (nunca se
+    elige un terminal al azar cuando hay más de uno abierto).
     """
+    if path is None:
+        try:
+            from .config import get_settings
+
+            path = get_settings().mt5.terminal_path
+        except Exception:
+            path = None
+    if not path:
+        return None
     try:
         import MetaTrader5 as mt5
 
-        if not mt5.initialize():
+        if not mt5.initialize(path=str(path)):
             return None
         # OJO: no se hace shutdown: el proceso puede tener la conexión MT5
         # en uso (el broker del forward). Solo se lee un tick.

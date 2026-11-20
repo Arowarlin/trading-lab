@@ -21,7 +21,9 @@ llm:
 
 # MetaTrader 5 (CFD). El terminal ya está instalado.
 mt5:
-  terminal_path: null         # ej. "C:\\Program Files\\Darwinex MetaTrader 5\\terminal64.exe"
+  # Terminal del carril FTMO. FundingPips usa la ruta de su propia cuenta
+  # (config/propfund/accounts.yaml) y nunca este path global.
+  terminal_path: "C:\\Program Files\\FTMO Global Markets MT5 Terminal\\terminal64.exe"
   login: null                 # número de cuenta (mejor en .env: MT5_LOGIN)
   server: null                # ej. "Darwinex-Live" / "FTMO-Server"
   magic: 20261105
