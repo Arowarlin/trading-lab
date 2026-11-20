@@ -28,5 +28,8 @@ oficiales, guías de usuario publicadas y prensa técnica. Confianza: **A** ofic
 | Express Generator | Validador multi-mercado (foro oficial) | https://forexsb.com/forum/post/83115 | B |
 | Simulador de challenge abierto | LuxAlgo prop-firm-sim (motor, reglas citadas, MCP) | https://www.luxalgo.com/prop-firm-sim/ · https://github.com/LuxAlgo/prop-firm-sim | B |
 
+| QuantAnalyzer | Página del producto y Portfolio Master | https://strategyquant.com/quantanalyzer/ · https://strategyquant.com/quantanalyzer/portfolio-master | A |
+| QuantAnalyzer | Portfolio Master: novedades 4.7 (OOS en la búsqueda genética) | https://strategyquant.com/doc/quantanalyzer/portfolio-master-new-features-in-4-7/ | A |
+
 **No verificado** (sin fuente pública encontrada): Prop Firm Simulator, Challenge Finder, Health Scores y
 MCP server de Build Alpha; detalle del algoritmo genético de Build Alpha, FSB Pro y EA Studio.

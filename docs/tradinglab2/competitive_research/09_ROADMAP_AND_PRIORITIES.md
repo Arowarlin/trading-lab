@@ -12,12 +12,14 @@ tiempos son orientativos (horas de trabajo efectivo), no compromisos.
 | R4 · Consola (Fase 8) | Evolución, databank, detalle, robustez, presupuesto, mapas de calor, veredicto | P1 | Comprensión rápida | Medio-alto | Ninguno | 8–12 h |
 | R5 · Generador v2 | Bloques causales (sweeps, rangos, día previo, calendario), `locked`, multi-mercado k-de-n | P2 | Más diversidad con sentido | Medio | Medio (más pruebas; se cuentan) | 6–10 h |
 | R6 · Futuros (Fase 10) | Databento, continuo, costes por contrato | P2 | Mercado con coste bajo y datos limpios | Medio | Ninguno | 6–8 h |
-| R7 · Cartera y fondeo (Fase 11) | Matriz estrategia × cuenta, correlación, contraste con simulador abierto | P2 | Pasar challenges, no solo backtests | Medio | Bajo | 6–8 h |
+| R7 · Portfolio Lab y fondeo (Fase 11) | Matriz estrategia × cuenta, correlación diaria, exposición por subyacente, búsqueda de combinaciones con restricciones (objetivo: P(pasar) y DD conjunto) solo entre estrategias de nivel ≥ 3, validada con WF de cartera; contraste con simulador abierto (ref. QuantAnalyzer Portfolio Master) | P2 | Pasar challenges, no solo backtests | Medio | Bajo | 6–8 h |
+| R7b · Demo vs backtest | Importar operaciones reales de MT5 (forward y EA, solo lectura) y compararlas con lo esperado del backtest: expectativa, coste real, slippage, frecuencia; alerta de deterioro | P1 en cuanto haya una estrategia en demo | Detecta pronto estrategias que dejan de funcionar | Medio | Ninguno (informativo; no reoptimiza) | 5–7 h |
 | R8 · IA (Fase 9) | Hipótesis → AST validado | P2 | Ideas nuevas con causa | Medio | Medio (control por campaña) | 5–8 h |
 | R9 · Export MQL5 (Fase 12) | Plantillas, determinismo, CSV de señales | P2 | Llevar a MT5 | Medio | Ninguno | 6–10 h |
 | R10 | Editor visual, MCP de solo lectura, Reality Check/SPA | P3 | Comodidad / rigor adicional | Alto | — | — |
 
-**Orden recomendado:** R0 → R1 → R2 → (campañas nuevas en otros mercados) → R3 → R4 → R6 → R7 → R5 → R8 → R9.
+**Orden recomendado:** R0 → R1 → R2 → (campañas nuevas en otros mercados) → R3 → R4 → R6 → R7 + R7b → R5 → R8 → R9.
+R7b puede adelantarse en cuanto una estrategia de discovery entre en demo (o antes, para el EA us100-ftmo1).
 
 Razonamiento: primero que el laboratorio **pueda reconocer** un edge real (R0), después que **refute antes**
 las falsas (R1), después que **busque donde hay más probabilidad** de encontrarlo (R2). La consola y la

@@ -56,7 +56,26 @@ Rutas GET `/api/discovery/*`; vistas: campañas y presupuesto (count_tests, n_to
 evolución por generación, databank con filtros, detalle (reglas, equity, mapas de calor de meseta,
 hora × día, perturbaciones, veredicto), colecciones. Cada botón conectado o "Próximamente".
 
-### R5–R9
+### R7 · Portfolio Lab (referencia: QuantAnalyzer Portfolio Master)
+- `discovery/portfolio_lab.py`: reutiliza `portfolio.build_clusters/simulate` y
+  `propfund.risk.exposure_by_underlying`. Entrada: solo estrategias de nivel ≥ 3 (o 4).
+- Búsqueda de combinaciones (exhaustiva si ≤ 12 estrategias; genética si más) con restricciones: correlación
+  diaria máxima, exposición por subyacente, reglas de la cuenta. Objetivo: P(pasar) y DD conjunto del MC
+  del challenge, no beneficio.
+- Selección con IS+OOS-1; validación con walk-forward de cartera. Cada búsqueda se registra con su número
+  de combinaciones evaluadas (informe de presupuesto). Nunca lee OOS-2.
+- What-if (excluir horas/días) solo como informe; prohibido aplicarlo a la estrategia.
+
+### R7b · Demo vs backtest
+- `discovery/live_drift.py`: lee operaciones cerradas de MT5 en solo lectura (AttachOnlyBroker por cuenta,
+  filtrando por magic) y del registro del forward existente; las compara con la distribución esperada del
+  backtest de esa estrategia (expectativa R, coste real vs modelado, slippage, frecuencia, hora de
+  entrada).
+- Alerta cuando la expectativa real cae fuera del intervalo del 95 % del bootstrap del backtest con un
+  mínimo de 30 operaciones. Solo informa: no apaga bots ni cambia parámetros.
+- CLI `lab discovery drift STRATEGY_ID|EA_ID` y panel en la consola.
+
+### R5, R6, R8, R9
 Según `docs/tradinglab2/10` (fases 9–12) más: bloques causales con test de look-ahead, `locked` en
 plantillas, multi-mercado k-de-n con lista pre-declarada, contraste del simulador de challenge.
 
