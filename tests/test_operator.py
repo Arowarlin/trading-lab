@@ -13,7 +13,6 @@ import pytest
 from tradinglab import web
 from tradinglab.config import Settings
 from tradinglab.db import connect, init_db
-from tradinglab.f13 import config_hash, freeze
 from tradinglab.journal import ClosedTrade
 from tradinglab.killswitch import activate as activate_killswitch
 from tradinglab.killswitch import load_state
@@ -29,7 +28,7 @@ from tradinglab.operator import (
     web_port,
 )
 from tradinglab.riskpause import pause_status
-from tradinglab.runtime import console_actions, get_bot_state
+from tradinglab.runtime import console_actions
 
 
 class FakeBroker:
@@ -68,6 +67,9 @@ class FakeBroker:
     def health(self):
         return {"paper": True, "mode": "paper"}
 
+    def symbol_spec(self, symbol: str) -> dict:
+        return {"symbol": symbol, "contract_size": 1.0, "tick_size": 0.01, "digits": 2}
+
     def submit_market(
         self, ticker, qty, price=None, *, bot="manual", reason="", **kwargs
     ):
@@ -102,6 +104,9 @@ def _service(tmp_path: Path, *, broker=None, now=None, settings=None, pin="1234"
         db_path=db,
     )
     fake = broker or FakeBroker()
+    from tradinglab.asset_aliases import discover
+
+    discover(db, fake)
     service = OperatorService(
         settings,
         db,
@@ -113,8 +118,8 @@ def _service(tmp_path: Path, *, broker=None, now=None, settings=None, pin="1234"
 
 def _order_params(**overrides):
     params = {
-        "account": "paper_main",
-        "ticker": "SPY",
+        "account": "ftmo_demo",
+        "ticker": "EURUSD",
         "side": "buy",
         "qty": 1,
         "price": 100.0,
@@ -211,8 +216,8 @@ def test_preview_y_token_de_un_solo_uso(tmp_path: Path) -> None:
     service, fake, _ = _service(tmp_path, now=lambda: clock["now"])
     service.arm("1234")
     preview = service.preview("order", _order_params())
-    assert preview["summary"]["account"] == "paper_main"
-    assert preview["summary"]["symbol"] == "SPY"
+    assert preview["summary"]["account"] == "ftmo_demo"
+    assert preview["summary"]["symbol"] == "EURUSD"
     assert preview["summary"]["risk_usd"] == pytest.approx(1.0)
     result = service.execute("order", _order_params(), preview["token"])
     assert result["ok"] is True
@@ -238,8 +243,8 @@ def test_orden_fuera_de_limite_rechazada(tmp_path: Path) -> None:
     service, fake, _ = _service(tmp_path)
     service.arm("1234")
     with pytest.raises(OperatorError) as exc:
-        service.preview("order", _order_params(qty=150, sl=90.0))
-    assert "guard" in str(exc.value)
+        service.preview("order", _order_params(qty=25, sl=90.0))
+    assert "lotes" in str(exc.value)
     assert fake.orders == []
 
 
@@ -247,7 +252,14 @@ def test_cierre_permitido_con_killswitch_activo(tmp_path: Path, monkeypatch) -> 
     monkeypatch.setattr("tradinglab.killswitch.send_alert", lambda *a, **k: None)
     fake = FakeBroker(
         positions=[
-            {"ticker": "SPY", "qty": 5.0, "avg_price": 100.0, "last": 101.0}
+            {
+                "ticket": 12345,
+                "symbol": "EURUSD",
+                "volume": 5.0,
+                "price_open": 100.0,
+                "price_current": 101.0,
+                "profit": 0.0,
+            }
         ]
     )
     service, fake, db = _service(tmp_path, broker=fake)
@@ -255,23 +267,23 @@ def test_cierre_permitido_con_killswitch_activo(tmp_path: Path, monkeypatch) -> 
     assert load_state(db).active is True
     service.arm("1234")
     preview = service.preview(
-        "close", {"account": "paper_main", "ticket": "SPY", "price": 101.0}
+        "close", {"account": "ftmo_demo", "ticket": "12345", "price": 101.0}
     )
     result = service.execute(
         "close",
-        {"account": "paper_main", "ticket": "SPY", "price": 101.0},
+        {"account": "ftmo_demo", "ticket": "12345", "price": 101.0},
         preview["token"],
     )
     assert result["ok"] is True
-    assert fake.orders[-1]["qty"] == -5
-    assert fake.orders[-1]["price"] == pytest.approx(101.0)
+    assert fake.closed[-1]["identifier"] == 12345
+    assert fake.closed[-1]["volume"] == pytest.approx(5.0)
 
 
 def test_piloto_bloquea_apertura_de_otro_mercado(tmp_path: Path) -> None:
     from tradinglab.market_pilots import select_pilot
 
     service, fake, db = _service(tmp_path)
-    select_pilot(db, "equity", confirm=True)
+    select_pilot(db, "cfd", confirm=True)
     service.arm("1234")
     with pytest.raises(OperatorError) as exc:
         service.preview("order", _order_params(account="ftmo_demo"))
@@ -282,7 +294,14 @@ def test_piloto_bloquea_apertura_de_otro_mercado(tmp_path: Path) -> None:
 def test_pausa_bloquea_apertura_pero_no_cierre(tmp_path: Path) -> None:
     fake = FakeBroker(
         positions=[
-            {"ticker": "SPY", "qty": 5.0, "avg_price": 100.0, "last": 101.0}
+            {
+                "ticket": 12345,
+                "symbol": "EURUSD",
+                "volume": 5.0,
+                "price_open": 100.0,
+                "price_current": 101.0,
+                "profit": 0.0,
+            }
         ]
     )
     service, fake, db = _service(tmp_path, broker=fake)
@@ -293,10 +312,10 @@ def test_pausa_bloquea_apertura_pero_no_cierre(tmp_path: Path) -> None:
         stamp = f"2026-01-0{5 + index}T15:00:00+00:00"
         trades.append(
             ClosedTrade(
-                bot="trend-spy",
-                account="paper_main",
-                profile="swing_equity",
-                ticker="SPY",
+                bot="ea:us100-ftmo1",
+                account="ftmo_demo",
+                profile="intraday_fx",
+                ticker="EURUSD",
                 qty=1.0,
                 entry_price=100.0,
                 exit_price=90.0,
@@ -313,21 +332,21 @@ def test_pausa_bloquea_apertura_pero_no_cierre(tmp_path: Path) -> None:
                 exit_fill_id=index + 3,
             )
         )
-    paused = pause_status(db, "paper_main", trades=trades, tz="UTC", now=now)
+    paused = pause_status(db, "ftmo_demo", trades=trades, tz="UTC", now=now)
     assert paused["paused"] is True
     with pytest.raises(OperatorError) as exc:
         service.preview("order", _order_params())
     assert "pausa" in str(exc.value).lower()
     preview = service.preview(
-        "close", {"account": "paper_main", "ticket": "SPY", "price": 101.0}
+        "close", {"account": "ftmo_demo", "ticket": "12345", "price": 101.0}
     )
     result = service.execute(
         "close",
-        {"account": "paper_main", "ticket": "SPY", "price": 101.0},
+        {"account": "ftmo_demo", "ticket": "12345", "price": 101.0},
         preview["token"],
     )
     assert result["ok"] is True
-    assert fake.orders[-1]["qty"] == -5
+    assert fake.closed[-1]["identifier"] == 12345
 
 
 def test_mode_live_y_plantilla_rechazadas(tmp_path: Path) -> None:
@@ -346,71 +365,6 @@ def test_mode_live_y_plantilla_rechazadas(tmp_path: Path) -> None:
     assert exc.value.status == 403
 
 
-def test_bot_runtime_y_hash_f13(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setattr("tradinglab.orchestrator.DEFAULT_DB", tmp_path / "lab.db")
-    from tradinglab.orchestrator import load_bots
-
-    service, _, db = _service(tmp_path)
-    before = config_hash()
-    service.arm("1234")
-
-    preview = service.preview("bot_disable", {"bot": "trend-spy", "reason": "test"})
-    service.execute(
-        "bot_disable", {"bot": "trend-spy", "reason": "test"}, preview["token"]
-    )
-    state = get_bot_state(db, "trend-spy")
-    assert state is not None and state["enabled"] == 0
-    assert next(bot for bot in load_bots() if bot.id == "trend-spy").enabled is False
-    assert config_hash() == before
-
-    preview = service.preview("bot_enable", {"bot": "trend-spy", "reason": "test"})
-    service.execute(
-        "bot_enable", {"bot": "trend-spy", "reason": "test"}, preview["token"]
-    )
-    state = get_bot_state(db, "trend-spy")
-    assert state is not None and state["enabled"] == 1
-    assert next(bot for bot in load_bots() if bot.id == "trend-spy").enabled is True
-    assert config_hash() == before
-
-
-def test_run_bot_reutiliza_orquestador(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setattr("tradinglab.orchestrator.DEFAULT_DB", tmp_path / "lab.db")
-    calls: dict = {}
-
-    class Action:
-        status = "ejecutado"
-
-    def fake_run_bot(spec, settings, broker, **kwargs):
-        calls["bot"] = spec.id
-        calls["account"] = kwargs.get("account").id
-        return [Action()]
-
-    monkeypatch.setattr("tradinglab.orchestrator.run_bot", fake_run_bot)
-    service, fake, _ = _service(tmp_path)
-    service.arm("1234")
-    preview = service.preview("run_bot", {"bot": "trend-spy"})
-    result = service.execute("run_bot", {"bot": "trend-spy"}, preview["token"])
-    assert result["ok"] is True
-    assert result["result"]["executed"] == 1
-    assert calls == {"bot": "trend-spy", "account": "paper_main"}
-
-
-def test_f13_congelado_no_permite_tocar_su_bot(tmp_path: Path) -> None:
-    service, _, db = _service(tmp_path)
-    root = tmp_path / "repo"
-    root.mkdir()
-    freeze(
-        db,
-        bot="qqq-trend-f13",
-        symbol="QQQ",
-        start_date="2026-01-05",
-        root=root,
-    )
-    service.arm("1234")
-    with pytest.raises(OperatorError) as exc:
-        service.preview("bot_enable", {"bot": "qqq-trend-f13"})
-    assert "F13" in str(exc.value)
-
 
 def test_auditoria_sin_secretos(tmp_path: Path) -> None:
     service, _, db = _service(tmp_path)
@@ -423,21 +377,6 @@ def test_auditoria_sin_secretos(tmp_path: Path) -> None:
         text = json.dumps(row, ensure_ascii=False)
         assert "1234" not in text
         assert preview["token"] not in text
-
-
-def test_f13_status_falla_bloquea_y_audita(tmp_path: Path, monkeypatch) -> None:
-    service, _, db = _service(tmp_path)
-
-    def boom(db_path):
-        raise RuntimeError("fallo E:\\secreto\\datos")
-
-    monkeypatch.setattr("tradinglab.f13.status", boom)
-    assert service._f13_bot_locked("qqq-trend-f13") is True
-    rows = console_actions(db, 20)
-    row = next(row for row in rows if row["action"] == "f13_status_error")
-    assert row["ok"] is False
-    assert "<ruta>" in row["detail"]
-    assert "secreto" not in row["detail"]
 
 
 def _http(
@@ -475,8 +414,7 @@ def _csrf(server: web.DashboardServer) -> str:
 
 
 def test_web_operador_sin_armar_y_dos_pasos(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setattr("tradinglab.orchestrator.DEFAULT_DB", tmp_path / "lab.db")
-    service, _, db = _service(tmp_path)
+    service, fake, db = _service(tmp_path)
     data = web.LabData(
         Settings(),
         root=tmp_path,
@@ -501,7 +439,7 @@ def test_web_operador_sin_armar_y_dos_pasos(tmp_path: Path, monkeypatch) -> None
             server,
             "POST",
             "/api/operator/preview",
-            body={"action": "bot_disable", "params": {"bot": "trend-spy"}},
+            body={"action": "order", "params": _order_params()},
             token=csrf,
         )
         assert status == 403
@@ -528,7 +466,7 @@ def test_web_operador_sin_armar_y_dos_pasos(tmp_path: Path, monkeypatch) -> None
             server,
             "POST",
             "/api/operator/preview",
-            body={"action": "bot_disable", "params": {"bot": "trend-spy"}},
+            body={"action": "order", "params": _order_params()},
             token=csrf,
             operator_client=False,
         )
@@ -538,7 +476,7 @@ def test_web_operador_sin_armar_y_dos_pasos(tmp_path: Path, monkeypatch) -> None
             server,
             "POST",
             "/api/operator/preview",
-            body={"action": "bot_disable", "params": {"bot": "trend-spy"}},
+            body={"action": "order", "params": _order_params()},
             token=csrf,
         )
         assert status == 200 and preview["token"]
@@ -548,8 +486,8 @@ def test_web_operador_sin_armar_y_dos_pasos(tmp_path: Path, monkeypatch) -> None
             "POST",
             "/api/operator/execute",
             body={
-                "action": "bot_disable",
-                "params": {"bot": "trend-spy"},
+                "action": "order",
+                "params": _order_params(),
                 "token": "inventado",
             },
             token=csrf,
@@ -561,20 +499,20 @@ def test_web_operador_sin_armar_y_dos_pasos(tmp_path: Path, monkeypatch) -> None
             "POST",
             "/api/operator/execute",
             body={
-                "action": "bot_disable",
-                "params": {"bot": "trend-spy"},
+                "action": "order",
+                "params": _order_params(),
                 "token": preview["token"],
             },
             token=csrf,
         )
         assert status == 200, result
-        assert get_bot_state(db, "trend-spy")["enabled"] == 0
+        assert len(fake.orders) == 1
 
         status, operator_payload = _http(
             server, "GET", "/api/operator", operator_client=False
         )
         assert status == 200
-        assert any(row["action"] == "bot_disable" for row in operator_payload["audit"])
+        assert any(row["action"] == "order" for row in operator_payload["audit"])
     finally:
         server.shutdown()
         server.server_close()

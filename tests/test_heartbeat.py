@@ -118,7 +118,6 @@ def test_heartbeat_pc_siempre_hace_ping_y_tiene_timeout():
 def test_tareas_programadas_tienen_latido():
     root = Path(__file__).resolve().parents[1] / "scripts"
     checks = {
-        "f13_daily.ps1": "Send-TaskHeartbeat",
         "agents_daily.ps1": "Send-TaskHeartbeat",
         "llm_compare_daily.ps1": "Send-TaskHeartbeat",
         "intraday_forward_execute.ps1": "Send-TaskHeartbeat",

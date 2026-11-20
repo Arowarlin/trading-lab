@@ -76,8 +76,8 @@ def _trade(
     pnl: float,
     *,
     bot: str = "trend-spy",
-    account: str | None = "paper_main",
-    profile: str | None = "swing_equity",
+    account: str | None = "ftmo_demo",
+    profile: str | None = "intraday_fx",
     ticker: str = "SPY",
     hour: int = 15,
     risk_usd: float | None = None,
@@ -131,7 +131,7 @@ def test_fifo_reconstruye_operaciones_y_no_escribe(tmp_path: Path) -> None:
         db,
         tz="UTC",
         bots={
-            "trend-spy": {"account": "paper_main", "profile": "swing_equity"},
+            "trend-spy": {"account": "ftmo_demo", "profile": "intraday_fx"},
             "fx-bot": {"account": "ftmo_demo", "profile": "intraday_fx"},
         },
     )
@@ -151,8 +151,8 @@ def test_fifo_reconstruye_operaciones_y_no_escribe(tmp_path: Path) -> None:
     assert sp[0].fees == pytest.approx(2.0)
     assert sp[0].return_pct == pytest.approx(0.198)
     assert sp[0].holding_hours == pytest.approx(48.0)
-    assert sp[0].account == "paper_main"
-    assert sp[0].profile == "swing_equity"
+    assert sp[0].account == "ftmo_demo"
+    assert sp[0].profile == "intraday_fx"
     assert sp[0].day == "2026-01-07"
 
     assert sp[1].qty == pytest.approx(5.0)
@@ -322,7 +322,7 @@ def test_build_journal_filtros_y_agrupacion(tmp_path: Path, monkeypatch) -> None
 
     specs = [
         BotSpec(id="trend-spy", type="deterministic", strategy="trend", universe=["SPY"],
-                enabled=True, profile="swing_equity", account="paper_main"),
+                enabled=True, profile="intraday_fx", account="ftmo_trial_ea"),
         BotSpec(id="fx-bot", type="deterministic", strategy="trend", universe=["EURUSD"],
                 enabled=True, profile="intraday_fx", account="ftmo_demo"),
     ]
@@ -333,14 +333,14 @@ def test_build_journal_filtros_y_agrupacion(tmp_path: Path, monkeypatch) -> None
     assert payload["total_trades"] == 2
     assert payload["habits"]["informative"] is True
     assert payload["habits"]["blocking"] is False
-    assert payload["filters_available"]["accounts"] == ["ftmo_demo", "paper_main"]
+    assert payload["filters_available"]["accounts"] == ["ftmo_demo", "ftmo_trial_ea"]
     accounts = {row["key"]: row for row in payload["by_account"]}
-    assert accounts["paper_main"]["n"] == 1
+    assert accounts["ftmo_trial_ea"]["n"] == 1
     assert accounts["ftmo_demo"]["n"] == 1
-    assert accounts["paper_main"]["total_return"] == pytest.approx(0.0001)
+    assert accounts["ftmo_trial_ea"]["total_return"] == pytest.approx(0.0001)
     assert accounts["ftmo_demo"]["total_return"] == pytest.approx(0.0000002)
 
-    filtered = build_journal(db, tz="UTC", account="paper_main")
+    filtered = build_journal(db, tz="UTC", account="ftmo_trial_ea")
     assert filtered["total_trades"] == 1
     assert filtered["summary"]["n"] == 1
     assert filtered["summary"]["sample_ok"] is False
@@ -454,7 +454,7 @@ def test_api_journal_responde(tmp_path: Path, monkeypatch) -> None:
               ts="2026-01-06T15:00:00+00:00")
     specs = [
         BotSpec(id="trend-spy", type="deterministic", strategy="trend", universe=["SPY"],
-                enabled=True, profile="swing_equity", account="paper_main")
+                enabled=True, profile="intraday_fx", account="ftmo_demo")
     ]
     monkeypatch.setattr(journal_mod, "load_bots", lambda: specs)
     data = web.LabData(Settings(), root=tmp_path, db_path=db, external=False)
@@ -468,7 +468,7 @@ def test_api_journal_responde(tmp_path: Path, monkeypatch) -> None:
         assert payload["total_trades"] == 1
         assert payload["summary"]["net_pnl"] == pytest.approx(10.0)
         with urllib.request.urlopen(
-            f"{base}/api/journal?account=paper_main&group_by=day", timeout=5
+            f"{base}/api/journal?account=ftmo_demo&group_by=day", timeout=5
         ) as response:
             filtered = json.load(response)
         assert filtered["filters"]["group_by"] == "day"

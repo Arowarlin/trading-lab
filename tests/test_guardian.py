@@ -153,8 +153,24 @@ def test_cuenta_bloqueada_no_exporta_guardian():
         build_config("ftmo_trial_ea")
 
 
-def test_los_magics_del_ea_no_se_cuelan_en_otra_cuenta():
-    cfg = build_config("paper_main")
+def test_los_magics_del_ea_no_se_cuelan_en_otra_cuenta(tmp_path):
+    path = _accounts_file(
+        tmp_path,
+        {
+            "otra": {
+                "name": "Otra demo",
+                "type": "fondeo",
+                "broker": "mt5",
+                "platform": "mt5",
+                "firm": "ftmo",
+                "phase": "challenge",
+                "status": "demo",
+                "account_size": 100_000,
+                "pocket": "intraday_fx",
+            }
+        },
+    )
+    cfg = build_config("otra", accounts_path=path)
     assert 93010001 not in cfg["magics"]
     assert 93020001 not in cfg["magics"]
     assert cfg["ea_magics"] == []

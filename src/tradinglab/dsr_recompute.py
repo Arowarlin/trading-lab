@@ -20,7 +20,6 @@ from .global_dsr import (
     sr_from_annual,
 )
 from .learning import count_tests
-from .stats import dsr_from_returns
 
 
 def _ea_row(db_path: str | Path, n_trials: int, global_info: dict) -> dict:
@@ -41,38 +40,6 @@ def _ea_row(db_path: str | Path, n_trials: int, global_info: dict) -> dict:
         "n_sharpes": int(global_info.get("n_srs") or 0),
         "sources": dict(global_info.get("sources") or {}),
         "note": "dsr_local N=8 informativo; gate = dsr_global",
-    }
-
-
-def _f13_row(db_path: str | Path, n_trials: int, global_info: dict) -> dict:
-    with connect(db_path) as con:
-        frame = con.execute(
-            "SELECT trade_date, daily_return FROM f13_metrics "
-            "ORDER BY trade_date"
-        ).fetchall()
-    returns = [
-        float(row["daily_return"])
-        for row in frame
-        if row["daily_return"] is not None
-    ]
-    dsr_global = None
-    note = "Sin datos: no hay retornos diarios de F13"
-    if len(returns) >= 3 and global_info.get("available"):
-        payload = dsr_from_returns(
-            returns, global_info["srs"], n_trials
-        )
-        dsr_global = payload["dsr"]
-        note = "v2 calculado con f13_metrics; v1 no existía"
-    return {
-        "entity": "F13 qqq-trend-f13",
-        "dsr_v1": None,
-        "dsr_v1_note": "Sin datos: F13 no usó DSR",
-        "dsr_local": None,
-        "dsr_global": dsr_global,
-        "n_trials": int(n_trials),
-        "n_sharpes": int(global_info.get("n_srs") or 0),
-        "sources": dict(global_info.get("sources") or {}),
-        "note": note,
     }
 
 
@@ -142,7 +109,6 @@ def build_report(db_path: str | Path = DEFAULT_DB) -> dict:
     daily = global_srs(db_path, DAILY)
     rows = [
         _ea_row(db_path, n_trials, daily),
-        _f13_row(db_path, n_trials, daily),
         _campaign_row(db_path, "2026-11-A", n_trials),
         _campaign_row(db_path, "2026-11-B", n_trials),
     ]

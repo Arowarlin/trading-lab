@@ -61,7 +61,7 @@ def test_paper_broker_rejects_insufficient_cash(tmp_path):
 def test_bots_catalog_loads():
     bots = load_bots()
     assert bots
-    assert any(b.id == "trend-spy" for b in bots)
+    assert not any(b.id == "trend-spy" for b in bots)
     assert all(b.strategy for b in bots)
 
 def test_paper_equity_series_acepta_timestamps_mixtos(tmp_path):

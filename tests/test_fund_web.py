@@ -3,16 +3,13 @@ from __future__ import annotations
 import http.client
 import json
 import threading
-from datetime import datetime, timedelta
 from pathlib import Path
-from zoneinfo import ZoneInfo
 
 import pytest
 
 from tradinglab import web
 from tradinglab.accounts import load_accounts
 from tradinglab.config import Settings
-from tradinglab.db import connect, init_db
 from tradinglab.journal import ClosedTrade
 from tradinglab.killswitch import load_state
 from tradinglab.operator import OperatorService, OperatorSession
@@ -86,8 +83,6 @@ def test_fund_limites_bolsillos_y_clusters(tmp_path: Path) -> None:
     payload = _data(tmp_path).fund()
     accounts = {row["id"]: row for row in payload["accounts"]}
     assert set(accounts) == {
-        "paper_main",
-        "alpaca_paper",
         "ftmo_demo",
         "ftmo_trial_ea",
         "topstep_template",
@@ -102,56 +97,12 @@ def test_fund_limites_bolsillos_y_clusters(tmp_path: Path) -> None:
     assert ftmo["usage"]["available"] is False
 
     pockets = {row["pocket"]: row for row in payload["pockets"]}
-    assert set(pockets) == {"swing_equity", "intraday_fx", "intraday_futures"}
-    assert pockets["swing_equity"]["capital"] == pytest.approx(200_000.0)
+    assert set(pockets) == {"intraday_fx", "intraday_futures"}
+    assert pockets["intraday_fx"]["capital"] == pytest.approx(200_000.0)
     # La cuenta del trial está reservada (blocked) pero suma capital del bolsillo.
-    assert sum(row["capital"] for row in payload["pockets"]) == pytest.approx(450_000.0)
-
-    trend_rows = [
-        row for row in payload["clusters"] if row["cluster"] == "trend_equity"
-    ]
-    # El clúster se separa por cuenta: trend-spy en paper_main y F13 en
-    # alpaca_paper. Cada uno reserva su 0,5 % de 100.000.
-    by_account = {row["account"]: row for row in trend_rows}
-    assert set(by_account) == {"paper_main", "alpaca_paper"}
-    assert by_account["paper_main"]["reserved_usd"] == pytest.approx(500.0)
-    assert by_account["alpaca_paper"]["reserved_usd"] == pytest.approx(500.0)
-    assert all(row["budget_usd"] == pytest.approx(1000.0) for row in trend_rows)
-    assert all(row["over_budget"] is False for row in trend_rows)
+    assert sum(row["capital"] for row in payload["pockets"]) == pytest.approx(250_000.0)
+    assert payload["clusters"] == []
     assert payload["exposure"]["note"]
-
-
-def test_uso_diario_paper_con_curva_sintetica(tmp_path: Path) -> None:
-    db = tmp_path / "lab.db"
-    init_db(db)
-    tz = ZoneInfo(Settings().timezone)
-    now = datetime.now(tz)
-    today = now.replace(hour=10, minute=0, second=0, microsecond=0)
-    points = [
-        (today - timedelta(days=2), 100_000.0),
-        (today.replace(hour=9, minute=30), 100_000.0),
-        (today.replace(hour=11, minute=0), 98_500.0),
-    ]
-    with connect(db) as con:
-        for stamp, equity in points:
-            con.execute(
-                "INSERT INTO equity(ts, cash, positions_value, equity) VALUES(?,?,?,?)",
-                (stamp.isoformat(), equity, 0.0, equity),
-            )
-
-    payload = _data(tmp_path).fund()
-    paper = next(row for row in payload["accounts"] if row["id"] == "paper_main")
-    usage = paper["usage"]
-    assert usage["available"] is True
-    assert usage["source"] == "sqlite"
-    assert usage["equity"] == pytest.approx(98_500.0)
-    assert usage["day_start_equity"] == pytest.approx(100_000.0)
-    assert usage["daily_loss_usd"] == pytest.approx(1_500.0)
-    assert usage["daily_limit_usd"] == pytest.approx(5_000.0)
-    assert usage["daily_used_pct"] == pytest.approx(0.30)
-    assert usage["daily_cushion_usd"] == pytest.approx(3_500.0)
-    assert usage["drawdown_used_pct"] == pytest.approx(0.15)
-    assert usage["drawdown_cushion_usd"] == pytest.approx(8_500.0)
 
 
 def test_api_limits_apretar_aflojar_y_firma(server) -> None:
@@ -161,7 +112,7 @@ def test_api_limits_apretar_aflojar_y_firma(server) -> None:
         server,
         "POST",
         "/api/fund/limits",
-        body={"account": "paper_main", "changes": {"daily_loss_pct": 0.04}},
+        body={"account": "ftmo_demo", "changes": {"daily_loss_pct": 0.04}},
     )
     assert status == 403
 
@@ -169,21 +120,21 @@ def test_api_limits_apretar_aflojar_y_firma(server) -> None:
         server,
         "POST",
         "/api/fund/limits",
-        body={"account": "paper_main", "changes": {"daily_loss_pct": 0.04}},
+        body={"account": "ftmo_demo", "changes": {"daily_loss_pct": 0.04}},
         token=token,
     )
     assert status == 200, payload
     assert payload["pending"] is False
     fund = _request(server, "GET", "/api/fund")[1]
-    paper = next(row for row in fund["accounts"] if row["id"] == "paper_main")
-    assert paper["own_limits"]["daily_loss_pct"] == pytest.approx(0.04)
-    assert paper["effective_limits"]["daily_loss_pct"] == pytest.approx(0.04)
+    row = next(row for row in fund["accounts"] if row["id"] == "ftmo_demo")
+    assert row["own_limits"]["daily_loss_pct"] == pytest.approx(0.04)
+    assert row["effective_limits"]["daily_loss_pct"] == pytest.approx(0.04)
 
     status, payload = _request(
         server,
         "POST",
         "/api/fund/limits",
-        body={"account": "paper_main", "changes": {"daily_loss_pct": 0.06}},
+        body={"account": "ftmo_demo", "changes": {"daily_loss_pct": 0.045}},
         token=token,
     )
     assert status == 400
@@ -194,8 +145,8 @@ def test_api_limits_apretar_aflojar_y_firma(server) -> None:
         "POST",
         "/api/fund/limits",
         body={
-            "account": "paper_main",
-            "changes": {"daily_loss_pct": 0.06},
+            "account": "ftmo_demo",
+            "changes": {"daily_loss_pct": 0.045},
             "confirm": True,
         },
         token=token,
@@ -203,9 +154,9 @@ def test_api_limits_apretar_aflojar_y_firma(server) -> None:
     assert status == 200, payload
     assert payload["pending"] is True
     fund = _request(server, "GET", "/api/fund")[1]
-    paper = next(row for row in fund["accounts"] if row["id"] == "paper_main")
-    assert paper["own_limits"]["daily_loss_pct"] == pytest.approx(0.04)
-    assert paper["pending"]
+    row = next(row for row in fund["accounts"] if row["id"] == "ftmo_demo")
+    assert row["own_limits"]["daily_loss_pct"] == pytest.approx(0.04)
+    assert row["pending"]
 
     status, payload = _request(
         server,
@@ -284,10 +235,10 @@ def test_pausa_de_fondo_se_reanuda_con_confirmacion(server) -> None:
         stamp = f"2026-01-0{5 + index}T15:00:00+00:00"
         trades.append(
             ClosedTrade(
-                bot="trend-spy",
-                account="paper_main",
-                profile="swing_equity",
-                ticker="SPY",
+                bot="ea:us100-ftmo1",
+                account="ftmo_demo",
+                profile="intraday_fx",
+                ticker="US100",
                 qty=1.0,
                 entry_price=100.0,
                 exit_price=90.0,
@@ -304,16 +255,16 @@ def test_pausa_de_fondo_se_reanuda_con_confirmacion(server) -> None:
                 exit_fill_id=index + 3,
             )
         )
-    assert pause_status(db, "paper_main", trades=trades, tz="UTC")["paused"] is True
+    assert pause_status(db, "ftmo_demo", trades=trades, tz="UTC")["paused"] is True
     token = _token(server)
     fund = _request(server, "GET", "/api/fund")[1]
-    paper = next(row for row in fund["accounts"] if row["id"] == "paper_main")
-    assert paper["pause"]["paused"] is True
+    row = next(row for row in fund["accounts"] if row["id"] == "ftmo_demo")
+    assert row["pause"]["paused"] is True
     status, payload = _request(
         server,
         "POST",
         "/api/fund/pause/resume",
-        body={"account": "paper_main", "confirm": True},
+        body={"account": "ftmo_demo", "confirm": True},
         token=token,
     )
     assert status == 200, payload
@@ -323,14 +274,14 @@ def test_pausa_de_fondo_se_reanuda_con_confirmacion(server) -> None:
 def test_cluster_avisa_si_supera_presupuesto(tmp_path: Path, monkeypatch) -> None:
     specs = [
         BotSpec(
-            id=f"bot-{index}",
+            id=f"cfd-{index}",
             type="deterministic",
             strategy="trend",
-            universe=["SPY"],
+            universe=["US100"],
             enabled=True,
-            profile="swing_equity",
-            cluster="trend_equity",
-            account="paper_main",
+            profile="swing_cfd",
+            cluster="cfd",
+            account="ftmo_demo",
         )
         for index in range(3)
     ]

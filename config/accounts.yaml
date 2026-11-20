@@ -1,36 +1,7 @@
 # Cuentas del fondo personal. La identidad vive aquí; los límites editables
-# viven en SQLite (account_limit_history) para no entrar en el hash de F13.
+# viven en SQLite (account_limit_history) para no entrar en ningún hash.
+# Solo cuentas de fondeo CFD/futuros: no hay cuentas de acciones ni ETF.
 accounts:
-  paper_main:
-    name: "Paper interno"
-    type: capital_propio
-    broker: paper
-    platform: internal
-    status: active
-    account_size: 100000
-    pocket: swing_equity
-    limits:
-      daily_loss_pct: 0.05
-      max_drawdown_pct: 0.10
-      per_trade_risk_pct: 0.01
-      max_open_risk_pct: 0.02
-      max_trades_per_day: 5
-
-  alpaca_paper:
-    name: "Alpaca paper"
-    type: capital_propio
-    broker: alpaca
-    platform: alpaca
-    status: active
-    account_size: 100000
-    pocket: swing_equity
-    limits:
-      daily_loss_pct: 0.03
-      max_drawdown_pct: 0.08
-      per_trade_risk_pct: 0.0075
-      max_open_risk_pct: 0.015
-      max_trades_per_day: 3
-
   ftmo_demo:
     name: "FTMO demo"
     type: fondeo

@@ -46,7 +46,7 @@ permissions:
     resource: "src/tradinglab/risk.py"
     effect: deny
   - action: edit
-    resource: "src/tradinglab/f13.py"
+    resource: "src/tradinglab/propfund/*"
     effect: deny
   - action: edit
     resource: "src/tradinglab/prop/*"
@@ -206,11 +206,11 @@ Trabaja exclusivamente dentro de `E:\trading-lab`, en modo paper. Sigue las
 reglas de `PLAN.md`, `README.md` y `AGENTS.md`.
 
 Límites absolutos:
-- No live trading, no órdenes reales, no activar bots ni F13.
+- No live trading, no órdenes reales, no activar bots.
 - No leer ni escribir `.env` ni secretos.
 - No borrar archivos, no `git push`, no cambiar tareas programadas.
 - No modificar `scripts/`, `AGENTS.md`, `operator.py`, `killswitch.py`,
-  `risk.py`, `f13.py` ni `prop/`.
+  `risk.py`, `propfund/` ni `prop/`.
 - No cambiar `config/telegram.yaml` ni el modo de Telegram.
 - No instalar dependencias.
 - Si una acción está denegada, no busques rodeos: explica que necesitas

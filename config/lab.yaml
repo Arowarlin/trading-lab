@@ -1,12 +1,11 @@
-# Configuración que sí consume qqq-trend-f13.
-#
-# El resto de la configuración operativa (LLM, MT5, daytrader, backup, etc.)
-# vive en config/ops.yaml y no entra en el hash de F13. Lista exacta y motivo
-# en docs/f13.md.
+# Configuración base del laboratorio (paper/demo).
+# El detalle operativo (LLM, MT5, ProjectX, operador, backup, etc.) vive en
+# config/ops.yaml. El Prop Fund y sus cuentas viven en config/propfund/.
+
 mode: paper                 # paper | live  (live exige confirmación explícita)
 
 risk:
-  max_position_pct: 0.10      # máximo 10% del equity por ticker
+  max_position_pct: 0.10      # máximo 10% del equity por activo
   max_gross_exposure: 0.90    # máximo 90% invertido
   max_positions: 8
   daily_loss_limit_pct: 0.03  # kill switch diario
@@ -15,10 +14,10 @@ risk:
   atr_stop_mult: 2.0
 
 data:
-  provider: yahoo             # yahoo | alpaca
+  provider: yahoo             # caché de datos; la consola CFD lee MT5 en solo lectura
   cache_dir: data/cache
 
 execution:
-  broker: paper               # paper | alpaca
+  broker: paper               # paper interno; MT5/ProjectX van por sus adaptadores
   commission_bps: 1.0
   slippage_bps: 5.0

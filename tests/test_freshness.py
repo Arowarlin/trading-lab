@@ -308,12 +308,11 @@ def test_el_offset_del_servidor_no_es_desviacion(monkeypatch):
 
 def test_universo_activo_incluye_bots_forward_ia_y_ea():
     pairs = set(freshness.active_pairs())
-    assert ("SPY", "1d") in pairs
-    assert ("QQQ", "1d") in pairs
     assert ("EURUSD", "M15") in pairs
     assert ("US100.CASH", "H4") in pairs
     assert ("US100.CASH", "M5") in pairs
     assert ("XAUUSD", "M1") in pairs
+    assert ("SPY", "1d") not in pairs
     assert all(timeframe.upper() != "D1" for _, timeframe in pairs)
 
 

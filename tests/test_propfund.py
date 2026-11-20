@@ -46,7 +46,7 @@ def test_el_manifiesto_cubre_los_identificadores_protegidos():
     assert "config/mt5_eas.yaml" in flat
     assert "src/tradinglab/ai_trader.py" in flat
     assert "config/intraday_forward.yaml" in flat
-    assert "config/prop.yaml" in flat
+    assert "src/tradinglab/prop/rules.py" in flat
 
 
 def test_verify_detecta_un_cambio(tmp_path):

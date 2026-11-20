@@ -524,7 +524,7 @@ def test_agente_telegram_deny_edicion() -> None:
         "src/tradinglab/operator.py",
         "src/tradinglab/killswitch.py",
         "src/tradinglab/risk.py",
-        "src/tradinglab/f13.py",
+        "src/tradinglab/propfund/*",
         "src/tradinglab/prop/*",
     }
     denied = {rule["resource"] for rule in rules if rule.get("effect") == "deny"}

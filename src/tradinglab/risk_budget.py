@@ -333,16 +333,6 @@ def set_bot_slice(
             raise RiskBudgetError(
                 "subir la rebanada exige modo operador armado y confirmación"
             )
-        try:
-            from .f13 import status as f13_status
-
-            frozen = f13_status(db_path)
-        except Exception:
-            frozen = None
-        if frozen and str(frozen.get("bot")) == bot:
-            raise RiskBudgetError(
-                "no se puede subir la rebanada del bot con F13 congelado"
-            )
     now = utcnow()
     with connect(db_path) as con:
         con.execute(

@@ -1,8 +1,7 @@
 # Prop Fund · cuentas de fondeo (una entrada por cuenta, nunca por firma).
 #
-# * No hay cuentas de capital propio: paper_main / alpaca_paper siguen en
-#   config/accounts.yaml solo porque el piloto F13 las usa (hash congelado);
-#   el Prop Fund las ignora como destino de ejecución.
+# * No hay cuentas de capital propio: paper_main / alpaca_paper se retiraron
+#   con el carril de acciones/ETF (archivadas en legacy/).
 # * template: true  → ejemplo de estructura, NO una cuenta real ni disponibilidad
 #   confirmada. Las plantillas nunca reciben órdenes.
 # * connection_state arranca en DISCONNECTED. Solo PAPER/DEMO pueden enrutar.

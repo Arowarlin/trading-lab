@@ -172,22 +172,30 @@ def test_rebanada_subir_bajar_historial_y_reversion(tmp_path, monkeypatch):
     assert reverted["history_id"]
 
 
-def test_rebanada_rechaza_f13_congelado(tmp_path, monkeypatch):
+def test_rebanada_sube_solo_armada_y_confirmada(tmp_path):
     db = tmp_path / "lab.db"
     init_db(db)
-    monkeypatch.setattr(
-        "tradinglab.f13.status",
-        lambda path: {"bot": "qqq-trend-f13"},
-    )
-    with pytest.raises(RiskBudgetError, match="F13"):
+    with pytest.raises(RiskBudgetError, match="armado"):
         set_bot_slice(
             db,
             asset="EURUSD",
-            bot="qqq-trend-f13",
+            bot="eurusd-london-pullback-forward",
             slice_pct=0.004,
-            armed=True,
+            armed=False,
             confirm=True,
         )
+    result = set_bot_slice(
+        db,
+        asset="EURUSD",
+        bot="eurusd-london-pullback-forward",
+        slice_pct=0.004,
+        armed=True,
+        confirm=True,
+    )
+    assert result["action"] == "raise"
+    assert effective_slice(
+        db, "EURUSD", "eurusd-london-pullback-forward", budget=load_budget()
+    )["pct"] == pytest.approx(0.004)
 
 
 def test_apagon_noticias_por_evento(tmp_path):

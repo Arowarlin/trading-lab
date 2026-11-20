@@ -17,7 +17,6 @@ import yaml
 
 from .config import ROOT
 from .db import connect, init_db, utcnow
-from .f13 import status as f13_status
 from .prop.guard import AccountLimits
 from .prop.rules import PropRules, from_yaml
 
@@ -288,7 +287,6 @@ def set_limits(
     own = own_limits(db_path, account, now=current)
     old_values = _as_dict(own)
     firm = firm_limits(account)
-    frozen = f13_status(db_path) is not None
     errors: list[str] = []
     actions: list[dict] = []
 
@@ -320,11 +318,6 @@ def set_limits(
         if abs(value - old) <= 1e-12:
             continue
         loosening = value > old
-        if loosening and frozen:
-            errors.append(
-                f"{field}: F13 congelado/iniciado; solo se permite apretar límites"
-            )
-            continue
         if loosening and not confirm:
             errors.append(
                 f"{field}: aflojar requiere confirmación explícita"

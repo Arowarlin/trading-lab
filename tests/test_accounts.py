@@ -12,7 +12,6 @@ from tradinglab.accounts import (
     own_limits,
     set_limits,
 )
-from tradinglab.f13 import config_check, config_hash, freeze
 from tradinglab.prop.guard import AccountLimits, AccountSnapshot, evaluate_account
 from tradinglab.prop.rules import from_yaml
 
@@ -30,7 +29,8 @@ def _state(**kwargs) -> AccountSnapshot:
 
 def test_cuentas_y_limites_efectivos(tmp_path):
     accounts = load_accounts()
-    assert {"paper_main", "alpaca_paper", "ftmo_demo", "topstep_template"} <= set(accounts)
+    assert {"ftmo_demo", "ftmo_trial_ea", "topstep_template"} <= set(accounts)
+    assert "paper_main" not in accounts and "alpaca_paper" not in accounts
     ftmo = accounts["ftmo_demo"]
     assert ftmo.type == "fondeo"
     assert firm_limits(ftmo)["daily_loss_pct"] == pytest.approx(0.05)
@@ -55,18 +55,18 @@ def test_apretar_inmediato_y_aflojar_confirmado(tmp_path):
     now = datetime(2026, 11, 9, 15, 0, tzinfo=timezone.utc)
     result = set_limits(
         db,
-        account_id="paper_main",
-        changes={"per_trade_risk_pct": 0.005},
+        account_id="ftmo_demo",
+        changes={"per_trade_risk_pct": 0.002},
         accounts=accounts,
         now=now,
     )
     assert result["ok"] is True
-    assert own_limits(db, accounts["paper_main"], now=now).per_trade_risk_pct == pytest.approx(0.005)
+    assert own_limits(db, accounts["ftmo_demo"], now=now).per_trade_risk_pct == pytest.approx(0.002)
 
     denied = set_limits(
         db,
-        account_id="paper_main",
-        changes={"max_trades_per_day": 8},
+        account_id="ftmo_demo",
+        changes={"max_trades_per_day": 5},
         accounts=accounts,
         now=now,
     )
@@ -75,18 +75,18 @@ def test_apretar_inmediato_y_aflojar_confirmado(tmp_path):
 
     accepted = set_limits(
         db,
-        account_id="paper_main",
-        changes={"max_trades_per_day": 8},
+        account_id="ftmo_demo",
+        changes={"per_trade_risk_pct": 0.004},
         confirm=True,
         accounts=accounts,
         now=now,
     )
     assert accepted["ok"] is True
     assert accepted["pending"] is True
-    assert own_limits(db, accounts["paper_main"], now=now).max_trades_per_day == 5
+    assert own_limits(db, accounts["ftmo_demo"], now=now).per_trade_risk_pct == pytest.approx(0.002)
     later = now + timedelta(days=2)
-    assert own_limits(db, accounts["paper_main"], now=later).max_trades_per_day == 8
-    assert history(db, "paper_main")
+    assert own_limits(db, accounts["ftmo_demo"], now=later).per_trade_risk_pct == pytest.approx(0.004)
+    assert history(db, "ftmo_demo")
 
 
 def test_limite_propio_no_puede_superar_firma(tmp_path):
@@ -102,58 +102,16 @@ def test_limite_propio_no_puede_superar_firma(tmp_path):
     assert "firma" in result["errors"][0]
 
 
-def test_f13_congelado_solo_aprieta(tmp_path):
-    accounts = load_accounts()
-    db = tmp_path / "lab.db"
-    root = tmp_path / "repo"
-    root.mkdir()
-    (root / "config").mkdir()
-    freeze(db, bot="qqq-trend-f13", symbol="QQQ", start_date="2026-11-09", root=root)
-
-    loosen = set_limits(
-        db,
-        account_id="paper_main",
-        changes={"daily_loss_pct": 0.06},
-        accounts=accounts,
-        confirm=True,
-    )
-    assert loosen["ok"] is False
-    assert "solo se permite apretar" in loosen["errors"][0]
-    tighten = set_limits(
-        db,
-        account_id="paper_main",
-        changes={"daily_loss_pct": 0.03},
-        accounts=accounts,
-    )
-    assert tighten["ok"] is True
-
-
-def test_editar_limites_no_cambia_hash_f13(tmp_path):
-    db = tmp_path / "lab.db"
-    before = config_check(db)
-    set_limits(
-        db,
-        account_id="paper_main",
-        changes={"daily_loss_pct": 0.04},
-        accounts=load_accounts(),
-    )
-    after = config_check(db)
-    assert after["status"] == "not_started"
-    assert after["current"] == before["current"] == config_hash()
-
-
 def test_tres_bots_misma_cuenta_y_dos_cuentas(tmp_path):
-    accounts = load_accounts()
-    paper_limits = effective_limits(tmp_path / "paper.db", accounts["paper_main"])
-    alpaca_limits = effective_limits(tmp_path / "alpaca.db", accounts["alpaca_paper"])
     state = _state(open_risk_usd=0)
     open_risk = 0.0
+    base = AccountLimits(0.05, 0.10, 0.01, 0.02, 5)
     results = []
     for risk in (700.0, 700.0, 700.0):
         report = evaluate_account(
             from_yaml("ftmo", "challenge", 100_000),
             _state(open_risk_usd=open_risk),
-            limits=paper_limits,
+            limits=base,
             proposed_risk_usd=risk,
         )
         results.append(report.allowed)
@@ -171,7 +129,7 @@ def test_tres_bots_misma_cuenta_y_dos_cuentas(tmp_path):
     loose = evaluate_account(
         from_yaml("ftmo", "challenge", 100_000),
         state,
-        limits=alpaca_limits,
+        limits=base,
         proposed_risk_usd=600,
     )
     assert strict.allowed is False

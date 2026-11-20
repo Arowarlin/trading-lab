@@ -15,8 +15,8 @@ import numpy as np
 from .accounts import load_accounts
 from .botlab import latest_evaluations
 from .config import Settings
-from .f13 import execution_metrics, load_criteria
 from .journal import load_closed_trades, summarize
+from .metrics import execution_metrics
 from .orchestrator import load_bots
 
 MIN_TRADES = 20
@@ -150,9 +150,9 @@ def build_drift(
         if trade.manual:
             continue
         by_bot.setdefault(trade.bot, []).append(trade)
-    criteria = load_criteria()
-    max_p50 = float(criteria.get("max_slippage_bps_p50", 10.0))
-    max_p95 = float(criteria.get("max_slippage_bps_p95", 25.0))
+    criteria = {"max_slippage_bps_p50": 10.0, "max_slippage_bps_p95": 25.0}
+    max_p50 = float(criteria["max_slippage_bps_p50"])
+    max_p95 = float(criteria["max_slippage_bps_p95"])
     backtest_bps = float(settings.execution.slippage_bps)
 
     rows = []

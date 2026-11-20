@@ -20,7 +20,6 @@ from .accounts import (
     set_limits,
 )
 from .db import connect, init_db, utcnow
-from .f13 import status as f13_status
 
 DEFAULT_MAX_CAPITAL = 0.0
 
@@ -136,13 +135,6 @@ def rollback_version(
             changes[field] = value
     if not changes:
         return {"ok": True, "changes": [], "account_id": account_id, "version": version}
-    frozen = f13_status(db_path) is not None
-    if frozen:
-        for field, value in changes.items():
-            if value > float(current[field]) + 1e-12:
-                raise LimitVersionError(
-                    f"{field}: F13 congelado/iniciado; el rollback intenta aflojar"
-                )
     result = set_limits(
         db_path,
         account_id=account_id,
@@ -159,7 +151,6 @@ def rollback_version(
         "account_id": account_id,
         "version": version,
         "changes": result["changes"],
-        "frozen": frozen,
     }
 
 

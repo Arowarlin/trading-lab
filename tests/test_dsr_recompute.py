@@ -7,7 +7,7 @@ from tradinglab.dsr_recompute import build_report, write_report
 from tradinglab.learning import count_tests
 
 
-def test_reporte_lista_ea_f13_y_campanas(tmp_path: Path):
+def test_reporte_lista_ea_y_campanas(tmp_path: Path):
     db = tmp_path / "lab.db"
     init_db(db)
     before = count_tests(db)
@@ -17,7 +17,6 @@ def test_reporte_lista_ea_f13_y_campanas(tmp_path: Path):
     entities = [row["entity"] for row in payload["rows"]]
     assert entities == [
         "EA us100-ftmo1",
-        "F13 qqq-trend-f13",
         "Campaña 2026-11-A",
         "Campaña 2026-11-B",
     ]

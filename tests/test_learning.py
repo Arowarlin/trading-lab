@@ -73,7 +73,7 @@ def test_aprobar_aplicar_revertir_reduce_riesgo(tmp_path: Path) -> None:
     db = tmp_path / "lab.db"
     init_db(db)
     settings = Settings()
-    account = load_accounts()["paper_main"]
+    account = load_accounts()["ftmo_demo"]
     lesson = create_lesson(
         db,
         hypothesis="reducir pérdida diaria",
@@ -81,7 +81,7 @@ def test_aprobar_aplicar_revertir_reduce_riesgo(tmp_path: Path) -> None:
         author="humano",
         action={
             "kind": "reduce_risk",
-            "account_id": "paper_main",
+            "account_id": "ftmo_demo",
             "changes": {"daily_loss_pct": 0.04},
         },
         settings=settings,
@@ -101,7 +101,7 @@ def test_aprobar_aplicar_revertir_reduce_riesgo(tmp_path: Path) -> None:
     )
     later = datetime.now(timezone.utc) + timedelta(days=3)
     assert own_limits(db, account, now=later).daily_loss_pct == pytest.approx(0.05)
-    rows = history(db, "paper_main")
+    rows = history(db, "ftmo_demo")
     assert any(row["origin"] == "lesson-revert" and abs(row["new_value"] - 0.05) < 1e-9 for row in rows)
 
 
@@ -114,7 +114,7 @@ def test_auto_aplicar_solo_reduce_riesgo(tmp_path: Path) -> None:
         hypothesis="otra acción",
         evidence="test",
         author="humano",
-        action={"kind": "other", "account_id": "paper_main", "changes": {}},
+        action={"kind": "other", "account_id": "ftmo_demo", "changes": {}},
         settings=settings,
     )
     with pytest.raises(ValueError):
@@ -126,7 +126,7 @@ def test_auto_aplicar_solo_reduce_riesgo(tmp_path: Path) -> None:
         author="qwen",
         action={
             "kind": "reduce_risk",
-            "account_id": "paper_main",
+            "account_id": "ftmo_demo",
             "changes": {"daily_loss_pct": 0.03},
         },
         settings=settings,
@@ -134,7 +134,7 @@ def test_auto_aplicar_solo_reduce_riesgo(tmp_path: Path) -> None:
     result = apply_lesson(db, reduce["id"], auto=True, settings=settings)
     assert result["status"] == "approved"
     assert result["applied_by"] == "auto"
-    assert own_limits(db, load_accounts()["paper_main"]).daily_loss_pct == pytest.approx(0.03)
+    assert own_limits(db, load_accounts()["ftmo_demo"]).daily_loss_pct == pytest.approx(0.03)
 
 
 def test_rechazar_y_challenger_no_activa(tmp_path: Path) -> None:
@@ -194,7 +194,7 @@ def test_web_learning_aprobar_y_aplicar(tmp_path: Path) -> None:
         author="humano",
         action={
             "kind": "reduce_risk",
-            "account_id": "paper_main",
+            "account_id": "ftmo_demo",
             "changes": {"daily_loss_pct": 0.04},
         },
         settings=settings,
@@ -235,7 +235,7 @@ def test_web_learning_aprobar_y_aplicar(tmp_path: Path) -> None:
         )
         assert status == 200, applied
         assert applied["lesson"]["applied_at"]
-        assert own_limits(db, load_accounts()["paper_main"]).daily_loss_pct == pytest.approx(0.04)
+        assert own_limits(db, load_accounts()["ftmo_demo"]).daily_loss_pct == pytest.approx(0.04)
     finally:
         server.shutdown()
         server.server_close()

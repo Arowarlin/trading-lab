@@ -524,19 +524,6 @@ def status_text(config: TelegramConfig) -> str:
         f"- Telegram: {'activo' if config.enabled else 'pausado'} · modo={config.mode}",
     ]
     try:
-        from .f13 import status as f13_status
-
-        f13 = f13_status(DEFAULT_DB)
-        if f13:
-            lines.append(
-                f"- F13: congelado · inicio={f13.get('start_date')} · "
-                f"hash={str(f13.get('config_hash') or '')[:8]}"
-            )
-        else:
-            lines.append("- F13: no iniciado")
-    except Exception:
-        lines.append("- F13: Sin datos")
-    try:
         from .cushion import evaluate_from_db, summary_line
 
         lines.append(f"- {summary_line(evaluate_from_db(DEFAULT_DB))}")
@@ -575,30 +562,24 @@ def status_text(config: TelegramConfig) -> str:
     return "\n".join(lines)
 
 
-def f13_text() -> str:
+def propfund_text() -> str:
     try:
-        from .f13 import load_criteria
-        from .f13 import status as f13_status
+        from .propfund.console import build_payload
 
-        row = f13_status(DEFAULT_DB)
-        criteria = load_criteria()
-        if not row:
-            return "F13 · no iniciado\n" + json.dumps(criteria, ensure_ascii=False, indent=2)
-        return "\n".join(
-            [
-                "F13 · estado",
-                f"- Bot: {row.get('bot')}",
-                f"- Símbolo: {row.get('symbol')}",
-                f"- Inicio: {row.get('start_date')}",
-                f"- Congelado: {row.get('frozen_at')}",
-                f"- Hash: {str(row.get('config_hash') or '')[:16]}…",
-                f"- Ventana: {criteria.get('window_weeks')} semanas",
-                f"- Trades esperados 8s: {criteria.get('expected_trades_8w_low')}–{criteria.get('expected_trades_8w_high')}",
-                "- El bot sigue enabled:false; la activación es manual y en paper.",
-            ]
+        payload = build_payload()
+        protection = payload.get("protection") or {}
+        lines = ["Prop Fund · estado"]
+        lines.append(
+            "- Protegidos: "
+            + ("OK" if protection.get("ok") else str(protection.get("status") or "Sin datos"))
         )
+        for group in protection.get("groups") or []:
+            lines.append(
+                f"  · {group.get('name')}: {'OK' if group.get('ok') else 'ALTERADO'}"
+            )
+        return "\n".join(lines)
     except Exception as exc:
-        return f"F13 · Sin datos ({type(exc).__name__})"
+        return f"Prop Fund · Sin datos ({type(exc).__name__})"
 
 
 def decisions_text() -> str:
@@ -629,7 +610,7 @@ def decisions_text() -> str:
 
 HELP_TEXT = """TradingLab · comandos
 /status · estado del laboratorio
-/f13 · estado de F13
+/propfund · estado del Prop Fund y protegidos
 /decisions · resultados con retorno 20d
 /ping · comprobar conexión
 /pause · pausar el puente (solo /status, /help y /resume)
@@ -645,7 +626,7 @@ HELP_TEXT = """TradingLab · comandos
 /help · esta ayuda
 
 Modo agente: solo paper, sin live, sin .env, sin borrar, sin push y sin
-activar F13. El agente trabaja en E:\\trading-lab y responde con el resumen.
+activar bots. El agente trabaja en E:\\trading-lab y responde con el resumen.
 Push/backup solo se ejecutan con /confirm y el código temporal.
 """
 
@@ -936,8 +917,8 @@ def handle_inbound(
     if msg.command == "/status":
         reply(status_text(config))
         return
-    if msg.command == "/f13":
-        reply(f13_text())
+    if msg.command == "/propfund":
+        reply(propfund_text())
         return
     if msg.command == "/decisions":
         reply(decisions_text())
@@ -1161,7 +1142,6 @@ __all__ = [
     "execute_action",
     "execute_backup",
     "execute_push",
-    "f13_text",
     "get_chat_id",
     "get_token",
     "handle_inbound",

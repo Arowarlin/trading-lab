@@ -14,7 +14,6 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .accounts import AccountDefinition, load_accounts
 from .db import connect, init_db, utcnow
-from .f13 import status as f13_status
 
 DEFAULT_MAX_CONSECUTIVE_LOSSES = 3
 DEFAULT_DAILY_LOSS_PCT = 0.02
@@ -66,10 +65,6 @@ def init_riskpause(db_path: str | Path) -> None:
     init_db(db_path)
     with connect(db_path) as con:
         con.executescript(SCHEMA)
-
-
-def _frozen(db_path: str | Path) -> bool:
-    return f13_status(db_path) is not None
 
 
 def config(db_path: str | Path, account_id: str) -> RiskConfig:
@@ -279,10 +274,6 @@ def resume(
 ) -> dict:
     if not confirm:
         raise RiskPauseError("reanudar exige confirmación explícita")
-    if _frozen(db_path):
-        raise RiskPauseError(
-            "F13 está congelado/iniciado: solo se permite apretar; no reanudar"
-        )
     state = _state(db_path, account_id)
     if not state or not state["paused"]:
         raise RiskPauseError(f"{account_id} no está en pausa")
@@ -347,10 +338,6 @@ def set_thresholds(
         if abs(new_value - old[field]) <= 1e-12:
             continue
         loosening = new_value > old[field]
-        if loosening and _frozen(db_path):
-            raise RiskPauseError(
-                f"{field}: F13 congelado/iniciado; solo se permite apretar"
-            )
         if loosening and not confirm:
             raise RiskPauseError(
                 f"{field}: aflojar requiere confirmación explícita"

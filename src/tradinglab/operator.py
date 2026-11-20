@@ -47,7 +47,7 @@ PIN_RE = re.compile(r"^\d{6,12}$")
 PIN_MIN_DIGITS = 6
 DEFAULT_WEB_PORT = 8420
 WEB_PORT_ENV = "LAB_WEB_PORT"
-SUPPORTED_PLATFORMS = {"internal", "paper", "alpaca", "mt5"}
+SUPPORTED_PLATFORMS = {"internal", "paper", "mt5"}
 TRADEABLE_STATUSES = {"active", "demo", "paper", "simulated"}
 ACTIONS = {
     "order",
@@ -485,20 +485,9 @@ class OperatorService:
         return out
 
     def _f13_bot_locked(self, bot: str) -> bool:
-        try:
-            from .f13 import status as f13_status
-
-            frozen = f13_status(self.db_path)
-        except Exception as exc:
-            self._audit(
-                "f13_status_error",
-                {"bot": bot},
-                "bloqueado",
-                False,
-                reason=_sanitize_error(exc),
-            )
-            return True
-        return bool(frozen and str(frozen.get("bot")) == bot)
+        # El piloto F13 se retiró el 2026-11-19; no queda ningún hash congelado
+        # que bloquee bots. El método se conserva para las llamadas existentes.
+        return False
 
     def _account_allowed(self, account: AccountDefinition) -> tuple[bool, str | None]:
         if self.settings.mode == "live":
@@ -521,7 +510,6 @@ class OperatorService:
         return account
 
     def _default_broker(self, account: AccountDefinition):
-        from .execution.alpaca import AlpacaBroker
         from .execution.paper import PaperBroker
 
         if account.platform in {"internal", "paper"}:
@@ -531,8 +519,6 @@ class OperatorService:
                 self.settings.execution.commission_bps,
                 self.settings.execution.slippage_bps,
             )
-        if account.platform == "alpaca":
-            return AlpacaBroker(paper=True, db_path=self.db_path)
         if account.platform == "mt5":
             from .execution import get_mt5_broker
 
@@ -706,9 +692,9 @@ class OperatorService:
         qty = float(params.get("qty") or 0)
         if qty <= 0:
             raise OperatorError("qty debe ser > 0", 400)
-        equity_platform = account.platform in {"internal", "paper", "alpaca"}
+        equity_platform = account.platform in {"internal", "paper"}
         if equity_platform and int(qty) != qty:
-            raise OperatorError("qty debe ser entera para acciones/ETF", 400)
+            raise OperatorError("qty debe ser entera para la cuenta paper interna", 400)
         price = float(params.get("price") or 0)
         if price <= 0:
             price = self._last_price(ticker)
@@ -1092,7 +1078,7 @@ class OperatorService:
         bot = str(payload.get("bot") or "console")[:80]
         try:
             signed = payload["qty"] if payload["side"] == "buy" else -payload["qty"]
-            if account.platform in {"internal", "paper", "alpaca"}:
+            if account.platform in {"internal", "paper"}:
                 order = broker.submit_market(
                     payload["symbol"],
                     int(signed),

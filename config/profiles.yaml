@@ -1,27 +1,6 @@
 # Perfiles de bots por clase de activo.
 # Valores de plantilla: verifica cada límite con tu firma/contrato.
 profiles:
-  swing_equity:
-    target_vol: 0.08
-    vol_target:
-      enabled: false
-    description: "Swing de acciones/ETF; señal diaria tras el cierre de EE. UU."
-    timeframe: "1d"
-    schedule:
-      tz: "America/New_York"
-      start: "00:00"
-      end: "23:59"
-      days: ["Mon", "Tue", "Wed", "Thu", "Fri"]
-    max_risk_pct: 0.005
-    max_trades_per_day: 1
-    max_cluster_risk_pct: 0.01
-    validation:
-      min_trades: 20
-      min_dsr: 0.90
-      max_pbo: 0.30
-      require_walk_forward: true
-      require_regimes: true
-
   intraday_fx:
     target_vol: 0.06
     vol_target:

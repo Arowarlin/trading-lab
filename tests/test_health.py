@@ -16,8 +16,8 @@ def _trade(day: str, pnl: float, index: int = 1) -> ClosedTrade:
     stamp = f"{day}T15:00:00+00:00"
     return ClosedTrade(
         bot="trend-spy",
-        account="paper_main",
-        profile="swing_equity",
+        account="ftmo_demo",
+        profile="intraday_fx",
         ticker="SPY",
         qty=1.0,
         entry_price=100.0,
@@ -114,7 +114,7 @@ def test_cash_flows_validacion_y_listado(tmp_path: Path) -> None:
     init_db(db)
     flow = add_cash_flow(
         db,
-        account_id="paper_main",
+        account_id="ftmo_demo",
         kind="deposit",
         amount=1_000.0,
         ts="2026-01-02T10:00:00+00:00",
@@ -122,13 +122,13 @@ def test_cash_flows_validacion_y_listado(tmp_path: Path) -> None:
         accounts=load_accounts(),
     )
     assert flow["amount"] == pytest.approx(1_000.0)
-    rows = cash_flows(db, "paper_main")
+    rows = cash_flows(db, "ftmo_demo")
     assert len(rows) == 1
     assert rows[0]["kind"] == "deposit"
     with pytest.raises(ValueError):
         add_cash_flow(
             db,
-            account_id="paper_main",
+            account_id="ftmo_demo",
             kind="transfer",
             amount=100,
             accounts=load_accounts(),
@@ -136,7 +136,7 @@ def test_cash_flows_validacion_y_listado(tmp_path: Path) -> None:
     with pytest.raises(ValueError):
         add_cash_flow(
             db,
-            account_id="paper_main",
+            account_id="ftmo_demo",
             kind="deposit",
             amount=-5,
             accounts=load_accounts(),
@@ -157,7 +157,7 @@ def test_fund_incluye_salud_flujos_y_twr(tmp_path: Path) -> None:
         )
     add_cash_flow(
         db,
-        account_id="paper_main",
+        account_id="ftmo_demo",
         kind="deposit",
         amount=5_000.0,
         ts="2026-01-02T20:00:00+00:00",
@@ -167,12 +167,12 @@ def test_fund_incluye_salud_flujos_y_twr(tmp_path: Path) -> None:
         Settings(), root=tmp_path, db_path=db, external=False
     )
     payload = data.fund()
-    paper = next(row for row in payload["accounts"] if row["id"] == "paper_main")
+    paper = next(row for row in payload["accounts"] if row["id"] == "ftmo_demo")
     assert paper["cash_flows"]
     assert paper["cash_flow_net"] == pytest.approx(5_000.0)
-    assert paper["health"]["score"] is not None
+    # Sin MT5 en el test, la salud de la cuenta fondeada queda "Sin datos".
+    assert paper["health"]["score"] is None
     assert paper["health"]["partial"] is True
-    assert paper["twr"]["twr"] == pytest.approx((110_000 - 5_000) / 100_000 - 1)
-    assert payload["fund_return"]["twr"] == pytest.approx(0.05)
-    assert payload["fund_return"]["coverage"] > 0
-    assert payload["health"]["score"] is not None
+    # Sin curva de equity de la cuenta fondeada, el TWR queda "Sin datos".
+    assert paper["twr"]["twr"] is None
+    assert payload["fund_return"]["twr"] is None

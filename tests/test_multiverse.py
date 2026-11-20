@@ -126,19 +126,19 @@ def test_journal_incluye_multiverse_por_cuenta(tmp_path: Path, monkeypatch) -> N
             strategy="trend",
             universe=["SPY"],
             enabled=True,
-            profile="swing_equity",
-            account="paper_main",
+            profile="intraday_fx",
+            account="ftmo_demo",
         )
     ]
     monkeypatch.setattr(journal_mod, "load_bots", lambda: specs)
     payload = build_journal(db, tz="UTC")
     rows = {row["account"]: row for row in payload["multiverse"]}
-    assert "paper_main" in rows
-    assert rows["paper_main"]["paths"] == 1_000
-    assert rows["paper_main"]["seed"] == 42
-    assert rows["paper_main"]["trades"] == 2
-    assert rows["paper_main"]["daily_basis"] == "bloques_por_dia"
-    assert 0.0 <= rows["paper_main"]["prob_breach_any"] <= 1.0
+    assert "ftmo_demo" in rows
+    assert rows["ftmo_demo"]["paths"] == 1_000
+    assert rows["ftmo_demo"]["seed"] == 42
+    assert rows["ftmo_demo"]["trades"] == 2
+    assert rows["ftmo_demo"]["daily_basis"] == "bloques_por_dia"
+    assert 0.0 <= rows["ftmo_demo"]["prob_breach_any"] <= 1.0
 
 
 def test_research_detail_lee_sidecar_de_operaciones(tmp_path: Path) -> None:

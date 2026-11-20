@@ -153,7 +153,7 @@ def test_load_bots_incluye_intraday_sin_tocar_bots_yaml():
     assert INTRADAY_IDS <= {spec.id for spec in intra}
     assert all(not spec.enabled for spec in intra)
     assert all(spec.yaml_enabled is False for spec in intra)
-    assert any(spec.id == "trend-spy" for spec in specs)
+    assert not any(spec.id == "trend-spy" for spec in specs)
     for spec in intra:
         if spec.id == "nasdaq-caja-ny":
             assert spec.timeframe == "M5"

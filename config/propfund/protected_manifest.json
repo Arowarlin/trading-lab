@@ -46,16 +46,6 @@
         "src/tradinglab/ea_us100_engine.py": "10b183ca0b9812f4859c2445d23412318cbbc9365565c87eff0d019030cb4adb"
       }
     },
-    "f13_hash": {
-      "description": "Archivos del hash congelado de F13: cambiarlos detiene el piloto.",
-      "files": {
-        "config/accounts.yaml": "5e9e96f4f090bf339838b69bb6c328fdee7e8a91ed0a5a75b5aa09d66a207a31",
-        "config/bots.yaml": "cb45ce69a28dea6c35a979347e96cc1c43922f816fa8f7e65ad609585892046e",
-        "config/f13.yaml": "bab020a23aaf4acd7dbd2267fd9b29516313e53444f86402f74cd86c296abb40",
-        "config/lab.yaml": "c2342c669648559ef26f3e1b40fbb3ff4d0ac62d6ba0603aa621dc2a5eccd926",
-        "config/prop.yaml": "698369f12c39ff30c0cbd76125df753b4f6954e3981ea8269d17ef253fbc8c92"
-      }
-    },
     "ftmo_forward": {
       "description": "Las dos estrategias forward fijas del carril FTMO (eurusd-london-pullback-forward, usdjpy-tokyo-breakout-forward) y la incubación us100-trend-d1.",
       "files": {

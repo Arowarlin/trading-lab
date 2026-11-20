@@ -427,7 +427,7 @@ def report_bot(
     )
     trades = [trade for trade in trades if trade.bot == bot and not trade.manual]
     summary = summarize(trades, load_accounts())
-    from .f13 import execution_metrics
+    from .metrics import execution_metrics
 
     execution = execution_metrics(db_path, bot=bot, start_date=start)
     drift = _drift_for(db_path, bot, settings)

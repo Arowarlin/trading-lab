@@ -1,14 +1,11 @@
 from __future__ import annotations
 
 from ..config import Settings
-from .alpaca import AlpacaBroker, AlpacaError
 from .paper import PaperBroker
 
 
 def get_broker(settings: Settings, db_path=None):
-    """Broker de acciones: paper interno o Alpaca."""
-    if settings.execution.broker == "alpaca":
-        return AlpacaBroker(paper=(settings.mode != "live"), db_path=db_path)
+    """Broker de paper interno. Solo paper; el laboratorio ya no opera acciones."""
     if db_path is None:
         from ..config import DEFAULT_DB
 
@@ -24,10 +21,8 @@ def get_broker(settings: Settings, db_path=None):
 def get_broker_for_account(settings: Settings, account, db_path=None):
     """Broker que corresponde a la cuenta declarada por un bot.
 
-    Regla dura: solo paper/demo. La cuenta `alpaca_paper` se abre siempre con
-    `paper=True`; una cuenta marcada como live se rechaza antes de crear el
-    cliente. El broker interno sigue usando el efectivo y las posiciones de
-    `paper_main`.
+    Solo paper/demo. Las cuentas CFD/futuros usan MT5 o ProjectX; el broker
+    interno se conserva para simulaciones y pruebas.
     """
     if str(getattr(settings, "mode", "paper")) == "live":
         raise ValueError("modo live bloqueado: el laboratorio solo opera paper/demo")
@@ -48,15 +43,9 @@ def get_broker_for_account(settings: Settings, account, db_path=None):
             settings.execution.commission_bps,
             settings.execution.slippage_bps,
         )
-    if platform == "alpaca":
-        return AlpacaBroker(
-            paper=True,
-            db_path=db_path,
-            account=str(getattr(account, "id", "alpaca_paper")),
-        )
     raise ValueError(
         f"cuenta {getattr(account, 'id', '?')} con plataforma {platform}: "
-        "sin broker de acciones paper"
+        "sin broker de paper para esa plataforma"
     )
 
 
@@ -71,24 +60,6 @@ def get_projectx_broker(settings: Settings, db_path=None, dry_run: bool | None =
         account_id=settings.projectx.account_id,
         dry_run=settings.projectx.dry_run if dry_run is None else dry_run,
         require_simulated=settings.projectx.require_simulated,
-        db_path=db_path or DEFAULT_DB,
-    )
-
-
-def get_tradestation_broker(
-    settings: Settings, db_path=None, dry_run: bool | None = None
-):
-    """TradeStation SIM en solo lectura; requiere OAuth y API Key."""
-    from ..config import DEFAULT_DB
-    from .tradestation import TradeStationBroker
-
-    return TradeStationBroker(
-        account_id=settings.tradestation.account_id,
-        base_url=settings.tradestation.base_url,
-        dry_run=(
-            settings.tradestation.dry_run if dry_run is None else bool(dry_run)
-        ),
-        require_simulated=settings.tradestation.require_simulated,
         db_path=db_path or DEFAULT_DB,
     )
 
@@ -113,11 +84,8 @@ def get_mt5_broker(settings: Settings, db_path=None, dry_run: bool | None = None
 
 __all__ = [
     "PaperBroker",
-    "AlpacaBroker",
-    "AlpacaError",
     "get_broker",
     "get_broker_for_account",
     "get_mt5_broker",
     "get_projectx_broker",
-    "get_tradestation_broker",
 ]

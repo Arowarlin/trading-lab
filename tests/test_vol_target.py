@@ -87,8 +87,8 @@ def test_el_backtest_escala_la_exposicion():
 
 
 def test_perfil_tiene_target_vol_y_el_flag_esta_apagado():
-    config = profile_vol_config("swing_equity")
-    assert config["target_vol"] == pytest.approx(0.08)
+    config = profile_vol_config("swing_cfd")
+    assert config["target_vol"] == pytest.approx(0.10)
     assert config["enabled"] is False
     assert profile_vol_config("intraday_fx")["target_vol"] == pytest.approx(0.06)
     assert profile_vol_config("intraday_futures")["target_vol"] == pytest.approx(0.10)

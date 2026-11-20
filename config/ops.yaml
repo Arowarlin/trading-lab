@@ -1,8 +1,7 @@
-# Configuración operativa del laboratorio (no afecta al hash de F13).
+# Configuración operativa del laboratorio.
 #
-# Aquí viven las secciones que no cambian la ejecución de qqq-trend-f13:
-# zona horaria, LLM, daytrader, MT5, ProjectX, fondeo, operador, salud, aprendizaje
-# y backup. `config/lab.yaml` se queda solo con lo que F13 consume.
+# Aquí viven zona horaria, LLM, MT5, ProjectX, fondeo, operador, salud,
+# aprendizaje y backup. `config/lab.yaml` guarda el riesgo base.
 
 timezone: America/New_York
 starting_cash: 100000.0
@@ -20,16 +19,7 @@ llm:
   max_tokens: 4096
   timeout_s: 600
 
-daytrader:
-  dir: "C:/Users/PC/Proyectos/trading/trader"
-  account: alpaca_paper
-  # Activado por decision del operador (2026-11-11): el carril de acciones
-  # (ORB) queda habilitado en paper. Sigue necesitando --execute, el
-  # veredicto PASS del pipeline externo y los guards del laboratorio, y solo
-  # acepta el ticker de config/equities_lane.yaml (AAPL).
-  enabled: true
-
-# MetaTrader 5 (forex). El terminal ya está instalado.
+# MetaTrader 5 (CFD). El terminal ya está instalado.
 mt5:
   terminal_path: null         # ej. "C:\\Program Files\\Darwinex MetaTrader 5\\terminal64.exe"
   login: null                 # número de cuenta (mejor en .env: MT5_LOGIN)

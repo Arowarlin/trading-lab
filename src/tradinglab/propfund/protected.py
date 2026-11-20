@@ -15,10 +15,8 @@ Grupos protegidos (identificados en la auditoría de la Fase 0, ver
   ``us100-trend-d1`` que comparte el mismo archivo de configuración.
 * ``ftmo_risk``       – reglas de fondeo, guard, defensa, guardián MT5 y stop
   diario de cuenta que protegen a los tres anteriores.
-* ``f13_hash``        – archivos que entran en el hash congelado del piloto F13.
 
-La comparación ignora CRLF/LF (el repositorio y Windows no coinciden), igual
-que ``tradinglab.f13``.
+La comparación ignora CRLF/LF (el repositorio y Windows no coinciden).
 """
 
 from __future__ import annotations
@@ -96,16 +94,6 @@ PROTECTED_GROUPS: dict[str, dict] = {
             "mql5/TradingLabGuardian.mq5",
             "config/guardian.yaml",
             "config/prop_templates.yaml",
-        ],
-    },
-    "f13_hash": {
-        "description": "Archivos del hash congelado de F13: cambiarlos detiene el piloto.",
-        "paths": [
-            "config/lab.yaml",
-            "config/bots.yaml",
-            "config/prop.yaml",
-            "config/f13.yaml",
-            "config/accounts.yaml",
         ],
     },
 }
