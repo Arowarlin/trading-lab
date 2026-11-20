@@ -40,7 +40,7 @@ def latest_backup(directory: str | Path | None = None) -> Path | None:
         return None
     files = sorted(
         root.glob("trading-lab_*.zip"),
-        key=lambda path: path.stat().st_mtime,
+        key=lambda path: (path.stat().st_mtime, path.name),
         reverse=True,
     )
     return files[0] if files else None

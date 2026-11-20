@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 import zipfile
 from pathlib import Path
@@ -142,3 +143,28 @@ def test_verify_latest_backup_usa_el_mas_reciente(tmp_path, monkeypatch):
     report = verify_latest_backup(live)
     assert report["ok"] is True
     assert Path(report["backup"]).name == latest.name
+
+
+def test_verify_latest_backup_desempata_por_nombre_con_mtime_igual(tmp_path, monkeypatch):
+    backup_at = "2026-11-16T13:00:00+00:00"
+    older = _zip(
+        tmp_path,
+        {"fills": ["2026-11-16T10:00:00+00:00"]},
+        backup_at,
+        name="trading-lab_20261116_100000.zip",
+    )
+    newer = _zip(
+        tmp_path,
+        {"fills": ["2026-11-16T12:00:00+00:00"]},
+        backup_at,
+        name="trading-lab_20261116_130000.zip",
+    )
+    stamp = older.stat().st_mtime
+    os.utime(older, (stamp, stamp))
+    os.utime(newer, (stamp, stamp))
+    live = tmp_path / "live.db"
+    _db(live, {"fills": ["2026-11-16T12:00:00+00:00"]})
+    monkeypatch.setenv("TRADINGLAB_BACKUP_DIR", str(tmp_path))
+    report = verify_latest_backup(live)
+    assert report["ok"] is True
+    assert Path(report["backup"]).name == newer.name
