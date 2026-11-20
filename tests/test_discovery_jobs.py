@@ -18,9 +18,14 @@ import pytest
 import yaml
 
 from tradinglab.config import ROOT
-from tradinglab.discovery import databank, dsl, jobs
+from tradinglab.discovery import campaigns, databank, dsl, jobs
 
 TEMPLATE = ROOT / "config" / "discovery" / "templates" / "ny_open_vol_filter.yaml"
+SEGMENTS = {
+    "is": ["2024-01-08", "2024-01-15"],
+    "oos1": ["2024-01-16", "2024-01-25"],
+    "oos2": ["2024-01-26", None],
+}
 
 
 def _dataset(bars: int = 8_000, seed: int = 7) -> pd.DataFrame:
@@ -51,12 +56,32 @@ def _strategies(count: int = 6) -> list[dict]:
     return result
 
 
-def _setup(bars: pd.DataFrame) -> jobs.QueueSetup:
-    return jobs.QueueSetup(bars=bars, template="ny_open_vol_filter")
-
-
 def _db(tmp_path: Path) -> Path:
     return tmp_path / "discovery.db"
+
+
+def _register(
+    db: Path,
+    frame: pd.DataFrame,
+    *,
+    campaign_id: str = "camp",
+    approved: bool = True,
+) -> dict:
+    campaigns.register(
+        "US100",
+        "M5",
+        "ny_open_vol_filter",
+        "small",
+        segments=SEGMENTS,
+        frame=frame,
+        campaign_id=campaign_id,
+        db_path=db,
+    )
+    if approved:
+        return campaigns.approve(campaign_id, db_path=db)
+    campaign = databank.get_campaign(campaign_id, db_path=db)
+    assert campaign is not None
+    return campaign
 
 
 def _counts(db: Path) -> dict[str, int]:
@@ -67,9 +92,16 @@ def _counts(db: Path) -> dict[str, int]:
     return {str(state): int(count) for state, count in rows}
 
 
+def _job_rows(db: Path) -> list[dict]:
+    with sqlite3.connect(db) as con:
+        con.row_factory = sqlite3.Row
+        rows = con.execute("SELECT * FROM disc_jobs ORDER BY id").fetchall()
+    return [dict(row) for row in rows]
+
+
 def test_enqueue_dedupes_and_rejects_invalid(tmp_path: Path) -> None:
     db = _db(tmp_path)
-    databank.add_campaign("camp", {"instrument": "US100", "timeframe": "M5"}, db_path=db)
+    _register(db, _dataset())
     strategies = _strategies(5)
     assert jobs.enqueue("camp", strategies, db_path=db) == 5
     assert jobs.enqueue("camp", strategies, db_path=db) == 0
@@ -84,10 +116,10 @@ def test_enqueue_dedupes_and_rejects_invalid(tmp_path: Path) -> None:
 
 def test_run_queue_completes_and_is_idempotent(tmp_path: Path) -> None:
     db = _db(tmp_path)
-    databank.add_campaign("camp", {"instrument": "US100", "timeframe": "M5"}, db_path=db)
+    frame = _dataset()
+    _register(db, frame)
     jobs.enqueue("camp", _strategies(6), db_path=db)
-    setup = _setup(_dataset())
-    summary = jobs.run_queue("camp", 2, setup=setup, db_path=db, batch_size=3)
+    summary = jobs.run_queue("camp", 2, bars=frame, db_path=db, batch_size=3)
     assert summary["done"] == 6
     assert summary["failed"] == 0
     assert summary["queued"] == 0
@@ -104,25 +136,19 @@ def test_run_queue_completes_and_is_idempotent(tmp_path: Path) -> None:
         assert row["status"] == "evaluated"
     assert all(row["attempts"] == 1 for row in _job_rows(db))
 
-    again = jobs.run_queue("camp", 2, setup=setup, db_path=db)
+    again = jobs.run_queue("camp", 2, bars=frame, db_path=db)
     assert again["done"] == 6
     assert again["queued"] == 0
     assert len(databank.list_strategies(campaign_id="camp", db_path=db)) == 6
 
 
-def _job_rows(db: Path) -> list[dict]:
-    with sqlite3.connect(db) as con:
-        con.row_factory = sqlite3.Row
-        rows = con.execute("SELECT * FROM disc_jobs ORDER BY id").fetchall()
-    return [dict(row) for row in rows]
-
-
 def test_cancel_campaign_skips_queued(tmp_path: Path) -> None:
     db = _db(tmp_path)
-    databank.add_campaign("camp", {"instrument": "US100", "timeframe": "M5"}, db_path=db)
+    frame = _dataset()
+    _register(db, frame)
     jobs.enqueue("camp", _strategies(4), db_path=db)
     assert jobs.cancel_campaign("camp", db_path=db) == 4
-    summary = jobs.run_queue("camp", 2, setup=_setup(_dataset()), db_path=db)
+    summary = jobs.run_queue("camp", 2, bars=frame, db_path=db)
     assert summary["cancelled"] == 4
     assert summary["done"] == 0
     assert databank.get_campaign("camp", db_path=db)["status"] == "cancelled"
@@ -131,7 +157,8 @@ def test_cancel_campaign_skips_queued(tmp_path: Path) -> None:
 
 def test_resume_orphan_running(tmp_path: Path) -> None:
     db = _db(tmp_path)
-    databank.add_campaign("camp", {"instrument": "US100", "timeframe": "M5"}, db_path=db)
+    frame = _dataset()
+    _register(db, frame)
     jobs.enqueue("camp", _strategies(3), db_path=db)
     with sqlite3.connect(db) as con:
         first = con.execute("SELECT id FROM disc_jobs ORDER BY id LIMIT 1").fetchone()[0]
@@ -140,7 +167,7 @@ def test_resume_orphan_running(tmp_path: Path) -> None:
             " WHERE id = ?",
             (first,),
         )
-    summary = jobs.run_queue("camp", 2, setup=_setup(_dataset()), db_path=db)
+    summary = jobs.run_queue("camp", 2, bars=frame, db_path=db)
     assert summary["done"] == 3
     rows = {row["id"]: row for row in _job_rows(db)}
     assert rows[first]["state"] == "done"
@@ -149,12 +176,13 @@ def test_resume_orphan_running(tmp_path: Path) -> None:
 
 def test_job_error_is_saved(tmp_path: Path) -> None:
     db = _db(tmp_path)
-    databank.add_campaign("camp", {"instrument": "US100", "timeframe": "M5"}, db_path=db)
+    frame = _dataset()
+    _register(db, frame)
     strategy = copy.deepcopy(_strategies(1)[0])
     strategy["instrument"] = "US500"
     assert dsl.validate(strategy) == []
     jobs.enqueue("camp", [strategy], db_path=db)
-    summary = jobs.run_queue("camp", 1, setup=_setup(_dataset()), db_path=db)
+    summary = jobs.run_queue("camp", 1, bars=frame, db_path=db)
     assert summary["failed"] == 1
     row = _job_rows(db)[0]
     assert row["state"] == "failed"
@@ -164,15 +192,32 @@ def test_job_error_is_saved(tmp_path: Path) -> None:
 
 def test_workers_are_clamped_to_engine_config(tmp_path: Path) -> None:
     db = _db(tmp_path)
-    databank.add_campaign("camp", {"instrument": "US100", "timeframe": "M5"}, db_path=db)
+    frame = _dataset()
+    _register(db, frame)
     jobs.enqueue("camp", _strategies(1), db_path=db)
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
-        summary = jobs.run_queue(
-            "camp", 99, setup=_setup(_dataset()), db_path=db
-        )
+        summary = jobs.run_queue("camp", 99, bars=frame, db_path=db)
     assert summary["workers"] == 12
     assert any("engine.workers" in str(item.message) for item in caught)
+
+
+def test_draft_campaign_cannot_run(tmp_path: Path) -> None:
+    db = _db(tmp_path)
+    frame = _dataset()
+    _register(db, frame, approved=False)
+    jobs.enqueue("camp", _strategies(1), db_path=db)
+    with pytest.raises(jobs.QueueError, match="borrador"):
+        jobs.run_queue("camp", 1, bars=frame, db_path=db)
+    assert _counts(db)["queued"] == 1
+
+
+def test_run_queue_has_no_free_dates_parameter() -> None:
+    import inspect
+
+    parameters = inspect.signature(jobs.run_queue).parameters
+    assert "setup" not in parameters
+    assert "bars" in parameters
 
 
 def _child_script(tmp_path: Path) -> Path:
@@ -180,14 +225,13 @@ def _child_script(tmp_path: Path) -> Path:
     path.write_text(
         "import pickle, sys\n"
         "from pathlib import Path\n"
-        "from tradinglab.discovery.jobs import QueueSetup, run_queue\n"
+        "from tradinglab.discovery.jobs import run_queue\n"
         "\n"
         "if __name__ == '__main__':\n"
         "    payload = pickle.loads(Path(sys.argv[1]).read_bytes())\n"
         "    run_queue(\n"
         "        payload['campaign'], payload['workers'],\n"
-        "        setup=QueueSetup.from_dict(payload['setup']),\n"
-        "        db_path=payload['db'], batch_size=4,\n"
+        "        bars=payload['bars'], db_path=payload['db'], batch_size=4,\n"
         "    )\n",
         encoding="utf-8",
     )
@@ -226,10 +270,10 @@ def _kill_tree(process: subprocess.Popen) -> None:
 @pytest.mark.skipif(os.name != "nt", reason="taskkill /T es de Windows")
 def test_real_resume_after_kill(tmp_path: Path) -> None:
     db = _db(tmp_path)
-    databank.add_campaign("camp", {"instrument": "US100", "timeframe": "M5"}, db_path=db)
+    frame = _dataset(bars=60_000)
+    _register(db, frame)
     total = 100
     jobs.enqueue("camp", _strategies(total), db_path=db)
-    setup = _setup(_dataset(bars=60_000))
     payload_path = tmp_path / "payload.pkl"
     payload_path.write_bytes(
         pickle.dumps(
@@ -237,7 +281,7 @@ def test_real_resume_after_kill(tmp_path: Path) -> None:
                 "campaign": "camp",
                 "workers": 2,
                 "db": str(db),
-                "setup": setup.as_dict(include_bars=True),
+                "bars": frame,
             }
         )
     )

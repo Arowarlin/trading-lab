@@ -9784,5 +9784,129 @@ def discovery_data_check_cmd(
         raise typer.Exit(1)
 
 
+@discovery_app.command("register")
+def discovery_register_cmd(
+    instrument: str = typer.Option("US100", "--instrument", help="Instrumento canónico"),
+    tf: str = typer.Option("M5", "--tf", help="Timeframe"),
+    template: str = typer.Option(
+        "ny_open_vol_filter", "--template", help="Plantilla de config/discovery/templates"
+    ),
+    profile: str = typer.Option("small", "--profile", help="small | medium | large"),
+    is_range: str = typer.Option(None, "--is", help="IS como inicio:fin"),
+    oos1_range: str = typer.Option(None, "--oos1", help="OOS-1 como inicio:fin"),
+    oos2_range: str = typer.Option(None, "--oos2", help="OOS-2 como inicio:fin (fin vacío = última vela)"),
+    seed: int = typer.Option(0, "--seed"),
+    campaign_id: str = typer.Option(None, "--campaign-id"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Previsualiza sin escribir"),
+    db: str = typer.Option(None, "--db", help="discovery.db alternativo"),
+) -> None:
+    """Registra un BORRADOR de campaña; no cuenta hasta aprobarlo."""
+
+    from .discovery import campaigns
+    from .discovery.config import load_engine_config
+
+    def _range(value: str, name: str) -> list[str | None]:
+        start, _, end = str(value or "").partition(":")
+        if not start:
+            raise typer.BadParameter(f"{name}: falta la fecha de inicio")
+        return [start, end or None]
+
+    defaults = load_engine_config().data_quality.default_segments
+    segments: dict[str, list[str | None]] = {
+        name: [value[0], value[1]] for name, value in defaults.items()
+    }
+    for name, value in (("is", is_range), ("oos1", oos1_range), ("oos2", oos2_range)):
+        if value:
+            segments[name] = _range(value, f"--{name}")
+
+    try:
+        campaign = campaigns.register(
+            instrument,
+            tf,
+            template,
+            profile,
+            segments=segments,
+            seed=seed,
+            campaign_id=campaign_id,
+            dry_run=dry_run,
+            db_path=db,
+        )
+    except campaigns.CampaignError as exc:
+        console.print(f"[red]Rechazada:[/red] {exc}")
+        raise typer.Exit(1) from exc
+
+    table = Table(title=f"Discovery · registro · {campaign['campaign_id']}")
+    table.add_column("Campo", style="bold")
+    table.add_column("Valor")
+    table.add_row("Estado", "BORRADOR (no cuenta)" if not dry_run else "DRY-RUN (no escribe)")
+    table.add_row("n_total", f"{campaign['n_total']:,} pruebas")
+    table.add_row("dataset_hash", campaign["dataset_hash"][:16] + "…")
+    table.add_row("config_hash", campaign["config_hash"][:16] + "…")
+    table.add_row("OOS-2 fin real", campaign.get("oos2_end") or "Sin datos")
+    table.add_row(
+        "Calidad",
+        f"{(campaign.get('quality') or {}).get('status', 'Sin datos')} · "
+        f"inicio útil {(campaign.get('quality') or {}).get('useful_start') or 'Sin datos'}",
+    )
+    console.print(table)
+    console.print(
+        "Para que cuente en el DSR: "
+        f"lab discovery approve {campaign['campaign_id']} --approved-by-operator"
+    )
+
+
+@discovery_app.command("approve")
+def discovery_approve_cmd(
+    campaign_id: str = typer.Argument(..., help="ID de la campaña"),
+    approved_by_operator: bool = typer.Option(
+        False, "--approved-by-operator", help="Aprobación explícita del operador"
+    ),
+    db: str = typer.Option(None, "--db", help="discovery.db alternativo"),
+) -> None:
+    """Aprueba una campaña; sin el flag no hace nada."""
+
+    if not approved_by_operator:
+        console.print(
+            "Sin --approved-by-operator no se aprueba: "
+            f"{campaign_id} sigue en borrador y no cuenta."
+        )
+        return
+    from .discovery import campaigns
+
+    try:
+        campaign = campaigns.approve(campaign_id, db_path=db)
+    except Exception as exc:  # noqa: BLE001
+        console.print(f"[red]No se pudo aprobar:[/red] {exc}")
+        raise typer.Exit(1) from exc
+    console.print(
+        f"Campaña {campaign['campaign_id']}: {campaign['status']} · "
+        f"approved_at {campaign.get('approved_at') or 'Sin datos'} · "
+        f"cuenta {int(campaign.get('n_total') or 0):,} pruebas"
+    )
+
+
+@discovery_app.command("cancel")
+def discovery_cancel_cmd(
+    campaign_id: str = typer.Argument(..., help="ID de la campaña"),
+    db: str = typer.Option(None, "--db", help="discovery.db alternativo"),
+) -> None:
+    """Cancela los jobs en cola; lo ya aprobado sigue contando."""
+
+    from .discovery import databank, jobs
+
+    try:
+        pending = jobs.cancel_campaign(campaign_id, db_path=db)
+    except Exception as exc:  # noqa: BLE001
+        console.print(f"[red]No se pudo cancelar:[/red] {exc}")
+        raise typer.Exit(1) from exc
+    console.print(f"Cancelados {pending} jobs en cola de {campaign_id}.")
+    campaign = databank.get_campaign(campaign_id, db_path=db)
+    if campaign and campaign.get("approved_at"):
+        console.print(
+            f"La campaña estaba aprobada: sigue contando "
+            f"{int(campaign.get('n_total') or 0):,} pruebas."
+        )
+
+
 if __name__ == "__main__":
     main()

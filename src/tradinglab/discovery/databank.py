@@ -53,7 +53,11 @@ CREATE TABLE IF NOT EXISTS disc_campaigns (
     n_evaluated INTEGER NOT NULL DEFAULT 0,
     n_effective INTEGER,
     status TEXT NOT NULL DEFAULT 'registered',
-    engine_version TEXT
+    engine_version TEXT,
+    approved_at TEXT,
+    approved_by TEXT,
+    quality_json TEXT,
+    reject_reason TEXT
 );
 
 CREATE TABLE IF NOT EXISTS disc_strategies (
@@ -131,6 +135,17 @@ CREATE INDEX IF NOT EXISTS idx_disc_jobs_campaign
 CREATE UNIQUE INDEX IF NOT EXISTS idx_disc_jobs_dedupe
     ON disc_jobs(campaign_id, strategy_hash)
     WHERE strategy_hash IS NOT NULL AND state IN ('queued', 'running', 'done');
+
+CREATE TABLE IF NOT EXISTS disc_holdout_reads (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    strategy_id INTEGER NOT NULL UNIQUE,
+    campaign_id TEXT NOT NULL,
+    read_at TEXT NOT NULL,
+    dataset_hash TEXT,
+    rows INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_disc_holdout_campaign
+    ON disc_holdout_reads(campaign_id);
 """
 
 
@@ -174,7 +189,31 @@ def init_databank(
     with _connection(target, con) as opened:
         opened.execute("PRAGMA journal_mode=WAL")
         opened.executescript(SCHEMA)
+        _migrate_campaigns(opened)
     return target
+
+
+def _migrate_campaigns(con: sqlite3.Connection) -> None:
+    """Añade columnas de aprobación/calidad y congela ``n_total``."""
+
+    columns = [
+        row["name"]
+        for row in con.execute("PRAGMA table_info(disc_campaigns)").fetchall()
+    ]
+    for column, kind in (
+        ("approved_at", "TEXT"),
+        ("approved_by", "TEXT"),
+        ("quality_json", "TEXT"),
+        ("reject_reason", "TEXT"),
+    ):
+        if column not in columns:
+            con.execute(f"ALTER TABLE disc_campaigns ADD COLUMN {column} {kind}")
+    con.execute(
+        "CREATE TRIGGER IF NOT EXISTS disc_campaigns_n_total_immutable "
+        "BEFORE UPDATE OF n_total ON disc_campaigns "
+        "WHEN OLD.n_total IS NOT NULL AND NEW.n_total IS NOT OLD.n_total "
+        "BEGIN SELECT RAISE(ABORT, 'disc_campaigns.n_total es inmutable'); END"
+    )
 
 
 def _resolve_target(
@@ -215,10 +254,14 @@ def add_campaign(
     timeframe: str | None = None,
     template: str | None = None,
     engine_profile: str | None = None,
+    status: str | None = None,
+    quality: dict[str, Any] | None = None,
+    n_total: int | None = None,
+    dataset_hash: str | None = None,
     db_path: str | Path | None = None,
     con: sqlite3.Connection | None = None,
 ) -> str:
-    """Inserta la campaña una vez; el registro formal llega en la Fase 5."""
+    """Inserta la campaña una vez (borrador o registrada)."""
 
     identifier = str(campaign_id or "").strip()
     if not identifier:
@@ -241,8 +284,9 @@ def add_campaign(
             "(id, created_at, instrument, timeframe, template, engine_profile,"
             " config_json, config_hash, is_start, is_end, oos1_start, oos1_end,"
             " oos2_start, oos2_end, dataset_hash, n_total, n_evaluated,"
-            " n_effective, status, engine_version) "
-            "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            " n_effective, status, engine_version, approved_at, approved_by,"
+            " quality_json, reject_reason) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NULL,NULL,?,NULL)",
             (
                 identifier,
                 _now(),
@@ -258,12 +302,15 @@ def add_campaign(
                 (config or {}).get("oos1_end"),
                 (config or {}).get("oos2_start"),
                 (config or {}).get("oos2_end"),
-                (config or {}).get("dataset_hash"),
-                (config or {}).get("n_total"),
+                dataset_hash if dataset_hash is not None else (config or {}).get("dataset_hash"),
+                n_total if n_total is not None else (config or {}).get("n_total"),
                 0,
                 (config or {}).get("n_effective"),
-                str((config or {}).get("status") or "registered"),
+                str(status or (config or {}).get("status") or "registered"),
                 __version__,
+                None if quality is None else json.dumps(
+                    quality, sort_keys=True, ensure_ascii=False, allow_nan=True
+                ),
             ),
         )
     return identifier
@@ -284,7 +331,114 @@ def get_campaign(
         return None
     data = dict(row)
     data["config"] = json.loads(data.pop("config_json") or "{}")
+    data["quality"] = json.loads(data.pop("quality_json") or "{}")
     return data
+
+
+def approve_campaign(
+    campaign_id: str,
+    *,
+    approved_by: str = "operator",
+    db_path: str | Path | None = None,
+    con: sqlite3.Connection | None = None,
+) -> dict[str, Any]:
+    """Pasa una campaña de ``draft`` a ``registered`` y la cuenta."""
+
+    identifier = str(campaign_id or "").strip()
+    if not identifier:
+        raise DatabankError("la aprobación necesita campaign_id")
+    target = _resolve_target(db_path, con)
+    with _connection(target, con) as opened:
+        row = opened.execute(
+            "SELECT status, approved_at FROM disc_campaigns WHERE id = ?",
+            (identifier,),
+        ).fetchone()
+        if row is None:
+            raise DatabankError(f"campaña no registrada: {identifier}")
+        if row["status"] == "draft":
+            opened.execute(
+                "UPDATE disc_campaigns SET status = 'registered',"
+                " approved_at = ?, approved_by = ? WHERE id = ? AND status = 'draft'",
+                (_now(), str(approved_by), identifier),
+            )
+    campaign = get_campaign(identifier, db_path=target)
+    if campaign is None:  # pragma: no cover
+        raise DatabankError(f"campaña no registrada: {identifier}")
+    return campaign
+
+
+def set_campaign_rejected(
+    campaign_id: str,
+    reason: str,
+    *,
+    db_path: str | Path | None = None,
+    con: sqlite3.Connection | None = None,
+) -> None:
+    """Marca rechazada; ``approved_at`` no se toca (si estaba aprobada, cuenta)."""
+
+    target = _resolve_target(db_path, con)
+    with _connection(target, con) as opened:
+        opened.execute(
+            "UPDATE disc_campaigns SET status = 'rejected', reject_reason = ?"
+            " WHERE id = ?",
+            (str(reason)[:2000], str(campaign_id)),
+        )
+
+
+def add_holdout_read(
+    strategy_id: int,
+    campaign_id: str,
+    *,
+    dataset_hash: str | None = None,
+    rows: int | None = None,
+    db_path: str | Path | None = None,
+    con: sqlite3.Connection | None = None,
+) -> int:
+    """Registra una lectura de OOS-2; la UNIQUE impide la segunda."""
+
+    target = _resolve_target(db_path, con)
+    with _connection(target, con) as opened:
+        cursor = opened.execute(
+            "INSERT INTO disc_holdout_reads"
+            "(strategy_id, campaign_id, read_at, dataset_hash, rows) "
+            "VALUES(?,?,?,?,?)",
+            (
+                int(strategy_id),
+                str(campaign_id),
+                _now(),
+                dataset_hash,
+                None if rows is None else int(rows),
+            ),
+        )
+        return int(cursor.lastrowid)
+
+
+def get_holdout_read(
+    strategy_id: int,
+    *,
+    db_path: str | Path | None = None,
+    con: sqlite3.Connection | None = None,
+) -> dict[str, Any] | None:
+    target = _resolve_target(db_path, con)
+    with _connection(target, con) as opened:
+        row = opened.execute(
+            "SELECT * FROM disc_holdout_reads WHERE strategy_id = ?",
+            (int(strategy_id),),
+        ).fetchone()
+    return None if row is None else dict(row)
+
+
+def count_holdout_reads(
+    *,
+    db_path: str | Path | None = None,
+    con: sqlite3.Connection | None = None,
+) -> int:
+    target = _resolve_target(db_path, con)
+    with _connection(target, con) as opened:
+        row = opened.execute(
+            "SELECT COUNT(*) AS n FROM disc_holdout_reads"
+        ).fetchone()
+    return int(row["n"])
 
 
 def set_campaign_status(
@@ -597,17 +751,22 @@ __all__ = [
     "DatabankError",
     "add_campaign",
     "add_evaluation",
+    "add_holdout_read",
     "add_lineage",
     "add_strategy",
     "add_validation",
+    "approve_campaign",
+    "count_holdout_reads",
     "decode_returns",
     "encode_returns",
     "get_campaign",
+    "get_holdout_read",
     "get_strategy",
     "init_databank",
     "lineage",
     "list_evaluations",
     "list_strategies",
+    "set_campaign_rejected",
     "set_campaign_status",
     "set_status",
 ]

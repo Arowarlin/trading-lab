@@ -31,7 +31,7 @@ import pandas as pd
 
 from ..db import connect
 from ..propfund.costs import load_profile
-from . import databank, dsl, fastbt
+from . import campaigns, databank, dsl, fastbt
 from .compiler import compile as compile_strategy
 from .config import load_engine_config
 from .data_sources import load_source
@@ -85,6 +85,36 @@ class QueueSetup:
         if "weekdays" in payload:
             payload["weekdays"] = tuple(int(day) for day in payload["weekdays"])
         return cls(**payload)
+
+    @classmethod
+    def from_campaign(
+        cls, campaign: dict[str, Any], *, bars: pd.DataFrame | None = None
+    ) -> "QueueSetup":
+        """Construye el setup desde ``disc_campaigns``; sin fechas libres."""
+
+        config = campaign.get("config") or {}
+        cost = config.get("cost") or {}
+        session = config.get("session") or {}
+        limits = config.get("limits") or {}
+        return cls(
+            instrument=campaign.get("instrument") or "",
+            timeframe=campaign.get("timeframe") or "",
+            start=campaign.get("is_start"),
+            end=campaign.get("is_end"),
+            account=str(cost.get("account") or "CFD-001"),
+            firm=cost.get("firm", "ftmo"),
+            use_p75=bool(cost.get("use_p75", True)),
+            session_tz=str(session.get("tz") or "America/New_York"),
+            session_start=str(session.get("start") or "09:35"),
+            session_end=str(session.get("end") or "11:30"),
+            flat_at=session.get("flat_at", "15:45"),
+            weekdays=tuple(int(day) for day in limits.get("weekdays", (0, 1, 2, 3, 4))),
+            stop_n=int(limits.get("stop_n", 14)),
+            trail_n=int(limits.get("trail_n", 14)),
+            template=campaign.get("template") or config.get("template"),
+            seed=int(config.get("seed", 0)),
+            bars=bars,
+        ).validated()
 
     def validated(self) -> "QueueSetup":
         if not str(self.instrument or "").strip():
@@ -234,7 +264,7 @@ def cancel_campaign(
         )
         opened.execute(
             "UPDATE disc_campaigns SET status = 'cancelled'"
-            " WHERE id = ? AND status IN ('registered', 'running')",
+            " WHERE id = ? AND status IN ('registered', 'running', 'done')",
             (identifier,),
         )
         return int(cursor.rowcount or 0)
@@ -444,7 +474,7 @@ def run_queue(
     campaign_id: str,
     workers: int | None = None,
     *,
-    setup: QueueSetup | None = None,
+    bars: pd.DataFrame | None = None,
     db_path: str | Path | None = None,
     batch_size: int = 32,
 ) -> dict[str, Any]:
@@ -468,12 +498,32 @@ def run_queue(
     workers = max(1, int(workers))
     priority = _set_priority()
 
-    if setup is None:
-        row = databank.get_campaign(identifier, db_path=target)
-        if row is None:
-            raise QueueError(f"Sin datos: campaña {identifier} no registrada")
-        setup = QueueSetup.from_dict(row["config"])
-    setup = setup.validated()
+    campaign_row = databank.get_campaign(identifier, db_path=target)
+    if campaign_row is None:
+        raise QueueError(f"Sin datos: campaña {identifier} no registrada")
+    status = str(campaign_row["status"])
+    if status == "draft":
+        raise QueueError(
+            "campaña en borrador: usa 'lab discovery approve "
+            f"{identifier} --approved-by-operator' antes de ejecutar"
+        )
+    if status == "rejected":
+        raise QueueError(f"campaña rechazada: {campaign_row.get('reject_reason')}")
+    setup = QueueSetup.from_campaign(campaign_row, bars=bars)
+    source = (
+        bars
+        if bars is not None
+        else load_source(setup.instrument, setup.timeframe).frame
+    )
+    if not campaigns.dataset_matches(campaign_row, source):
+        databank.set_campaign_rejected(
+            identifier,
+            "dataset_hash no coincide con el rango fijo de la campaña",
+            db_path=target,
+        )
+        raise QueueError(
+            "dataset_hash no coincide: la fuente cambió dentro del rango sellado"
+        )
 
     with connect(target) as con:
         con.execute(

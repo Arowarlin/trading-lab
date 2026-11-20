@@ -56,6 +56,7 @@ def test_tables_only_in_discovery_db(tmp_path: Path) -> None:
         "disc_evaluations",
         "disc_validations",
         "disc_jobs",
+        "disc_holdout_reads",
     } <= names
     with sqlite3.connect(target) as con:
         assert con.execute("PRAGMA journal_mode").fetchone()[0].lower() == "wal"
@@ -194,3 +195,54 @@ def test_list_filters(tmp_path: Path) -> None:
     ) == 1
     assert len(databank.list_strategies(level=1, db_path=db)) == 1
     assert databank.list_strategies(limit=1, db_path=db)[0]["origin"] == "template"
+
+
+def test_approval_keeps_counting_after_reject(tmp_path: Path) -> None:
+    db = tmp_path / "discovery.db"
+    databank.add_campaign(
+        "camp",
+        {"instrument": "US100", "timeframe": "M5", "n_total": 440},
+        status="draft",
+        n_total=440,
+        db_path=db,
+    )
+    assert databank.get_campaign("camp", db_path=db)["approved_at"] is None
+    approved = databank.approve_campaign("camp", approved_by="tester", db_path=db)
+    assert approved["status"] == "registered"
+    assert approved["approved_at"] is not None
+    databank.set_campaign_rejected("camp", "hash distinto", db_path=db)
+    rejected = databank.get_campaign("camp", db_path=db)
+    assert rejected["status"] == "rejected"
+    assert rejected["approved_at"] == approved["approved_at"]
+    assert rejected["reject_reason"] == "hash distinto"
+
+
+def test_n_total_immutable_trigger(tmp_path: Path) -> None:
+    db = tmp_path / "discovery.db"
+    databank.add_campaign(
+        "camp",
+        {"instrument": "US100", "timeframe": "M5"},
+        n_total=440,
+        db_path=db,
+    )
+    with sqlite3.connect(db) as con:
+        with pytest.raises(sqlite3.DatabaseError):
+            con.execute("UPDATE disc_campaigns SET n_total = 1 WHERE id = 'camp'")
+        con.rollback()
+        assert con.execute(
+            "SELECT n_total FROM disc_campaigns WHERE id = 'camp'"
+        ).fetchone()[0] == 440
+
+
+def test_holdout_read_is_unique(tmp_path: Path) -> None:
+    db = tmp_path / "discovery.db"
+    strategy_id = databank.add_strategy("camp", _strategy(), db_path=db)
+    first = databank.add_holdout_read(
+        strategy_id, "camp", dataset_hash="abc", rows=10, db_path=db
+    )
+    assert databank.get_holdout_read(strategy_id, db_path=db)["id"] == first
+    with pytest.raises(sqlite3.IntegrityError):
+        databank.add_holdout_read(
+            strategy_id, "camp", dataset_hash="abc", rows=10, db_path=db
+        )
+    assert databank.count_holdout_reads(db_path=db) == 1

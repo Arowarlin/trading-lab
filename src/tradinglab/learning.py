@@ -162,12 +162,20 @@ def list_lessons(
     return out
 
 
-def count_tests(db_path: str | Path, settings: Settings | None = None) -> int:
+def count_tests(
+    db_path: str | Path,
+    settings: Settings | None = None,
+    *,
+    discovery_db: str | Path | None = None,
+) -> int:
     """Contador único de pruebas del DSR.
 
     Suman las lecciones, los trials de Optuna, las lecturas del holdout, cada
-    intento registrado en `strategy_trials` (también los fallidos) y los bots
-    incubados.
+    intento registrado en `strategy_trials` (también los fallidos), los bots
+    incubados, las campañas registradas en `campaign_registry` y —desde la
+    Fase 5— las campañas de discovery aprobadas (`n_total`) y sus lecturas de
+    holdout. Las de discovery se leen de `data/discovery.db` en solo lectura y
+    un borrador no cuenta.
 
     Las campañas registradas suman su `N_total` **completo** desde el momento
     del registro, antes de correr nada: el denominador del DSR no puede crecer
@@ -195,6 +203,9 @@ def count_tests(db_path: str | Path, settings: Settings | None = None) -> int:
             campaigns = con.execute(
                 "SELECT COALESCE(SUM(n_total), 0) AS n FROM campaign_registry"
             ).fetchone()["n"]
+    from .discovery.campaigns import discovery_tests
+
+    extra = discovery_tests(discovery_db)["total"]
     return (
         int(lessons)
         + int(trials)
@@ -202,6 +213,7 @@ def count_tests(db_path: str | Path, settings: Settings | None = None) -> int:
         + int(strategies)
         + int(campaigns)
         + count_incubated(db_path)
+        + int(extra)
     )
 
 

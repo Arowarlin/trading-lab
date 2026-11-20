@@ -1,0 +1,496 @@
+"""Campañas de discovery, segmentos sellados y lectura única de OOS-2.
+
+* La campaña vive en ``data/discovery.db`` (``disc_campaigns``).
+* ``n_total = population × (generations + 1)`` se guarda al registrar, antes
+  de correr, y es inmutable (trigger en SQLite).
+* El ``dataset_hash`` se calcula sobre ``[is_start, oos2_end]`` con el final de
+  OOS-2 resuelto a la última vela real; las velas nuevas posteriores no
+  invalidan la campaña.
+* Registrar deja un **borrador**; solo ``approve`` (CLI con flag explícito) lo
+  pasa a ``registered`` y lo cuenta en el DSR. Una campaña aprobada cuenta
+  aunque luego se cancele o se rechace.
+* OOS-1 solo se abre con la campaña ``done``; OOS-2 solo por
+  ``read_holdout(strategy_id)``, una vez por estrategia.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import sqlite3
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+import pandas as pd
+import yaml
+
+from ..config import ROOT
+from . import __version__, databank
+from .config import load_engine_config
+from .data_quality import check_dataset, dataset_hash
+from .data_sources import load_source
+
+SEGMENTS = ("is", "oos1", "oos2")
+
+
+class CampaignError(ValueError):
+    pass
+
+
+class HoldoutError(CampaignError):
+    pass
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="milliseconds")
+
+
+def _start_ts(value: Any) -> pd.Timestamp:
+    stamp = pd.Timestamp(value)
+    if stamp.tzinfo is None:
+        return stamp.tz_localize("UTC")
+    return stamp.tz_convert("UTC")
+
+
+def _end_ts(value: Any) -> pd.Timestamp:
+    """Fin inclusivo: una fecha sin hora cubre el día completo."""
+
+    text = str(value)
+    stamp = _start_ts(value)
+    if len(text) <= 10:
+        return stamp + pd.Timedelta(days=1) - pd.Timedelta(nanoseconds=1)
+    return stamp
+
+
+def _normalize_segments(
+    segments: dict[str, Any] | None, engine_segments: dict[str, Any]
+) -> dict[str, list[str | None]]:
+    source = segments if segments is not None else engine_segments
+    normalized: dict[str, list[str | None]] = {}
+    for name in SEGMENTS:
+        value = source.get(name) if isinstance(source, dict) else None
+        if value is None or len(value) != 2:
+            raise CampaignError(f"tramo {name}: faltan start/end")
+        start, end = value
+        if start is None:
+            raise CampaignError(f"tramo {name}: falta start")
+        if name != "oos2" and end is None:
+            raise CampaignError(f"tramo {name}: falta end")
+        normalized[name] = [
+            str(start),
+            None if end is None else str(end),
+        ]
+    if _start_ts(normalized["is"][0]) >= _end_ts(normalized["is"][1]):
+        raise CampaignError("tramo is: start debe ser anterior a end")
+    if _start_ts(normalized["oos1"][0]) <= _end_ts(normalized["is"][1]):
+        raise CampaignError("oos1 debe empezar después de is")
+    if _start_ts(normalized["oos2"][0]) <= _end_ts(normalized["oos1"][1]):
+        raise CampaignError("oos2 debe empezar después de oos1")
+    return normalized
+
+
+def _template_session(template: str, instrument: str) -> dict[str, Any]:
+    path = ROOT / "config" / "discovery" / "templates" / f"{template}.yaml"
+    if not path.exists():
+        raise CampaignError(f"Sin datos: no existe la plantilla {template}")
+    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    strategy = data.get("strategy") or {}
+    session = dict(strategy.get("session") or {})
+    engine = load_engine_config().data_quality
+    return {
+        "tz": session.get("tz") or engine.tz_for(instrument),
+        "start": str(session.get("start") or "09:35"),
+        "end": str(session.get("end") or "11:30"),
+        "flat_at": str(session.get("flat_at") or "15:45"),
+        "or_minutes": int(session.get("or_minutes") or 15),
+    }
+
+
+def _source_frame(instrument: str, timeframe: str) -> pd.DataFrame:
+    return load_source(instrument, timeframe).frame
+
+
+def _resolve_oos2_end(frame: pd.DataFrame, requested: str | None) -> pd.Timestamp:
+    if requested is None:
+        if len(frame) == 0:
+            raise CampaignError("Sin datos: no hay barras para OOS-2")
+        return frame.index[-1]
+    limit = _end_ts(requested)
+    eligible = frame.index[frame.index <= limit]
+    if len(eligible) == 0:
+        raise CampaignError(f"Sin datos: OOS-2 termina antes de {requested}")
+    return eligible[-1]
+
+
+def _quality(
+    frame: pd.DataFrame,
+    instrument: str,
+    timeframe: str,
+    segments: dict[str, list[str | None]],
+) -> tuple[Any, str]:
+    report = check_dataset(
+        frame,
+        instrument,
+        timeframe,
+        segments={key: tuple(value) for key, value in segments.items()},
+    )
+    if report.status == "fail":
+        detail = "; ".join(report.issues[:5]) or "sin detalle"
+        raise CampaignError(f"calidad de datos fail: {detail}")
+    useful = report.granularity.get("useful_start")
+    if not useful:
+        raise CampaignError("Sin datos: la fuente no tiene inicio útil")
+    useful_date = pd.Timestamp(useful).date()
+    for name in SEGMENTS:
+        start_date = _start_ts(segments[name][0]).date()
+        if start_date < useful_date:
+            raise CampaignError(
+                f"tramo {name} empieza antes del inicio útil "
+                f"({start_date} < {useful_date})"
+            )
+    return report, str(useful)
+
+
+def _hash_range(
+    frame: pd.DataFrame, is_start: str, oos2_end: pd.Timestamp
+) -> pd.DataFrame:
+    start = _start_ts(is_start)
+    sliced = frame[(frame.index >= start) & (frame.index <= oos2_end)]
+    if len(sliced) == 0:
+        raise CampaignError("Sin datos: el rango de hash está vacío")
+    return sliced
+
+
+def dataset_matches(campaign: dict[str, Any], frame: pd.DataFrame) -> bool:
+    """Compara el hash del rango fijo; las velas nuevas no cuentan."""
+
+    if not campaign.get("dataset_hash"):
+        return False
+    if not campaign.get("oos2_end"):
+        return False
+    try:
+        sliced = _hash_range(
+            frame,
+            str(campaign["is_start"]),
+            _start_ts(campaign["oos2_end"]),
+        )
+    except CampaignError:
+        return False
+    return dataset_hash(sliced) == campaign["dataset_hash"]
+
+
+def register(
+    instrument: str,
+    timeframe: str,
+    template: str,
+    profile: str = "small",
+    *,
+    segments: dict[str, Any] | None = None,
+    seed: int = 0,
+    campaign_id: str | None = None,
+    account: str = "CFD-001",
+    firm: str | None = "ftmo",
+    use_p75: bool = True,
+    frame: pd.DataFrame | None = None,
+    dry_run: bool = False,
+    db_path: str | Path | None = None,
+) -> dict[str, Any]:
+    """Registra un borrador (o previsualiza con ``dry_run``)."""
+
+    instrument = str(instrument or "").strip().upper()
+    timeframe = str(timeframe or "").strip().upper()
+    if not instrument or not timeframe:
+        raise CampaignError("instrument y timeframe son obligatorios")
+    engine = load_engine_config()
+    try:
+        profile_config = engine.profile(profile)
+    except KeyError as exc:
+        raise CampaignError(str(exc)) from exc
+    n_total = int(profile_config.population * (profile_config.generations + 1))
+
+    source = frame if frame is not None else _source_frame(instrument, timeframe)
+    normalized = _normalize_segments(segments, engine.data_quality.default_segments)
+    oos2_end = _resolve_oos2_end(source, normalized["oos2"][1])
+    normalized["oos2"][1] = oos2_end.isoformat()
+    report, useful_start = _quality(source, instrument, timeframe, normalized)
+    if _start_ts(normalized["oos2"][0]) > oos2_end:
+        raise CampaignError("oos2: start posterior al final real de OOS-2")
+
+    hashed = _hash_range(source, normalized["is"][0], oos2_end)
+    digest = dataset_hash(hashed)
+    session = _template_session(template, instrument)
+    config_payload: dict[str, Any] = {
+        "instrument": instrument,
+        "timeframe": timeframe,
+        "template": template,
+        "profile": profile,
+        "seed": int(seed),
+        "engine_profile": profile,
+        "is_start": normalized["is"][0],
+        "is_end": normalized["is"][1],
+        "oos1_start": normalized["oos1"][0],
+        "oos1_end": normalized["oos1"][1],
+        "oos2_start": normalized["oos2"][0],
+        "oos2_end": normalized["oos2"][1],
+        "segments": normalized,
+        "dataset_hash": digest,
+        "n_total": n_total,
+        "cost": {"account": account, "firm": firm, "use_p75": bool(use_p75)},
+        "session": session,
+        "limits": {
+            "weekdays": [0, 1, 2, 3, 4],
+            "stop_n": 14,
+            "trail_n": 14,
+        },
+        "quality": {
+            "status": report.status,
+            "useful_start": useful_start,
+            "issues": list(report.issues),
+            "segments": {
+                key: value.as_dict() for key, value in report.segments.items()
+            },
+        },
+        "engine_version": __version__,
+    }
+    config_json = json.dumps(config_payload, sort_keys=True, ensure_ascii=False)
+    config_hash = hashlib.sha256(config_json.encode("utf-8")).hexdigest()
+    identifier = str(campaign_id or "").strip()
+    if not identifier:
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+        identifier = f"disc-{instrument}-{timeframe}-{stamp}-{config_hash[:8]}"
+
+    preview = {
+        "campaign_id": identifier,
+        "status": "draft",
+        "approved_at": None,
+        "n_total": n_total,
+        "dataset_hash": digest,
+        "config_hash": config_hash,
+        "config": config_payload,
+        "quality": config_payload["quality"],
+        "rows": int(len(hashed)),
+        "oos2_end": oos2_end.isoformat(),
+    }
+    if dry_run:
+        preview["dry_run"] = True
+        return preview
+
+    existing = databank.get_campaign(identifier, db_path=db_path)
+    if existing is not None:
+        if (
+            existing["status"] == "draft"
+            and existing["config_hash"] == config_hash
+        ):
+            existing["campaign_id"] = existing["id"]
+            return existing
+        raise CampaignError(f"la campaña {identifier} ya está registrada")
+    databank.add_campaign(
+        identifier,
+        config_payload,
+        instrument=instrument,
+        timeframe=timeframe,
+        template=template,
+        engine_profile=profile,
+        status="draft",
+        quality=config_payload["quality"],
+        n_total=n_total,
+        dataset_hash=digest,
+        db_path=db_path,
+    )
+    campaign = databank.get_campaign(identifier, db_path=db_path)
+    if campaign is None:  # pragma: no cover
+        raise CampaignError("no se pudo registrar la campaña")
+    campaign["campaign_id"] = campaign["id"]
+    return campaign
+
+
+def approve(
+    campaign_id: str,
+    *,
+    approved_by: str = "operator",
+    db_path: str | Path | None = None,
+) -> dict[str, Any]:
+    """Aprobación explícita (solo la llama el CLI con su flag)."""
+
+    result = databank.approve_campaign(
+        campaign_id, approved_by=approved_by, db_path=db_path
+    )
+    result["campaign_id"] = result["id"]
+    return result
+
+
+def mark_done(
+    campaign_id: str, *, db_path: str | Path | None = None
+) -> dict[str, Any]:
+    campaign = databank.get_campaign(campaign_id, db_path=db_path)
+    if campaign is None:
+        raise CampaignError(f"campaña no registrada: {campaign_id}")
+    if campaign["status"] == "draft":
+        raise CampaignError("un borrador no se puede marcar done")
+    if campaign["status"] not in {"registered", "running", "done"}:
+        raise CampaignError(
+            f"la campaña está {campaign['status']}; no se puede marcar done"
+        )
+    databank.set_campaign_status(campaign_id, "done", db_path=db_path)
+    result = databank.get_campaign(campaign_id, db_path=db_path)
+    if result is None:  # pragma: no cover
+        raise CampaignError("no se pudo marcar done")
+    return result
+
+
+def _segment_frame(
+    frame: pd.DataFrame,
+    campaign: dict[str, Any],
+    segment: str,
+) -> pd.DataFrame:
+    start = _start_ts(campaign[f"{segment}_start"])
+    end = _end_ts(campaign[f"{segment}_end"])
+    sliced = frame[(frame.index >= start) & (frame.index <= end)]
+    if len(sliced) == 0:
+        raise CampaignError(f"Sin datos en el tramo {segment}")
+    return sliced
+
+
+def load_segment(
+    campaign_id: str,
+    segment: str,
+    *,
+    frame: pd.DataFrame | None = None,
+    db_path: str | Path | None = None,
+) -> pd.DataFrame:
+    """Devuelve IS/OOS-1 sellado. OOS-2 solo por ``read_holdout``."""
+
+    name = str(segment or "").strip().lower()
+    if name not in {"is", "oos1"}:
+        raise HoldoutError(
+            "OOS-2 no se lee por load_segment; usa read_holdout(strategy_id)"
+        )
+    campaign = databank.get_campaign(campaign_id, db_path=db_path)
+    if campaign is None:
+        raise CampaignError(f"campaña no registrada: {campaign_id}")
+    if name == "oos1" and campaign["status"] != "done":
+        raise CampaignError(
+            "OOS-1 sellado: la campaña debe estar done antes de leerlo"
+        )
+    source = frame if frame is not None else _source_frame(
+        campaign["instrument"], campaign["timeframe"]
+    )
+    if not dataset_matches(campaign, source):
+        databank.set_campaign_rejected(
+            campaign_id,
+            "dataset_hash no coincide con el rango fijo de la campaña",
+            db_path=db_path,
+        )
+        raise CampaignError(
+            "dataset_hash no coincide: la fuente cambió dentro del rango sellado"
+        )
+    return _segment_frame(source, campaign, name)
+
+
+def read_holdout(
+    strategy_id: int,
+    *,
+    frame: pd.DataFrame | None = None,
+    db_path: str | Path | None = None,
+) -> pd.DataFrame:
+    """Lectura única de OOS-2 por estrategia; la segunda falla."""
+
+    strategy = databank.get_strategy(strategy_id, db_path=db_path)
+    if strategy is None:
+        raise CampaignError(f"estrategia no encontrada: {strategy_id}")
+    campaign_id = str(strategy["campaign_id"])
+    campaign = databank.get_campaign(campaign_id, db_path=db_path)
+    if campaign is None:
+        raise CampaignError(f"campaña no registrada: {campaign_id}")
+    if campaign["status"] != "done":
+        raise CampaignError("el holdout OOS-2 solo se abre con la campaña done")
+    if databank.get_holdout_read(strategy_id, db_path=db_path) is not None:
+        raise HoldoutError(
+            f"la estrategia {strategy_id} ya leyó OOS-2; segunda lectura prohibida"
+        )
+    source = frame if frame is not None else _source_frame(
+        campaign["instrument"], campaign["timeframe"]
+    )
+    if not dataset_matches(campaign, source):
+        databank.set_campaign_rejected(
+            campaign_id,
+            "dataset_hash no coincide con el rango fijo de la campaña",
+            db_path=db_path,
+        )
+        raise CampaignError(
+            "dataset_hash no coincide: la fuente cambió dentro del rango sellado"
+        )
+    start = _start_ts(campaign["oos2_start"])
+    end = _start_ts(campaign["oos2_end"])
+    sealed = source[(source.index >= start) & (source.index <= end)]
+    if len(sealed) == 0:
+        raise CampaignError("Sin datos en OOS-2")
+    try:
+        databank.add_holdout_read(
+            int(strategy_id),
+            campaign_id,
+            dataset_hash=campaign["dataset_hash"],
+            rows=int(len(sealed)),
+            db_path=db_path,
+        )
+    except sqlite3.IntegrityError as exc:
+        raise HoldoutError(
+            f"la estrategia {strategy_id} ya leyó OOS-2; segunda lectura prohibida"
+        ) from exc
+    return sealed
+
+
+def discovery_tests(
+    discovery_db: str | Path | None = None,
+) -> dict[str, int]:
+    """Suma DSR de discovery en solo lectura; nunca crea ni escribe."""
+
+    path = Path(discovery_db) if discovery_db else databank.DEFAULT_DISCOVERY_DB
+    if not path.exists():
+        return {"campaigns": 0, "holdout_reads": 0, "total": 0}
+    uri = f"file:{path.as_posix()}?mode=ro"
+    campaigns = 0
+    reads = 0
+    con = sqlite3.connect(uri, uri=True, timeout=5)
+    try:
+        try:
+            row = con.execute(
+                "SELECT COALESCE(SUM(n_total), 0) AS n FROM disc_campaigns"
+                " WHERE approved_at IS NOT NULL"
+            ).fetchone()
+            campaigns = int(row[0] or 0)
+        except sqlite3.OperationalError:
+            campaigns = 0
+        try:
+            row = con.execute(
+                "SELECT COUNT(*) AS n FROM disc_holdout_reads"
+            ).fetchone()
+            reads = int(row[0] or 0)
+        except sqlite3.OperationalError:
+            reads = 0
+    finally:
+        con.close()
+    return {
+        "campaigns": campaigns,
+        "holdout_reads": reads,
+        "total": campaigns + reads,
+    }
+
+
+def total_tests(discovery_db: str | Path | None = None) -> dict[str, int]:
+    return discovery_tests(discovery_db)
+
+
+__all__ = [
+    "CampaignError",
+    "HoldoutError",
+    "approve",
+    "dataset_matches",
+    "discovery_tests",
+    "load_segment",
+    "mark_done",
+    "read_holdout",
+    "register",
+    "total_tests",
+]

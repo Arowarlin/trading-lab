@@ -1,14 +1,16 @@
 """Benchmark de la cola con preparación única por worker.
 
-Genera 3 años de barras M5 sintéticas y 120 estrategias válidas (variantes de
-la plantilla NY), ejecuta ``jobs.run_queue`` con 12 workers y una base temporal
-``discovery.db`` e imprime los jobs/minuto medidos. No usa datos reales, no
-escribe en el repo y no se registra como tarea.
+Genera 4 años de barras M5 sintéticas (3 años de IS + OOS-1/OOS-2), 120
+estrategias válidas y ejecuta ``jobs.run_queue`` con 12 workers sobre una base
+temporal ``discovery.db``. Imprime los jobs/minuto medidos. No usa datos
+reales, no escribe en el repo y no se registra como tarea.
 """
 
 from __future__ import annotations
 
 import copy
+import subprocess
+import sys
 import tempfile
 import time
 from pathlib import Path
@@ -18,10 +20,16 @@ import pandas as pd
 import yaml
 
 from tradinglab.config import ROOT
-from tradinglab.discovery import databank, dsl, jobs
+from tradinglab.discovery import campaigns, databank, dsl, jobs
 
 BARS_PER_YEAR_M5 = 365 * 24 * 12
+FRAME_YEARS = 4
 TEMPLATE = ROOT / "config" / "discovery" / "templates" / "ny_open_vol_filter.yaml"
+SEGMENTS = {
+    "is": ["2023-01-02", "2025-12-31"],
+    "oos1": ["2026-01-01", "2026-06-30"],
+    "oos2": ["2026-07-01", None],
+}
 
 
 def _dataset(bars: int, seed: int = 20261120) -> pd.DataFrame:
@@ -55,30 +63,48 @@ def _strategies(count: int) -> list[dict]:
 
 
 def main() -> int:
-    bars = BARS_PER_YEAR_M5 * 3
+    bars = BARS_PER_YEAR_M5 * FRAME_YEARS
     count = 120
     workers = 12
     frame = _dataset(bars)
     strategies = _strategies(count)
     print("TradingLab · bench cola (preparación por worker)")
     print(
-        f"barras/backtest: {bars:,} ({bars / BARS_PER_YEAR_M5:.2f} años M5) · "
-        f"workers: {workers} · jobs: {count}"
+        f"frame: {bars:,} barras M5 ({bars / BARS_PER_YEAR_M5:.2f} años) · "
+        f"IS: 3 años · workers: {workers} · jobs: {count}"
     )
     with tempfile.TemporaryDirectory() as tmp:
         db = Path(tmp) / "discovery.db"
-        databank.add_campaign(
-            "bench",
-            {"instrument": "US100", "timeframe": "M5"},
-            instrument="US100",
-            timeframe="M5",
+        campaigns.register(
+            "US100",
+            "M5",
+            "ny_open_vol_filter",
+            "small",
+            segments=SEGMENTS,
+            frame=frame,
+            campaign_id="bench",
             db_path=db,
         )
+        subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "tradinglab.cli",
+                "discovery",
+                "approve",
+                "bench",
+                "--approved-by-operator",
+                "--db",
+                str(db),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
         added = jobs.enqueue("bench", strategies, db_path=db)
-        setup = jobs.QueueSetup(bars=frame, template="ny_open_vol_filter")
         started = time.perf_counter()
         summary = jobs.run_queue(
-            "bench", workers, setup=setup, db_path=db, batch_size=32
+            "bench", workers, bars=frame, db_path=db, batch_size=32
         )
         elapsed = time.perf_counter() - started
         strategies_written = databank.list_strategies(

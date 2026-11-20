@@ -65,6 +65,10 @@ data_quality:
   # Fuente de datos por símbolo. `default` usa la caché MT5 estándar.
   # `calendar: nyse` activa festivos/cierres tempranos de EE. UU.
   sources:
+    US100:
+      path: data/cache/ea/US100_CASH_M5_NY.parquet
+      timezone: America/New_York
+      calendar: nyse
     US100.cash:
       path: data/cache/ea/US100_CASH_M5_NY.parquet
       timezone: America/New_York
