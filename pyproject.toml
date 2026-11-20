@@ -24,6 +24,7 @@ dependencies = [
 [project.optional-dependencies]
 mt5 = ["MetaTrader5==5.0.6231", "tzdata==2026.6"]
 dev = ["pytest==9.2.0", "ruff==0.17.4", "pre-commit==4.7.0"]
+discovery = ["numba>=0.60"]
 
 [project.scripts]
 lab = "tradinglab.cli:app"
