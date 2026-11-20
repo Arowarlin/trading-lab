@@ -170,6 +170,21 @@ def test_coste_ftmo_usa_la_tabla_verificada():
     assert est.components["spread"] > 0
 
 
+def test_coste_fundingpips_trial_comisiones_oficiales():
+    index = load_profile("CFD-006", "US100")
+    assert index.commission_type == "zero"
+    assert index.commission_value == 0.0
+    assert "fundingpips.com" in (index.commission_source or "")
+    fx = load_profile("CFD-006", "EURUSD")
+    assert fx.commission_type == "per_lot_usd"
+    assert fx.commission_value == 5.0
+    assert fx.commission_side == "per_side"
+    assert "fundingpips.com" in (fx.commission_source or "")
+    metal = load_profile("CFD-006", "XAUUSD")
+    assert metal.commission_type == "per_lot_usd"
+    assert metal.commission_value == 5.0
+
+
 def test_coste_futuros_no_usa_spreads_mt5():
     profile = CostProfile("FUT-T", "MNQ", Market.FUTURES, commission_value=0.37,
                           exchange_fee_per_side=0.35, clearing_fee_per_side=0.0,

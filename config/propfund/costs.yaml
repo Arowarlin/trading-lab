@@ -53,12 +53,20 @@ accounts:
         needs_verification: false
         source: 'spread: broker_spreads[broker:CFD-006] · NDX100 · p50 de medianas horarias y p75 de p75 horarios (23 h) · slippage: Sin datos'
         slippage_price: null
+        commission_type: zero
+        commission_value: 0.0
+        commission_side: per_side
+        commission_source: 'FundingPips 2 Step Standard/Pro · https://help.fundingpips.com/hc/en-us/articles/34501809112081-2-Step-Standard · 2026-11-20 · índices sin comisión'
         measured_at: '2026-11-20T16:51:20+00:00'
       US500:
         spread_price: 1.279594
         spread_p75_price: 1.282791
         needs_verification: false
         source: 'spread: broker_spreads[broker:CFD-006] · SPX500 · p50 de medianas horarias y p75 de p75 horarios (23 h) · slippage: Sin datos'
+        commission_type: zero
+        commission_value: 0.0
+        commission_side: per_side
+        commission_source: 'FundingPips 2 Step Standard/Pro · https://help.fundingpips.com/hc/en-us/articles/34501809112081-2-Step-Standard · 2026-11-20 · índices sin comisión'
         measured_at: '2026-11-20T16:51:21+00:00'
       XAUUSD:
         spread_price: 0.239329
@@ -67,6 +75,10 @@ accounts:
         source: 'spread: broker_spreads[broker:CFD-006] · XAUUSD · p50 de medianas horarias y p75 de p75 horarios (23 h) · slippage: Sin datos'
         measured_at: '2026-11-20T16:51:21+00:00'
         slippage_price: null
+        commission_type: per_lot_usd
+        commission_value: 5.0
+        commission_side: per_side
+        commission_source: 'FundingPips 2 Step Standard/Pro · https://help.fundingpips.com/hc/en-us/articles/34501809112081-2-Step-Standard · 2026-11-20 · 5 USD por lote; el texto no aclara lado, se asume por lado'
       EURUSD:
         spread_price: 0.00001
         spread_p75_price: 0.00002
@@ -74,6 +86,10 @@ accounts:
         source: 'spread: broker_spreads[broker:CFD-006] · EURUSD · p50 de medianas horarias y p75 de p75 horarios (24 h) · slippage: Sin datos'
         measured_at: '2026-11-20T16:51:19+00:00'
         slippage_price: null
+        commission_type: per_lot_usd
+        commission_value: 5.0
+        commission_side: per_side
+        commission_source: 'FundingPips 2 Step Standard/Pro · https://help.fundingpips.com/hc/en-us/articles/34501809112081-2-Step-Standard · 2026-11-20 · 5 USD por lote; el texto no aclara lado, se asume por lado'
       GBPUSD:
         spread_price: 0.00001
         spread_p75_price: 0.00005
@@ -81,6 +97,10 @@ accounts:
         source: 'spread: broker_spreads[broker:CFD-006] · GBPUSD · p50 de medianas horarias y p75 de p75 horarios (24 h) · slippage: Sin datos'
         measured_at: '2026-11-20T16:51:21+00:00'
         slippage_price: null
+        commission_type: per_lot_usd
+        commission_value: 5.0
+        commission_side: per_side
+        commission_source: 'FundingPips 2 Step Standard/Pro · https://help.fundingpips.com/hc/en-us/articles/34501809112081-2-Step-Standard · 2026-11-20 · 5 USD por lote; el texto no aclara lado, se asume por lado'
       USDJPY:
         spread_price: 0.000999
         spread_p75_price: 0.004983
@@ -88,6 +108,10 @@ accounts:
         source: 'spread: broker_spreads[broker:CFD-006] · USDJPY · p50 de medianas horarias y p75 de p75 horarios (24 h) · slippage: Sin datos'
         measured_at: '2026-11-20T16:51:21+00:00'
         slippage_price: null
+        commission_type: per_lot_usd
+        commission_value: 5.0
+        commission_side: per_side
+        commission_source: 'FundingPips 2 Step Standard/Pro · https://help.fundingpips.com/hc/en-us/articles/34501809112081-2-Step-Standard · 2026-11-20 · 5 USD por lote; el texto no aclara lado, se asume por lado'
   FUT-001:
     symbols:
       MNQ: {commission_value: null, exchange_fee_per_side: null, clearing_fee_per_side: null, nfa_fee_per_side: null, slippage_ticks: 1, source: "Comisiones Topstep Sin datos: verificar en el contrato"}

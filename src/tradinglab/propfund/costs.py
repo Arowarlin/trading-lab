@@ -46,6 +46,7 @@ class CostProfile:
     commission_type: str | None = None          # per_lot_usd | percent_of_volume | zero | per_contract_usd
     commission_value: float | None = None
     commission_side: str = "per_side"           # per_side | round_turn
+    commission_source: str | None = None
     spread_price: float | None = None           # mediana, en unidades de precio
     spread_p75_price: float | None = None
     slippage_price: float | None = None         # CFD: por lado, en precio
