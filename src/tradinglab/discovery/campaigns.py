@@ -38,7 +38,11 @@ from ..db import connect
 from . import __version__, databank, grid, snapshots
 from .config import load_engine_config
 from .data_quality import check_dataset, dataset_hash
-from .data_sources import load_source
+from .data_sources import (
+    DataSourceError,
+    load_source,
+    normalize_source,
+)
 
 SEGMENTS = ("is", "oos1", "oos2")
 
@@ -116,8 +120,15 @@ def _template_session(template: str, instrument: str) -> dict[str, Any]:
     }
 
 
-def _source_frame(instrument: str, timeframe: str) -> pd.DataFrame:
-    return load_source(instrument, timeframe).frame
+def _source_frame(
+    instrument: str, timeframe: str, data_source: str = "broker"
+) -> pd.DataFrame:
+    return load_source(instrument, timeframe, source=data_source).frame
+
+
+def campaign_data_source(campaign: dict[str, Any]) -> str:
+    config = campaign.get("config") or {}
+    return normalize_source(config.get("data_source") or "broker")
 
 
 def _resolve_oos2_end(frame: pd.DataFrame, requested: str | None) -> pd.Timestamp:
@@ -201,7 +212,10 @@ def register(
     account: str = "CFD-001",
     firm: str | None = "ftmo",
     use_p75: bool = True,
+    cost_accounts: list[str] | None = None,
+    cost_mode: str = "worst",
     mode: str = "ga",
+    data_source: str = "broker",
     frame: pd.DataFrame | None = None,
     dry_run: bool = False,
     now: Any | None = None,
@@ -216,6 +230,25 @@ def register(
     mode = str(mode or "ga").strip().lower()
     if mode not in {"ga", "grid"}:
         raise CampaignError(f"modo desconocido: {mode}")
+    try:
+        data_source = normalize_source(data_source)
+    except DataSourceError as exc:
+        raise CampaignError(str(exc)) from exc
+    from . import costs as discovery_costs
+
+    try:
+        selected_costs, selected_cost_mode = discovery_costs.resolve_cost_accounts(
+            instrument, cost_accounts, cost_mode
+        )
+        assumed_slippage, slippage_source = discovery_costs.assumed_slippage_for(
+            instrument
+        )
+        from ..propfund.registry import load_registry
+
+        registry = load_registry()
+        selected_firm = registry.firm_of(selected_costs[0]).id
+    except Exception as exc:  # noqa: BLE001
+        raise CampaignError(str(exc)) from exc
     engine = load_engine_config()
     try:
         profile_config = engine.profile(profile)
@@ -238,7 +271,9 @@ def register(
     else:
         n_total = int(profile_config.population * (profile_config.generations + 1))
 
-    source = frame if frame is not None else _source_frame(instrument, timeframe)
+    source = frame if frame is not None else _source_frame(
+        instrument, timeframe, data_source
+    )
     source = snapshots.closed_bars(source, timeframe, now=now)
     normalized = _normalize_segments(segments, engine.data_quality.default_segments)
     oos2_end = _resolve_oos2_end(source, normalized["oos2"][1])
@@ -255,6 +290,7 @@ def register(
         "template": template,
         "profile": profile,
         "mode": mode,
+        "data_source": data_source,
         "seed": int(seed),
         "engine_profile": profile,
         "is_start": normalized["is"][0],
@@ -266,7 +302,17 @@ def register(
         "segments": normalized,
         "dataset_hash": digest,
         "n_total": n_total,
-        "cost": {"account": account, "firm": firm, "use_p75": bool(use_p75)},
+        "cost": {
+            "account": selected_costs[0],
+            "firm": selected_firm,
+            "use_p75": bool(use_p75),
+            "accounts": list(selected_costs),
+            "mode": selected_cost_mode,
+            "assumed_slippage": {
+                "value": float(assumed_slippage),
+                "source": slippage_source,
+            },
+        },
         "session": session,
         "point": 0.01,
         "limits": {
@@ -363,6 +409,7 @@ def register_synthetic(
     account: str = "CFD-001",
     firm: str | None = "ftmo",
     mode: str = "ga",
+    data_source: str = "broker",
     db_path: str | Path | None = None,
 ) -> dict[str, Any]:
     """Campaña sintética: nunca se aprueba ni cuenta en el DSR."""
@@ -378,6 +425,7 @@ def register_synthetic(
         account=account,
         firm=firm,
         mode=mode,
+        data_source=data_source,
         frame=frame,
         dry_run=False,
         db_path=db_path,
@@ -550,7 +598,11 @@ def supersede(
         "oos2": [old["oos2_start"], oos2_end],
     }
     source = snapshots.closed_bars(
-        _source_frame(old["instrument"], old["timeframe"]),
+        _source_frame(
+            old["instrument"],
+            old["timeframe"],
+            campaign_data_source(old),
+        ),
         old["timeframe"],
         now=now,
     )
@@ -677,7 +729,9 @@ def campaign_bars(
             )
             raise CampaignError(str(exc)) from exc
     source = frame if frame is not None else _source_frame(
-        campaign["instrument"], campaign["timeframe"]
+        campaign["instrument"],
+        campaign["timeframe"],
+        campaign_data_source(campaign),
     )
     if not dataset_matches(campaign, source):
         databank.set_campaign_rejected(

@@ -17,6 +17,7 @@ import pytest
 
 from tradinglab.discovery.fastbt import (
     HAVE_NUMBA,
+    CfdHourlyCosts,
     ExitSpec,
     RunLimits,
     Signals,
@@ -25,6 +26,8 @@ from tradinglab.discovery.fastbt import (
     set_backend,
 )
 from tradinglab.intraday import backtest_intraday, run_event_backtest
+from tradinglab.propfund.costs import CostProfile
+from tradinglab.propfund.models import Market
 
 WEEK = tuple(range(7))
 SIGNAL_TS = pd.Timestamp("2024-01-10 09:55", tz="UTC")
@@ -190,6 +193,77 @@ def test_event_matches_run_event_backtest(
     assert got.entry_price == expected["entry_price"]
     assert got.exit_price == expected["exit_price"]
     assert got.reason == expected["exit_reason"]
+    assert got.entry_cost_bps == pytest.approx(
+        sum(expected["entry_costs"].values()), abs=1e-12
+    )
+    assert got.exit_cost_bps == pytest.approx(
+        sum(expected["exit_costs"].values()), abs=1e-12
+    )
+
+
+def test_event_matches_run_event_backtest_hourly_spread() -> None:
+    bars = _event_frame("tie")
+    order = {
+        "side": "buy",
+        "type": "market",
+        "stop": 99.0,
+        "target": 102.0,
+        "created_at": SIGNAL_TS,
+        "expires_at": END_TS,
+    }
+    hourly = {hour: 10.0 for hour in range(24)}
+    reference = run_event_backtest(
+        bars,
+        [order],
+        point=0.01,
+        commission_bps=0.0,
+        spread_bps=10.0,
+        slippage_bps=0.0,
+        spread_by_hour=hourly,
+        max_trades_per_day=5,
+        force_exit_time=time(15, 45),
+        session_offset_hours=0.0,
+        session_window=(time(0, 0), time(0, 0)),
+        session_tz="UTC",
+        session_weekdays=WEEK,
+        asset_class="cfd",
+    )
+    assert reference["trades"]
+    profile = CostProfile(
+        account="TEST",
+        symbol="US100",
+        market=Market.CFD,
+        commission_type="zero",
+        commission_value=0.0,
+        slippage_price=0.0,
+        spread_price=0.1,
+        spread_p75_price=0.1,
+    )
+    cost = CfdHourlyCosts(
+        profile,
+        spread_bps_by_local_hour={hour: 10.0 for hour in range(24)},
+        session_tz="America/New_York",
+    )
+    long, short = _one_signal(bars, "buy")
+    result = run(
+        Signals(long, short),
+        bars,
+        ExitSpec(stop="fixed", stop_price=99.0, target="fixed", target_price=102.0),
+        cost,
+        RunLimits(
+            session_tz="UTC",
+            flat_at="15:45",
+            weekdays=WEEK,
+            max_trades_per_day=5,
+            close_at_end=False,
+        ),
+    )
+    expected = reference["trades"][0]
+    got = result.trades[0]
+    assert got.entry_time == expected["entry_time"]
+    assert got.exit_time == expected["exit_time"]
+    assert got.entry_price == expected["entry_price"]
+    assert got.exit_price == expected["exit_price"]
     assert got.entry_cost_bps == pytest.approx(
         sum(expected["entry_costs"].values()), abs=1e-12
     )

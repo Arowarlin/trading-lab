@@ -60,6 +60,35 @@ class FitnessConfig(BaseModel):
     cost_r_max: float = Field(default=0.10, gt=0.0, le=1.0)
 
 
+class AssumedSlippageConfig(BaseModel):
+    """Slippage por lado en unidades de precio; ``None`` = Sin datos."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    source: str = "assumption"
+    instruments: dict[str, float | None] = Field(default_factory=dict)
+
+    @field_validator("instruments")
+    @classmethod
+    def _valid_values(
+        cls, value: dict[str, float | None]
+    ) -> dict[str, float | None]:
+        clean: dict[str, float | None] = {}
+        for name, item in value.items():
+            if item is None:
+                clean[str(name).upper()] = None
+                continue
+            number = float(item)
+            if not (number >= 0.0) or number != number:
+                raise ValueError(f"slippage asumido inválido para {name}: {item!r}")
+            clean[str(name).upper()] = number
+        return clean
+
+    def for_instrument(self, symbol: str) -> float | None:
+        key = str(symbol or "").strip().upper()
+        return self.instruments.get(key)
+
+
 class RobustnessConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -198,6 +227,9 @@ class EngineConfig(BaseModel):
     limits: LimitsConfig
     validation: ValidationConfig
     fitness: FitnessConfig = Field(default_factory=FitnessConfig)
+    assumed_slippage: AssumedSlippageConfig = Field(
+        default_factory=AssumedSlippageConfig
+    )
     robustness: RobustnessConfig = Field(default_factory=RobustnessConfig)
     perturb: PerturbConfig = Field(default_factory=PerturbConfig)
     data_quality: DataQualityConfig
@@ -238,6 +270,7 @@ def load_engine_config(path: str | Path | None = None) -> EngineConfig:
         "limits": raw.get("limits") or {},
         "validation": raw.get("validation") or {},
         "fitness": raw.get("fitness") or {},
+        "assumed_slippage": raw.get("assumed_slippage") or {},
         "robustness": raw.get("robustness") or {},
         "perturb": raw.get("perturb") or {},
         "data_quality": raw.get("data_quality") or {},
@@ -246,6 +279,7 @@ def load_engine_config(path: str | Path | None = None) -> EngineConfig:
 
 
 __all__ = [
+    "AssumedSlippageConfig",
     "DataQualityConfig",
     "ENGINE_PATH",
     "EngineConfig",

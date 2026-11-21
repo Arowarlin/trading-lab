@@ -101,8 +101,8 @@ accounts:
     terminal_path: 'C:\Program Files\Darwinex MetaTrader 5\terminal64.exe'
     login: 40000453530
     server: FundingPips-Trial
-    allowed_instruments: [US100, US500, XAUUSD, EURUSD, GBPUSD, USDJPY]
-    broker_symbols: {US100: NDX100, US500: SPX500, XAUUSD: XAUUSD, EURUSD: EURUSD, GBPUSD: GBPUSD, USDJPY: USDJPY}
+    allowed_instruments: [US100, US500, US30, XAUUSD, EURUSD, GBPUSD, USDJPY]
+    broker_symbols: {US100: NDX100, US500: SPX500, US30: DJI30, XAUUSD: XAUUSD, EURUSD: EURUSD, GBPUSD: GBPUSD, USDJPY: USDJPY}
     spread_source: broker:CFD-006
     limits: {daily_loss: 3000, max_loss: 6000, drawdown_mode: static, profit_target: 6000, min_trading_days: 0, max_lots: 20}
     risk: {per_trade_risk_pct: 0.005, daily_risk_pct: 0.02, max_trades_per_day: 3, max_open_positions: 3, buffer_vs_firm_pct: 0.20, max_cost_r: 0.20}

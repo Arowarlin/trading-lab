@@ -69,17 +69,24 @@ def fold_bounds(length: int, folds: int) -> list[tuple[int, int]]:
     return bounds
 
 
-def _fold_row(result: fastbt.FastResult, start: int, end: int, bars: pd.DataFrame) -> dict[str, Any]:
-    metrics = result.metrics
+def _fold_row(
+    result: fastbt.FastResult,
+    start: int,
+    end: int,
+    bars: pd.DataFrame,
+    *,
+    metrics: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    data = metrics if metrics is not None else result.metrics
     return {
         "start_index": int(start),
         "end_index": int(end),
         "start": bars.index[start].isoformat(),
         "end": bars.index[end].isoformat(),
-        "trades": int(metrics.get("trades") or 0),
-        "expectancy_r": metrics.get("expectancy_r"),
-        "profit_factor": metrics.get("profit_factor"),
-        "max_dd_r": metrics.get("max_dd_r"),
+        "trades": int(data.get("trades") or 0),
+        "expectancy_r": data.get("expectancy_r"),
+        "profit_factor": data.get("profit_factor"),
+        "max_dd_r": data.get("max_dd_r"),
     }
 
 
@@ -97,6 +104,7 @@ def evaluate(
     *,
     cache=None,
     cost_r_max: float | None = None,
+    cost_book=None,
 ) -> dict[str, Any]:
     """Evalúa una estrategia congelada en IS y devuelve el vector de fitness."""
 
@@ -121,6 +129,28 @@ def evaluate(
         base_limits,
         prepared=prepared,
     )
+    applied = None
+    full_metrics = full.metrics
+    full_daily = full.daily_r
+    cost_info: dict[str, Any] = {}
+    if cost_book is not None:
+        from .costs import apply_result
+
+        applied, full_metrics = apply_result(
+            cost_book,
+            full,
+            session_tz=base_limits.session_tz,
+            point=float(getattr(setup, "point", 0.01)),
+        )
+        full_daily = applied.daily_r
+        cost_info = {
+            "cost_by_account": full_metrics.get("cost_by_account"),
+            "worst_account": full_metrics.get("worst_account"),
+            "worst_share": full_metrics.get("worst_share"),
+            "cost_accounts": full_metrics.get("cost_accounts"),
+            "cost_mode": full_metrics.get("cost_mode"),
+            "slippage_assumption": full_metrics.get("slippage_assumption"),
+        }
 
     fold_rows: list[dict[str, Any]] = []
     for start, end in fold_bounds(len(bars), folds):
@@ -140,7 +170,20 @@ def evaluate(
             fold_limits,
             prepared=prepared,
         )
-        fold_rows.append(_fold_row(fold_result, start, end, bars))
+        if cost_book is not None:
+            from .costs import apply_result
+
+            _fold_applied, fold_metrics = apply_result(
+                cost_book,
+                fold_result,
+                session_tz=fold_limits.session_tz,
+                point=float(getattr(setup, "point", 0.01)),
+            )
+            fold_rows.append(
+                _fold_row(fold_result, start, end, bars, metrics=fold_metrics)
+            )
+        else:
+            fold_rows.append(_fold_row(fold_result, start, end, bars))
 
     fold_expectancy = [row["expectancy_r"] for row in fold_rows]
     median_expectancy = _median(fold_expectancy)
@@ -154,10 +197,14 @@ def evaluate(
     )
     node_count = complexity(model)
 
-    trades = full.trades
+    trades = applied.trades if applied is not None else full.trades
     cost_values = [float(trade.r_cost) for trade in trades if trade.r_cost is not None]
-    cost_r = float(np.median(cost_values)) if cost_values else None
-    base_expectancy = full.metrics.get("expectancy_r")
+    cost_r = (
+        float(np.median(cost_values))
+        if cost_values
+        else full_metrics.get("cost_r")
+    )
+    base_expectancy = full_metrics.get("expectancy_r")
     plus, _delta = metrics.cost_sensitivity(
         trades, float(getattr(setup, "point", 0.01))
     )
@@ -178,7 +225,7 @@ def evaluate(
                 f"pliegue {row['start']} trades {row['trades']} < "
                 f"{config.validation.min_trades_fold}"
             )
-    concentration = full.metrics.get("concentration")
+    concentration = full_metrics.get("concentration")
     if concentration is None or float(concentration) > 0.20:
         violations.append(f"concentración {concentration} > 0,20")
     if cost_r is None:
@@ -202,26 +249,28 @@ def evaluate(
         -float(node_count),
         -float(cost_drop),
     ]
+    raws = {
+        "expectancy_r": median_expectancy,
+        "positive_fraction": positive_fraction,
+        "dispersion": dispersion,
+        "stability": stability,
+        "worst_dd_r": worst_dd,
+        "complexity": node_count,
+        "cost_r": cost_r,
+        "cost_drop": cost_drop,
+        "mean_bars": mean_bars,
+        "concentration": concentration,
+    }
     metrics_payload = {
         "fitness": fitness,
-        "raw": {
-            "expectancy_r": median_expectancy,
-            "positive_fraction": positive_fraction,
-            "dispersion": dispersion,
-            "stability": stability,
-            "worst_dd_r": worst_dd,
-            "complexity": node_count,
-            "cost_r": cost_r,
-            "cost_drop": cost_drop,
-            "mean_bars": mean_bars,
-            "concentration": concentration,
-        },
+        "raw": raws,
         "folds": fold_rows,
         "violations": violations,
         "cost_r": cost_r,
         "complexity": node_count,
-        "is": dict(full.metrics),
+        "is": dict(full_metrics),
     }
+    metrics_payload.update(cost_info)
     return {
         "strategy_hash": dsl.strategy_hash(model),
         "fitness": fitness,
@@ -230,7 +279,7 @@ def evaluate(
         "cost_r": cost_r,
         "complexity": node_count,
         "folds": fold_rows,
-        "daily_returns": full.daily_r,
+        "daily_returns": full_daily,
         "trades_count": len(trades),
         "metrics": metrics_payload,
     }

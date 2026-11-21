@@ -32,6 +32,9 @@ class FeasibilityRow:
     mean_minutes: float
     feasible: bool
     reasons: list[str]
+    cost_by_account: dict[str, float | None] | None = None
+    worst_account: str | None = None
+    worst_share: float | None = None
 
 
 def _walk(node: Any):
@@ -77,13 +80,23 @@ def _context(campaign_id: str, db_path):
         raise campaigns.CampaignError(f"campaña no registrada: {campaign_id}")
     setup = jobs.QueueSetup.from_campaign(campaign)
     bars = campaigns.load_segment(campaign_id, "is", db_path=db_path)
-    from ..propfund.costs import load_profile
+    book = None
+    if setup.legacy_cost:
+        from ..propfund.costs import load_profile
 
-    try:
-        profile = load_profile(setup.account, setup.instrument, firm=setup.firm)
-        cost = fastbt.cost_from_profile(profile, use_p75=setup.use_p75)
-    except Exception as exc:  # noqa: BLE001 - coste ausente se informa como Sin datos
-        raise campaigns.CampaignError(f"Sin datos: coste {exc}") from exc
+        try:
+            profile = load_profile(setup.account, setup.instrument, firm=setup.firm)
+            cost = fastbt.cost_from_profile(profile, use_p75=setup.use_p75)
+        except Exception as exc:  # noqa: BLE001 - coste ausente se informa como Sin datos
+            raise campaigns.CampaignError(f"Sin datos: coste {exc}") from exc
+    else:
+        from .costs import build_cost_book_for_setup
+
+        try:
+            book = build_cost_book_for_setup(setup)
+            cost = book
+        except Exception as exc:  # noqa: BLE001
+            raise campaigns.CampaignError(f"Sin datos: coste {exc}") from exc
     limits = fastbt.RunLimits(
         session_tz=setup.session_tz,
         session_start=setup.session_start,
@@ -97,13 +110,13 @@ def _context(campaign_id: str, db_path):
         atr_windows=(setup.stop_n, setup.trail_n),
         sessions=(limits,),
     )
-    return campaign, setup, bars, cost, prepared
+    return campaign, setup, bars, cost, prepared, book
 
 
 def check(campaign_id: str, *, db_path=None) -> dict[str, Any]:
     """Devuelve la viabilidad de cada combinación/individuo inicial."""
 
-    campaign, setup, bars, cost, prepared = _context(campaign_id, db_path)
+    campaign, setup, bars, cost, prepared, book = _context(campaign_id, db_path)
     strategies, population, mode, template, seed = candidate_strategies(campaign)
     config = load_engine_config()
     folds = int(config.validation.folds)
@@ -117,6 +130,9 @@ def check(campaign_id: str, *, db_path=None) -> dict[str, Any]:
         cost_r: float | None = None
         mean_bars = 0.0
         reasons: list[str] = []
+        cost_by_account: dict[str, float | None] | None = None
+        worst_account: str | None = None
+        worst_share: float | None = None
         gate = jobs.strategy_gate(strategy, setup)
         if gate:
             reasons.append(gate)
@@ -137,6 +153,19 @@ def check(campaign_id: str, *, db_path=None) -> dict[str, Any]:
                     prepared=prepared,
                 )
                 trades = list(full.trades)
+                if book is not None:
+                    from .costs import apply_result
+
+                    applied, _metrics = apply_result(
+                        book,
+                        full,
+                        session_tz=base_limits.session_tz,
+                        point=setup.point,
+                    )
+                    trades = list(applied.trades)
+                    cost_by_account = applied.cost_by_account
+                    worst_account = applied.worst_account
+                    worst_share = applied.worst_share
                 trades_is = len(trades)
                 costs = [
                     float(trade.r_cost)
@@ -144,6 +173,10 @@ def check(campaign_id: str, *, db_path=None) -> dict[str, Any]:
                     if trade.r_cost is not None
                 ]
                 cost_r = float(np.median(costs)) if costs else None
+                if book is None:
+                    cost_by_account = {setup.account: cost_r}
+                    worst_account = setup.account
+                    worst_share = 1.0 if trades else 0.0
                 if trades:
                     mean_bars = float(np.mean([trade.bars_held for trade in trades]))
                 for start, end in fitness.fold_bounds(len(bars), folds):
@@ -197,6 +230,9 @@ def check(campaign_id: str, *, db_path=None) -> dict[str, Any]:
                 mean_minutes=mean_bars * 5.0,
                 feasible=not reasons,
                 reasons=reasons,
+                cost_by_account=cost_by_account,
+                worst_account=worst_account,
+                worst_share=worst_share,
             )
         )
     n_checked = len(rows)

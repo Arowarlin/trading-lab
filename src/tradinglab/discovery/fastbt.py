@@ -330,6 +330,71 @@ class CfdProfileCosts:
         )
 
 
+class CfdHourlyCosts(CfdProfileCosts):
+    """Coste CFD con spread p75 por hora **local** de la sesión.
+
+    ``spread_bps_by_local_hour`` se indexa por hora 0-23 en ``session_tz``.
+    Las horas sin medición usan el máximo de las horas medidas (cota
+    conservadora); el llamador guarda la lista de horas ausentes para el
+    informe.
+    """
+
+    def __init__(
+        self,
+        profile: CostProfile,
+        *,
+        spread_bps_by_local_hour: Mapping[int, float],
+        session_tz: str,
+        use_p75: bool = True,
+        missing_hours: tuple[int, ...] = (),
+    ) -> None:
+        mapping = {
+            int(hour): float(value)
+            for hour, value in dict(spread_bps_by_local_hour).items()
+            if np.isfinite(float(value)) and float(value) >= 0.0
+        }
+        if not mapping:
+            raise MissingCostData("Sin datos: spread p75 por hora local")
+        # El padre exige un spread global o un mapping; el global puede ser
+        # None hasta que se mida, pero el mapping local ya es obligatorio.
+        super().__init__(
+            profile,
+            spread_bps_by_hour={0: 0.0},
+            use_p75=use_p75,
+        )
+        self.spread_bps_by_local_hour = mapping
+        self.session_tz = str(session_tz)
+        self.missing_hours = tuple(int(hour) for hour in missing_hours)
+
+    def label(self) -> str:
+        return f"CFD horario · {self.profile.account} · {self.profile.symbol}"
+
+    def panel(self, bars: pd.DataFrame) -> CostPanel:
+        prices = pd.to_numeric(bars["close"], errors="coerce").to_numpy(dtype=float)
+        if np.isnan(prices).any() or (prices <= 0).any():
+            raise MissingCostData("Sin datos: precios inválidos para costes")
+        local_hours = bars.index.tz_convert(self.session_tz).hour.to_numpy()
+        fallback = max(self.spread_bps_by_local_hour.values())
+        spread = np.array(
+            [
+                self.spread_bps_by_local_hour.get(int(hour), fallback)
+                for hour in local_hours
+            ],
+            dtype=float,
+        )
+        commission = self._commission_bps(prices)
+        if self.profile.slippage_price is None:  # pragma: no cover - validado
+            raise MissingCostData("Sin datos: slippage CFD")
+        slippage = float(self.profile.slippage_price) / prices * 10_000.0
+        entry = commission + slippage + spread
+        return CostPanel(
+            entry_bps=entry,
+            stop_bps=entry.copy(),
+            target_bps=commission.copy(),
+            spread_bps=spread,
+        )
+
+
 class FuturesCosts:
     """Costes de futuros: comisión + fees por contrato y slippage en ticks."""
 

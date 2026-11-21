@@ -36,6 +36,20 @@ fitness:
   # Restricción dura: mediana de (coste ida y vuelta / distancia del stop) en R.
   cost_r_max: 0.10
 
+# Slippage asumido (precio por lado) para el Discovery Lab. No está medido:
+# se aplica a todas las cuentas sin slippage medido y los informes lo marcan
+# como supuesto. US100 1,0 pt ≈ 0,5 bps. US500/US30: decisión del operador.
+assumed_slippage:
+  source: assumption
+  instruments:
+    US100: 1.0
+    US500: 0.5
+    US30: 2.5
+    XAUUSD: 0.15
+    EURUSD: 0.00005
+    GBPUSD: 0.00005
+    USDJPY: 0.005
+
 robustness:
   random_trials: 1000
   pbo_min_strategies: 8

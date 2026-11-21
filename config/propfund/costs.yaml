@@ -17,6 +17,18 @@ accounts:
         source: 'spread: broker_spreads · US100.CASH · p50 de medianas horarias y p75 de p75 horarios (23 h) · slippage: config/ai_trader.yaml global.slippage_price'
         measured_at: '2026-11-19T20:01:11+00:00'
         needs_verification: false
+      US500:
+        spread_price: null
+        spread_p75_price: null
+        slippage_price: null
+        needs_verification: true
+        source: 'spread: Sin datos · slippage: Sin datos'
+      US30:
+        spread_price: null
+        spread_p75_price: null
+        slippage_price: null
+        needs_verification: true
+        source: 'spread: Sin datos · slippage: Sin datos'
       XAUUSD:
         spread_price: 0.381448
         spread_p75_price: 0.430976
@@ -68,6 +80,16 @@ accounts:
         commission_side: per_side
         commission_source: 'FundingPips 2 Step Standard/Pro · https://help.fundingpips.com/hc/en-us/articles/34501809112081-2-Step-Standard · 2026-11-20 · índices sin comisión'
         measured_at: '2026-11-20T16:51:21+00:00'
+      US30:
+        spread_price: null
+        spread_p75_price: null
+        needs_verification: true
+        source: 'spread: Sin datos · slippage: Sin datos'
+        slippage_price: null
+        commission_type: zero
+        commission_value: 0.0
+        commission_side: per_side
+        commission_source: 'FundingPips 2 Step Standard/Pro · https://help.fundingpips.com/hc/en-us/articles/34501809112081-2-Step-Standard · 2026-11-20 · índices sin comisión'
       XAUUSD:
         spread_price: 0.239329
         spread_p75_price: 0.28961

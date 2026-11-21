@@ -64,6 +64,9 @@ class QueueSetup:
     account: str = "CFD-001"
     firm: str | None = "ftmo"
     use_p75: bool = True
+    cost_accounts: tuple[str, ...] = ()
+    cost_mode: str = "target"
+    legacy_cost: bool = True
     session_tz: str = "America/New_York"
     session_start: str = "09:35"
     session_end: str = "11:30"
@@ -74,6 +77,7 @@ class QueueSetup:
     template: str | None = None
     seed: int = 0
     point: float = 0.01
+    data_source: str = "broker"
     cache_limit_bytes: int = 0
     bars: pd.DataFrame | None = None  # solo tests/benchmark sintéticos
 
@@ -101,14 +105,28 @@ class QueueSetup:
         cost = config.get("cost") or {}
         session = config.get("session") or {}
         limits = config.get("limits") or {}
+        configured_accounts = tuple(
+            str(account).strip().upper()
+            for account in (cost.get("accounts") or ())
+            if str(account).strip()
+        )
+        legacy_cost = not bool(configured_accounts)
+        if legacy_cost:
+            configured_accounts = (str(cost.get("account") or "CFD-001").upper(),)
+            configured_mode = "target"
+        else:
+            configured_mode = str(cost.get("mode") or "worst").lower()
         return cls(
             instrument=campaign.get("instrument") or "",
             timeframe=campaign.get("timeframe") or "",
             start=campaign.get("is_start"),
             end=campaign.get("is_end"),
-            account=str(cost.get("account") or "CFD-001"),
+            account=str(cost.get("account") or configured_accounts[0]),
             firm=cost.get("firm", "ftmo"),
             use_p75=bool(cost.get("use_p75", True)),
+            cost_accounts=configured_accounts,
+            cost_mode=configured_mode,
+            legacy_cost=legacy_cost,
             session_tz=str(session.get("tz") or "America/New_York"),
             session_start=str(session.get("start") or "09:35"),
             session_end=str(session.get("end") or "11:30"),
@@ -119,6 +137,7 @@ class QueueSetup:
             template=campaign.get("template") or config.get("template"),
             seed=int(config.get("seed", 0)),
             point=float(config.get("point", 0.01)),
+            data_source=str(config.get("data_source") or "broker"),
             cache_limit_bytes=int(config.get("cache_limit_bytes", 0)),
             bars=bars,
         ).validated()
@@ -128,19 +147,31 @@ class QueueSetup:
             raise QueueError("el setup necesita instrument")
         if not str(self.timeframe or "").strip():
             raise QueueError("el setup necesita timeframe")
+        if self.data_source not in {"broker", "dukascopy"}:
+            raise QueueError(f"fuente no soportada: {self.data_source!r}")
         if not str(self.account or "").strip():
             raise QueueError("el setup necesita account")
         if self.session_start == self.session_end:
             raise QueueError("la sesión no puede tener start == end (24 h no soportado)")
+        if self.cost_mode not in {"worst", "target"}:
+            raise QueueError(f"cost_mode desconocido: {self.cost_mode}")
+        if not self.cost_accounts:
+            raise QueueError("Sin datos: cost_accounts vacío")
+        if self.cost_mode == "target" and len(self.cost_accounts) != 1:
+            raise QueueError("cost_mode target exige exactamente una cuenta")
         return replace(
             self,
             instrument=str(self.instrument).upper(),
             timeframe=str(self.timeframe).upper(),
             weekdays=tuple(int(day) for day in self.weekdays),
+            cost_accounts=tuple(str(account).upper() for account in self.cost_accounts),
+            cost_mode=str(self.cost_mode).lower(),
         )
 
     def cost_profile(self) -> str:
-        return f"{self.account}:{self.instrument}"
+        if self.legacy_cost:
+            return f"{self.account}:{self.instrument}"
+        return f"{self.cost_mode}:{'+'.join(self.cost_accounts)}:{self.instrument}"
 
 
 def _set_priority() -> str:
@@ -300,13 +331,24 @@ def _init_worker(payload: dict[str, Any]) -> None:
     if setup.bars is not None:
         bars = setup.bars.copy()
     else:
-        loaded = load_source(setup.instrument, setup.timeframe)
+        loaded = load_source(
+            setup.instrument,
+            setup.timeframe,
+            source=setup.data_source,
+        )
         bars = loaded.frame
     bars = _slice_bars(bars, setup.start, setup.end)
     if len(bars) < 100:
         raise QueueError("Sin datos: menos de 100 barras en el tramo IS")
-    profile = load_profile(setup.account, setup.instrument, firm=setup.firm)
-    cost = fastbt.cost_from_profile(profile, use_p75=setup.use_p75)
+    if setup.legacy_cost:
+        profile = load_profile(setup.account, setup.instrument, firm=setup.firm)
+        cost = fastbt.cost_from_profile(profile, use_p75=setup.use_p75)
+        book = None
+    else:
+        from .costs import build_cost_book_for_setup
+
+        book = build_cost_book_for_setup(setup)
+        cost = book
     limits = fastbt.RunLimits(
         session_tz=setup.session_tz,
         session_start=setup.session_start,
@@ -325,6 +367,7 @@ def _init_worker(payload: dict[str, Any]) -> None:
         "setup": setup,
         "bars": bars,
         "cost": cost,
+        "cost_book": book,
         "prepared": prepared,
         "cache": cache,
         "prep_s": time.perf_counter() - started,
@@ -375,6 +418,7 @@ def _evaluate_job(task: tuple[int, str, str]) -> dict[str, Any]:
                 setup,
                 state["prepared"],
                 cache=cache,
+                cost_book=state.get("cost_book"),
             )
             series = fit["daily_returns"]
             return {
@@ -404,6 +448,29 @@ def _evaluate_job(task: tuple[int, str, str]) -> dict[str, Any]:
             run_limits_from_strategy(model, setup),
             prepared=state["prepared"],
         )
+        book = state.get("cost_book")
+        if book is not None:
+            from .costs import apply_result
+
+            applied, metrics = apply_result(
+                book,
+                result,
+                session_tz=setup.session_tz,
+                point=setup.point,
+            )
+            returns = applied.daily_r
+            return {
+                "job_id": job_id,
+                "strategy_hash": dsl.strategy_hash(model),
+                "metrics": metrics,
+                "trades": len(applied.trades),
+                "returns": returns.to_numpy(dtype=float).tolist(),
+                "return_dates": [stamp.isoformat() for stamp in returns.index],
+                "error": None,
+                "backend": result.backend,
+                "prep_s": float(state.get("prep_s", 0.0)),
+                "cache": cache.stats() if cache is not None else {},
+            }
         returns = result.daily_r
         return {
             "job_id": job_id,

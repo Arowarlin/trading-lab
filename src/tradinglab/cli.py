@@ -9855,6 +9855,14 @@ def discovery_register_cmd(
     oos2_range: str = typer.Option(None, "--oos2", help="OOS-2 como inicio:fin (fin vacío = última vela)"),
     seed: int = typer.Option(0, "--seed"),
     campaign_id: str = typer.Option(None, "--campaign-id"),
+    cost_account: list[str] = typer.Option(
+        None,
+        "--cost-account",
+        help="Cuenta de coste; repetible. Por defecto, todas las CFD no plantilla",
+    ),
+    cost_mode: str = typer.Option(
+        "best", "--cost-mode", help="best | worst | target"
+    ),
     dry_run: bool = typer.Option(False, "--dry-run", help="Previsualiza sin escribir"),
     db: str = typer.Option(None, "--db", help="discovery.db alternativo"),
 ) -> None:
@@ -9887,6 +9895,8 @@ def discovery_register_cmd(
             seed=seed,
             campaign_id=campaign_id,
             mode=mode,
+            cost_accounts=cost_account,
+            cost_mode=cost_mode,
             dry_run=dry_run,
             db_path=db,
         )
@@ -9902,6 +9912,17 @@ def discovery_register_cmd(
     table.add_row("dataset_hash", campaign["dataset_hash"][:16] + "…")
     table.add_row("Snapshot", str(campaign.get("snapshot_path") or "Sin datos"))
     table.add_row("config_hash", campaign["config_hash"][:16] + "…")
+    cost_config = (campaign.get("config") or {}).get("cost") or {}
+    table.add_row(
+        "Coste",
+        f"{cost_config.get('mode', 'target')} · "
+        f"{', '.join(cost_config.get('accounts') or []) or cost_config.get('account') or 'Sin datos'}",
+    )
+    slippage = cost_config.get("assumed_slippage") or {}
+    table.add_row(
+        "Slippage asumido",
+        f"{slippage.get('value', 'Sin datos')} ({slippage.get('source', 'Sin datos')})",
+    )
     table.add_row("OOS-2 fin real", campaign.get("oos2_end") or "Sin datos")
     table.add_row(
         "Calidad",
@@ -9980,11 +10001,34 @@ def discovery_feasibility_cmd(
     table.add_column("Ops IS", justify="right")
     table.add_column("Ops/pliegue")
     table.add_column("Cost_R", justify="right")
+    table.add_column("Coste por cuenta (sí/no)")
+    table.add_column("Más barata")
+    table.add_column("Elegida")
+    table.add_column("Peor")
     table.add_column("Velas", justify="right")
     table.add_column("Min", justify="right")
     table.add_column("¿Factible?")
     table.add_column("Motivo")
     for row in report["rows"]:
+        by_account = row.get("cost_by_account") or {}
+        viability = row.get("cost_viable_by_account") or {}
+        cost_text = " · ".join(
+            f"{name} {'Sin datos' if value is None else f'{float(value):.4f}'} "
+            f"({'sí' if viability.get(name) else 'no' if viability.get(name) is False else 'Sin datos'})"
+            for name, value in by_account.items()
+        ) or "Sin datos"
+        best = row.get("best_account") or "Sin datos"
+        best_share = row.get("best_share")
+        if best_share is not None and row.get("best_account"):
+            best = f"{best} ({float(best_share) * 100:.0f} %)"
+        selected = row.get("selected_account") or "Sin datos"
+        selected_share = row.get("selected_share")
+        if selected_share is not None and row.get("selected_account"):
+            selected = f"{selected} ({float(selected_share) * 100:.0f} %)"
+        worst = row.get("worst_account") or "Sin datos"
+        share = row.get("worst_share")
+        if share is not None and row.get("worst_account"):
+            worst = f"{worst} ({float(share) * 100:.0f} %)"
         table.add_row(
             str(int(row["index"]) + 1),
             str(row["label"]),
@@ -9993,6 +10037,10 @@ def discovery_feasibility_cmd(
             "Sin datos"
             if row["cost_r"] is None
             else f"{float(row['cost_r']):.4f}",
+            cost_text,
+            best,
+            selected,
+            worst,
             f"{float(row['mean_bars']):.2f}",
             f"{float(row['mean_minutes']):.0f}",
             "sí" if row["feasible"] else "NO",
@@ -10270,6 +10318,76 @@ def discovery_show_cmd(
     table.add_row("Estado", str(strategy["status"]))
     table.add_row("Selección", strategy.get("selection_reason") or "Sin datos")
     console.print(table)
+    campaign = databank.get_campaign(strategy["campaign_id"], db_path=db)
+    evaluations = databank.list_evaluations(strategy_id, db_path=db)
+    if evaluations:
+        costs = Table(title="Evaluaciones y coste")
+        costs.add_column("Segmento")
+        costs.add_column("Ops", justify="right")
+        costs.add_column("Cost_R", justify="right")
+        costs.add_column("Cuentas")
+        costs.add_column("Coste por cuenta (sí/no)")
+        costs.add_column("Más barata")
+        costs.add_column("Elegida")
+        costs.add_column("Peor")
+        costs.add_column("Slippage")
+        legacy_account = (
+            ((campaign or {}).get("config") or {}).get("cost", {}).get("account")
+            or "Sin datos"
+        )
+        for evaluation in evaluations:
+            metrics = evaluation.get("metrics") or {}
+            by_account = metrics.get("cost_by_account")
+            if not by_account and metrics.get("cost_r") is not None:
+                by_account = {legacy_account: metrics.get("cost_r")}
+            viability = metrics.get("cost_viable_by_account") or {}
+            if not viability and by_account:
+                from .discovery.config import load_engine_config
+
+                max_cost_r = float(load_engine_config().fitness.cost_r_max)
+                viability = {
+                    name: (
+                        None if value is None else bool(float(value) <= max_cost_r)
+                    )
+                    for name, value in by_account.items()
+                }
+            cost_text = " · ".join(
+                f"{name} {'Sin datos' if value is None else f'{float(value):.4f}'} "
+                f"({'sí' if viability.get(name) else 'no' if viability.get(name) is False else 'Sin datos'})"
+                for name, value in (by_account or {}).items()
+            ) or "Sin datos"
+            best = metrics.get("best_account") or "Sin datos"
+            best_share = metrics.get("best_share")
+            if best_share is not None and metrics.get("best_account"):
+                best = f"{best} ({float(best_share) * 100:.0f} %)"
+            selected = metrics.get("selected_account") or best
+            selected_share = metrics.get("selected_share")
+            if selected_share is not None and metrics.get("selected_account"):
+                selected = f"{selected} ({float(selected_share) * 100:.0f} %)"
+            worst = metrics.get("worst_account") or (
+                legacy_account if by_account else "Sin datos"
+            )
+            if metrics.get("worst_share") is not None and metrics.get("worst_account"):
+                worst = f"{worst} ({float(metrics['worst_share']) * 100:.0f} %)"
+            assumption = metrics.get("slippage_assumption") or {}
+            assumption_text = ", ".join(
+                f"{name} {item.get('value')} ({item.get('source')})"
+                for name, item in assumption.items()
+            ) or "Sin datos"
+            costs.add_row(
+                str(evaluation.get("segment")),
+                str(evaluation.get("trades_count") or 0),
+                "Sin datos"
+                if metrics.get("cost_r") is None
+                else f"{float(metrics['cost_r']):.4f}",
+                ", ".join(metrics.get("cost_accounts") or []) or legacy_account,
+                cost_text,
+                best,
+                selected,
+                worst,
+                assumption_text,
+            )
+        console.print(costs)
     validations = databank.list_validations(strategy_id, db_path=db)
     if validations:
         tests = Table(title="Validaciones")
