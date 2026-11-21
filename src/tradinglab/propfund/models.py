@@ -135,6 +135,8 @@ class Program(_Strict):
     platforms: list[str]
     sizes: list[int] = Field(default_factory=list)
     rules: list[FirmRule] = Field(default_factory=list)
+    # Restricciones comprobables (noticias, overnight, fin de semana, límites).
+    firm_constraints: list[FirmRule] = Field(default_factory=list)
     automation: AutomationPolicy | None = None  # sobrescribe la política de la firma
 
 
@@ -151,6 +153,8 @@ class Firm(_Strict):
     execution_providers: list[str] = Field(default_factory=list)
     automation: AutomationPolicy
     programs: list[Program] = Field(default_factory=list)
+    # Restricciones comprobables de la firma; el programa puede sobrescribirlas.
+    firm_constraints: list[FirmRule] = Field(default_factory=list)
     rules_version: str = "0"
     notes: str = ""
 

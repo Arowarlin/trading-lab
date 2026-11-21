@@ -112,3 +112,38 @@ MGC cuando haya datos). Se retira el carril de acciones/ETF.
 El manifiesto protegido queda con 4 grupos (`ai_trader`, `ea_us100_ftmo1`,
 `ftmo_forward`, `ftmo_risk`); `f13_hash` se retiró y el re-freeze se
 ejecutó con `lab propfund freeze --approved-by-operator`.
+
+## Tarea E · Onboarding de cuentas (R2i, 2026-11-21)
+
+`lab propfund onboard ACCOUNT_ID` escribe `reports/propfund/<cuenta>_onboarding.md`
+(solo lectura, sin campañas, sin OOS y sin `count_tests`):
+
+* **Reglas** del programa con URL y fecha; lo no encontrado queda `Sin datos` y
+  `unverified`. Incluye EAs, noticias, fin de semana, overnight, días mínimos,
+  límites de pérdida, apalancamiento, límite de tiempo y máximos.
+* **Costes**: símbolos del bróker leídos con `symbols_get` (sin adivinar),
+  `sync-spreads` en dry-run, spread p75 por hora local NY, comisión citada y
+  `assumed_slippage` de `engine.yaml`. MT5 solo adjunto: sin login ni shutdown y
+  con login/servidor comprobados contra la cuenta.
+* **Mapa de viabilidad** de las plantillas existentes por instrumento × sesión ×
+  TF con el coste de ESTA cuenta (`cost_mode target`): solo operaciones IS y
+  `cost_R`, sin PnL.
+* **Restricciones** de la firma en `config/propfund/firms.yaml`
+  (`firm_constraints`): noticias, fin de semana, overnight, máx. operaciones/día
+  y máx. lotes. `propfund/constraints.py::check_strategy` marca
+  `incompatible con <firma>` y comparten la regla el onboarding, el mapa y la
+  matriz.
+* **Matriz** de estrategias nivel ≥ 3: DSL congelado, solo IS, sin reoptimizar;
+  expectativa neta, `cost_R`, P(pasar), P(romper), compatibilidad y si la firma
+  permite automatizarla. Si el dataset sellado ya no coincide, el recálculo se
+  marca como indicativo. Si no hay estrategias nivel ≥ 3, se dice.
+* **Resumen**: instrumentos donde esta cuenta es más barata que las demás y
+  combinaciones candidatas (sugerencia; la campaña la decide y aprueba el
+  operador).
+
+Datos verificados de FundingPips el 2026-11-21 (Free Trial y 2 Step Standard):
+14 días naturales por fase, MT5/servidor `FundingPips-Trial`, Standard 5 %/10 %
+y Pro 3 %/6 %, noticias permitidas en evaluación, overnight/weekend permitidos
+en evaluación, 20 lotes por operación y máximo de operaciones/día `Sin datos`.
+Informe de referencia: `reports/propfund/CFD-006_onboarding.md` (ignorado por
+git, se regenera con el comando).

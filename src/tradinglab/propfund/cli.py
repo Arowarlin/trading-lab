@@ -352,3 +352,74 @@ def sync_spreads_cmd(
             f"[bold]Dry-run:[/bold] no se escribió nada. Se escribirían: {planned}. "
             "Usa --write para aplicar."
         )
+
+
+@app.command("onboard")
+def onboard_cmd(
+    account_id: str = typer.Argument(..., help="Cuenta Prop Fund, p. ej. CFD-006"),
+    no_mt5: bool = typer.Option(
+        False, "--no-mt5", help="No adjuntar MT5; el resto del informe se genera igual."
+    ),
+    db: str = typer.Option(
+        None, "--db", help="discovery.db alternativo (solo lectura)."
+    ),
+    out: str = typer.Option(
+        None, "--out", help="Ruta del informe; por defecto reports/propfund/<id>_onboarding.md."
+    ),
+    dry_run: bool = typer.Option(False, "--dry-run", help="No escribe el informe."),
+    as_json: bool = typer.Option(False, "--json"),
+) -> None:
+    """Onboarding de una cuenta: reglas, costes, viabilidad, matriz y resumen."""
+    from .onboarding import DEFAULT_DISCOVERY_DB, onboard
+
+    try:
+        report = onboard(
+            account_id,
+            attach=not no_mt5,
+            discovery_db=db or DEFAULT_DISCOVERY_DB,
+            write=not dry_run,
+            out=out,
+        )
+    except (ValueError, KeyError) as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2) from exc
+    if as_json:
+        payload_report = {key: value for key, value in report.items() if key != "markdown"}
+        scan_payload = payload_report.get("scan")
+        if isinstance(scan_payload, dict):
+            payload_report["scan"] = {
+                key: value
+                for key, value in scan_payload.items()
+                if key not in {"runs", "bars_cache"}
+            }
+        console.print_json(json.dumps(payload_report, default=str))
+        return
+    rules = report.get("rules") or {}
+    costs = report.get("costs") or {}
+    scan = report.get("scan") or {}
+    matrix = report.get("matrix") or {}
+    summary = report.get("summary") or {}
+    symbol_rows = (report.get("symbols") or {}).get("symbols") or []
+    found = sum(1 for row in symbol_rows if row.get("found"))
+    out_console = Console(width=150)
+    out_console.print(
+        f"[bold]Onboarding {report['account']}[/bold] · {report['firm_name']} · "
+        f"{report.get('program') or 'Sin datos'} · fase {report['phase']}"
+    )
+    out_console.print(
+        f"Reglas verificadas: {rules.get('verified', 0)}/{len(rules.get('rows') or [])} · "
+        f"símbolos encontrados: {found}/{len(symbol_rows)} · "
+        f"coste listo: {costs.get('status')} · viabilidad OK: {scan.get('n_ok', 0)}/{scan.get('n_rows', 0)} · "
+        f"matriz: {matrix.get('n', 0)}"
+    )
+    cheaper = (summary.get("cheapest_instruments") or [])
+    out_console.print(
+        "Coste más barato en: "
+        + (", ".join(row["instrument"] for row in cheaper) if cheaper else "Sin datos")
+    )
+    for warning in report.get("warnings") or []:
+        out_console.print(f"[yellow]Aviso:[/yellow] {warning}")
+    if report.get("path"):
+        out_console.print(f"Informe: [green]{report['path']}[/green]")
+    else:
+        out_console.print("[yellow]Dry-run:[/yellow] no se escribió el informe.")

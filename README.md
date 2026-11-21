@@ -1563,10 +1563,15 @@ riesgo independientes. **No modifica el carril FTMO**: el EA `us100-ftmo1`,
 .\.venv\Scripts\lab.exe propfund verify          # hashes de los componentes protegidos
 .\.venv\Scripts\lab.exe propfund route --strategy nq-orb-ny --symbol MNQ --side long --entry 20000 --stop 19990 --include-disabled
 .\.venv\Scripts\lab.exe propfund affected --firm topstep
+.\.venv\Scripts\lab.exe propfund onboard CFD-006   # reglas, costes, viabilidad y matriz
 ```
 
 Consola: vista **Prop Fund** (Riesgo y fondeo). Documentación en `docs/propfund/`
 (auditoría, arquitectura, matriz de firmas, datos, plan y prompt de OpenCode).
+`lab propfund onboard ACCOUNT_ID` escribe `reports/propfund/<cuenta>_onboarding.md`
+con reglas verificadas, símbolos del bróker, spreads por hora NY, mapa de
+viabilidad de plantillas, restricciones de la firma y matriz de estrategias
+nivel ≥ 3. Es solo lectura: no registra campañas, no lee OOS y no suma al DSR.
 
 ## 6n. Catálogo único de instrumentos (6.4)
 
