@@ -1,8 +1,9 @@
 """Campañas de discovery, segmentos sellados y lectura única de OOS-2.
 
 * La campaña vive en ``data/discovery.db`` (``disc_campaigns``).
-* ``n_total = population × (generations + 1)`` se guarda al registrar, antes
-  de correr, y es inmutable (trigger en SQLite).
+* ``n_total`` se guarda al registrar, antes de correr, y es inmutable (trigger
+  en SQLite). En modo ``ga`` es ``population × (generations + 1)``; en modo
+  ``grid`` es el número de combinaciones declaradas en la plantilla.
 * El ``dataset_hash`` se calcula sobre ``[is_start, oos2_end]`` con el final de
   OOS-2 resuelto a la última vela real; las velas nuevas posteriores no
   invalidan la campaña.
@@ -26,7 +27,7 @@ import pandas as pd
 import yaml
 
 from ..config import ROOT
-from . import __version__, databank
+from . import __version__, databank, grid
 from .config import load_engine_config
 from .data_quality import check_dataset, dataset_hash
 from .data_sources import load_source
@@ -192,6 +193,7 @@ def register(
     account: str = "CFD-001",
     firm: str | None = "ftmo",
     use_p75: bool = True,
+    mode: str = "ga",
     frame: pd.DataFrame | None = None,
     dry_run: bool = False,
     db_path: str | Path | None = None,
@@ -202,12 +204,30 @@ def register(
     timeframe = str(timeframe or "").strip().upper()
     if not instrument or not timeframe:
         raise CampaignError("instrument y timeframe son obligatorios")
+    mode = str(mode or "ga").strip().lower()
+    if mode not in {"ga", "grid"}:
+        raise CampaignError(f"modo desconocido: {mode}")
     engine = load_engine_config()
     try:
         profile_config = engine.profile(profile)
     except KeyError as exc:
         raise CampaignError(str(exc)) from exc
-    n_total = int(profile_config.population * (profile_config.generations + 1))
+    session = _template_session(template, instrument)
+    grid_spec: dict[str, Any] | None = None
+    if mode == "grid":
+        try:
+            grid_spec = grid.load_grid(template)
+            grid_strategies = grid.grid_strategies(
+                template,
+                instrument=instrument,
+                timeframe=timeframe,
+                session=session,
+            )
+        except Exception as exc:  # noqa: BLE001
+            raise CampaignError(f"rejilla inválida: {exc}") from exc
+        n_total = len(grid_strategies)
+    else:
+        n_total = int(profile_config.population * (profile_config.generations + 1))
 
     source = frame if frame is not None else _source_frame(instrument, timeframe)
     normalized = _normalize_segments(segments, engine.data_quality.default_segments)
@@ -219,12 +239,12 @@ def register(
 
     hashed = _hash_range(source, normalized["is"][0], oos2_end)
     digest = dataset_hash(hashed)
-    session = _template_session(template, instrument)
     config_payload: dict[str, Any] = {
         "instrument": instrument,
         "timeframe": timeframe,
         "template": template,
         "profile": profile,
+        "mode": mode,
         "seed": int(seed),
         "engine_profile": profile,
         "is_start": normalized["is"][0],
@@ -254,6 +274,9 @@ def register(
         },
         "engine_version": __version__,
     }
+    if grid_spec is not None:
+        config_payload["grid"] = grid_spec
+        config_payload["grid_size"] = n_total
     config_json = json.dumps(config_payload, sort_keys=True, ensure_ascii=False)
     config_hash = hashlib.sha256(config_json.encode("utf-8")).hexdigest()
     identifier = str(campaign_id or "").strip()
@@ -318,6 +341,7 @@ def register_synthetic(
     campaign_id: str | None = None,
     account: str = "CFD-001",
     firm: str | None = "ftmo",
+    mode: str = "ga",
     db_path: str | Path | None = None,
 ) -> dict[str, Any]:
     """Campaña sintética: nunca se aprueba ni cuenta en el DSR."""
@@ -332,6 +356,7 @@ def register_synthetic(
         campaign_id=campaign_id,
         account=account,
         firm=firm,
+        mode=mode,
         frame=frame,
         dry_run=False,
         db_path=db_path,

@@ -9849,6 +9849,7 @@ def discovery_register_cmd(
         "ny_open_vol_filter", "--template", help="Plantilla de config/discovery/templates"
     ),
     profile: str = typer.Option("small", "--profile", help="small | medium | large"),
+    mode: str = typer.Option("ga", "--mode", help="ga | grid"),
     is_range: str = typer.Option(None, "--is", help="IS como inicio:fin"),
     oos1_range: str = typer.Option(None, "--oos1", help="OOS-1 como inicio:fin"),
     oos2_range: str = typer.Option(None, "--oos2", help="OOS-2 como inicio:fin (fin vacío = última vela)"),
@@ -9885,6 +9886,7 @@ def discovery_register_cmd(
             segments=segments,
             seed=seed,
             campaign_id=campaign_id,
+            mode=mode,
             dry_run=dry_run,
             db_path=db,
         )
@@ -9937,6 +9939,7 @@ def discovery_preflight_cmd(
     table.add_row("Generados", str(report["generated"]))
     table.add_row("Válidos", str(report["valid"]))
     table.add_row("Rechazados", str(report["rejected"]))
+    table.add_row("Duplicadas", str(report.get("duplicates", 0)))
     if report.get("last_error"):
         table.add_row("Último error", str(report["last_error"]))
     console.print(table)
@@ -9983,6 +9986,35 @@ def discovery_approve_cmd(
         f"Campaña {campaign['campaign_id']}: {campaign['status']} · "
         f"approved_at {campaign.get('approved_at') or 'Sin datos'} · "
         f"cuenta {int(campaign.get('n_total') or 0):,} pruebas"
+    )
+
+
+@discovery_app.command("reject")
+def discovery_reject_cmd(
+    campaign_id: str = typer.Argument(..., help="ID de la campaña"),
+    reason: str = typer.Option(
+        ..., "--reason", help="Motivo del rechazo"
+    ),
+    db: str = typer.Option(None, "--db", help="discovery.db alternativo"),
+) -> None:
+    """Rechaza una campaña; si nunca se aprobó, no cuenta en el DSR."""
+
+    from .discovery import databank
+
+    campaign = databank.get_campaign(campaign_id, db_path=db)
+    if campaign is None:
+        console.print(f"[red]Campaña no registrada:[/red] {campaign_id}")
+        raise typer.Exit(1)
+    if campaign.get("approved_at"):
+        console.print(
+            "[yellow]La campaña ya estaba aprobada: el rechazo no borra "
+            "su cuenta en el DSR.[/yellow]"
+        )
+    databank.set_campaign_rejected(campaign_id, str(reason), db_path=db)
+    row = databank.get_campaign(campaign_id, db_path=db)
+    console.print(
+        f"Campaña {campaign_id}: {row['status']} · motivo {row['reject_reason']} · "
+        f"approved_at {row.get('approved_at') or 'Sin datos'}"
     )
 
 

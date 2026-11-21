@@ -15,7 +15,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from . import campaigns, databank, dsl, fitness, genetic, jobs, nsga2
+from . import campaigns, databank, dsl, fitness, genetic, grid, jobs, nsga2
 from .config import load_engine_config
 
 
@@ -146,12 +146,23 @@ def preflight(campaign_id: str, *, db_path=None) -> dict[str, Any]:
         or "ny_open_vol_filter"
     )
     seed = int(campaign_config.get("seed", 0))
-    strategies = initial_strategies(
-        campaign,
-        template=template,
-        population=int(profile.population),
-        rng=random.Random(seed),
-    )
+    mode = str(campaign_config.get("mode") or "ga")
+    if mode == "grid":
+        strategies = grid.grid_strategies(
+            template,
+            instrument=campaign.get("instrument"),
+            timeframe=campaign.get("timeframe"),
+            session=campaign_config.get("session"),
+        )
+        population = len(strategies)
+    else:
+        strategies = initial_strategies(
+            campaign,
+            template=template,
+            population=int(profile.population),
+            rng=random.Random(seed),
+        )
+        population = int(profile.population)
     setup = jobs.QueueSetup.from_campaign(campaign)
     reasons: dict[str, int] = {}
     valid = 0
@@ -161,17 +172,22 @@ def preflight(campaign_id: str, *, db_path=None) -> dict[str, Any]:
             valid += 1
         else:
             reasons[reason] = reasons.get(reason, 0) + 1
+    duplicates = len(strategies) - len(
+        {dsl.strategy_hash(strategy) for strategy in strategies}
+    )
     return {
         "campaign_id": campaign_id,
         "status": campaign.get("status"),
         "instrument": setup.instrument,
         "timeframe": setup.timeframe,
         "template": template,
+        "mode": mode,
         "seed": seed,
-        "population": int(profile.population),
+        "population": population,
         "generated": len(strategies),
         "valid": valid,
         "rejected": len(strategies) - valid,
+        "duplicates": duplicates,
         "reasons": reasons,
         "last_error": campaign.get("last_error"),
     }
@@ -543,6 +559,9 @@ def run_campaign(
         raise campaigns.CampaignError("Sin datos: n_total no válido")
     template = str(campaign.get("template") or campaign["config"].get("template") or "ny_open_vol_filter")
     campaign_seed = int(seed if seed is not None else campaign["config"].get("seed", 0))
+    mode = str(campaign["config"].get("mode") or "ga").strip().lower()
+    if mode not in {"ga", "grid"}:
+        raise campaigns.CampaignError(f"modo de campaña desconocido: {mode}")
     rng = random.Random(campaign_seed)
     setup = jobs.QueueSetup.from_campaign(campaign, bars=bars)
     is_frame = campaigns.load_segment(campaign_id, "is", frame=bars, db_path=db_path)
@@ -562,16 +581,37 @@ def run_campaign(
     known: dict[str, Individual] = {}
     symmetric = genetic.template_symmetric(template)
     init_stats: dict[str, int] = {}
-    initial_candidates = initial_strategies(
-        campaign,
-        template=template,
-        population=int(profile.population),
-        rng=rng,
-        stats=init_stats,
-        symmetric=symmetric,
-    )
+    if mode == "grid":
+        initial_candidates = grid.grid_strategies(
+            template,
+            instrument=campaign.get("instrument"),
+            timeframe=campaign.get("timeframe"),
+            session=campaign["config"].get("session"),
+        )
+        init_stats = {
+            "attempts": len(initial_candidates),
+            "invalid": 0,
+            "duplicates": 0,
+            "generated": len(initial_candidates),
+        }
+        initial_origin = "grid"
+        initial_operators = ["grid"] * len(initial_candidates)
+        generations = 0
+    else:
+        initial_candidates = initial_strategies(
+            campaign,
+            template=template,
+            population=int(profile.population),
+            rng=rng,
+            stats=init_stats,
+            symmetric=symmetric,
+        )
+        initial_origin = "template"
+        initial_operators = ["seed"] * len(initial_candidates)
+        generations = int(profile.generations)
     init_errors: list[str] = []
     diagnostics: dict[str, Any] = {
+        "mode": mode,
         "symmetric": symmetric,
         "init": dict(init_stats),
         "generations": [],
@@ -581,7 +621,7 @@ def run_campaign(
         "attempts": 0,
         "retried": 0,
         "empty_slots": 0,
-        "stop_reason": "generations",
+        "stop_reason": "grid" if mode == "grid" else "generations",
     }
 
     with jobs.BatchEvaluator(
@@ -595,8 +635,8 @@ def run_campaign(
                 evaluator,
                 initial_candidates,
                 generation=0,
-                operators=["seed"] * len(initial_candidates),
-                origin="template",
+                operators=initial_operators,
+                origin=initial_origin,
                 parent_items=[(None, None) for _ in initial_candidates],
                 campaign_id=campaign_id,
                 setup=setup,
@@ -635,7 +675,7 @@ def run_campaign(
                 )
             raise
 
-        for generation in range(1, int(profile.generations) + 1):
+        for generation in range(1, generations + 1):
             if time_limit is not None and time.monotonic() - started >= float(time_limit) * 60.0:
                 diagnostics["stop_reason"] = "time_limit"
                 break

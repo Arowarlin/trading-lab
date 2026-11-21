@@ -16,6 +16,29 @@ parameter_space:
   threshold: [0.0, 0.001, 0.002, 0.003]
   session_return_end: ["10:00", "10:30", "11:00"]
   entry_window_start: ["15:00", "15:15", "15:30"]
+grid:
+  dimensions:
+    - name: threshold
+      kind: path
+      path: long_entry.args[0].right.value
+      values: [0.0, 0.001, 0.002, 0.003]
+    - name: session_return_end
+      kind: path
+      path: long_entry.args[0].left.params.end
+      values: [600, 630, 660]   # 10:00, 10:30, 11:00 NY
+    - name: entry_start
+      kind: path
+      path: long_entry.args[1].start
+      values: ["15:00", "15:15", "15:30"]
+    - name: volatility
+      kind: volatility
+      values: ["none", "vol_high"]
+    - name: exit_variant
+      kind: exit
+      values: ["A", "B"]
+  exit_variants:
+    A: {stop_mult: 3.0, target_rr: 1000.0, time_exit_bars: 6, flat_at: "15:55"}
+    B: {stop_mult: 2.0, target_rr: 2.0, time_exit_bars: 6, flat_at: "15:55"}
 strategy:
   dsl_version: "1"
   instrument: US100
