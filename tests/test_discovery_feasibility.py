@@ -139,6 +139,7 @@ def test_cli_feasibility_muestra_tabla(tmp_path: Path, monkeypatch) -> None:
 
     from tradinglab.cli import app
 
+    monkeypatch.setenv("COLUMNS", "240")
     db = tmp_path / "discovery.db"
     frame = engine.synthetic_frame(years=0.5, seed=3)
     campaigns.register(
@@ -166,6 +167,14 @@ def test_cli_feasibility_muestra_tabla(tmp_path: Path, monkeypatch) -> None:
                     "trades_is": 120,
                     "fold_trades": [30, 30, 30, 30],
                     "cost_r": 0.08,
+                    "cost_by_account": {"CFD-001": 0.08, "CFD-006": 0.07},
+                    "cost_viable_by_account": {"CFD-001": True, "CFD-006": True},
+                    "worst_account": "CFD-001",
+                    "worst_share": 1.0,
+                    "best_account": "CFD-006",
+                    "best_share": 1.0,
+                    "selected_account": "CFD-006",
+                    "selected_share": 1.0,
                     "mean_bars": 6.0,
                     "mean_minutes": 30.0,
                     "feasible": True,
@@ -180,3 +189,5 @@ def test_cli_feasibility_muestra_tabla(tmp_path: Path, monkeypatch) -> None:
     assert result.exit_code == 0
     assert "Factibles 1/1" in result.output
     assert "PASA" in result.output
+    assert "Más barata" in result.output
+    assert "sí" in result.output

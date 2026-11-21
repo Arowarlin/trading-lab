@@ -76,6 +76,77 @@ def test_us30_en_cfd006_usa_dji30() -> None:
     assert "US30" in account.allowed_instruments
 
 
+def test_best_toma_el_minimo_por_operacion_y_guarda_ambas() -> None:
+    book = costs.CostBook(
+        [
+            _fake("A", _panel([20.0, 1.0, 0.0])),
+            _fake("B", _panel([1.0, 1.0, 1.0])),
+        ],
+        mode="best",
+        session_tz="UTC",
+    )
+    bars = pd.DataFrame(
+        {"open": [100.0] * 3, "high": [101.0] * 3, "low": [99.0] * 3, "close": [100.0] * 3},
+        index=pd.date_range("2024-01-10 15:00", periods=3, freq="5min", tz="UTC"),
+    )
+    book.panel(bars)
+    applied = book.apply([_trade()], session_tz="UTC")
+    assert applied.trades[0].r_cost == pytest.approx(0.02)
+    assert applied.cost_by_account["A"] == pytest.approx(0.20)
+    assert applied.cost_by_account["B"] == pytest.approx(0.02)
+    assert applied.best_account == "B"
+    assert applied.best_share == pytest.approx(1.0)
+    assert applied.selected_account == "B"
+    assert applied.selected_share == pytest.approx(1.0)
+
+
+def test_apply_result_guarda_neto_de_ambas_y_la_mas_barata() -> None:
+    book = costs.CostBook(
+        [
+            _fake("A", _panel([20.0, 1.0, 0.0])),
+            _fake("B", _panel([1.0, 1.0, 1.0])),
+        ],
+        mode="best",
+        session_tz="UTC",
+    )
+    bars = pd.DataFrame(
+        {"open": [100.0] * 3, "high": [101.0] * 3, "low": [99.0] * 3, "close": [100.0] * 3},
+        index=pd.date_range("2024-01-10 15:00", periods=3, freq="5min", tz="UTC"),
+    )
+    book.panel(bars)
+    result = fastbt.FastResult(
+        trades=[_trade()],
+        daily_r=pd.Series(dtype=float),
+        metrics={},
+    )
+    _applied, metrics = costs.apply_result(
+        book, result, session_tz="UTC", max_cost_r=0.10
+    )
+    assert metrics["cost_by_account"]["A"] == pytest.approx(0.20)
+    assert metrics["cost_by_account"]["B"] == pytest.approx(0.02)
+    assert metrics["best_account"] == "B"
+    assert metrics["cost_viable_by_account"] == {"A": False, "B": True}
+    assert metrics["selected_account"] == "B"
+
+
+def test_best_es_el_modo_por_defecto(tmp_path: Path) -> None:
+    frame = __import__("tradinglab.discovery.engine", fromlist=["x"]).synthetic_frame(
+        years=0.5, seed=17
+    )
+    preview = campaigns.register(
+        "US100",
+        "M5",
+        "ny_open_vol_filter",
+        "small",
+        segments=SEGMENTS,
+        frame=frame,
+        campaign_id="best-default",
+        dry_run=True,
+        db_path=tmp_path / "discovery.db",
+    )
+    assert preview["config"]["cost"]["mode"] == "best"
+
+
 def test_worst_toma_el_maximo_por_operacion_no_por_vela() -> None:
     book = costs.CostBook(
         [
@@ -345,10 +416,15 @@ def test_show_muestra_coste_por_cuenta(tmp_path: Path, monkeypatch) -> None:
         metrics={
             "cost_r": 0.03,
             "cost_by_account": {"CFD-001": 0.03, "CFD-006": 0.027},
+            "cost_viable_by_account": {"CFD-001": True, "CFD-006": True},
             "worst_account": "CFD-001",
             "worst_share": 1.0,
+            "best_account": "CFD-006",
+            "best_share": 1.0,
+            "selected_account": "CFD-006",
+            "selected_share": 1.0,
             "cost_accounts": ["CFD-001", "CFD-006"],
-            "cost_mode": "worst",
+            "cost_mode": "best",
             "slippage_assumption": {
                 "US100": {"value": 1.0, "source": "assumption"}
             },
@@ -363,5 +439,7 @@ def test_show_muestra_coste_por_cuenta(tmp_path: Path, monkeypatch) -> None:
     assert "Coste por cuenta" in result.output
     assert "CFD-001" in result.output
     assert "CFD-006" in result.output
+    assert "Más barata" in result.output
+    assert "sí" in result.output
 
 
