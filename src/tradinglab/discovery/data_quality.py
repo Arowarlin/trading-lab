@@ -5,9 +5,10 @@ Reglas (Fase 1b):
 * **Granularidad homogénea:** la mediana del intervalo de cada mes debe ser el
   timeframe. Se informa el ``inicio útil`` (primer mes desde el que todos los
   meses siguientes son homogéneos) y los datos anteriores no se usan.
-* **Pausa programada en hora de sesión:** la recurrencia ≥ 20 % se calcula
-  sobre ``HH:MM`` en la zona del instrumento (``data_quality.session_tz``), no
-  en UTC. Una pausa a las 16:50 NY que en UTC alterna 20:50/21:50 es la misma.
+* **Pausa programada en hora del servidor:** la recurrencia ≥ 20 % se calcula
+  sobre ``HH:MM`` en ``data_quality.pause_tz`` (America/New_York para FTMO), no
+  en UTC ni en la zona de trading del instrumento. Una pausa a las 16:50 NY que
+  en UTC alterna 20:50/21:50 es la misma.
 * **Festivos/cierres tempranos:** para índices de EE. UU. se importa
   ``tradinglab.nyse_calendar``; los huecos en esas fechas son informativos y no
   cuentan. Fuera de su cobertura (2021-2027) se avisa "sin calendario".
@@ -298,13 +299,13 @@ def _gap_analysis(
     tf_minutes: int,
     config: DataQualityConfig,
     *,
-    session_tz: str,
+    pause_tz: str,
     calendar: str | None,
 ) -> tuple[list[dict], int, list[dict], list[dict], int]:
     index = _utc_index(frame.index).sort_values()
     if len(index) < 2:
         return [], 0, [], [], 0
-    local_index = index.tz_convert(ZoneInfo(session_tz))
+    local_index = index.tz_convert(ZoneInfo(pause_tz))
     gaps: list[dict] = []
     threshold = float(config.gap_factor) * tf_minutes
     max_gap = float(config.max_gap_hours) * 60.0
@@ -313,12 +314,12 @@ def _gap_analysis(
         if minutes <= threshold or minutes >= max_gap:
             continue
         start = previous + pd.Timedelta(minutes=tf_minutes)
-        local_start = start.tz_convert(ZoneInfo(session_tz))
+        local_start = start.tz_convert(ZoneInfo(pause_tz))
         gaps.append(
             {
                 "start": local_start,
                 "start_utc": start,
-                "resume": current.tz_convert(ZoneInfo(session_tz)),
+                "resume": current.tz_convert(ZoneInfo(pause_tz)),
                 "resume_utc": current,
                 "minutes": round(minutes, 2),
                 "hhmm": local_start.strftime("%H:%M"),
@@ -396,6 +397,7 @@ def check_dataset(
     config = config or load_engine_config().data_quality
     tf_minutes = _tf_minutes(timeframe)
     session_tz = config.tz_for(symbol)
+    pause_tz = config.pause_tz
     issues: list[str] = []
     if frame is None or len(frame) == 0:
         return QualityReport(
@@ -518,9 +520,13 @@ def check_dataset(
         work,
         tf_minutes,
         config,
-        session_tz=session_tz,
+        pause_tz=pause_tz,
         calendar=calendar_name,
     )
+    if calendar_name is None:
+        issues.append("sin calendario: festivos no verificables (no se inventan fechas)")
+        if status == "ok":
+            status = "warn"
     if outside_calendar:
         issues.append(
             f"sin calendario: {outside_calendar} huecos fuera de "
@@ -581,6 +587,7 @@ def check_dataset(
             "fail_if_gap_pct_gt": config.fail_if_gap_pct_gt,
             "scheduled_gap_share": config.scheduled_gap_share,
             "session_tz": session_tz,
+            "pause_tz": pause_tz,
             "gap_pct": round(gap_pct, 6),
             "expected_bars": expected_bars,
             "non_scheduled_samples": [
@@ -598,6 +605,7 @@ def check_dataset(
             "name": calendar_name,
             "coverage": list(_CALENDAR_COVERAGE) if calendar_name == "nyse" else None,
             "gaps": len(calendar_gaps),
+            "note": "sin calendario" if calendar_name is None else "",
         },
         source=source or {},
         datacheck=datacheck,

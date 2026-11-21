@@ -66,12 +66,16 @@ data_quality:
   # Huecos >= max_gap_hours son cierres de sesión/fin de semana/festivo: no cuentan.
   max_gap_hours: 4
   # Pausa programada: el mismo HH:MM LOCAL de reanudación en >= esta fracción
-  # de días con datos. La hora local sale de session_tz, no de UTC.
+  # de días con datos. La pausa diaria del servidor se mide en pause_tz
+  # (America/New_York para FTMO), no en la zona de trading del instrumento.
   scheduled_gap_share: 0.2
   # warn si hay más de warn_if_gaps_gt huecos no programados.
   warn_if_gaps_gt: 0
   # fail si los huecos no programados superan esta fracción de velas esperadas.
   fail_if_gap_pct_gt: 0.005
+
+  # Pausa diaria del servidor (independiente de la lógica de trading).
+  pause_tz: America/New_York
 
   # Zona de sesión por símbolo (case-insensitive); default America/New_York.
   session_tz:
@@ -91,7 +95,8 @@ data_quality:
     oos2: ["2025-07-01", null]
 
   # Fuente de datos por símbolo. `default` usa la caché MT5 estándar.
-  # `calendar: nyse` activa festivos/cierres tempranos de EE. UU.
+  # `calendar: nyse` activa festivos/cierres tempranos de EE. UU.; null significa
+  # "sin calendario" (no se inventan festivos).
   sources:
     US100:
       path: data/cache/ea/US100_CASH_M5_NY.parquet
@@ -105,6 +110,38 @@ data_quality:
       path: data/cache/mt5/US500.CASH_M5.parquet
       timezone: UTC
       calendar: nyse
+    US30:
+      path: data/cache/discovery/US30_M5.parquet
+      timezone: UTC
+      calendar: nyse
+    US30.cash:
+      path: data/cache/discovery/US30_M5.parquet
+      timezone: UTC
+      calendar: nyse
+    GER40:
+      path: data/cache/discovery/GER40_M5.parquet
+      timezone: UTC
+      calendar: null
+    GER40.cash:
+      path: data/cache/discovery/GER40_M5.parquet
+      timezone: UTC
+      calendar: null
+    XAUUSD:
+      path: data/cache/discovery/XAUUSD_M5.parquet
+      timezone: UTC
+      calendar: null
+    EURUSD:
+      path: data/cache/discovery/EURUSD_M5.parquet
+      timezone: UTC
+      calendar: null
+    GBPUSD:
+      path: data/cache/discovery/GBPUSD_M5.parquet
+      timezone: UTC
+      calendar: null
+    USDJPY:
+      path: data/cache/discovery/USDJPY_M5.parquet
+      timezone: UTC
+      calendar: null
     default:
       path: data/cache/mt5/{symbol}_{tf}.parquet
       timezone: UTC

@@ -72,6 +72,7 @@ def test_config_real_tiene_los_valores_de_la_fase_0() -> None:
     assert config.data_quality.warn_if_gaps_gt == 0
     assert config.data_quality.fail_if_gap_pct_gt == pytest.approx(0.005)
     assert config.data_quality.session_tz["default"] == "America/New_York"
+    assert config.data_quality.pause_tz == "America/New_York"
     assert config.data_quality.tz_for("US100.cash") == "America/New_York"
     assert config.data_quality.tz_for("EURUSD") == "Europe/London"
     assert config.data_quality.default_segments["is"] == ("2021-10-01", "2024-06-30")
@@ -119,6 +120,13 @@ def test_config_rechaza_perturb_invalido(tmp_path: Path) -> None:
     payload = _base()
     payload["perturb"] = {"entry_delays": [0, 1]}
     with pytest.raises(ValidationError, match="retardos"):
+        load_engine_config(_write(tmp_path, payload))
+
+
+def test_config_rechaza_timezone_invalida(tmp_path: Path) -> None:
+    payload = _base()
+    payload["data_quality"]["pause_tz"] = "No/Zone"
+    with pytest.raises(ValidationError, match="pausa"):
         load_engine_config(_write(tmp_path, payload))
 
 

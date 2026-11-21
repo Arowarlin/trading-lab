@@ -6,7 +6,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from tradinglab.discovery.config import load_engine_config
 from tradinglab.discovery.data_quality import (
+    _gap_analysis,
     check_dataset,
     dataset_hash,
     load_and_check,
@@ -275,4 +277,98 @@ def test_hueco_en_cierre_temprano_es_informativo() -> None:
     assert report.non_scheduled_gaps == 0
     assert report.calendar_gaps
     assert "cierre temprano" in report.calendar_gaps[0]["reason"]
+
+
+def _pause_frame_17ny() -> pd.DataFrame:
+    days = list(pd.bdate_range("2024-03-11", "2024-03-28")) + [
+        pd.Timestamp("2024-04-01")
+    ]
+    frames = []
+    for day in days:
+        begin = pd.Timestamp(day).tz_localize("UTC")
+        index = pd.date_range(begin, begin + pd.Timedelta(days=1), freq="5min", inclusive="left")
+        drop = (index >= pd.Timestamp(f"{day.date()} 21:00", tz="UTC")) & (
+            index < pd.Timestamp(f"{day.date()} 22:00", tz="UTC")
+        )
+        index = index[~drop]
+        close = np.arange(len(index), dtype=float) + 100.0
+        frames.append(
+            pd.DataFrame(
+                {"open": close, "high": close + 0.5, "low": close - 0.5, "close": close},
+                index=index,
+            )
+        )
+    return pd.concat(frames).sort_index()
+
+
+def test_pausa_17_ny_en_eurusd_sin_huecos_falsos_por_dst() -> None:
+    frame = _pause_frame_17ny()
+    report = check_dataset(
+        frame,
+        "EURUSD",
+        "M5",
+        segments={
+            "is": ("2024-03-11", "2024-03-28"),
+            "oos1": ("2024-03-29", "2024-03-31"),
+            "oos2": ("2024-04-01", None),
+        },
+    )
+    assert report.non_scheduled_gaps == 0
+    assert report.scheduled_pauses
+    assert report.scheduled_pauses[0]["start_hhmm"] == "17:00"
+    assert report.scheduled_pauses[0]["count"] == 15
+    assert report.gap_thresholds["pause_tz"] == "America/New_York"
+    assert report.gap_thresholds["session_tz"] == "Europe/London"
+    assert any("sin calendario" in issue for issue in report.issues)
+
+    config = load_engine_config().data_quality
+    scheduled, non_scheduled, _samples, _calendar, _outside = _gap_analysis(
+        frame,
+        5,
+        config,
+        pause_tz="Europe/London",
+        calendar=None,
+    )
+    assert scheduled
+    assert non_scheduled == 1
+
+
+def test_us30_usa_nyse_y_los_demas_sin_calendario() -> None:
+    config = load_engine_config().data_quality
+    assert config.source_for("US30").calendar == "nyse"
+    assert config.source_for("US30.cash").calendar == "nyse"
+    for symbol in ("GER40", "GER40.cash", "XAUUSD", "EURUSD", "GBPUSD", "USDJPY"):
+        assert config.source_for(symbol).calendar is None
+
+    days = [f"2024-07-{day:02d}" for day in range(1, 11)]
+    frames = []
+    for day in days:
+        begin = pd.Timestamp(f"{day} 08:00", tz="UTC")
+        index = pd.date_range(begin, begin + pd.Timedelta(hours=12), freq="5min", inclusive="left")
+        if day == "2024-07-04":
+            drop = (index >= pd.Timestamp(f"{day} 14:00", tz="UTC")) & (
+                index < pd.Timestamp(f"{day} 16:00", tz="UTC")
+            )
+            index = index[~drop]
+        close = np.arange(len(index), dtype=float) + 100.0
+        frames.append(
+            pd.DataFrame(
+                {"open": close, "high": close + 0.5, "low": close - 0.5, "close": close},
+                index=index,
+            )
+        )
+    frame = pd.concat(frames).sort_index()
+    report = check_dataset(
+        frame,
+        "US30",
+        "M5",
+        segments={
+            "is": ("2024-07-01", "2024-07-05"),
+            "oos1": ("2024-07-06", "2024-07-08"),
+            "oos2": ("2024-07-09", None),
+        },
+    )
+    assert report.calendar_gaps
+    assert any("2024-07-04" in item["start"] for item in report.calendar_gaps)
+    assert report.calendar["name"] == "nyse"
 

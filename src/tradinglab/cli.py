@@ -9729,6 +9729,26 @@ def discovery_data_check_cmd(
     )
     summary.add_row("Hash", data["dataset_hash"][:16] + "…" if data["dataset_hash"] else "Sin datos")
     summary.add_row("Huecos no programados", str(data["non_scheduled_gaps"]))
+    thresholds = data.get("gap_thresholds") or {}
+    gap_pct = thresholds.get("gap_pct")
+    summary.add_row(
+        "Huecos no programados (%)",
+        f"{float(gap_pct) * 100.0:.3f}%" if gap_pct is not None else "Sin datos",
+    )
+    pauses = data.get("scheduled_pauses") or []
+    summary.add_row(
+        "Pausa detectada",
+        (
+            f"{pauses[0]['start_hhmm']} ({pauses[0]['count']}×)"
+            if pauses
+            else "ninguna"
+        ),
+    )
+    summary.add_row("Zona de pausa", str(thresholds.get("pause_tz") or "Sin datos"))
+    summary.add_row(
+        "Calendario",
+        (data.get("calendar") or {}).get("name") or "sin calendario",
+    )
     summary.add_row(
         "Huecos de calendario",
         str(len(data.get("calendar_gaps") or [])),
@@ -9782,6 +9802,43 @@ def discovery_data_check_cmd(
             console.print(f"- {issue}")
     if report.status == "fail":
         raise typer.Exit(1)
+
+
+@discovery_app.command("fetch")
+def discovery_fetch_cmd(
+    symbol: str = typer.Argument(..., help="Símbolo CFD, p. ej. EURUSD"),
+    account: str = typer.Option("CFD-001", "--account", help="Cuenta Prop Fund"),
+    tf: str = typer.Option("M5", "--tf", help="Timeframe a descargar"),
+    start: str = typer.Option("2021-09-01", "--start", help="Inicio UTC"),
+    end: str = typer.Option(None, "--end", help="Fin UTC (por defecto, ahora)"),
+    block_days: int = typer.Option(90, "--block-days", help="Días por bloque"),
+) -> None:
+    """Descarga M5 por cuenta desde el terminal MT5 adjunto (solo lectura)."""
+
+    from .discovery import fetch
+
+    try:
+        result = fetch.download(
+            symbol,
+            account=account,
+            timeframe=tf,
+            start=start,
+            end=end,
+            block_days=int(block_days),
+        )
+    except Exception as exc:  # noqa: BLE001
+        console.print(f"[red]Fetch no disponible:[/red] {exc}")
+        raise typer.Exit(1) from exc
+    table = Table(title=f"Discovery · fetch {result['symbol']} {result['timeframe']}")
+    table.add_column("Campo", style="bold")
+    table.add_column("Valor")
+    table.add_row("Cuenta", result["account"])
+    table.add_row("Símbolo bróker", result["broker_symbol"])
+    table.add_row("Filas", f"{result['rows']:,}")
+    table.add_row("Inicio UTC", result["start"])
+    table.add_row("Fin UTC", result["end"])
+    table.add_row("Ruta", result["path"])
+    console.print(table)
 
 
 @discovery_app.command("register")

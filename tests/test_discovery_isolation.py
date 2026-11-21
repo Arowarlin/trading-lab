@@ -11,6 +11,10 @@ DISCOVERY = ROOT / "src" / "tradinglab" / "discovery"
 MANIFEST = ROOT / "config" / "propfund" / "protected_manifest.json"
 
 FORBIDDEN_CALLS = {"submit_market", "close_position", "modify_position"}
+ALLOWED_EXECUTION_MODULES = {
+    "execution.mt5_offsets",
+    "tradinglab.execution.mt5_offsets",
+}
 
 
 def _discovery_sources() -> list[Path]:
@@ -42,8 +46,9 @@ def test_discovery_no_importa_ni_llama_funciones_de_ordenes() -> None:
                     assert not alias.name.startswith("tradinglab.execution"), path
             elif isinstance(node, ast.ImportFrom):
                 module = node.module or ""
-                assert not module.startswith("tradinglab.execution"), path
-                assert not module.startswith("execution"), path
+                if module not in ALLOWED_EXECUTION_MODULES:
+                    assert not module.startswith("tradinglab.execution"), path
+                    assert not module.startswith("execution"), path
             elif isinstance(node, ast.Call):
                 func = node.func
                 name = getattr(func, "attr", None) or getattr(func, "id", None)

@@ -123,6 +123,7 @@ class DataQualityConfig(BaseModel):
     scheduled_gap_share: float = Field(ge=0.0, le=1.0)
     warn_if_gaps_gt: int = Field(ge=0)
     fail_if_gap_pct_gt: float = Field(ge=0.0, le=1.0)
+    pause_tz: str = "America/New_York"
     session_tz: dict[str, str] = Field(default_factory=lambda: {"default": "America/New_York"})
     default_segments: dict[str, tuple[str | None, str | None]] = Field(
         default_factory=lambda: {
@@ -140,6 +141,15 @@ class DataQualityConfig(BaseModel):
             )
         }
     )
+
+    @field_validator("pause_tz")
+    @classmethod
+    def _valid_pause_tz(cls, value: str) -> str:
+        try:
+            ZoneInfo(str(value))
+        except (ZoneInfoNotFoundError, ValueError) as exc:
+            raise ValueError(f"zona de pausa inválida: {value}") from exc
+        return str(value)
 
     @field_validator("session_tz")
     @classmethod

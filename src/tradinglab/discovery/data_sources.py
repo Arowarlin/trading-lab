@@ -3,6 +3,8 @@
 * ``US100.cash`` se lee de la caché del EA (``data/cache/ea/...``), **nunca se
   escribe ni se refresca**. Su índice es hora de Nueva York sin zona; se
   localiza en ``America/New_York`` y se convierte a UTC.
+* Los símbolos descargados por ``discovery fetch`` se leen primero de
+  ``data/cache/discovery/<SYMBOL>_<TF>.parquet`` (UTC).
 * El resto usa ``data/cache/mt5/<SYMBOL>_<TF>.parquet`` (o el mapa
   ``data_quality.sources`` de ``config/discovery/engine.yaml``).
 * Los timestamps ambiguos o inexistentes nunca se inventan: se eligen con
@@ -89,6 +91,17 @@ def load_source(
     """Carga una fuente configurada y la devuelve en UTC. Nunca escribe."""
     config = config or load_engine_config().data_quality
     spec = config.source_for(symbol)
+    discovery = (
+        root
+        / "data"
+        / "cache"
+        / "discovery"
+        / f"{_safe_symbol(symbol)}_{str(timeframe).upper()}.parquet"
+    )
+    if discovery.exists():
+        spec = spec.model_copy(
+            update={"path": str(discovery), "timezone": "UTC"}
+        )
     path = resolve_path(spec, symbol, timeframe, root=root)
     if not path.exists():
         raise DataSourceError(f"Sin datos: no existe {path}")
