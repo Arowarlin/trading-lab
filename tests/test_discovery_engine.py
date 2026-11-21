@@ -182,7 +182,7 @@ def test_initial_population_uses_real_instrument(tmp_path) -> None:
         frame=frame,
         db_path=db,
     )
-    campaigns.approve("real-instrument", db_path=db)
+    campaigns.approve("real-instrument", db_path=db, verify=False)
     campaign = databank.get_campaign("real-instrument", db_path=db)
     assert campaign is not None
     profile = load_engine_config().profile("small")
@@ -249,7 +249,7 @@ def _register_real(db, campaign_id: str, seed: int, frame) -> None:
         frame=frame,
         db_path=db,
     )
-    campaigns.approve(campaign_id, db_path=db)
+    campaigns.approve(campaign_id, db_path=db, verify=False)
 
 
 def test_failed_initialization_restores_registered(tmp_path, monkeypatch) -> None:

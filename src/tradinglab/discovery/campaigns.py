@@ -395,13 +395,59 @@ def approve(
     campaign_id: str,
     *,
     approved_by: str = "operator",
+    verify: bool = True,
     db_path: str | Path | None = None,
 ) -> dict[str, Any]:
-    """Aprobación explícita (solo la llama el CLI con su flag)."""
+    """Aprobación explícita (solo la llama el CLI con su flag).
 
+    Con ``verify=True`` (por defecto) exige preflight limpio y al menos el
+    50 % de las combinaciones/individuos iniciales factibles. ``verify=False``
+    queda reservado a tests y a ``supersede``.
+    """
+
+    campaign = databank.get_campaign(campaign_id, db_path=db_path)
+    if campaign is None:
+        raise CampaignError(f"campaña no registrada: {campaign_id}")
+    if verify and campaign["status"] == "draft":
+        from . import engine, feasibility
+
+        preflight = engine.preflight(campaign_id, db_path=db_path)
+        if int(preflight["valid"]) < int(preflight["population"]):
+            raise CampaignError(
+                "preflight: "
+                f"{preflight['valid']} válidos < población {preflight['population']}"
+            )
+        report = feasibility.check(campaign_id, db_path=db_path)
+        if not report["passes"]:
+            raise CampaignError(
+                "feasibility: "
+                f"{report['n_feasible']}/{report['n_checked']} factibles "
+                f"({report['feasible_pct']:.1f} %) < 50 %"
+            )
     result = databank.approve_campaign(
         campaign_id, approved_by=approved_by, db_path=db_path
     )
+    result["campaign_id"] = result["id"]
+    return result
+
+
+def invalidate(
+    campaign_id: str,
+    reason: str,
+    *,
+    db_path: str | Path | None = None,
+) -> dict[str, Any]:
+    """Archiva una campaña como inválida sin borrar su cuenta en el DSR."""
+
+    campaign = databank.get_campaign(campaign_id, db_path=db_path)
+    if campaign is None:
+        raise CampaignError(f"campaña no registrada: {campaign_id}")
+    if campaign["status"] == "superseded":
+        raise CampaignError("una campaña superseded ya no cuenta; no se invalida")
+    databank.set_campaign_invalid(campaign_id, str(reason), db_path=db_path)
+    result = databank.get_campaign(campaign_id, db_path=db_path)
+    if result is None:  # pragma: no cover
+        raise CampaignError("no se pudo invalidar la campaña")
     result["campaign_id"] = result["id"]
     return result
 
@@ -764,6 +810,7 @@ __all__ = [
     "campaign_bars",
     "dataset_matches",
     "discovery_tests",
+    "invalidate",
     "load_segment",
     "mark_done",
     "read_holdout",

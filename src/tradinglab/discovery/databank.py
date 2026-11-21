@@ -446,6 +446,24 @@ def set_campaign_rejected(
         )
 
 
+def set_campaign_invalid(
+    campaign_id: str,
+    reason: str,
+    *,
+    db_path: str | Path | None = None,
+    con: sqlite3.Connection | None = None,
+) -> None:
+    """Archiva como inválida; conserva ``approved_at`` y su cuenta en el DSR."""
+
+    target = _resolve_target(db_path, con)
+    with _connection(target, con) as opened:
+        opened.execute(
+            "UPDATE disc_campaigns SET status = 'invalid', reject_reason = ?"
+            " WHERE id = ?",
+            (str(reason)[:2000], str(campaign_id)),
+        )
+
+
 def set_campaign_superseded(
     campaign_id: str,
     replacement_id: str,
@@ -1090,6 +1108,7 @@ __all__ = [
     "list_strategies",
     "list_validations",
     "set_campaign_rejected",
+    "set_campaign_invalid",
     "set_campaign_status",
     "set_campaign_counts",
     "set_lineage_rank",

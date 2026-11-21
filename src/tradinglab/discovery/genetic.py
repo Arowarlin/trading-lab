@@ -16,6 +16,7 @@ import yaml
 from ..config import ROOT
 from . import dsl
 from .blocks import BLOCKS, get_block
+from .mirror import mirror_expr
 
 BOOL_KINDS = {"and", "or", "not", "gt", "lt", "ge", "le", "between", "cross_up", "cross_down",
               "held_for", "within_bars", "time_between", "weekday_in", "pattern", "regime", "htf"}
@@ -69,63 +70,6 @@ def template_symmetric(name: str) -> bool:
         raise FileNotFoundError(f"Sin datos: no existe la plantilla {name}")
     data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     return bool(data.get("symmetric", False))
-
-
-MIRROR_KIND = {
-    "gt": "lt",
-    "lt": "gt",
-    "ge": "le",
-    "le": "ge",
-    "cross_up": "cross_down",
-    "cross_down": "cross_up",
-}
-MIRROR_LEVEL = {
-    "opening_range_high": "opening_range_low",
-    "opening_range_low": "opening_range_high",
-    "prev_day_high": "prev_day_low",
-    "prev_day_low": "prev_day_high",
-    "prev_session_high": "prev_session_low",
-    "prev_session_low": "prev_session_high",
-    "donchian_high": "donchian_low",
-    "donchian_low": "donchian_high",
-}
-MIRROR_PRICE = {"high": "low", "low": "high"}
-MIRROR_PATTERN = {
-    "bos_up": "bos_down",
-    "bos_down": "bos_up",
-    "choch_up": "choch_down",
-    "choch_down": "choch_up",
-}
-
-
-def mirror_expr(expr: Any) -> Any:
-    """Espejo del AST: largo alcista → corto bajista.
-
-    ``gt↔lt``, ``ge↔le``, ``cross_up↔cross_down``, niveles ``*_high↔*_low``,
-    precios ``high↔low`` y patrones ``bos/choch``. ``between`` se mantiene tal
-    cual: no tiene una dirección única.
-    """
-
-    if not isinstance(expr, dict):
-        return copy.deepcopy(expr)
-    data = copy.deepcopy(expr)
-    kind = data.get("kind")
-    if kind in MIRROR_KIND:
-        data["kind"] = MIRROR_KIND[kind]
-    if kind == "price" and data.get("price") in MIRROR_PRICE:
-        data["price"] = MIRROR_PRICE[data["price"]]
-    if kind == "level" and data.get("level") in MIRROR_LEVEL:
-        data["level"] = MIRROR_LEVEL[data["level"]]
-    if kind == "indicator" and data.get("src") in MIRROR_PRICE:
-        data["src"] = MIRROR_PRICE[data["src"]]
-    if kind == "pattern" and data.get("pattern") in MIRROR_PATTERN:
-        data["pattern"] = MIRROR_PATTERN[data["pattern"]]
-    if "args" in data:
-        data["args"] = [mirror_expr(item) for item in data.get("args") or []]
-    for key in ("left", "right", "expr"):
-        if isinstance(data.get(key), dict):
-            data[key] = mirror_expr(data[key])
-    return data
 
 
 def _enforce_symmetry(strategy: dict[str, Any]) -> None:

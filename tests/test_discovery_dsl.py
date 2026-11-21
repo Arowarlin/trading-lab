@@ -67,6 +67,9 @@ def _strategy(**overrides) -> dict:
         "limits": {"max_trades_per_day": 2, "cooldown_bars": 5},
     }
     payload.update(overrides)
+    if "long_entry" in overrides and "short_entry" not in overrides:
+        # Los tests que solo examinan el largo no arrastran un corto ajeno.
+        payload["short_entry"] = None
     return payload
 
 
@@ -194,7 +197,7 @@ def test_sesion_que_cruza_medianoche() -> None:
 
 def test_plantillas_cargan_y_validan() -> None:
     paths = sorted(TEMPLATES.glob("*.yaml"))
-    assert len(paths) == 4
+    assert len(paths) == 5
     names = set()
     for path in paths:
         payload = yaml.safe_load(path.read_text(encoding="utf-8"))
@@ -205,6 +208,7 @@ def test_plantillas_cargan_y_validan() -> None:
         "asia_range_reversion",
         "session_breakout_htf",
         "intraday_momentum_close",
+        "intraday_momentum_close_v2",
     }
 
 

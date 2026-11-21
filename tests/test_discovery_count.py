@@ -65,7 +65,7 @@ def _register(db: Path, frame: pd.DataFrame, campaign_id: str) -> dict:
         campaign_id=campaign_id,
         db_path=db,
     )
-    return campaigns.approve(campaign_id, db_path=db)
+    return campaigns.approve(campaign_id, db_path=db, verify=False)
 
 
 def test_count_tests_includes_only_approved_and_holdout(tmp_path: Path) -> None:
@@ -115,6 +115,69 @@ def test_count_tests_includes_only_approved_and_holdout(tmp_path: Path) -> None:
     assert count_tests(lab, discovery_db=db) == base + 441 + 440
 
 
+def test_invalid_campaign_still_counts(tmp_path: Path) -> None:
+    db = tmp_path / "discovery.db"
+    lab = tmp_path / "lab.db"
+    frame = _frame()
+    _register(db, frame, "invalid-campaign")
+    before = count_tests(lab, discovery_db=db)
+
+    campaign = campaigns.invalidate(
+        "invalid-campaign",
+        "espejo del umbral sin signo",
+        db_path=db,
+    )
+
+    assert campaign["status"] == "invalid"
+    assert campaign["reject_reason"] == "espejo del umbral sin signo"
+    assert campaign["approved_at"] is not None
+    assert count_tests(lab, discovery_db=db) == before
+
+
+def test_verify_false_solo_tests_o_supersede() -> None:
+    class Visitor(ast.NodeVisitor):
+        def __init__(self, allow_supersede: bool = False) -> None:
+            self.allow_supersede = allow_supersede
+            self.stack: list[str] = []
+            self.offenders: list[str] = []
+
+        def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+            self.stack.append(node.name)
+            self.generic_visit(node)
+            self.stack.pop()
+
+        visit_AsyncFunctionDef = visit_FunctionDef
+
+        def visit_Call(self, node: ast.Call) -> None:
+            for keyword in node.keywords:
+                if (
+                    keyword.arg == "verify"
+                    and isinstance(keyword.value, ast.Constant)
+                    and keyword.value.value is False
+                ):
+                    function = self.stack[-1] if self.stack else "<module>"
+                    if not (
+                        self.allow_supersede and function == "supersede"
+                    ):
+                        self.offenders.append(function)
+            self.generic_visit(node)
+
+    offenders: list[str] = []
+    for path in (ROOT / "src" / "tradinglab").rglob("*.py"):
+        visitor = Visitor(allow_supersede=path.name == "campaigns.py")
+        visitor.visit(ast.parse(path.read_text(encoding="utf-8")))
+        offenders.extend(
+            f"{path.relative_to(ROOT)}:{name}" for name in visitor.offenders
+        )
+    for path in (ROOT / "scripts").rglob("*.py"):
+        visitor = Visitor()
+        visitor.visit(ast.parse(path.read_text(encoding="utf-8")))
+        offenders.extend(
+            f"{path.relative_to(ROOT)}:{name}" for name in visitor.offenders
+        )
+    assert offenders == []
+
+
 def test_missing_discovery_db_adds_zero(tmp_path: Path) -> None:
     lab = tmp_path / "lab.db"
     missing = tmp_path / "no-existe.db"
@@ -124,10 +187,12 @@ def test_missing_discovery_db_adds_zero(tmp_path: Path) -> None:
 
 def test_cli_approve_requires_flag_and_cancel_keeps_count(
     tmp_path: Path,
+    monkeypatch,
 ) -> None:
     from typer.testing import CliRunner
 
     from tradinglab.cli import app
+    from tradinglab.discovery import engine, feasibility
 
     db = tmp_path / "discovery.db"
     frame = _frame()
@@ -140,6 +205,26 @@ def test_cli_approve_requires_flag_and_cancel_keeps_count(
         frame=frame,
         campaign_id="cli",
         db_path=db,
+    )
+    monkeypatch.setattr(
+        engine,
+        "preflight",
+        lambda *args, **kwargs: {
+            "valid": 440,
+            "population": 440,
+            "rejected": 0,
+            "generated": 440,
+        },
+    )
+    monkeypatch.setattr(
+        feasibility,
+        "check",
+        lambda *args, **kwargs: {
+            "passes": True,
+            "n_feasible": 6,
+            "n_checked": 10,
+            "feasible_pct": 60.0,
+        },
     )
     runner = CliRunner()
     without = runner.invoke(

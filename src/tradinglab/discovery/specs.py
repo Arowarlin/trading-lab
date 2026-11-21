@@ -16,7 +16,9 @@ def exit_spec_from_strategy(model: Strategy) -> fastbt.ExitSpec:
     else:
         stop_kwargs = {"stop": "fixed", "stop_price": stop.value}
     target = model.exit.target
-    if target.type == "rr":
+    if target is None:
+        target_kwargs = {"target": None}
+    elif target.type == "rr":
         target_kwargs = {"target": "rr", "target_rr": target.rr}
     elif target.type == "pct":
         percentage = target.value if target.value is not None else target.rr

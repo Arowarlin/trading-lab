@@ -127,16 +127,15 @@ def initial_strategies(
     return strategies
 
 
-def preflight(campaign_id: str, *, db_path=None) -> dict[str, Any]:
-    """Solo inicialización: generados, válidos y rechazos del worker.
+def candidate_strategies(
+    campaign: dict[str, Any],
+) -> tuple[list[dict[str, Any]], int, str, str, int]:
+    """Lista de candidatos de una campaña, sin barras ni backtests.
 
-    No carga barras, no ejecuta backtests y no lee OOS. Trabaja igual sobre un
-    borrador, para poder ejecutarlo antes de aprobar la campaña.
+    Grid: todas las combinaciones. GA: la población inicial con la semilla de
+    la campaña. Es la misma lista para ``preflight`` y ``feasibility``.
     """
 
-    campaign = databank.get_campaign(campaign_id, db_path=db_path)
-    if campaign is None:
-        raise campaigns.CampaignError(f"campaña no registrada: {campaign_id}")
     config = load_engine_config()
     campaign_config = campaign.get("config") or {}
     profile = config.profile(str(campaign_config.get("profile") or "small"))
@@ -163,6 +162,20 @@ def preflight(campaign_id: str, *, db_path=None) -> dict[str, Any]:
             rng=random.Random(seed),
         )
         population = int(profile.population)
+    return strategies, population, mode, template, seed
+
+
+def preflight(campaign_id: str, *, db_path=None) -> dict[str, Any]:
+    """Solo inicialización: generados, válidos y rechazos del worker.
+
+    No carga barras, no ejecuta backtests y no lee OOS. Trabaja igual sobre un
+    borrador, para poder ejecutarlo antes de aprobar la campaña.
+    """
+
+    campaign = databank.get_campaign(campaign_id, db_path=db_path)
+    if campaign is None:
+        raise campaigns.CampaignError(f"campaña no registrada: {campaign_id}")
+    strategies, population, mode, template, seed = candidate_strategies(campaign)
     setup = jobs.QueueSetup.from_campaign(campaign)
     reasons: dict[str, int] = {}
     valid = 0
@@ -943,6 +956,7 @@ def run_campaign(
 
 __all__ = [
     "Individual",
+    "candidate_strategies",
     "initial_strategies",
     "preflight",
     "run_campaign",

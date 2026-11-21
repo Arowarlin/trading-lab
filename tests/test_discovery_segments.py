@@ -70,7 +70,7 @@ def _register(
         db_path=db,
     )
     if approved:
-        campaign = campaigns.approve(campaign_id, db_path=db)
+        campaign = campaigns.approve(campaign_id, db_path=db, verify=False)
     return campaign
 
 
@@ -210,7 +210,7 @@ def test_queue_builds_setup_from_campaign(tmp_path: Path) -> None:
     with pytest.raises(jobs.QueueError, match="borrador"):
         jobs.run_queue("c1", 1, bars=frame, db_path=db)
 
-    campaigns.approve("c1", db_path=db)
+    campaigns.approve("c1", db_path=db, verify=False)
     setup = jobs.QueueSetup.from_campaign(
         databank.get_campaign("c1", db_path=db)
     )

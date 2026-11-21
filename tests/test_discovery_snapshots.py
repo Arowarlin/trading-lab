@@ -80,7 +80,7 @@ def _approved_failure(
     now: pd.Timestamp | None = None,
 ) -> dict:
     old = _register(db, frame, campaign_id=campaign_id, now=now)
-    campaigns.approve(campaign_id, db_path=db)
+    campaigns.approve(campaign_id, db_path=db, verify=False)
     databank.set_campaign_rejected(
         campaign_id,
         "dataset_hash no coincide con el rango fijo de la campaña",
@@ -172,7 +172,7 @@ def test_supersede_rejects_without_hash_or_startup_failure(tmp_path: Path) -> No
     frame = _frame()
     now = frame.index[-1] + pd.Timedelta(minutes=10)
     _register(db, frame, now=now)
-    campaigns.approve("old", db_path=db)
+    campaigns.approve("old", db_path=db, verify=False)
 
     with pytest.raises(campaigns.CampaignError, match="hash o al arrancar"):
         campaigns.supersede("old", db_path=db, now=now)

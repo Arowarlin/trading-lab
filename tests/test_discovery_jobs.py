@@ -78,7 +78,7 @@ def _register(
         db_path=db,
     )
     if approved:
-        return campaigns.approve(campaign_id, db_path=db)
+        return campaigns.approve(campaign_id, db_path=db, verify=False)
     campaign = databank.get_campaign(campaign_id, db_path=db)
     assert campaign is not None
     return campaign

@@ -127,7 +127,7 @@ class Exit(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     stop: StopSpec = Field(default_factory=StopSpec)
-    target: TargetSpec = Field(default_factory=TargetSpec)
+    target: TargetSpec | None = Field(default_factory=TargetSpec)
     breakeven: dict[str, float] | None = None
     trailing: dict[str, float] | None = None
     time_exit_bars: int | None = Field(default=None, ge=1)
@@ -466,6 +466,18 @@ def validate(strategy: Strategy | dict) -> list[str]:
             "short_entry: la condición de precio va en la misma dirección que "
             f"long_entry ({long_direction})"
         )
+    from .mirror import mirror_errors
+
+    errors.extend(
+        mirror_errors(
+            model.long_entry.model_dump(mode="json", exclude_none=True)
+            if model.long_entry is not None
+            else None,
+            model.short_entry.model_dump(mode="json", exclude_none=True)
+            if model.short_entry is not None
+            else None,
+        )
+    )
     session = model.session
     if session.start == session.end:
         errors.append("session: start y end no pueden ser iguales")
@@ -477,10 +489,14 @@ def validate(strategy: Strategy | dict) -> list[str]:
             f"session.tz {session.tz} no coincide con session_tz del instrumento "
             f"({configured_tz})"
         )
+    if (
+        model.exit.target is not None
+        and model.exit.target.type == "fixed"
+        and model.exit.target.value is None
+    ):
+        errors.append("exit.target fixed necesita value")
     if model.exit.stop.type == "fixed" and model.exit.stop.value is None:
         errors.append("exit.stop fixed necesita value")
-    if model.exit.target.type == "fixed" and model.exit.target.value is None:
-        errors.append("exit.target fixed necesita value")
     if model.exit.stop.type == "atr":
         from .blocks import get_block
 

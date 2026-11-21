@@ -150,10 +150,23 @@ def _apply_exit(strategy: dict[str, Any], variant: str, spec: dict[str, Any]) ->
     stop["type"] = "atr"
     stop["mult"] = float(definition["stop_mult"])
     stop["n"] = int(definition.get("stop_n", 14))
-    target = exit_block.setdefault("target", {"type": "rr"})
-    target["type"] = "rr"
-    target["rr"] = float(definition["target_rr"])
-    exit_block["time_exit_bars"] = int(definition.get("time_exit_bars", 6))
+    if "target_rr" not in definition:
+        raise GridError(f"exit_variants {variant} sin target_rr (usa null para sin target)")
+    target_rr = definition["target_rr"]
+    if target_rr is None:
+        exit_block["target"] = None
+    else:
+        target = exit_block.get("target")
+        if not isinstance(target, dict):
+            target = {"type": "rr"}
+            exit_block["target"] = target
+        target["type"] = "rr"
+        target["rr"] = float(target_rr)
+    time_exit = definition.get("time_exit_bars")
+    if time_exit is None:
+        exit_block.pop("time_exit_bars", None)
+    else:
+        exit_block["time_exit_bars"] = int(time_exit)
     session = strategy.setdefault("session", {})
     session["flat_at"] = str(definition.get("flat_at", "15:55"))
 

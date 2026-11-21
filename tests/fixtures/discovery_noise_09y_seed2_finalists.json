@@ -41,7 +41,7 @@
   "finalists": [
     {
       "strategy_id": 134,
-      "strategy_hash": "cf187a0037c7d1bd53ee60522a4d808a91e7bc90a804a020eb0132306f3af64f",
+      "strategy_hash": "227206711478ef54d3108d406fa98aaea8c5d6aa8deb100f211d74ad3ac82f61",
       "selection_reason": "finalista: OOS-1 expectativa 0.18088414451644802 PF 1.5002659283764905",
       "dsl": {
         "dsl_version": "1",
@@ -135,7 +135,7 @@
               "days": [],
               "kind": "regime",
               "lookback": 100,
-              "n": 5,
+              "n": 14,
               "params": {
                 "pct": 0.8
               },
@@ -150,11 +150,12 @@
           "risk_per_trade_r": 1.0
         },
         "timeframe": "M5"
-      }
+      },
+      "r2e_note": "corto re-espejado por tipo de bloque (R2e)"
     },
     {
       "strategy_id": 167,
-      "strategy_hash": "45bb81729134c3b65e33a54b945db9bc6db0fe8f197b077a0cdfdde245606ef3",
+      "strategy_hash": "bbd4e092243853443421c59c21e670599ae46e9db0d8d3a4ed0a38986bc25df3",
       "selection_reason": "finalista: OOS-1 expectativa 0.1184697355452868 PF 1.3517684222627613",
       "dsl": {
         "dsl_version": "1",
@@ -247,10 +248,10 @@
               "args": [],
               "days": [],
               "kind": "regime",
-              "lookback": 100,
+              "lookback": 319,
               "n": 14,
               "params": {
-                "pct": 0.6
+                "pct": 0.8
               },
               "regime": "vol_high"
             }
@@ -263,7 +264,9 @@
           "risk_per_trade_r": 1.0
         },
         "timeframe": "M5"
-      }
+      },
+      "r2e_note": "corto re-espejado por tipo de bloque (R2e)"
     }
-  ]
+  ],
+  "r2e_note": "fixtures actualizados a R2e: short_entry = mirror_expr(long_entry)"
 }

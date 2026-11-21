@@ -74,7 +74,7 @@ strategy:
           kind: indicator
           ind: session_return
           params: {start: 570, end: 600}
-        right: {kind: const, value: 0.002}
+        right: {kind: const, value: -0.002}
       - kind: time_between
         start: "15:00"
         end: "15:45"

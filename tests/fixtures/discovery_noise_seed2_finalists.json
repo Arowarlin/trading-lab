@@ -41,7 +41,7 @@
   "finalists": [
     {
       "strategy_id": 249,
-      "strategy_hash": "7f0bf5962f123cb62866917badb6057f73ee2cd89e8b5c7be2db0026f80c6875",
+      "strategy_hash": "c08f31a3ca8554be583f9ca503a71626e0584d135a65412cae224233311ab401",
       "selection_reason": "finalista: OOS-1 expectativa 0.11899813468087514 PF 1.4348314475238844",
       "dsl": {
         "dsl_version": "1",
@@ -134,7 +134,7 @@
               "args": [],
               "days": [],
               "kind": "regime",
-              "lookback": 337,
+              "lookback": 100,
               "n": 14,
               "params": {
                 "pct": 0.8
@@ -150,7 +150,9 @@
           "risk_per_trade_r": 1.0
         },
         "timeframe": "M5"
-      }
+      },
+      "r2e_note": "corto re-espejado por tipo de bloque (R2e)"
     }
-  ]
+  ],
+  "r2e_note": "fixtures actualizados a R2e: short_entry = mirror_expr(long_entry)"
 }

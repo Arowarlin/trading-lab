@@ -8,7 +8,7 @@ verifica bloque a bloque en ``tests/test_discovery_lookahead.py``.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable
+from typing import Callable, Literal
 
 import numpy as np
 import pandas as pd
@@ -34,7 +34,17 @@ class BlockSpec:
     warmup: Callable[[dict], int]
     compute: Callable[[pd.DataFrame, dict, dict], pd.Series]
     description: str = ""
+    mirror: Literal["signed", "bounded", "price", "none"] = "none"
+    center: float | None = None
     lookahead_safe: bool = True
+
+    def __post_init__(self) -> None:
+        if self.mirror not in {"signed", "bounded", "price", "none"}:
+            raise ValueError(f"{self.name}: mirror desconocido {self.mirror!r}")
+        if self.mirror == "bounded" and self.center is None:
+            raise ValueError(f"{self.name}: mirror bounded necesita center")
+        if self.mirror != "bounded" and self.center is not None:
+            raise ValueError(f"{self.name}: center solo se declara con mirror bounded")
 
 
 def _p(params: dict, name: str, spec: ParamSpec):
@@ -152,6 +162,7 @@ BLOCKS: dict[str, BlockSpec] = {
         _warm_n,
         lambda bars, params, ctx: sma(bars["close"].astype(float), _n(params)),
         "media móvil simple",
+        mirror="price",
     ),
     "ema": BlockSpec(
         "ema",
@@ -160,6 +171,7 @@ BLOCKS: dict[str, BlockSpec] = {
         _warm_n,
         lambda bars, params, ctx: ema(bars["close"].astype(float), _n(params)),
         "media móvil exponencial",
+        mirror="price",
     ),
     "rsi": BlockSpec(
         "rsi",
@@ -168,6 +180,7 @@ BLOCKS: dict[str, BlockSpec] = {
         _warm_n,
         _rsi_float,
         "RSI",
+        mirror="bounded", center=50.0,
     ),
     "atr": BlockSpec(
         "atr",
@@ -176,6 +189,7 @@ BLOCKS: dict[str, BlockSpec] = {
         _warm_n,
         lambda bars, params, ctx: atr(bars, _n(params)),
         "ATR",
+        mirror="none",
     ),
     "zscore": BlockSpec(
         "zscore",
@@ -184,6 +198,7 @@ BLOCKS: dict[str, BlockSpec] = {
         _warm_n,
         _zscore_float,
         "z-score del cierre",
+        mirror="signed",
     ),
     "macd": BlockSpec(
         "macd",
@@ -199,6 +214,7 @@ BLOCKS: dict[str, BlockSpec] = {
             int(params.get("slow", 26)),
         ),
         "línea MACD",
+        mirror="signed",
     ),
     "adx": BlockSpec(
         "adx",
@@ -207,6 +223,7 @@ BLOCKS: dict[str, BlockSpec] = {
         lambda params: int(params.get("n", 14)) * 2 + 1,
         lambda bars, params, ctx: ext.adx(bars, _n(params)),
         "ADX",
+        mirror="none",
     ),
     "bollinger_pct": BlockSpec(
         "bollinger_pct",
@@ -215,6 +232,7 @@ BLOCKS: dict[str, BlockSpec] = {
         _warm_n,
         _bollinger_pct,
         "posición en las bandas de Bollinger",
+        mirror="bounded", center=0.5,
     ),
     "stochastic": BlockSpec(
         "stochastic",
@@ -223,6 +241,7 @@ BLOCKS: dict[str, BlockSpec] = {
         _warm_n,
         lambda bars, params, ctx: ext.stochastic(bars, _n(params)),
         "estocástico %K",
+        mirror="bounded", center=50.0,
     ),
     "cci": BlockSpec(
         "cci",
@@ -231,6 +250,7 @@ BLOCKS: dict[str, BlockSpec] = {
         _warm_n,
         lambda bars, params, ctx: ext.cci(bars, _n(params)),
         "CCI",
+        mirror="signed",
     ),
     "donchian_pos": BlockSpec(
         "donchian_pos",
@@ -239,6 +259,7 @@ BLOCKS: dict[str, BlockSpec] = {
         _warm_n,
         _donchian_pos,
         "posición en el canal Donchian",
+        mirror="bounded", center=0.5,
     ),
     "keltner_pos": BlockSpec(
         "keltner_pos",
@@ -247,6 +268,7 @@ BLOCKS: dict[str, BlockSpec] = {
         _warm_n,
         _keltner_pos,
         "posición en el canal Keltner",
+        mirror="bounded", center=0.5,
     ),
     "vwap_distance": BlockSpec(
         "vwap_distance",
@@ -255,6 +277,7 @@ BLOCKS: dict[str, BlockSpec] = {
         _warm_n,
         _vwap_distance,
         "distancia al VWAP de la sesión",
+        mirror="signed",
     ),
     "realized_vol": BlockSpec(
         "realized_vol",
@@ -263,6 +286,7 @@ BLOCKS: dict[str, BlockSpec] = {
         _warm_n,
         lambda bars, params, ctx: ext.realized_vol(bars["close"].astype(float), _n(params)),
         "volatilidad realizada",
+        mirror="none",
     ),
     "atr_pct_rank": BlockSpec(
         "atr_pct_rank",
@@ -273,6 +297,7 @@ BLOCKS: dict[str, BlockSpec] = {
             bars, _n(params), int(params.get("lookback", 100))
         ),
         "percentil del ATR porcentual",
+        mirror="none",
     ),
     "range_compression": BlockSpec(
         "range_compression",
@@ -281,6 +306,7 @@ BLOCKS: dict[str, BlockSpec] = {
         _warm_n,
         lambda bars, params, ctx: ext.range_compression(bars, _n(params)),
         "rango / ATR",
+        mirror="none",
     ),
     "swing_high": BlockSpec(
         "swing_high",
@@ -291,6 +317,7 @@ BLOCKS: dict[str, BlockSpec] = {
             bars, int(params.get("left", 5)), int(params.get("right", 5))
         ),
         "pivote alto confirmado y desplazado",
+        mirror="price",
     ),
     "swing_low": BlockSpec(
         "swing_low",
@@ -301,6 +328,7 @@ BLOCKS: dict[str, BlockSpec] = {
             bars, int(params.get("left", 5)), int(params.get("right", 5))
         ),
         "pivote bajo confirmado y desplazado",
+        mirror="price",
     ),
     "bos_up": BlockSpec(
         "bos_up",
@@ -311,6 +339,7 @@ BLOCKS: dict[str, BlockSpec] = {
             bars, int(params.get("left", 5)), int(params.get("right", 5))
         ),
         "ruptura de estructura al alza",
+        mirror="price",
     ),
     "bos_down": BlockSpec(
         "bos_down",
@@ -321,6 +350,7 @@ BLOCKS: dict[str, BlockSpec] = {
             bars, int(params.get("left", 5)), int(params.get("right", 5))
         ),
         "ruptura de estructura a la baja",
+        mirror="price",
     ),
     "choch_up": BlockSpec(
         "choch_up",
@@ -331,6 +361,7 @@ BLOCKS: dict[str, BlockSpec] = {
             bars, int(params.get("left", 5)), int(params.get("right", 5))
         ),
         "cambio de carácter al alza",
+        mirror="price",
     ),
     "choch_down": BlockSpec(
         "choch_down",
@@ -341,6 +372,7 @@ BLOCKS: dict[str, BlockSpec] = {
             bars, int(params.get("left", 5)), int(params.get("right", 5))
         ),
         "cambio de carácter a la baja",
+        mirror="price",
     ),
     "engulfing": BlockSpec(
         "engulfing",
@@ -349,6 +381,7 @@ BLOCKS: dict[str, BlockSpec] = {
         lambda params: 2,
         lambda bars, params, ctx: _engulfing(bars),
         "envolvente",
+        mirror="none",
     ),
     "pin_bar": BlockSpec(
         "pin_bar",
@@ -357,6 +390,7 @@ BLOCKS: dict[str, BlockSpec] = {
         lambda params: 1,
         lambda bars, params, ctx: _pin_bar(bars, float(params.get("ratio", 2.0))),
         "pin bar",
+        mirror="none",
     ),
     "inside_bar": BlockSpec(
         "inside_bar",
@@ -366,6 +400,7 @@ BLOCKS: dict[str, BlockSpec] = {
         lambda bars, params, ctx: (bars["high"].astype(float) < bars["high"].astype(float).shift(1))
         & (bars["low"].astype(float) > bars["low"].astype(float).shift(1)),
         "inside bar",
+        mirror="none",
     ),
     "range_expansion": BlockSpec(
         "range_expansion",
@@ -381,6 +416,7 @@ BLOCKS: dict[str, BlockSpec] = {
             .shift(1)
         ),
         "expansión de rango",
+        mirror="none",
     ),
     "trending": BlockSpec(
         "trending",
@@ -389,6 +425,7 @@ BLOCKS: dict[str, BlockSpec] = {
         lambda params: int(params.get("n", 14)) * 2 + 1,
         lambda bars, params, ctx: ext.adx(bars, _n(params)) > float(params.get("threshold", 25)),
         "régimen tendencial",
+        mirror="none",
     ),
     "ranging": BlockSpec(
         "ranging",
@@ -397,6 +434,7 @@ BLOCKS: dict[str, BlockSpec] = {
         lambda params: int(params.get("n", 14)) * 2 + 1,
         lambda bars, params, ctx: ext.adx(bars, _n(params)) < float(params.get("threshold", 20)),
         "régimen lateral",
+        mirror="none",
     ),
     "vol_high": BlockSpec(
         "vol_high",
@@ -406,6 +444,7 @@ BLOCKS: dict[str, BlockSpec] = {
         lambda bars, params, ctx: ext.atr_pct_rank(bars, _n(params), int(params.get("lookback", 100)))
         > float(params.get("pct", 0.8)),
         "volatilidad alta",
+        mirror="none",
     ),
     "vol_low": BlockSpec(
         "vol_low",
@@ -415,6 +454,7 @@ BLOCKS: dict[str, BlockSpec] = {
         lambda bars, params, ctx: ext.atr_pct_rank(bars, _n(params), int(params.get("lookback", 100)))
         < float(params.get("pct", 0.2)),
         "volatilidad baja",
+        mirror="none",
     ),
     "session_return": BlockSpec(
         "session_return",
@@ -426,6 +466,7 @@ BLOCKS: dict[str, BlockSpec] = {
         lambda params: 0,
         _session_return,
         "retorno close(end)/open(start)-1 de la sesión; NaN hasta cerrar end",
+        mirror="signed",
     ),
 }
 

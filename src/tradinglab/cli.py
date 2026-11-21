@@ -9960,6 +9960,76 @@ def discovery_preflight_cmd(
     )
 
 
+@discovery_app.command("feasibility")
+def discovery_feasibility_cmd(
+    campaign_id: str = typer.Argument(..., help="ID del borrador de campaña"),
+    db: str = typer.Option(None, "--db", help="discovery.db alternativo"),
+) -> None:
+    """Viabilidad sin PnL: operaciones, pliegues, coste_R y tiempo. No suma al DSR."""
+
+    from .discovery import feasibility
+
+    try:
+        report = feasibility.check(campaign_id, db_path=db)
+    except Exception as exc:  # noqa: BLE001
+        console.print(f"[red]Feasibility imposible:[/red] {exc}")
+        raise typer.Exit(1) from exc
+    table = Table(title=f"Discovery · feasibility {campaign_id}")
+    table.add_column("#", justify="right")
+    table.add_column("Combinación")
+    table.add_column("Ops IS", justify="right")
+    table.add_column("Ops/pliegue")
+    table.add_column("Cost_R", justify="right")
+    table.add_column("Velas", justify="right")
+    table.add_column("Min", justify="right")
+    table.add_column("¿Factible?")
+    table.add_column("Motivo")
+    for row in report["rows"]:
+        table.add_row(
+            str(int(row["index"]) + 1),
+            str(row["label"]),
+            str(int(row["trades_is"])),
+            "/".join(str(int(value)) for value in row["fold_trades"]) or "Sin datos",
+            "Sin datos"
+            if row["cost_r"] is None
+            else f"{float(row['cost_r']):.4f}",
+            f"{float(row['mean_bars']):.2f}",
+            f"{float(row['mean_minutes']):.0f}",
+            "sí" if row["feasible"] else "NO",
+            "; ".join(row["reasons"]) or "",
+        )
+    console.print(table)
+    console.print(
+        f"Factibles {report['n_feasible']}/{report['n_checked']} "
+        f"({report['feasible_pct']:.1f} %) · gate ≥{feasibility.MIN_FEASIBLE_PCT:.0f} %: "
+        f"{'PASA' if report['passes'] else 'FALLA'}"
+    )
+    if not report["passes"]:
+        raise typer.Exit(1)
+
+
+@discovery_app.command("invalidate")
+def discovery_invalidate_cmd(
+    campaign_id: str = typer.Argument(..., help="ID de la campaña"),
+    reason: str = typer.Option(..., "--reason", help="Motivo de la invalidez"),
+    db: str = typer.Option(None, "--db", help="discovery.db alternativo"),
+) -> None:
+    """Archiva una campaña como inválida; conserva su cuenta en el DSR."""
+
+    from .discovery import campaigns
+
+    try:
+        campaign = campaigns.invalidate(campaign_id, str(reason), db_path=db)
+    except Exception as exc:  # noqa: BLE001
+        console.print(f"[red]No se pudo invalidar:[/red] {exc}")
+        raise typer.Exit(1) from exc
+    console.print(
+        f"Campaña {campaign_id}: {campaign['status']} · "
+        f"motivo {campaign.get('reject_reason')} · "
+        f"approved_at {campaign.get('approved_at') or 'Sin datos'}"
+    )
+
+
 @discovery_app.command("approve")
 def discovery_approve_cmd(
     campaign_id: str = typer.Argument(..., help="ID de la campaña"),
