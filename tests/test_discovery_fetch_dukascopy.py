@@ -43,6 +43,15 @@ def test_url_mes_cero_based() -> None:
     assert "datafeed.dukascopy.com" in url
 
 
+def test_point_por_simbolo() -> None:
+    assert duka.point_for("EURUSD") == pytest.approx(1e-5)
+    assert duka.point_for("USDJPY") == pytest.approx(1e-3)
+    assert duka.point_for("XAUUSD") == pytest.approx(1e-3)
+    assert duka.point_for("US100") == pytest.approx(0.001)
+    assert duka.point_for("US500") == pytest.approx(0.001)
+    assert duka.point_for("US30") == pytest.approx(0.001)
+
+
 def test_decode_escala_y_descarta_volumen_cero() -> None:
     payload = _payload(
         [

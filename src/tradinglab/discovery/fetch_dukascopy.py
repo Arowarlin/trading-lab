@@ -12,6 +12,10 @@ no fabricar velas en huecos.
 La caché es un único ``data/cache/dukascopy/<SYMBOL>_M1.parquet`` en UTC. La
 descarga va por meses, reanuda saltando meses ya completos y reescribe el
 parquet al cerrar cada mes.
+
+Se usa **HTTP** directo al feed público, sin credenciales y sin proxy. Si el
+feed responde 301 a HTTPS, ``httpx`` sigue el redirect; el WAF puede limitar
+las ráfagas con 429/503, por eso hay reintentos y una tasa máxima.
 """
 
 from __future__ import annotations
@@ -30,7 +34,7 @@ import pandas as pd
 
 from ..config import ROOT
 
-DUKASCOPY_BASE = "https://datafeed.dukascopy.com/datafeed"
+DUKASCOPY_BASE = "http://datafeed.dukascopy.com/datafeed"
 DUKASCOPY_DIR = ROOT / "data" / "cache" / "dukascopy"
 
 RECORD = struct.Struct(">IIIIIf")
@@ -40,9 +44,9 @@ COLUMNS = BASE_COLUMNS + ASK_COLUMNS
 
 # nombre canónico -> (instrumento del feed, escala de precio)
 INSTRUMENTS = {
-    "US100": ("USATECHIDXUSD", 0.01),
-    "US500": ("USA500IDXUSD", 0.01),
-    "US30": ("USA30IDXUSD", 0.01),
+    "US100": ("USATECHIDXUSD", 0.001),
+    "US500": ("USA500IDXUSD", 0.001),
+    "US30": ("USA30IDXUSD", 0.001),
     "XAUUSD": ("XAUUSD", 0.001),
     "EURUSD": ("EURUSD", 0.00001),
     "GBPUSD": ("GBPUSD", 0.00001),
@@ -333,8 +337,9 @@ def download(
     client: httpx.Client | None = None,
     now: datetime | None = None,
     progress: Callable[[dict[str, Any]], None] | None = None,
-    retries: int = 5,
-    backoff_s: float = 1.5,
+    retries: int = 3,
+    backoff_s: float = 1.0,
+    pause_s: float = 0.0,
 ) -> dict[str, Any]:
     """Descarga por meses y deja la caché M1 lista para reanudar."""
     key = normalize_symbol(symbol)
@@ -355,6 +360,12 @@ def download(
             if int(group.index.max().day) >= 20:
                 completed.add(str(month_key))
     current_month = (now or datetime.now(timezone.utc)).strftime("%Y-%m")
+    ask_months: set[str] = set()
+    if include_ask and len(existing) and "ask_close" in existing.columns:
+        with_ask = existing.loc[
+            pd.to_numeric(existing["ask_close"], errors="coerce").notna()
+        ]
+        ask_months = set(with_ask.index.strftime("%Y-%m"))
     limiter = _RateLimiter(rate_per_s)
     own_client = client is None
     http = client or httpx.Client(
@@ -402,7 +413,12 @@ def download(
             month_key = cursor.strftime("%Y-%m")
             month_end = min(end_dt, _next_month(cursor) - pd.Timedelta(nanoseconds=1))
             month_from = max(start_dt, cursor)
-            if not force and month_key in completed and month_key != current_month:
+            if (
+                not force
+                and month_key in completed
+                and month_key != current_month
+                and (not include_ask or month_key in ask_months)
+            ):
                 skipped += 1
                 cursor = _next_month(cursor)
                 continue
@@ -431,20 +447,27 @@ def download(
                     bid_frames.append(bid)
                     if not ask.empty:
                         ask_frames.append(ask)
-            # Segundo pase secuencial para timeouts transitorios del feed.
-            for day in list(failed):
-                try:
-                    time.sleep(1.0)
-                    _, bid, ask = _pair(day)
-                except DukascopyError:
-                    continue
-                failed.remove(day)
-                if bid.empty:
-                    empty_days += 1
-                    continue
-                bid_frames.append(bid)
-                if not ask.empty:
-                    ask_frames.append(ask)
+            # Segundo pase en paralelo para timeouts transitorios del feed.
+            if failed:
+                retry = list(failed)
+                failed = []
+                with ThreadPoolExecutor(
+                    max_workers=min(4, len(retry))
+                ) as pool:
+                    futures = {pool.submit(_pair, day): day for day in retry}
+                    for future in as_completed(futures):
+                        day = futures[future]
+                        try:
+                            _, bid, ask = future.result()
+                        except DukascopyError:
+                            failed.append(day)
+                            continue
+                        if bid.empty:
+                            empty_days += 1
+                            continue
+                        bid_frames.append(bid)
+                        if not ask.empty:
+                            ask_frames.append(ask)
             if failed:
                 sample = ", ".join(day.isoformat() for day in failed[:5])
                 raise DukascopyError(
@@ -460,6 +483,8 @@ def download(
                         "empty_days": len(days),
                     }
                 )
+                if pause_s > 0:
+                    time.sleep(float(pause_s))
                 cursor = _next_month(cursor)
                 continue
             bid = pd.concat(bid_frames).sort_index()
@@ -500,6 +525,8 @@ def download(
             )
             if progress is not None:
                 progress(months[-1])
+            if pause_s > 0:
+                time.sleep(float(pause_s))
             cursor = _next_month(cursor)
     finally:
         if own_client:

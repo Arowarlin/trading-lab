@@ -55,7 +55,8 @@ def _utc(frame: pd.DataFrame) -> pd.DataFrame:
         index = index.tz_convert("UTC")
     work.index = index
     work.index.name = "time"
-    return work.sort_index()
+    work = work.sort_index()
+    return work.loc[~work.index.duplicated(keep="last")]
 
 
 def _load_broker(

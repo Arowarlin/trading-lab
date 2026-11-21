@@ -30,7 +30,7 @@ _GAP_RULES = {
     "M30": (3.0, 4.0),
     "H1": (1.5, 6.0),
     "H4": (1.5, 24.0),
-    "D1": (1.5, 96.0),
+    "D1": (1.5, 72.0),
 }
 
 
@@ -55,10 +55,19 @@ def quality_config(
     return base.model_copy(update=updates)
 
 
-def missing_weekdays(frame: pd.DataFrame) -> tuple[int, list[str]]:
-    """Días hábiles sin ninguna barra, dentro del rango observado."""
+def missing_weekdays(
+    frame: pd.DataFrame, timeframe: str = "M5"
+) -> tuple[int, list[str]]:
+    """Sesiones esperadas sin ninguna barra.
+
+    Se excluye el sábado. En D1 la etiqueta es la apertura 17:00 NY: la sesión
+    del viernes se etiqueta como jueves, así que se esperan domingo-jueves. En
+    las temporalidades intradía se esperan domingo-viernes.
+    """
     if frame is None or len(frame) == 0:
         return 0, []
+    key = str(timeframe).strip().upper()
+    expected = {6, 0, 1, 2, 3} if key == "D1" else {6, 0, 1, 2, 3, 4}
     index = pd.DatetimeIndex(frame.index)
     if index.tz is None:
         index = index.tz_localize("UTC")
@@ -66,7 +75,7 @@ def missing_weekdays(frame: pd.DataFrame) -> tuple[int, list[str]]:
     present = set(local)
     days = pd.date_range(local.min(), local.max(), freq="D", tz="America/New_York")
     missing = [
-        stamp for stamp in days if stamp.weekday() < 5 and stamp not in present
+        stamp for stamp in days if stamp.weekday() in expected and stamp not in present
     ]
     return len(missing), [stamp.date().isoformat() for stamp in missing[:10]]
 
@@ -126,7 +135,7 @@ def quality_for_source(
         source=loaded.as_dict(),
     )
     data = report.as_dict()
-    missing, sample = missing_weekdays(loaded.frame)
+    missing, sample = missing_weekdays(loaded.frame, key)
     data["source_name"] = source_key
     data["missing_weekdays"] = int(missing)
     data["missing_weekdays_sample"] = sample

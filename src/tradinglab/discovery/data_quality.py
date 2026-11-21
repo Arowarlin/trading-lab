@@ -187,7 +187,13 @@ def _granularity(index: pd.DatetimeIndex, tf_minutes: int) -> dict:
             median = (
                 pd.Series(stamps).diff().dt.total_seconds().div(60).median()
             )
-        good = median is not None and abs(float(median) - tf_minutes) < 0.5
+        # Un mes con una sola barra es un borde de la serie (p. ej. la sesión
+        # D1 que empieza el último día del mes anterior); no se puede evaluar
+        # su granularidad y no debe invalidar los meses anteriores.
+        good = (
+            len(stamps) == 1
+            or (median is not None and abs(float(median) - tf_minutes) < 0.5)
+        )
         months.append(
             {
                 "month": str(period),

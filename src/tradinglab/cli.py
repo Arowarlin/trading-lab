@@ -9737,7 +9737,7 @@ def discovery_data_check_cmd(
             "Huecos",
             "Pausa",
             "Calendario",
-            "Días sin datos",
+            "Sesiones sin datos",
         ):
             matrix.add_column(column)
         for data in rows:
@@ -9817,7 +9817,7 @@ def discovery_data_check_cmd(
         f"{source_info.get('adjusted', 0)} ajustadas · {source_info.get('dropped', 0)} descartadas",
     )
     summary.add_row(
-        "Días hábiles sin datos",
+        "Sesiones sin datos",
         str(data.get("missing_weekdays", 0)),
     )
     bad_months = (data.get("granularity") or {}).get("bad_months") or []
@@ -9974,6 +9974,10 @@ def discovery_compare_dukascopy_cmd(
             row["verdict"],
         )
     console.print(table)
+    console.print(
+        "[dim]Lag +1 = Dukascopy va una vela por detrás del bróker; "
+        "criterio: corr ≥ 0,95 y lag 0.[/dim]"
+    )
     for row in rows:
         if row["verdict"] != "apta":
             console.print(f"[yellow]{row['symbol']}:[/yellow] {row['reason']}")
