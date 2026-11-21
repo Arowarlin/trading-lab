@@ -70,6 +70,31 @@ def test_bloque_sin_lookahead(name: str) -> None:
     )
 
 
+def test_session_return_nan_hasta_cerrar_end() -> None:
+    index = pd.date_range(
+        "2024-01-02 09:30", periods=78, freq="5min", tz="America/New_York"
+    ).tz_convert("UTC")
+    close = np.full(len(index), 100.0)
+    close[6] = 101.0
+    frame = pd.DataFrame(
+        {
+            "open": close,
+            "high": close + 0.1,
+            "low": close - 0.1,
+            "close": close,
+        },
+        index=index,
+    )
+    values = BLOCKS["session_return"].compute(
+        frame, {"start": 570, "end": 600}, CONTEXT
+    )
+
+    assert np.isnan(values.iloc[5])  # 09:55
+    assert np.isnan(values.iloc[6])  # 10:00: la vela aún no ha cerrado
+    assert values.iloc[7] == pytest.approx(0.01)  # 10:05, ya cerrada
+    assert values.iloc[7:].nunique(dropna=False) == 1
+
+
 def test_vwap_sin_lookahead() -> None:
     frame = _frame()
     cutoff = 800

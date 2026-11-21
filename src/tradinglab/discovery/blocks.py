@@ -107,6 +107,43 @@ def _vwap_distance(bars: pd.DataFrame, params: dict, ctx: dict) -> pd.Series:
     return (close - vwap) / vwap.replace(0, np.nan)
 
 
+def _session_return(bars: pd.DataFrame, params: dict, ctx: dict) -> pd.Series:
+    """Retorno close(end)/open(start)-1, constante tras cerrar la vela end."""
+
+    context = _ctx(ctx)
+    start_min = int(params.get("start", 570))
+    end_min = int(params.get("end", 600))
+    if start_min >= end_min:
+        return pd.Series(np.nan, index=bars.index, dtype=float)
+    local = bars.index.tz_convert(context["tz"])
+    minutes = local.hour * 60 + local.minute
+    days = local.date
+    open_values = bars["open"].astype(float).to_numpy()
+    close_values = bars["close"].astype(float).to_numpy()
+    values = np.full(len(bars), np.nan, dtype=float)
+    positions = np.arange(len(bars))
+    unique_days = pd.unique(days)
+    for day in unique_days:
+        day_mask = days == day
+        day_positions = positions[day_mask]
+        start_hits = day_positions[minutes[day_mask] == start_min]
+        end_hits = day_positions[minutes[day_mask] == end_min]
+        if len(start_hits) == 0 or len(end_hits) == 0:
+            continue
+        start_pos = int(start_hits[0])
+        end_pos = int(end_hits[0])
+        if end_pos <= start_pos:
+            continue
+        begin = float(open_values[start_pos])
+        finish = float(close_values[end_pos])
+        if not np.isfinite(begin) or not np.isfinite(finish) or begin == 0.0:
+            continue
+        value = finish / begin - 1.0
+        day_end = int(day_positions[-1]) + 1
+        values[end_pos + 1 : day_end] = value
+    return pd.Series(values, index=bars.index, dtype=float)
+
+
 BLOCKS: dict[str, BlockSpec] = {
     "sma": BlockSpec(
         "sma",
@@ -378,6 +415,17 @@ BLOCKS: dict[str, BlockSpec] = {
         lambda bars, params, ctx: ext.atr_pct_rank(bars, _n(params), int(params.get("lookback", 100)))
         < float(params.get("pct", 0.2)),
         "volatilidad baja",
+    ),
+    "session_return": BlockSpec(
+        "session_return",
+        "float",
+        {
+            "start": ParamSpec(570, 570, 1, 570, True),
+            "end": ParamSpec(600, 660, 30, 600, True),
+        },
+        lambda params: 0,
+        _session_return,
+        "retorno close(end)/open(start)-1 de la sesión; NaN hasta cerrar end",
     ),
 }
 

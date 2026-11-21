@@ -1,0 +1,72 @@
+name: intraday_momentum_close
+symmetric: true
+description: >
+  Momentum intradía de cierre en US100: el rendimiento del inicio de la sesión
+  NY (09:30 → 10:00/10:30/11:00) predice el del tramo final. Entrada en la
+  ventana 15:00-15:45, salida por tiempo o flat_at 15:55.
+hypothesis: >
+  Los rebalanceos y las órdenes al cierre de la sesión NY hacen que el impulso
+  de la mañana continúe en la última hora. Se compra si el retorno de la
+  mañana supera el umbral; el corto es el espejo exacto.
+invalidation: >
+  La hipótesis se invalida si, después de costes (spread p75 + slippage +
+  comisión), la expectativa no es positiva y estable en IS y en las pruebas de
+  robustez. No se lee OOS-2 para decidir esta plantilla.
+parameter_space:
+  threshold: [0.0, 0.001, 0.002, 0.003]
+  session_return_end: ["10:00", "10:30", "11:00"]
+  entry_window_start: ["15:00", "15:15", "15:30"]
+strategy:
+  dsl_version: "1"
+  instrument: US100
+  market: cfd
+  timeframe: M5
+  session:
+    start: "09:30"
+    end: "15:55"
+    flat_at: "15:55"
+    or_minutes: 15
+  long_entry:
+    kind: and
+    args:
+      - kind: gt
+        left:
+          kind: indicator
+          ind: session_return
+          params: {start: 570, end: 600}
+        right: {kind: const, value: 0.002}
+      - kind: time_between
+        start: "15:00"
+        end: "15:45"
+      - kind: regime
+        regime: vol_high
+        n: 14
+        lookback: 100
+        params: {pct: 0.8}
+  short_entry:
+    kind: and
+    args:
+      - kind: lt
+        left:
+          kind: indicator
+          ind: session_return
+          params: {start: 570, end: 600}
+        right: {kind: const, value: 0.002}
+      - kind: time_between
+        start: "15:00"
+        end: "15:45"
+      - kind: regime
+        regime: vol_high
+        n: 14
+        lookback: 100
+        params: {pct: 0.8}
+  exit:
+    stop: {type: atr, mult: 2.0, n: 14}
+    target: {type: rr, rr: 2.0}
+    time_exit_bars: 6
+    opposite_signal: false
+  sizing:
+    risk_per_trade_r: 1.0
+  limits:
+    max_trades_per_day: 1
+    cooldown_bars: 0

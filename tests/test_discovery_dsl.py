@@ -194,13 +194,18 @@ def test_sesion_que_cruza_medianoche() -> None:
 
 def test_plantillas_cargan_y_validan() -> None:
     paths = sorted(TEMPLATES.glob("*.yaml"))
-    assert len(paths) == 3
+    assert len(paths) == 4
     names = set()
     for path in paths:
         payload = yaml.safe_load(path.read_text(encoding="utf-8"))
         names.add(payload["name"])
         assert validate(payload["strategy"]) == [], path.name
-    assert names == {"ny_open_vol_filter", "asia_range_reversion", "session_breakout_htf"}
+    assert names == {
+        "ny_open_vol_filter",
+        "asia_range_reversion",
+        "session_breakout_htf",
+        "intraday_momentum_close",
+    }
 
 
 def test_compile_es_determinista() -> None:
