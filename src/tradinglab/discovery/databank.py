@@ -59,7 +59,14 @@ CREATE TABLE IF NOT EXISTS disc_campaigns (
     approved_by TEXT,
     quality_json TEXT,
     reject_reason TEXT,
-    last_error TEXT
+    last_error TEXT,
+    snapshot_path TEXT,
+    snapshot_hash TEXT,
+    snapshot_rows INTEGER,
+    snapshot_at TEXT,
+    supersedes TEXT,
+    superseded_by TEXT,
+    superseded_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS disc_strategies (
@@ -216,6 +223,13 @@ def _migrate_campaigns(con: sqlite3.Connection) -> None:
         ("reject_reason", "TEXT"),
         ("n_finalists", "INTEGER"),
         ("last_error", "TEXT"),
+        ("snapshot_path", "TEXT"),
+        ("snapshot_hash", "TEXT"),
+        ("snapshot_rows", "INTEGER"),
+        ("snapshot_at", "TEXT"),
+        ("supersedes", "TEXT"),
+        ("superseded_by", "TEXT"),
+        ("superseded_at", "TEXT"),
     ):
         if column not in columns:
             con.execute(f"ALTER TABLE disc_campaigns ADD COLUMN {column} {kind}")
@@ -290,6 +304,13 @@ def add_campaign(
     quality: dict[str, Any] | None = None,
     n_total: int | None = None,
     dataset_hash: str | None = None,
+    config_hash: str | None = None,
+    snapshot_path: str | None = None,
+    snapshot_hash: str | None = None,
+    snapshot_rows: int | None = None,
+    snapshot_at: str | None = None,
+    supersedes: str | None = None,
+    reject_reason: str | None = None,
     db_path: str | Path | None = None,
     con: sqlite3.Connection | None = None,
 ) -> str:
@@ -300,6 +321,7 @@ def add_campaign(
         raise DatabankError("la campaña necesita id")
     payload = json.dumps(config or {}, sort_keys=True, ensure_ascii=False)
     digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()
+    stored_hash = str(config_hash or digest)
     instrument = str(instrument or (config or {}).get("instrument") or "").upper()
     timeframe = str(timeframe or (config or {}).get("timeframe") or "").upper()
     target = _resolve_target(db_path, con)
@@ -317,8 +339,9 @@ def add_campaign(
             " config_json, config_hash, is_start, is_end, oos1_start, oos1_end,"
             " oos2_start, oos2_end, dataset_hash, n_total, n_evaluated,"
             " n_effective, status, engine_version, approved_at, approved_by,"
-            " quality_json, reject_reason) "
-            "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NULL,NULL,?,NULL)",
+            " quality_json, reject_reason, snapshot_path, snapshot_hash,"
+            " snapshot_rows, snapshot_at, supersedes, superseded_by, superseded_at) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NULL,NULL,?,?,?,?,?,?,?,NULL,NULL)",
             (
                 identifier,
                 _now(),
@@ -327,7 +350,7 @@ def add_campaign(
                 template,
                 engine_profile,
                 payload,
-                digest,
+                stored_hash,
                 (config or {}).get("is_start"),
                 (config or {}).get("is_end"),
                 (config or {}).get("oos1_start"),
@@ -343,6 +366,12 @@ def add_campaign(
                 None if quality is None else json.dumps(
                     quality, sort_keys=True, ensure_ascii=False, allow_nan=True
                 ),
+                str(reject_reason)[:2000] if reject_reason is not None else None,
+                snapshot_path,
+                snapshot_hash,
+                None if snapshot_rows is None else int(snapshot_rows),
+                snapshot_at,
+                supersedes,
             ),
         )
     return identifier
@@ -393,7 +422,7 @@ def approve_campaign(
                 " approved_at = ?, approved_by = ? WHERE id = ? AND status = 'draft'",
                 (_now(), str(approved_by), identifier),
             )
-    campaign = get_campaign(identifier, db_path=target)
+    campaign = get_campaign(identifier, db_path=target, con=con)
     if campaign is None:  # pragma: no cover
         raise DatabankError(f"campaña no registrada: {identifier}")
     return campaign
@@ -415,6 +444,68 @@ def set_campaign_rejected(
             " WHERE id = ?",
             (str(reason)[:2000], str(campaign_id)),
         )
+
+
+def set_campaign_superseded(
+    campaign_id: str,
+    replacement_id: str,
+    *,
+    reason: str | None = None,
+    db_path: str | Path | None = None,
+    con: sqlite3.Connection | None = None,
+) -> None:
+    """Marca la campaña vieja como ``superseded``; conserva ``approved_at``."""
+
+    target = _resolve_target(db_path, con)
+    with _connection(target, con) as opened:
+        opened.execute(
+            "UPDATE disc_campaigns SET status = 'superseded',"
+            " superseded_by = ?, superseded_at = ?,"
+            " reject_reason = COALESCE(?, reject_reason) WHERE id = ?",
+            (
+                str(replacement_id),
+                _now(),
+                None if reason is None else str(reason)[:2000],
+                str(campaign_id),
+            ),
+        )
+
+
+def count_evaluations(
+    campaign_id: str,
+    *,
+    db_path: str | Path | None = None,
+    con: sqlite3.Connection | None = None,
+) -> int:
+    """Evaluaciones guardadas de una campaña (incluye OOS-1)."""
+
+    target = _resolve_target(db_path, con)
+    with _connection(target, con) as opened:
+        row = opened.execute(
+            "SELECT COUNT(*) AS n FROM disc_evaluations e"
+            " JOIN disc_strategies s ON s.id = e.strategy_id"
+            " WHERE s.campaign_id = ?",
+            (str(campaign_id),),
+        ).fetchone()
+    return int(row["n"])
+
+
+def count_executed_jobs(
+    campaign_id: str,
+    *,
+    db_path: str | Path | None = None,
+    con: sqlite3.Connection | None = None,
+) -> int:
+    """Jobs que llegaron a ejecutarse (``running``/``done`` o con intentos)."""
+
+    target = _resolve_target(db_path, con)
+    with _connection(target, con) as opened:
+        row = opened.execute(
+            "SELECT COUNT(*) AS n FROM disc_jobs WHERE campaign_id = ?"
+            " AND (state IN ('running', 'done') OR attempts > 0)",
+            (str(campaign_id),),
+        ).fetchone()
+    return int(row["n"])
 
 
 def add_holdout_read(

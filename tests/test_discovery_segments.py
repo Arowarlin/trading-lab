@@ -129,7 +129,7 @@ def test_segment_before_useful_start_rejects(tmp_path: Path) -> None:
         )
 
 
-def test_dataset_hash_fixed_range(tmp_path: Path) -> None:
+def test_dataset_hash_fixed_range_and_snapshot(tmp_path: Path) -> None:
     db = tmp_path / "discovery.db"
     frame = _frame()
     campaign = _register(db, frame, approved=True)
@@ -143,10 +143,14 @@ def test_dataset_hash_fixed_range(tmp_path: Path) -> None:
     modified = frame.copy()
     modified.iloc[100, modified.columns.get_loc("close")] += 1.0
     assert not campaigns.dataset_matches(campaign, modified)
-    with pytest.raises(campaigns.CampaignError, match="dataset_hash"):
-        campaigns.load_segment("c1", "is", frame=modified, db_path=db)
-    assert databank.get_campaign("c1", db_path=db)["status"] == "rejected"
+    # La campaña ya no lee la fuente viva: devuelve su snapshot y no se rechaza.
+    before = campaigns.load_segment("c1", "is", frame=frame, db_path=db)
+    after = campaigns.load_segment("c1", "is", frame=modified, db_path=db)
+    assert after.equals(before)
+    assert databank.get_campaign("c1", db_path=db)["status"] == "registered"
     assert campaigns.discovery_tests(db)["campaigns"] == 440
+    assert campaign["snapshot_hash"] == campaign["dataset_hash"]
+    assert Path(campaign["snapshot_path"]).exists()
 
 
 def test_segments_are_sealed(tmp_path: Path) -> None:

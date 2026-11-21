@@ -9900,6 +9900,7 @@ def discovery_register_cmd(
     table.add_row("Estado", "BORRADOR (no cuenta)" if not dry_run else "DRY-RUN (no escribe)")
     table.add_row("n_total", f"{campaign['n_total']:,} pruebas")
     table.add_row("dataset_hash", campaign["dataset_hash"][:16] + "…")
+    table.add_row("Snapshot", str(campaign.get("snapshot_path") or "Sin datos"))
     table.add_row("config_hash", campaign["config_hash"][:16] + "…")
     table.add_row("OOS-2 fin real", campaign.get("oos2_end") or "Sin datos")
     table.add_row(
@@ -9986,6 +9987,48 @@ def discovery_approve_cmd(
         f"Campaña {campaign['campaign_id']}: {campaign['status']} · "
         f"approved_at {campaign.get('approved_at') or 'Sin datos'} · "
         f"cuenta {int(campaign.get('n_total') or 0):,} pruebas"
+    )
+
+
+@discovery_app.command("supersede")
+def discovery_supersede_cmd(
+    campaign_id: str = typer.Argument(..., help="Campaña antigua (fallida)"),
+    approved_by_operator: bool = typer.Option(
+        False, "--approved-by-operator", help="Aprobación explícita del operador"
+    ),
+    db: str = typer.Option(None, "--db", help="discovery.db alternativo"),
+) -> None:
+    """Reemplaza una campaña fallida; sin el flag no hace nada."""
+
+    if not approved_by_operator:
+        console.print(
+            "Sin --approved-by-operator no se reemplaza: "
+            f"{campaign_id} queda igual."
+        )
+        return
+    from .discovery import campaigns
+
+    try:
+        new = campaigns.supersede(campaign_id, db_path=db)
+    except Exception as exc:  # noqa: BLE001
+        console.print(f"[red]No se pudo reemplazar:[/red] {exc}")
+        raise typer.Exit(1) from exc
+    table = Table(title=f"Discovery · reemplazo · {campaign_id}")
+    table.add_column("Campo", style="bold")
+    table.add_column("Valor")
+    table.add_row("Campaña nueva", str(new["campaign_id"]))
+    table.add_row("Estado", str(new["status"]))
+    table.add_row("config_hash", str(new["config_hash"])[:16] + "…")
+    table.add_row("n_total", f"{int(new.get('n_total') or 0):,}")
+    table.add_row("Snapshot", str(new.get("snapshot_path") or "Sin datos"))
+    table.add_row("Hash snapshot", str(new.get("snapshot_hash") or "Sin datos")[:16] + "…")
+    table.add_row("Cuenta antes", f"{int(new.get('count_before') or 0):,}")
+    table.add_row("Cuenta después", f"{int(new.get('count_after') or 0):,}")
+    console.print(table)
+    console.print(
+        "Siguiente: "
+        f"lab discovery preflight {new['campaign_id']} y después "
+        f"lab discovery run {new['campaign_id']} --approved-by-operator"
     )
 
 

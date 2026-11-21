@@ -5,8 +5,9 @@ Diseño:
 * **Un solo escritor**: los workers no abren SQLite. Compilan y ejecutan la
   estrategia y devuelven el resultado al proceso principal, que escribe en
   lotes con una transacción por lote.
-* **Preparación por worker**: el initializer carga las barras (por
-  ``discovery.data_sources`` o sintéticas), corta el tramo, construye el coste
+* **Preparación por worker**: el initializer carga las barras del snapshot de
+  la campaña (o ``discovery.data_sources``/sintéticas si no hay snapshot),
+  corta el tramo, construye el coste
   con ``propfund.costs`` y llama a ``fastbt.prepare``. Cada job solo lleva el
   JSON de la estrategia.
 * **Reanudación**: los ``running`` huérfanos vuelven a ``queued`` al arrancar.
@@ -610,21 +611,13 @@ def run_queue(
         )
     if status == "rejected":
         raise QueueError(f"campaña rechazada: {campaign_row.get('reject_reason')}")
-    setup = QueueSetup.from_campaign(campaign_row, bars=bars)
-    source = (
-        bars
-        if bars is not None
-        else load_source(setup.instrument, setup.timeframe).frame
-    )
-    if not campaigns.dataset_matches(campaign_row, source):
-        databank.set_campaign_rejected(
-            identifier,
-            "dataset_hash no coincide con el rango fijo de la campaña",
-            db_path=target,
-        )
+    if status == "superseded":
         raise QueueError(
-            "dataset_hash no coincide: la fuente cambió dentro del rango sellado"
+            f"campaña reemplazada por {campaign_row.get('superseded_by')}"
         )
+    setup = QueueSetup.from_campaign(campaign_row, bars=bars)
+    source = campaigns.campaign_bars(campaign_row, frame=bars, db_path=target)
+    setup = replace(setup, bars=source)
 
     with connect(target) as con:
         con.execute(

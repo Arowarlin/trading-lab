@@ -108,10 +108,10 @@ def test_count_tests_includes_only_approved_and_holdout(tmp_path: Path) -> None:
 
     modified = frame.copy()
     modified.iloc[100, modified.columns.get_loc("close")] += 1.0
-    with pytest.raises(campaigns.CampaignError, match="dataset_hash"):
-        campaigns.load_segment("other", "is", frame=modified, db_path=db)
-    assert databank.get_campaign("other", db_path=db)["status"] == "rejected"
-    # Rechazada o cancelada, lo aprobado sigue contando.
+    sealed = campaigns.load_segment("other", "is", frame=modified, db_path=db)
+    assert len(sealed) > 0
+    assert databank.get_campaign("other", db_path=db)["status"] == "registered"
+    # La fuente viva cambió, pero el snapshot congelado sigue contando una vez.
     assert count_tests(lab, discovery_db=db) == base + 441 + 440
 
 

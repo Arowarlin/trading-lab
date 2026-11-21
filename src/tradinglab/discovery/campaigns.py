@@ -5,8 +5,14 @@
   en SQLite). En modo ``ga`` es ``population × (generations + 1)``; en modo
   ``grid`` es el número de combinaciones declaradas en la plantilla.
 * El ``dataset_hash`` se calcula sobre ``[is_start, oos2_end]`` con el final de
-  OOS-2 resuelto a la última vela real; las velas nuevas posteriores no
+  OOS-2 resuelto a la última vela **cerrada**; las velas nuevas posteriores no
   invalidan la campaña.
+* Al registrar se escribe un snapshot inmutable en
+  ``data/discovery/snapshots/<campaign_id>.parquet`` y la campaña lee siempre
+  de él, nunca de la caché viva. ``oos2_end`` excluye la vela en formación.
+* ``supersede`` reemplaza una campaña fallida por otra con el mismo
+  ``config_hash`` y un snapshot nuevo; la vieja pasa a ``superseded`` y deja de
+  sumar en el DSR (sin doble conteo).
 * Registrar deja un **borrador**; solo ``approve`` (CLI con flag explícito) lo
   pasa a ``registered`` y lo cuenta en el DSR. Una campaña aprobada cuenta
   aunque luego se cancele o se rechace.
@@ -16,6 +22,7 @@
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import sqlite3
@@ -27,7 +34,8 @@ import pandas as pd
 import yaml
 
 from ..config import ROOT
-from . import __version__, databank, grid
+from ..db import connect
+from . import __version__, databank, grid, snapshots
 from .config import load_engine_config
 from .data_quality import check_dataset, dataset_hash
 from .data_sources import load_source
@@ -196,6 +204,7 @@ def register(
     mode: str = "ga",
     frame: pd.DataFrame | None = None,
     dry_run: bool = False,
+    now: Any | None = None,
     db_path: str | Path | None = None,
 ) -> dict[str, Any]:
     """Registra un borrador (o previsualiza con ``dry_run``)."""
@@ -230,6 +239,7 @@ def register(
         n_total = int(profile_config.population * (profile_config.generations + 1))
 
     source = frame if frame is not None else _source_frame(instrument, timeframe)
+    source = snapshots.closed_bars(source, timeframe, now=now)
     normalized = _normalize_segments(segments, engine.data_quality.default_segments)
     oos2_end = _resolve_oos2_end(source, normalized["oos2"][1])
     normalized["oos2"][1] = oos2_end.isoformat()
@@ -290,11 +300,15 @@ def register(
         "approved_at": None,
         "n_total": n_total,
         "dataset_hash": digest,
+        "snapshot_hash": digest,
+        "snapshot_path": str(snapshots.snapshot_path_for(identifier, db_path)),
+        "snapshot_rows": int(len(hashed)),
         "config_hash": config_hash,
         "config": config_payload,
         "quality": config_payload["quality"],
         "rows": int(len(hashed)),
         "oos2_end": oos2_end.isoformat(),
+        "read_at": snapshots.read_time(now).isoformat(),
     }
     if dry_run:
         preview["dry_run"] = True
@@ -309,6 +323,9 @@ def register(
             existing["campaign_id"] = existing["id"]
             return existing
         raise CampaignError(f"la campaña {identifier} ya está registrada")
+    snapshot = snapshots.write_snapshot(
+        identifier, hashed, db_path=db_path, now=now
+    )
     databank.add_campaign(
         identifier,
         config_payload,
@@ -320,6 +337,10 @@ def register(
         quality=config_payload["quality"],
         n_total=n_total,
         dataset_hash=digest,
+        snapshot_path=snapshot.path,
+        snapshot_hash=snapshot.hash,
+        snapshot_rows=snapshot.rows,
+        snapshot_at=snapshot.created_at,
         db_path=db_path,
     )
     campaign = databank.get_campaign(identifier, db_path=db_path)
@@ -404,6 +425,177 @@ def mark_done(
     return result
 
 
+def _new_campaign_id(
+    old: dict[str, Any],
+    config_hash: str,
+    *,
+    db_path: str | Path | None,
+    now: Any | None = None,
+) -> str:
+    stamp = snapshots.read_time(now).strftime("%Y%m%d%H%M%S")
+    base = (
+        f"disc-{old['instrument']}-{old['timeframe']}-{stamp}-"
+        f"{str(config_hash)[:8]}"
+    )
+    candidate = base
+    suffix = 1
+    while databank.get_campaign(candidate, db_path=db_path) is not None:
+        suffix += 1
+        candidate = f"{base}-{suffix}"
+    return candidate
+
+
+def supersede(
+    campaign_id: str,
+    *,
+    approved_by: str = "operator",
+    db_path: str | Path | None = None,
+    now: Any | None = None,
+) -> dict[str, Any]:
+    """Reemplaza una campaña fallida sin volver a contar sus pruebas.
+
+    Solo se permite sobre una campaña aprobada, con 0 evaluaciones y 0 jobs
+    ejecutados, que falló por ``dataset_hash`` o al arrancar. La campaña nueva
+    hereda ``config_hash``, plantilla, semilla y modo, y recibe un snapshot
+    nuevo. La vieja pasa a ``superseded`` y deja de sumar en ``count_tests``.
+    """
+
+    old = databank.get_campaign(campaign_id, db_path=db_path)
+    if old is None:
+        raise CampaignError(f"campaña no registrada: {campaign_id}")
+    if old["status"] == "superseded":
+        raise CampaignError(
+            f"la campaña ya fue reemplazada por {old.get('superseded_by')}"
+        )
+    if not old.get("approved_at"):
+        raise CampaignError("solo se reemplaza una campaña aprobada")
+    if old.get("status") not in {"rejected", "registered"}:
+        raise CampaignError(
+            f"la campaña está {old.get('status')}; no se puede reemplazar"
+        )
+    if int(old.get("n_evaluated") or 0) > 0 or databank.count_evaluations(
+        campaign_id, db_path=db_path
+    ) > 0:
+        raise CampaignError(
+            "la campaña tiene evaluaciones; no se puede reemplazar"
+        )
+    if databank.count_executed_jobs(campaign_id, db_path=db_path) > 0:
+        raise CampaignError(
+            "la campaña tiene jobs ejecutados; no se puede reemplazar"
+        )
+    config_hash = str(old.get("config_hash") or "")
+    if not config_hash:
+        raise CampaignError("Sin datos: la campaña no tiene config_hash")
+    reason = str(old.get("reject_reason") or "")
+    last_error = str(old.get("last_error") or "")
+    hash_failure = "dataset_hash" in reason.lower() or "dataset_hash" in last_error.lower()
+    startup_failure = bool(last_error.strip()) and not hash_failure
+    if not (hash_failure or startup_failure):
+        raise CampaignError(
+            "solo se reemplaza una campaña que falló por hash o al arrancar"
+        )
+    oos2_end = old.get("oos2_end")
+    if not oos2_end:
+        raise CampaignError("Sin datos: la campaña no tiene oos2_end")
+    config = copy.deepcopy(old.get("config") or {})
+    segments = {
+        "is": [old["is_start"], old["is_end"]],
+        "oos1": [old["oos1_start"], old["oos1_end"]],
+        "oos2": [old["oos2_start"], oos2_end],
+    }
+    source = snapshots.closed_bars(
+        _source_frame(old["instrument"], old["timeframe"]),
+        old["timeframe"],
+        now=now,
+    )
+    resolved_end = _resolve_oos2_end(source, oos2_end)
+    if _start_ts(resolved_end) != _start_ts(oos2_end):
+        raise CampaignError(
+            "la vela final de la campaña aún no está cerrada; "
+            "espera al cierre y vuelve a intentarlo"
+        )
+    report, useful_start = _quality(
+        source, old["instrument"], old["timeframe"], segments
+    )
+    snapshot_frame = _hash_range(source, old["is_start"], resolved_end)
+    digest = dataset_hash(snapshot_frame)
+    new_id = _new_campaign_id(
+        old, config_hash, db_path=db_path, now=now
+    )
+    total_before = discovery_tests(db_path)
+    snapshot = snapshots.write_snapshot(
+        new_id, snapshot_frame, db_path=db_path, now=now
+    )
+    quality = {
+        "status": report.status,
+        "useful_start": useful_start,
+        "issues": list(report.issues),
+        "segments": {
+            key: value.as_dict() for key, value in report.segments.items()
+        },
+    }
+    target = databank.init_databank(db_path)
+    with connect(target) as con:
+        databank.add_campaign(
+            new_id,
+            config,
+            instrument=old["instrument"],
+            timeframe=old["timeframe"],
+            template=old.get("template") or config.get("template"),
+            engine_profile=old.get("engine_profile"),
+            status="draft",
+            quality=quality,
+            n_total=old.get("n_total"),
+            dataset_hash=digest,
+            config_hash=config_hash,
+            snapshot_path=snapshot.path,
+            snapshot_hash=snapshot.hash,
+            snapshot_rows=snapshot.rows,
+            snapshot_at=snapshot.created_at,
+            supersedes=campaign_id,
+            con=con,
+        )
+        databank.approve_campaign(
+            new_id, approved_by=approved_by, db_path=target, con=con
+        )
+        databank.set_campaign_superseded(
+            campaign_id,
+            new_id,
+            reason=f"reemplazada por {new_id}",
+            db_path=target,
+            con=con,
+        )
+    total_after = discovery_tests(db_path)
+    snapshots.append_audit(
+        {
+            "action": "supersede",
+            "old_id": campaign_id,
+            "new_id": new_id,
+            "operator": str(approved_by),
+            "reason": reason or last_error or "fallo de arranque",
+            "old_status": old["status"],
+            "old_approved_at": old.get("approved_at"),
+            "old_dataset_hash": old.get("dataset_hash"),
+            "old_snapshot_path": old.get("snapshot_path"),
+            "new_snapshot_path": snapshot.path,
+            "new_snapshot_hash": snapshot.hash,
+            "config_hash": config_hash,
+            "n_total": int(old.get("n_total") or 0),
+            "count_before": int(total_before.get("total") or 0),
+            "count_after": int(total_after.get("total") or 0),
+        },
+        db_path=db_path,
+    )
+    result = databank.get_campaign(new_id, db_path=db_path)
+    if result is None:  # pragma: no cover
+        raise CampaignError("no se pudo crear la campaña de reemplazo")
+    result["campaign_id"] = result["id"]
+    result["superseded"] = campaign_id
+    result["count_before"] = int(total_before.get("total") or 0)
+    result["count_after"] = int(total_after.get("total") or 0)
+    return result
+
+
 def _segment_frame(
     frame: pd.DataFrame,
     campaign: dict[str, Any],
@@ -417,6 +609,42 @@ def _segment_frame(
     return sliced
 
 
+def campaign_bars(
+    campaign: dict[str, Any],
+    *,
+    frame: pd.DataFrame | None = None,
+    db_path: str | Path | None = None,
+) -> pd.DataFrame:
+    """Barras de la campaña: snapshot congelado; caché viva solo si no hay snapshot."""
+
+    campaign_id = str(campaign.get("id") or campaign.get("campaign_id") or "")
+    snapshot_path = campaign.get("snapshot_path")
+    if snapshot_path:
+        expected = campaign.get("snapshot_hash") or campaign.get("dataset_hash")
+        try:
+            return snapshots.load_snapshot(str(snapshot_path), expected)
+        except snapshots.SnapshotError as exc:
+            databank.set_campaign_rejected(
+                campaign_id,
+                f"snapshot inválido: {exc}",
+                db_path=db_path,
+            )
+            raise CampaignError(str(exc)) from exc
+    source = frame if frame is not None else _source_frame(
+        campaign["instrument"], campaign["timeframe"]
+    )
+    if not dataset_matches(campaign, source):
+        databank.set_campaign_rejected(
+            campaign_id,
+            "dataset_hash no coincide con el rango fijo de la campaña",
+            db_path=db_path,
+        )
+        raise CampaignError(
+            "dataset_hash no coincide: la fuente cambió dentro del rango sellado"
+        )
+    return source
+
+
 def load_segment(
     campaign_id: str,
     segment: str,
@@ -424,7 +652,7 @@ def load_segment(
     frame: pd.DataFrame | None = None,
     db_path: str | Path | None = None,
 ) -> pd.DataFrame:
-    """Devuelve IS/OOS-1 sellado. OOS-2 solo por ``read_holdout``."""
+    """Devuelve IS/OOS-1 sellado desde el snapshot. OOS-2 solo por ``read_holdout``."""
 
     name = str(segment or "").strip().lower()
     if name not in {"is", "oos1"}:
@@ -438,18 +666,7 @@ def load_segment(
         raise CampaignError(
             "OOS-1 sellado: la campaña debe estar done antes de leerlo"
         )
-    source = frame if frame is not None else _source_frame(
-        campaign["instrument"], campaign["timeframe"]
-    )
-    if not dataset_matches(campaign, source):
-        databank.set_campaign_rejected(
-            campaign_id,
-            "dataset_hash no coincide con el rango fijo de la campaña",
-            db_path=db_path,
-        )
-        raise CampaignError(
-            "dataset_hash no coincide: la fuente cambió dentro del rango sellado"
-        )
+    source = campaign_bars(campaign, frame=frame, db_path=db_path)
     return _segment_frame(source, campaign, name)
 
 
@@ -474,18 +691,7 @@ def read_holdout(
         raise HoldoutError(
             f"la estrategia {strategy_id} ya leyó OOS-2; segunda lectura prohibida"
         )
-    source = frame if frame is not None else _source_frame(
-        campaign["instrument"], campaign["timeframe"]
-    )
-    if not dataset_matches(campaign, source):
-        databank.set_campaign_rejected(
-            campaign_id,
-            "dataset_hash no coincide con el rango fijo de la campaña",
-            db_path=db_path,
-        )
-        raise CampaignError(
-            "dataset_hash no coincide: la fuente cambió dentro del rango sellado"
-        )
+    source = campaign_bars(campaign, frame=frame, db_path=db_path)
     start = _start_ts(campaign["oos2_start"])
     end = _start_ts(campaign["oos2_end"])
     sealed = source[(source.index >= start) & (source.index <= end)]
@@ -495,7 +701,7 @@ def read_holdout(
         databank.add_holdout_read(
             int(strategy_id),
             campaign_id,
-            dataset_hash=campaign["dataset_hash"],
+            dataset_hash=campaign.get("snapshot_hash") or campaign["dataset_hash"],
             rows=int(len(sealed)),
             db_path=db_path,
         )
@@ -523,6 +729,7 @@ def discovery_tests(
             row = con.execute(
                 "SELECT COALESCE(SUM(n_total), 0) AS n FROM disc_campaigns"
                 " WHERE approved_at IS NOT NULL"
+                " AND COALESCE(status, '') != 'superseded'"
             ).fetchone()
             campaigns = int(row[0] or 0)
         except sqlite3.OperationalError:
@@ -532,6 +739,7 @@ def discovery_tests(
                 "SELECT COUNT(*) AS n FROM disc_holdout_reads r"
                 " JOIN disc_campaigns c ON c.id = r.campaign_id"
                 " WHERE c.approved_at IS NOT NULL"
+                " AND COALESCE(c.status, '') != 'superseded'"
             ).fetchone()
             reads = int(row[0] or 0)
         except sqlite3.OperationalError:
@@ -553,6 +761,7 @@ __all__ = [
     "CampaignError",
     "HoldoutError",
     "approve",
+    "campaign_bars",
     "dataset_matches",
     "discovery_tests",
     "load_segment",
@@ -560,5 +769,6 @@ __all__ = [
     "read_holdout",
     "register",
     "register_synthetic",
+    "supersede",
     "total_tests",
 ]
