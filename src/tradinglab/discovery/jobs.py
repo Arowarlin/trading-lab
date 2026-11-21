@@ -115,7 +115,7 @@ class QueueSetup:
             configured_accounts = (str(cost.get("account") or "CFD-001").upper(),)
             configured_mode = "target"
         else:
-            configured_mode = str(cost.get("mode") or "worst").lower()
+            configured_mode = str(cost.get("mode") or "best").lower()
         return cls(
             instrument=campaign.get("instrument") or "",
             timeframe=campaign.get("timeframe") or "",
@@ -153,7 +153,7 @@ class QueueSetup:
             raise QueueError("el setup necesita account")
         if self.session_start == self.session_end:
             raise QueueError("la sesión no puede tener start == end (24 h no soportado)")
-        if self.cost_mode not in {"worst", "target"}:
+        if self.cost_mode not in {"worst", "best", "target"}:
             raise QueueError(f"cost_mode desconocido: {self.cost_mode}")
         if not self.cost_accounts:
             raise QueueError("Sin datos: cost_accounts vacío")
@@ -457,6 +457,7 @@ def _evaluate_job(task: tuple[int, str, str]) -> dict[str, Any]:
                 result,
                 session_tz=setup.session_tz,
                 point=setup.point,
+                max_cost_r=float(load_engine_config().fitness.cost_r_max),
             )
             returns = applied.daily_r
             return {

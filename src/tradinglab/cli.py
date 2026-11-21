@@ -182,7 +182,7 @@ from .propfund.cli import app as propfund_app  # noqa: E402  (capa Prop Fund ais
 
 discovery_app = typer.Typer(
     no_args_is_help=True,
-    help="Discovery Lab: calidad de datos CFD (solo lectura, sin MT5 ni red).",
+    help="Discovery Lab: datos CFD/M1, calidad y campañas (sin campañas automáticas).",
 )
 
 app.add_typer(propfund_app, name="propfund")
@@ -9683,7 +9683,13 @@ def stats_recompute_dsr_cmd(
 @discovery_app.command("data-check")
 def discovery_data_check_cmd(
     symbol: str = typer.Argument(..., help="Símbolo CFD, p. ej. US100.cash"),
-    tf: str = typer.Option("M5", "--tf", help="Timeframe de la caché MT5"),
+    tf: str = typer.Option("M5", "--tf", help="Timeframe"),
+    source: str = typer.Option(
+        "broker", "--source", help="broker | dukascopy"
+    ),
+    all_tf: bool = typer.Option(
+        False, "--all-tf", help="Matriz de las 7 temporalidades"
+    ),
     is_range: str = typer.Option(
         None,
         "--is",
@@ -9700,8 +9706,8 @@ def discovery_data_check_cmd(
         help="Tramo OOS-2 como inicio:fin; fin vacío = última vela",
     ),
 ) -> None:
-    """Informe de calidad de un dataset CFD desde la fuente configurada. Solo lectura."""
-    from .discovery.data_quality import load_and_check
+    """Informe de calidad por fuente y temporalidad. Solo lectura."""
+    from .discovery.source_quality import quality_for_source, quality_matrix
 
     def _range(value: str, name: str):
         start, _, end = str(value or "").partition(":")
@@ -9713,8 +9719,54 @@ def discovery_data_check_cmd(
     for name, value in (("is", is_range), ("oos1", oos1_range), ("oos2", oos2_range)):
         if value:
             segments[name] = _range(value, f"--{name}")
-    report = load_and_check(symbol, tf, segments=segments or None)
-    data = report.as_dict()
+
+    if all_tf:
+        rows = quality_matrix(
+            symbol,
+            source=source,
+            segments=segments or None,
+        )
+        matrix = Table(
+            title=f"Discovery · calidad · {symbol.upper()} · {source.lower()} · 7 TF"
+        )
+        for column in (
+            "TF",
+            "Estado",
+            "Filas",
+            "Inicio útil",
+            "Huecos",
+            "Pausa",
+            "Calendario",
+            "Días sin datos",
+        ):
+            matrix.add_column(column)
+        for data in rows:
+            pauses = data.get("scheduled_pauses") or []
+            matrix.add_row(
+                data["timeframe"],
+                data["status"].upper(),
+                f"{data['rows']:,}",
+                (data.get("granularity") or {}).get("useful_start") or "Sin datos",
+                str(data.get("non_scheduled_gaps", 0)),
+                (
+                    f"{pauses[0]['start_hhmm']} ({pauses[0]['count']}×)"
+                    if pauses
+                    else "ninguna"
+                ),
+                (data.get("calendar") or {}).get("name") or "sin calendario",
+                str(data.get("missing_weekdays", 0)),
+            )
+        console.print(matrix)
+        if all(data["status"] == "fail" for data in rows):
+            raise typer.Exit(1)
+        return
+
+    data = quality_for_source(
+        symbol,
+        tf,
+        source=source,
+        segments=segments or None,
+    )
 
     summary = Table(title=f"Discovery · calidad de datos · {data['symbol']} {data['timeframe']}")
     summary.add_column("Campo", style="bold")
@@ -9753,12 +9805,20 @@ def discovery_data_check_cmd(
         "Huecos de calendario",
         str(len(data.get("calendar_gaps") or [])),
     )
-    source = data.get("source") or {}
-    summary.add_row("Fuente", source.get("path") or "Sin datos")
+    source_info = data.get("source") or {}
+    summary.add_row(
+        "Fuente",
+        f"{data.get('source_name') or source_info.get('source') or 'Sin datos'} · "
+        f"{source_info.get('path') or 'Sin datos'}",
+    )
     summary.add_row(
         "Zona fuente / ajustes",
-        f"{source.get('timezone') or 'Sin datos'} · "
-        f"{source.get('adjusted', 0)} ajustadas · {source.get('dropped', 0)} descartadas",
+        f"{source_info.get('timezone') or 'Sin datos'} · "
+        f"{source_info.get('adjusted', 0)} ajustadas · {source_info.get('dropped', 0)} descartadas",
+    )
+    summary.add_row(
+        "Días hábiles sin datos",
+        str(data.get("missing_weekdays", 0)),
     )
     bad_months = (data.get("granularity") or {}).get("bad_months") or []
     summary.add_row(
@@ -9800,8 +9860,123 @@ def discovery_data_check_cmd(
         console.print("[bold]Motivos[/bold]")
         for issue in data["issues"]:
             console.print(f"- {issue}")
-    if report.status == "fail":
+    if data["status"] == "fail":
         raise typer.Exit(1)
+
+
+@discovery_app.command("fetch-dukascopy")
+def discovery_fetch_dukascopy_cmd(
+    symbol: str = typer.Argument(
+        ...,
+        help="US100 | US500 | US30 | XAUUSD | EURUSD | GBPUSD | USDJPY",
+    ),
+    start: str = typer.Option(
+        None,
+        "--from",
+        help="Inicio UTC (YYYY-MM-DD); por defecto, el inicio real del símbolo",
+    ),
+    end: str = typer.Option(
+        None, "--to", help="Fin UTC (YYYY-MM-DD); por defecto, ayer"
+    ),
+    workers: int = typer.Option(4, "--workers", help="Descargas en paralelo"),
+    rate: float = typer.Option(5.0, "--rate", help="Peticiones por segundo"),
+    no_ask: bool = typer.Option(False, "--no-ask", help="No descargar ASK"),
+    force: bool = typer.Option(False, "--force", help="Rehacer meses ya cacheados"),
+) -> None:
+    """Descarga M1 de Dukascopy y escribe SOLO la caché M1 (UTC)."""
+    from .discovery import fetch_dukascopy
+
+    if int(workers) < 1:
+        raise typer.BadParameter("--workers debe ser >= 1")
+    if float(rate) < 0:
+        raise typer.BadParameter("--rate debe ser >= 0")
+
+    def _progress(item: dict) -> None:
+        console.print(
+            f"[dim]{item['month']}: {item['rows']:,} velas · "
+            f"{item['empty_days']} días sin datos[/dim]"
+        )
+
+    try:
+        result = fetch_dukascopy.download(
+            symbol,
+            start=start,
+            end=end,
+            workers=int(workers),
+            rate_per_s=float(rate),
+            include_ask=not no_ask,
+            force=force,
+            progress=_progress,
+        )
+    except Exception as exc:  # noqa: BLE001
+        console.print(f"[red]Dukascopy no disponible:[/red] {exc}")
+        raise typer.Exit(1) from exc
+    table = Table(
+        title=f"Discovery · Dukascopy · {result['symbol']} M1 "
+        f"({result['instrument']})"
+    )
+    table.add_column("Campo", style="bold")
+    table.add_column("Valor")
+    table.add_row("Filas", f"{result['rows']:,}")
+    table.add_row("Filas con ASK", f"{result['ask_rows']:,}")
+    table.add_row("Inicio UTC", result["start"])
+    table.add_row("Fin UTC", result["end"])
+    table.add_row("Meses descargados", str(result["months_fetched"]))
+    table.add_row("Meses saltados", str(result["months_skipped"]))
+    table.add_row("Días sin datos", str(result["empty_days"]))
+    table.add_row("Ruta", result["path"])
+    console.print(table)
+
+
+@discovery_app.command("compare-dukascopy")
+def discovery_compare_dukascopy_cmd(
+    symbol: str = typer.Argument(
+        None, help="Símbolo; vacío = los 7"
+    ),
+    start: str = typer.Option("2021-10-01", "--from", help="Inicio UTC"),
+    end: str = typer.Option(None, "--to", help="Fin UTC; vacío = última vela"),
+    tf: str = typer.Option("M5", "--tf", help="Temporalidad de comparación"),
+) -> None:
+    """Compara Dukascopy con el bróker; no usa campañas ni OOS."""
+    from .discovery import compare
+
+    try:
+        rows = compare.compare_all(
+            [symbol] if symbol else None,
+            start=start,
+            end=end,
+            timeframe=tf,
+        )
+    except Exception as exc:  # noqa: BLE001
+        console.print(f"[red]Comparación no disponible:[/red] {exc}")
+        raise typer.Exit(1) from exc
+    table = Table(title=f"Discovery · Dukascopy vs bróker · {tf.upper()}")
+    for column in (
+        "Símbolo",
+        "Velas",
+        "Corr",
+        "Δnivel",
+        "Δnivel bps",
+        "Lag",
+        "Coincidencia",
+        "Veredicto",
+    ):
+        table.add_column(column)
+    for row in rows:
+        table.add_row(
+            row["symbol"],
+            f"{row['rows']:,}",
+            "Sin datos" if row["correlation"] is None else f"{row['correlation']:.4f}",
+            "Sin datos" if row["mean_diff"] is None else f"{row['mean_diff']:+.5f}",
+            "Sin datos" if row["mean_diff_bps"] is None else f"{row['mean_diff_bps']:+.2f}",
+            "Sin datos" if row["lag"] is None else f"{row['lag']:+d}",
+            "Sin datos" if row["match_pct"] is None else f"{row['match_pct']:.1f}%",
+            row["verdict"],
+        )
+    console.print(table)
+    for row in rows:
+        if row["verdict"] != "apta":
+            console.print(f"[yellow]{row['symbol']}:[/yellow] {row['reason']}")
 
 
 @discovery_app.command("fetch")
@@ -9850,6 +10025,9 @@ def discovery_register_cmd(
     ),
     profile: str = typer.Option("small", "--profile", help="small | medium | large"),
     mode: str = typer.Option("ga", "--mode", help="ga | grid"),
+    data_source: str = typer.Option(
+        "broker", "--source", help="Fuente única de la campaña: broker | dukascopy"
+    ),
     is_range: str = typer.Option(None, "--is", help="IS como inicio:fin"),
     oos1_range: str = typer.Option(None, "--oos1", help="OOS-1 como inicio:fin"),
     oos2_range: str = typer.Option(None, "--oos2", help="OOS-2 como inicio:fin (fin vacío = última vela)"),
@@ -9895,6 +10073,7 @@ def discovery_register_cmd(
             seed=seed,
             campaign_id=campaign_id,
             mode=mode,
+            data_source=data_source,
             cost_accounts=cost_account,
             cost_mode=cost_mode,
             dry_run=dry_run,
@@ -9908,6 +10087,7 @@ def discovery_register_cmd(
     table.add_column("Campo", style="bold")
     table.add_column("Valor")
     table.add_row("Estado", "BORRADOR (no cuenta)" if not dry_run else "DRY-RUN (no escribe)")
+    table.add_row("Fuente", str((campaign.get("config") or {}).get("data_source") or data_source))
     table.add_row("n_total", f"{campaign['n_total']:,} pruebas")
     table.add_row("dataset_hash", campaign["dataset_hash"][:16] + "…")
     table.add_row("Snapshot", str(campaign.get("snapshot_path") or "Sin datos"))
@@ -10356,7 +10536,19 @@ def discovery_show_cmd(
                 f"({'sí' if viability.get(name) else 'no' if viability.get(name) is False else 'Sin datos'})"
                 for name, value in (by_account or {}).items()
             ) or "Sin datos"
-            best = metrics.get("best_account") or "Sin datos"
+            best = metrics.get("best_account")
+            if not best and by_account:
+                valid_costs = {
+                    name: value
+                    for name, value in by_account.items()
+                    if value is not None
+                }
+                best = (
+                    min(valid_costs, key=lambda name: valid_costs[name])
+                    if valid_costs
+                    else "Sin datos"
+                )
+            best = best or "Sin datos"
             best_share = metrics.get("best_share")
             if best_share is not None and metrics.get("best_account"):
                 best = f"{best} ({float(best_share) * 100:.0f} %)"

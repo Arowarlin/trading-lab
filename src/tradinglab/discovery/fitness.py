@@ -141,12 +141,18 @@ def evaluate(
             full,
             session_tz=base_limits.session_tz,
             point=float(getattr(setup, "point", 0.01)),
+            max_cost_r=max_cost_r,
         )
         full_daily = applied.daily_r
         cost_info = {
             "cost_by_account": full_metrics.get("cost_by_account"),
             "worst_account": full_metrics.get("worst_account"),
             "worst_share": full_metrics.get("worst_share"),
+            "best_account": full_metrics.get("best_account"),
+            "best_share": full_metrics.get("best_share"),
+            "selected_account": full_metrics.get("selected_account"),
+            "selected_share": full_metrics.get("selected_share"),
+            "cost_viable_by_account": full_metrics.get("cost_viable_by_account"),
             "cost_accounts": full_metrics.get("cost_accounts"),
             "cost_mode": full_metrics.get("cost_mode"),
             "slippage_assumption": full_metrics.get("slippage_assumption"),

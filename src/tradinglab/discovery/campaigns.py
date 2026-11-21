@@ -148,12 +148,17 @@ def _quality(
     instrument: str,
     timeframe: str,
     segments: dict[str, list[str | None]],
+    data_source: str = "broker",
 ) -> tuple[Any, str]:
+    from .source_quality import quality_config
+
+    engine = load_engine_config()
     report = check_dataset(
         frame,
         instrument,
         timeframe,
         segments={key: tuple(value) for key, value in segments.items()},
+        config=quality_config(engine.data_quality, instrument, timeframe, data_source),
     )
     if report.status == "fail":
         detail = "; ".join(report.issues[:5]) or "sin detalle"
@@ -213,7 +218,7 @@ def register(
     firm: str | None = "ftmo",
     use_p75: bool = True,
     cost_accounts: list[str] | None = None,
-    cost_mode: str = "worst",
+    cost_mode: str = "best",
     mode: str = "ga",
     data_source: str = "broker",
     frame: pd.DataFrame | None = None,
@@ -278,7 +283,9 @@ def register(
     normalized = _normalize_segments(segments, engine.data_quality.default_segments)
     oos2_end = _resolve_oos2_end(source, normalized["oos2"][1])
     normalized["oos2"][1] = oos2_end.isoformat()
-    report, useful_start = _quality(source, instrument, timeframe, normalized)
+    report, useful_start = _quality(
+        source, instrument, timeframe, normalized, data_source
+    )
     if _start_ts(normalized["oos2"][0]) > oos2_end:
         raise CampaignError("oos2: start posterior al final real de OOS-2")
 
@@ -613,7 +620,11 @@ def supersede(
             "espera al cierre y vuelve a intentarlo"
         )
     report, useful_start = _quality(
-        source, old["instrument"], old["timeframe"], segments
+        source,
+        old["instrument"],
+        old["timeframe"],
+        segments,
+        campaign_data_source(old),
     )
     snapshot_frame = _hash_range(source, old["is_start"], resolved_end)
     digest = dataset_hash(snapshot_frame)

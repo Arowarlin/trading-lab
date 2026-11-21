@@ -33,8 +33,12 @@ class FeasibilityRow:
     feasible: bool
     reasons: list[str]
     cost_by_account: dict[str, float | None] | None = None
+    cost_viable_by_account: dict[str, bool | None] | None = None
     worst_account: str | None = None
     worst_share: float | None = None
+    best_account: str | None = None
+    selected_account: str | None = None
+    selected_share: float | None = None
 
 
 def _walk(node: Any):
@@ -131,8 +135,12 @@ def check(campaign_id: str, *, db_path=None) -> dict[str, Any]:
         mean_bars = 0.0
         reasons: list[str] = []
         cost_by_account: dict[str, float | None] | None = None
+        cost_viable_by_account: dict[str, bool | None] | None = None
         worst_account: str | None = None
         worst_share: float | None = None
+        best_account: str | None = None
+        selected_account: str | None = None
+        selected_share: float | None = None
         gate = jobs.strategy_gate(strategy, setup)
         if gate:
             reasons.append(gate)
@@ -161,11 +169,23 @@ def check(campaign_id: str, *, db_path=None) -> dict[str, Any]:
                         full,
                         session_tz=base_limits.session_tz,
                         point=setup.point,
+                        max_cost_r=max_cost_r,
                     )
                     trades = list(applied.trades)
                     cost_by_account = applied.cost_by_account
+                    cost_viable_by_account = {
+                        name: (
+                            None
+                            if value is None
+                            else bool(float(value) <= max_cost_r)
+                        )
+                        for name, value in applied.cost_by_account.items()
+                    }
                     worst_account = applied.worst_account
                     worst_share = applied.worst_share
+                    best_account = applied.best_account
+                    selected_account = applied.selected_account
+                    selected_share = applied.selected_share
                 trades_is = len(trades)
                 costs = [
                     float(trade.r_cost)
@@ -175,8 +195,16 @@ def check(campaign_id: str, *, db_path=None) -> dict[str, Any]:
                 cost_r = float(np.median(costs)) if costs else None
                 if book is None:
                     cost_by_account = {setup.account: cost_r}
+                    cost_viable_by_account = {
+                        setup.account: (
+                            None if cost_r is None else bool(cost_r <= max_cost_r)
+                        )
+                    }
                     worst_account = setup.account
                     worst_share = 1.0 if trades else 0.0
+                    best_account = setup.account
+                    selected_account = setup.account
+                    selected_share = 1.0 if trades else 0.0
                 if trades:
                     mean_bars = float(np.mean([trade.bars_held for trade in trades]))
                 for start, end in fitness.fold_bounds(len(bars), folds):
@@ -231,8 +259,12 @@ def check(campaign_id: str, *, db_path=None) -> dict[str, Any]:
                 feasible=not reasons,
                 reasons=reasons,
                 cost_by_account=cost_by_account,
+                cost_viable_by_account=cost_viable_by_account,
                 worst_account=worst_account,
                 worst_share=worst_share,
+                best_account=best_account,
+                selected_account=selected_account,
+                selected_share=selected_share,
             )
         )
     n_checked = len(rows)

@@ -22,9 +22,20 @@ import pandas as pd
 from ..config import ROOT
 from .config import DataQualityConfig, SourceConfig, load_engine_config
 
+DATA_SOURCES = ("broker", "dukascopy")
+
 
 class DataSourceError(RuntimeError):
     pass
+
+
+def normalize_source(value: str | None) -> str:
+    key = str(value or "broker").strip().lower()
+    if key not in DATA_SOURCES:
+        raise DataSourceError(
+            f"fuente no soportada: {value!r}; usa una de: {', '.join(DATA_SOURCES)}"
+        )
+    return key
 
 
 @dataclass(frozen=True)
@@ -39,6 +50,8 @@ class LoadedSource:
     adjusted: int
     dropped: int
     frame: pd.DataFrame = field(repr=False, compare=False)
+    source: str = "broker"
+    derived_from: str | None = None
 
     def as_dict(self) -> dict:
         return {
@@ -49,6 +62,8 @@ class LoadedSource:
             "rows": self.rows,
             "adjusted": self.adjusted,
             "dropped": self.dropped,
+            "source": self.source,
+            "derived_from": self.derived_from,
             "read_only": True,
         }
 
@@ -85,12 +100,51 @@ def load_source(
     symbol: str,
     timeframe: str = "M5",
     *,
+    source: str = "broker",
     config: DataQualityConfig | None = None,
     root: Path = ROOT,
 ) -> LoadedSource:
     """Carga una fuente configurada y la devuelve en UTC. Nunca escribe."""
+    source_key = normalize_source(source)
     config = config or load_engine_config().data_quality
     spec = config.source_for(symbol)
+    if source_key == "dukascopy":
+        from .fetch_dukascopy import cache_path as dukascopy_path
+        from .fetch_dukascopy import load_cache as load_dukascopy
+        from .resample import resample_session
+
+        path = dukascopy_path(symbol, root=root)
+        if not path.exists():
+            raise DataSourceError(f"Sin datos: no existe {path}")
+        try:
+            m1 = load_dukascopy(symbol, root=root)
+        except Exception as exc:  # noqa: BLE001
+            raise DataSourceError(str(exc)) from exc
+        frame = (
+            m1
+            if str(timeframe).upper() == "M1"
+            else resample_session(m1, timeframe)
+        )
+        calendar = spec.calendar
+        if str(symbol).upper() in {"US100", "US500", "US30"}:
+            calendar = "nyse"
+        path_text = (
+            path.relative_to(root).as_posix() if path.is_relative_to(root) else str(path)
+        )
+        return LoadedSource(
+            symbol=str(symbol).upper(),
+            timeframe=str(timeframe).upper(),
+            path=path_text,
+            timezone="UTC",
+            calendar=calendar,
+            rows_raw=int(len(m1)),
+            rows=int(len(frame)),
+            adjusted=0,
+            dropped=0,
+            frame=frame,
+            source="dukascopy",
+            derived_from="M1" if str(timeframe).upper() != "M1" else None,
+        )
     discovery = (
         root
         / "data"
@@ -134,12 +188,15 @@ def load_source(
         adjusted=int(adjusted),
         dropped=int(dropped),
         frame=utc,
+        source="broker",
     )
 
 
 __all__ = [
+    "DATA_SOURCES",
     "DataSourceError",
     "LoadedSource",
     "load_source",
+    "normalize_source",
     "resolve_path",
 ]

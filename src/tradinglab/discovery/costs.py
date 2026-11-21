@@ -71,6 +71,10 @@ class CostApplication:
     cost_by_account: dict[str, float | None]
     worst_account: str | None
     worst_share: float
+    best_account: str | None
+    best_share: float
+    selected_account: str | None
+    selected_share: float
 
 
 def _canonical_instrument(instrument: str) -> str:
@@ -100,12 +104,12 @@ def eligible_cost_accounts(instrument: str) -> list[str]:
 def resolve_cost_accounts(
     instrument: str,
     cost_accounts: Iterable[str] | None = None,
-    cost_mode: str = "worst",
+    cost_mode: str = "best",
 ) -> tuple[list[str], str]:
     """Valida la lista de cuentas y el modo; devuelve (cuentas, modo)."""
 
-    mode = str(cost_mode or "worst").strip().lower()
-    if mode not in {"worst", "target"}:
+    mode = str(cost_mode or "best").strip().lower()
+    if mode not in {"worst", "best", "target"}:
         raise ValueError(f"cost_mode desconocido: {cost_mode}")
     canonical = _canonical_instrument(instrument)
     registry = load_registry()
@@ -323,7 +327,7 @@ class CostBook:
             raise ValueError("Sin datos: CostBook sin cuentas")
         self.accounts = list(accounts)
         self.mode = str(mode).lower()
-        if self.mode not in {"worst", "target"}:
+        if self.mode not in {"worst", "best", "target"}:
             raise ValueError(f"cost_mode desconocido: {mode}")
         if self.mode == "target" and len(self.accounts) != 1:
             raise ValueError("target exige exactamente una cuenta")
@@ -344,10 +348,11 @@ class CostBook:
             assert self._worst_panel is not None
             return self._worst_panel
         panels = [item.panel(bars) for item in self.accounts]
-        entry = np.max(np.vstack([item.entry_bps for item in panels]), axis=0)
-        stop = np.max(np.vstack([item.stop_bps for item in panels]), axis=0)
-        target = np.max(np.vstack([item.target_bps for item in panels]), axis=0)
-        spread = np.max(np.vstack([item.spread_bps for item in panels]), axis=0)
+        reducer = np.min if self.mode == "best" else np.max
+        entry = reducer(np.vstack([item.entry_bps for item in panels]), axis=0)
+        stop = reducer(np.vstack([item.stop_bps for item in panels]), axis=0)
+        target = reducer(np.vstack([item.target_bps for item in panels]), axis=0)
+        spread = reducer(np.vstack([item.spread_bps for item in panels]), axis=0)
         self._panels = panels
         self._bars_id = id(bars)
         self._worst_panel = fastbt.CostPanel(
@@ -370,7 +375,9 @@ class CostBook:
         tz = str(session_tz or self.session_tz)
         adjusted: list[fastbt.Trade] = []
         cost_values: dict[str, list[float]] = {item.account: [] for item in self.accounts}
+        best_flags: list[str | None] = []
         worst_flags: list[str | None] = []
+        selected_flags: list[str | None] = []
         for trade in trades:
             per_account: dict[str, tuple[float, float, float]] = {}
             for item, panel in zip(self.accounts, self._panels):
@@ -388,10 +395,19 @@ class CostBook:
                 cost_values[item.account].append(rc)
             if not per_account:
                 adjusted.append(trade)
+                best_flags.append(None)
                 worst_flags.append(None)
+                selected_flags.append(None)
                 continue
-            worst_account = max(per_account, key=lambda name: per_account[name][0])
-            rc, entry_bps, exit_bps = per_account[worst_account]
+            best_name = min(per_account, key=lambda name: per_account[name][0])
+            worst_name = max(per_account, key=lambda name: per_account[name][0])
+            if self.mode == "best":
+                selected_name = best_name
+            elif self.mode == "worst":
+                selected_name = worst_name
+            else:
+                selected_name = self.accounts[0].account
+            rc, entry_bps, exit_bps = per_account[selected_name]
             r_net = trade.r_gross - rc if trade.r_gross is not None else None
             adjusted.append(
                 replace(
@@ -402,7 +418,9 @@ class CostBook:
                     r_net=r_net,
                 )
             )
-            worst_flags.append(worst_account)
+            best_flags.append(best_name)
+            worst_flags.append(worst_name)
+            selected_flags.append(selected_name)
         daily: dict[Any, float] = {}
         for trade in adjusted:
             if trade.r_net is None or not np.isfinite(float(trade.r_net)):
@@ -417,29 +435,38 @@ class CostBook:
             name: (float(np.median(values)) if values else None)
             for name, values in cost_values.items()
         }
+        valid = {
+            name: value for name, value in cost_by_account.items() if value is not None
+        }
         if self.mode == "target":
-            worst_account = self.accounts[0].account
+            best_account = self.accounts[0].account
+            worst_account = best_account
+            selected_account = best_account
         else:
-            valid = {
-                name: value
-                for name, value in cost_by_account.items()
-                if value is not None
-            }
-            worst_account = (
-                max(valid, key=lambda name: valid[name]) if valid else None
+            best_account = min(valid, key=lambda name: valid[name]) if valid else None
+            worst_account = max(valid, key=lambda name: valid[name]) if valid else None
+            selected_account = (
+                best_account if self.mode == "best" else worst_account
             )
-        valid_flags = [name for name in worst_flags if name is not None]
-        worst_share = (
-            sum(1 for name in valid_flags if name == worst_account) / len(valid_flags)
-            if valid_flags and worst_account is not None
-            else 0.0
-        )
+        valid_best = [name for name in best_flags if name is not None]
+        valid_worst = [name for name in worst_flags if name is not None]
+        valid_selected = [name for name in selected_flags if name is not None]
+
+        def _share(values: list[str], account: str | None) -> float:
+            if not values or account is None:
+                return 0.0
+            return sum(1 for name in values if name == account) / len(values)
+
         return CostApplication(
             trades=adjusted,
             daily_r=daily_r,
             cost_by_account=cost_by_account,
             worst_account=worst_account,
-            worst_share=worst_share,
+            worst_share=_share(valid_worst, worst_account),
+            best_account=best_account,
+            best_share=_share(valid_best, best_account),
+            selected_account=selected_account,
+            selected_share=_share(valid_selected, selected_account),
         )
 
 
@@ -447,7 +474,7 @@ def build_cost_book(
     instrument: str,
     *,
     accounts: Iterable[str] | None = None,
-    mode: str = "worst",
+    mode: str = "best",
     session_tz: str = "America/New_York",
     db_path: str | Path | None = None,
     config: EngineConfig | None = None,
@@ -484,8 +511,9 @@ def apply_result(
     *,
     session_tz: str,
     point: float = 0.01,
+    max_cost_r: float | None = None,
 ) -> tuple[CostApplication, dict[str, Any]]:
-    """Aplica el peor por operación y devuelve métricas con metadatos."""
+    """Aplica el coste del modo y devuelve métricas con metadatos."""
 
     from . import metrics as metrics_module
 
@@ -502,8 +530,20 @@ def apply_result(
     payload["cost_by_account"] = applied.cost_by_account
     payload["worst_account"] = applied.worst_account
     payload["worst_share"] = applied.worst_share
+    payload["best_account"] = applied.best_account
+    payload["best_share"] = applied.best_share
+    payload["selected_account"] = applied.selected_account
+    payload["selected_share"] = applied.selected_share
     payload["cost_accounts"] = book.account_ids
     payload["cost_mode"] = book.mode
+    payload["cost_viable_by_account"] = {
+        name: (
+            None
+            if value is None or max_cost_r is None
+            else bool(float(value) <= float(max_cost_r))
+        )
+        for name, value in applied.cost_by_account.items()
+    }
     payload["slippage_assumption"] = {
         item.instrument: {
             "value": item.assumed_slippage,

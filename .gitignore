@@ -7,6 +7,7 @@ data/cache/
 data/*.db
 data/*.db-*
 data/discovery.db*
+data/discovery/
 data/guardian.json
 data/task_missed_seen.json
 data/agent_runs/
