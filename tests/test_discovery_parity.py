@@ -34,9 +34,9 @@ SIGNAL_TS = pd.Timestamp("2024-01-10 09:55", tz="UTC")
 END_TS = pd.Timestamp("2024-01-10 16:00", tz="UTC")
 
 
-def _walk(n: int = 400, seed: int = 3) -> pd.DataFrame:
+def _walk(n: int = 400, seed: int = 3, freq: str = "5min") -> pd.DataFrame:
     rng = np.random.default_rng(seed)
-    index = pd.date_range("2024-01-10 14:00", periods=n, freq="5min", tz="UTC")
+    index = pd.date_range("2024-01-10 14:00", periods=n, freq=freq, tz="UTC")
     close = 100.0 + np.cumsum(rng.normal(0.0, 0.05, n))
     open_ = np.r_[close[0], close[:-1]]
     high = np.maximum(open_, close) + 0.02
@@ -80,9 +80,20 @@ def _one_signal(bars: pd.DataFrame, side: str) -> tuple[np.ndarray, np.ndarray]:
     return long, short
 
 
-def test_series_returns_match_backtest_intraday() -> None:
-    bars = _walk()
-    n = len(bars)
+@pytest.mark.parametrize(
+    ("timeframe", "freq", "n"),
+    [
+        ("M1", "1min", 600),
+        ("M5", "5min", 400),
+        ("M15", "15min", 400),
+        ("H1", "1h", 400),
+        ("D1", "1D", 360),
+    ],
+)
+def test_series_returns_match_backtest_intraday(
+    timeframe: str, freq: str, n: int
+) -> None:
+    bars = _walk(n=n, freq=freq)
     signal = np.zeros(n, dtype=bool)
     signal[10:60] = True
     signal[100:160] = True
@@ -92,7 +103,7 @@ def test_series_returns_match_backtest_intraday() -> None:
     reference = backtest_intraday(
         bars,
         target,
-        timeframe="M5",
+        timeframe=timeframe,
         commission_bps=1.0,
         slippage_bps=2.0,
         spread_override_bps=10.0,
@@ -272,10 +283,19 @@ def test_event_matches_run_event_backtest_hourly_spread() -> None:
     )
 
 
-def test_numba_and_python_identical() -> None:
+@pytest.mark.parametrize(
+    ("timeframe", "freq"),
+    [
+        ("M1", "1min"),
+        ("M15", "15min"),
+        ("H1", "1h"),
+        ("D1", "1D"),
+    ],
+)
+def test_numba_and_python_identical(timeframe: str, freq: str) -> None:
     if not HAVE_NUMBA:
         pytest.skip("numba no está instalado")
-    bars = _walk(n=300, seed=11)
+    bars = _walk(n=300, seed=11, freq=freq)
     n = len(bars)
     signal = np.zeros(n, dtype=bool)
     signal[20:60] = True
@@ -294,7 +314,11 @@ def test_numba_and_python_identical() -> None:
     )
     cost = cfd_costs_from_bps(commission_bps=0.5, slippage_bps=1.0, spread_bps=4.0)
     limits = RunLimits(
-        session_tz="UTC", weekdays=WEEK, max_trades_per_day=2, close_at_end=True
+        session_tz="UTC",
+        weekdays=WEEK,
+        max_trades_per_day=2,
+        close_at_end=True,
+        allow_next_day_entry=timeframe == "D1",
     )
 
     set_backend("python")

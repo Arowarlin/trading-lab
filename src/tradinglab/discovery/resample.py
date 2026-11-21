@@ -17,16 +17,9 @@ from zoneinfo import ZoneInfo
 import numpy as np
 import pandas as pd
 
-TIMEFRAMES = ("M1", "M5", "M15", "M30", "H1", "H4", "D1")
-_TF_MINUTES = {
-    "M1": 1,
-    "M5": 5,
-    "M15": 15,
-    "M30": 30,
-    "H1": 60,
-    "H4": 240,
-    "D1": 1440,
-}
+from .timeframes import TIMEFRAMES, TimeframeError
+from .timeframes import timeframe_minutes as _tf_minutes
+
 _NY = "America/New_York"
 _CUT_HOUR = 17
 
@@ -46,11 +39,10 @@ def _utc_index(index: pd.Index) -> pd.DatetimeIndex:
 
 
 def timeframe_minutes(timeframe: str) -> int:
-    key = str(timeframe or "").strip().upper()
-    if key not in _TF_MINUTES:
-        valid = ", ".join(TIMEFRAMES)
-        raise ResampleError(f"timeframe no soportado: {timeframe!r}; usa {valid}")
-    return _TF_MINUTES[key]
+    try:
+        return _tf_minutes(timeframe)
+    except TimeframeError as exc:
+        raise ResampleError(str(exc)) from exc
 
 
 def session_labels(

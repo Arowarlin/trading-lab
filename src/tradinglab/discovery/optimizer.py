@@ -20,6 +20,7 @@ EXIT_STEPS = {
     "stop.value": 0.1,
     "target.rr": 0.1,
     "target.value": 0.1,
+    "time_exit_minutes": 60,
     "time_exit_bars": 12,
     "session.start": 5,
     "session.end": 5,
@@ -130,7 +131,11 @@ def _parameters(strategy: dict[str, Any]) -> list[dict[str, Any]]:
         exit_parameters.append(("target.rr", EXIT_STEPS["target.rr"]))
     elif target_block.get("value") is not None:
         exit_parameters.append(("target.value", EXIT_STEPS["target.value"]))
-    if exit_block.get("time_exit_bars") is not None:
+    if exit_block.get("time_exit_minutes") is not None:
+        exit_parameters.append(
+            ("time_exit_minutes", float(EXIT_STEPS["time_exit_minutes"]))
+        )
+    elif exit_block.get("time_exit_bars") is not None:
         exit_parameters.append(
             ("time_exit_bars", float(EXIT_STEPS["time_exit_bars"]))
         )
@@ -146,7 +151,7 @@ def _parameters(strategy: dict[str, Any]) -> list[dict[str, Any]]:
                 "step": step,
                 "low": 0.0,
                 "high": 10_000.0,
-                "integer": key == "time_exit_bars",
+                "integer": key in {"time_exit_bars", "time_exit_minutes"},
             }
         )
     for key in ("session.start", "session.end"):
@@ -254,7 +259,7 @@ def plateau(
             value = float(current) + delta
             if value < parameter["low"] or value > parameter["high"]:
                 continue
-            if parameter["path"] == "time_exit_bars" and value < 1:
+            if parameter["path"] in {"time_exit_bars", "time_exit_minutes"} and value < 1:
                 continue
             variant = copy.deepcopy(base)
             _set_value(variant, parameter, value)

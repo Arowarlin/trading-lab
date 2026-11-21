@@ -57,6 +57,19 @@ def test_config_real_tiene_los_valores_de_la_fase_0() -> None:
     assert config.validation.min_trades_is == 100
     assert config.validation.min_trades_fold == 15
     assert config.validation.folds == 4
+    assert set(config.validation.by_timeframe) == {
+        "M1",
+        "M5",
+        "M15",
+        "M30",
+        "H1",
+        "H4",
+        "D1",
+    }
+    assert config.validation.for_timeframe("M1").min_trades_is == 200
+    assert config.validation.for_timeframe("M15").min_trades_fold == 10
+    assert config.validation.for_timeframe("H4").folds == 3
+    assert config.validation.for_timeframe("D1").min_trades_is == 15
     assert config.validation.finalists_max == 5
     assert config.validation.corr_cluster == pytest.approx(0.7)
     assert config.perturb.noise_paths == 500

@@ -19,6 +19,7 @@ from .config import load_engine_config
 from .dsl import (
     COMPARE,
     CROSS,
+    HTF_TIMEFRAMES,
     LOGICAL,
     DslError,
     Expr,
@@ -28,12 +29,9 @@ from .dsl import (
     validate,
 )
 from .indicator_cache import MISSING, IndicatorCache
+from .resample import resample_session
+from .timeframes import bar_delta, minutes_to_bars
 
-_HTF_RULES = {
-    "M15": ("15min", pd.Timedelta(minutes=15)),
-    "H1": ("1h", pd.Timedelta(hours=1)),
-    "H4": ("4h", pd.Timedelta(hours=4)),
-}
 _WEEKDAY = {"mon": 0, "tue": 1, "wed": 2, "thu": 3, "fri": 4, "sat": 5, "sun": 6}
 
 
@@ -82,28 +80,20 @@ def _require_bars(bars: pd.DataFrame) -> pd.DataFrame:
     return bars
 
 
-def _aggregations(bars: pd.DataFrame) -> dict[str, str]:
-    aggregations = {"open": "first", "high": "max", "low": "min", "close": "last"}
-    for column in ("tickvol", "volume"):
-        if column in bars.columns:
-            aggregations[column] = "sum"
-    return aggregations
-
-
 def _htf_bars(bars: pd.DataFrame, tf: str, tz: str) -> tuple[pd.DataFrame, pd.Timedelta]:
-    aggregations = _aggregations(bars)
-    if tf == "D1":
-        local = bars.index.tz_convert(tz)
-        keys = local.normalize()
-        htf = bars.groupby(keys).agg(aggregations).dropna()
-        htf.index = pd.DatetimeIndex(htf.index).tz_convert("UTC")
-        return htf, pd.Timedelta(days=1)
+    """Agrega a la TF superior con la misma sesión 17:00 NY que las campañas.
+
+    ``tz`` se mantiene en la firma por compatibilidad; la rejilla HTF usa la
+    sesión FX/CFD de Nueva York, igual que ``discovery.resample``.
+    """
+
+    if tf not in HTF_TIMEFRAMES:
+        raise DslError(f"timeframe HTF no soportado: {tf}")
     try:
-        rule, duration = _HTF_RULES[tf]
-    except KeyError as exc:
-        raise DslError(f"timeframe HTF no soportado: {tf}") from exc
-    htf = bars.resample(rule, label="left", closed="left").agg(aggregations).dropna()
-    return htf, duration
+        htf = resample_session(bars, tf)
+    except Exception as exc:  # noqa: BLE001
+        raise DslError(f"HTF {tf}: {exc}") from exc
+    return htf, bar_delta(tf)
 
 
 def _htf_positions(
@@ -429,10 +419,12 @@ def compile(
         short_entry = short_values.to_numpy(dtype=bool)
     else:
         short_entry = zeros.copy()
+    warmup_bars = minutes_to_bars(model.warmup_minutes or 0, model.timeframe)
     valid_from = min(
         max(
             _warmup(model.long_entry, bars, tz, model),
             _warmup(model.short_entry, bars, tz, model),
+            warmup_bars,
         ),
         length,
     )

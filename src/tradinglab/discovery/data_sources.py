@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -21,6 +22,7 @@ import pandas as pd
 
 from ..config import ROOT
 from .config import DataQualityConfig, SourceConfig, load_engine_config
+from .timeframes import normalize_timeframe, timeframe_minutes
 
 DATA_SOURCES = ("broker", "dukascopy")
 
@@ -96,6 +98,77 @@ def _localize(index: pd.DatetimeIndex, timezone: str) -> tuple[pd.DatetimeIndex,
     return localized, adjusted, dropped
 
 
+_PATH_TF = re.compile(r"_(M\d+|H\d+|D\d+)(?:_|$)")
+
+
+def _path_timeframe(path: str) -> str | None:
+    match = _PATH_TF.search(Path(str(path)).stem.upper())
+    if match is None:
+        return None
+    try:
+        return normalize_timeframe(match.group(1))
+    except ValueError:
+        return None
+
+
+def _read_frame(
+    path: Path, timezone: str
+) -> tuple[pd.DataFrame, int, int, int]:
+    """Lee un parquet, lo localiza y devuelve (UTC, filas, ajustadas, descartadas)."""
+    try:
+        frame = pd.read_parquet(path)
+    except Exception as exc:  # noqa: BLE001
+        raise DataSourceError(
+            f"Sin datos: no se pudo leer {path} ({type(exc).__name__}: {exc})"
+        ) from exc
+    frame = frame.copy()
+    frame.columns = [str(column).lower() for column in frame.columns]
+    rows_raw = int(len(frame))
+    index = pd.DatetimeIndex(pd.to_datetime(frame.index))
+    localized, adjusted, dropped = _localize(index, timezone)
+    mask = ~localized.isna()
+    frame = frame.loc[mask]
+    frame.index = localized[mask]
+    frame.index.name = "ts"
+    frame = frame.sort_index()
+    utc = frame.copy()
+    utc.index = utc.index.tz_convert("UTC")
+    return utc, rows_raw, adjusted, dropped
+
+
+def _broker_candidates(
+    config: DataQualityConfig,
+    symbol: str,
+    timeframe: str,
+    *,
+    spec: SourceConfig | None = None,
+) -> list[tuple[SourceConfig, str]]:
+    """Parejas (spec, TF de origen) posibles, de la más fina/antigua a la exacta."""
+
+    target = normalize_timeframe(timeframe)
+    spec = spec or config.source_for(symbol)
+    embedded = _path_timeframe(spec.path) if "{tf}" not in spec.path else target
+    candidates: list[tuple[SourceConfig, str]] = []
+    if embedded is not None:
+        try:
+            source_minutes = timeframe_minutes(embedded)
+        except ValueError:
+            source_minutes = timeframe_minutes(target)
+        if source_minutes <= timeframe_minutes(target):
+            candidates.append((spec, embedded))
+    default = config.sources.get("default")
+    if default is not None and default.path != spec.path:
+        candidates.append(
+            (
+                default.model_copy(update={"calendar": spec.calendar}),
+                target,
+            )
+        )
+    if not candidates:
+        candidates.append((spec, target))
+    return candidates
+
+
 def load_source(
     symbol: str,
     timeframe: str = "M5",
@@ -156,39 +229,57 @@ def load_source(
         spec = spec.model_copy(
             update={"path": str(discovery), "timezone": "UTC"}
         )
-    path = resolve_path(spec, symbol, timeframe, root=root)
-    if not path.exists():
-        raise DataSourceError(f"Sin datos: no existe {path}")
-    try:
-        frame = pd.read_parquet(path)
-    except Exception as exc:
-        raise DataSourceError(
-            f"Sin datos: no se pudo leer {path} ({type(exc).__name__}: {exc})"
-        ) from exc
-    frame = frame.copy()
-    frame.columns = [str(column).lower() for column in frame.columns]
-    rows_raw = int(len(frame))
-    index = pd.DatetimeIndex(pd.to_datetime(frame.index))
-    localized, adjusted, dropped = _localize(index, spec.timezone)
-    mask = ~localized.isna()
-    frame = frame.loc[mask]
-    frame.index = localized[mask]
-    frame.index.name = "ts"
-    frame = frame.sort_index()
-    utc = frame.copy()
-    utc.index = utc.index.tz_convert("UTC")
+    candidates = _broker_candidates(config, symbol, timeframe, spec=spec)
+    loaded: list[tuple[SourceConfig, str, Path, pd.DataFrame, int, int, int]] = []
+    missing: list[Path] = []
+    for candidate_spec, source_tf in candidates:
+        path = resolve_path(candidate_spec, symbol, source_tf, root=root)
+        if not path.exists():
+            missing.append(path)
+            continue
+        try:
+            utc, rows_raw, adjusted, dropped = _read_frame(
+                path, candidate_spec.timezone
+            )
+        except DataSourceError:
+            raise
+        loaded.append(
+            (candidate_spec, source_tf, path, utc, rows_raw, adjusted, dropped)
+        )
+    if not loaded:
+        expected = missing[0] if missing else resolve_path(spec, symbol, timeframe, root=root)
+        raise DataSourceError(f"Sin datos: no existe {expected}")
+
+    # Se prefiere la fuente con más historia; si empatan, la más fina.
+    candidate_spec, source_tf, path, raw, rows_raw, adjusted, dropped = min(
+        loaded,
+        key=lambda item: (
+            item[3].index[0] if len(item[3]) else pd.Timestamp.max.tz_localize("UTC"),
+            timeframe_minutes(item[1]),
+        ),
+    )
+    target = normalize_timeframe(timeframe)
+    if source_tf != target:
+        from .resample import resample_session
+
+        frame = resample_session(raw, target)
+        derived_from = source_tf
+    else:
+        frame = raw
+        derived_from = None
     return LoadedSource(
         symbol=str(symbol).upper(),
-        timeframe=str(timeframe).upper(),
+        timeframe=target,
         path=path.relative_to(root).as_posix() if path.is_relative_to(root) else str(path),
-        timezone=spec.timezone,
-        calendar=spec.calendar,
+        timezone=candidate_spec.timezone,
+        calendar=candidate_spec.calendar,
         rows_raw=int(rows_raw),
-        rows=int(len(utc)),
+        rows=int(len(frame)),
         adjusted=int(adjusted),
         dropped=int(dropped),
-        frame=utc,
+        frame=frame,
         source="broker",
+        derived_from=derived_from,
     )
 
 

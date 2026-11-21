@@ -17,6 +17,7 @@ from ..config import ROOT
 from . import dsl
 from .blocks import BLOCKS, get_block
 from .mirror import mirror_expr
+from .timeframes import normalize_timeframe
 
 BOOL_KINDS = {"and", "or", "not", "gt", "lt", "ge", "le", "between", "cross_up", "cross_down",
               "held_for", "within_bars", "time_between", "weekday_in", "pattern", "regime", "htf"}
@@ -60,6 +61,24 @@ def configured_template(
         )
         strategy["session"] = merged
     return strategy
+
+
+def template_timeframes(name: str) -> tuple[str, ...]:
+    """Temporalidades compatibles declaradas por la plantilla."""
+
+    path = TEMPLATE_DIR / f"{name}.yaml"
+    if not path.exists():
+        raise FileNotFoundError(f"Sin datos: no existe la plantilla {name}")
+    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    raw = data.get("timeframes")
+    if not isinstance(raw, list) or not raw:
+        raise ValueError(f"la plantilla {name} no declara timeframes")
+    result: list[str] = []
+    for item in raw:
+        key = normalize_timeframe(str(item))
+        if key not in result:
+            result.append(key)
+    return tuple(result)
 
 
 def template_symmetric(name: str) -> bool:
@@ -385,7 +404,8 @@ def mutate_exit(
             }
         )
     elif action == "time":
-        exit_block["time_exit_bars"] = rng.choice([12, 24, 36, 48, 72, 96])
+        exit_block.pop("time_exit_bars", None)
+        exit_block["time_exit_minutes"] = rng.choice([60, 120, 180, 240, 360, 480])
     else:
         exit_block["opposite_signal"] = not bool(exit_block.get("opposite_signal"))
     if symmetric:
@@ -521,7 +541,7 @@ def random_strategy(
                 "n": rng.choice([14, 20]),
             },
             "target": {"type": "rr", "rr": round(rng.uniform(1.0, 3.0), 2)},
-            "time_exit_bars": rng.choice([24, 48, 72]),
+            "time_exit_minutes": rng.choice([120, 240, 360]),
         }
         if symmetric:
             _enforce_symmetry(data)
@@ -543,7 +563,7 @@ def random_strategy(
                 "n": 14,
             },
             "target": {"type": "rr", "rr": round(rng.uniform(1.0, 3.0), 2)},
-            "time_exit_bars": rng.choice([24, 48, 72]),
+            "time_exit_minutes": rng.choice([120, 240, 360]),
         }
         if symmetric:
             _enforce_symmetry(data)
@@ -594,5 +614,6 @@ __all__ = [
     "random_strategy",
     "template_strategy",
     "template_symmetric",
+    "template_timeframes",
     "tournament_offspring",
 ]

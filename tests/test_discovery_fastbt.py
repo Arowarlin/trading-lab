@@ -80,6 +80,54 @@ def test_flat_at_uses_instrument_timezone() -> None:
     assert trade.exit_price == 100.5
 
 
+def test_overnight_session_flat_no_marca_la_tarde() -> None:
+    bars = _frame(n=220, start="2024-01-10 23:00")
+    signals = _signals(bars, ["2024-01-11 07:50"])  # 02:50 NY, tras flat 02:45
+    result = run(
+        signals,
+        bars,
+        ExitSpec(stop="pct", stop_mult=0.1, target="rr", target_rr=0.1),
+        _cost(),
+        _limits(
+            session_tz="America/New_York",
+            session_start="18:00",
+            session_end="03:00",
+            flat_at="02:45",
+        ),
+    )
+    assert result.trades == []
+
+
+def test_overnight_session_max_trades_cuenta_la_sesion_que_empezo_ayer() -> None:
+    bars = _frame(n=420, start="2024-01-10 23:00")
+    signals = _signals(
+        bars,
+        [
+            "2024-01-10 23:30",  # 18:30 NY, sesión del 10
+            "2024-01-11 05:30",  # 00:30 NY, misma sesión del 10
+            "2024-01-11 23:30",  # 18:30 NY, sesión del 11
+        ],
+    )
+    result = run(
+        signals,
+        bars,
+        ExitSpec(stop="pct", stop_mult=0.1, target="rr", target_rr=0.1),
+        _cost(),
+        _limits(
+            session_tz="America/New_York",
+            session_start="18:00",
+            session_end="03:00",
+            flat_at="02:45",
+            max_trades_per_day=1,
+        ),
+    )
+    entries = [trade.entry_time for trade in result.trades]
+    assert entries == [
+        pd.Timestamp("2024-01-10 23:35", tz="UTC"),
+        pd.Timestamp("2024-01-11 23:35", tz="UTC"),
+    ]
+
+
 def test_session_blocks_entries_but_allows_exits() -> None:
     bars = _frame(n=110, start="2024-01-10 13:00")
     bars.loc[pd.Timestamp("2024-01-10 16:45", tz="UTC"), "high"] = 101.0
@@ -439,14 +487,17 @@ def test_compiler_signals_integration() -> None:
 
 
 def _bias_dataset(
-    n: int = 400_000, seed: int = 20261120
+    n: int = 400_000,
+    seed: int = 20261120,
+    freq: str = "5min",
+    sigma: float = 0.001,
 ) -> tuple[pd.DataFrame, Signals]:
     rng = np.random.default_rng(seed)
-    index = pd.date_range("2023-01-02", periods=n, freq="5min", tz="UTC")
-    steps = rng.normal(0.0, 0.001, n)
+    index = pd.date_range("2023-01-02", periods=n, freq=freq, tz="UTC")
+    steps = rng.normal(0.0, sigma, n)
     close = 100.0 * np.exp(np.cumsum(steps))
     open_ = np.r_[close[0], close[:-1]]
-    span = np.abs(rng.normal(0.0, 0.0005, n))
+    span = np.abs(rng.normal(0.0, sigma / 2.0, n))
     high = np.maximum(open_, close) * (1.0 + span)
     low = np.minimum(open_, close) * (1.0 - span)
     bars = pd.DataFrame(
@@ -473,28 +524,62 @@ def test_signals_is_compiler_alias() -> None:
     assert fastbt.Signals is compiler.Signals
 
 
-def test_bias_zero_cost_random_walk() -> None:
-    bars, signals = _bias_dataset()
+@pytest.mark.parametrize(
+    ("freq", "n", "sigma", "barrier"),
+    [
+        ("1min", 300_000, 0.00045, 0.5),
+        ("5min", 100_000, 0.0010, 0.5),
+        ("15min", 60_000, 0.0017, 0.5),
+        ("1h", 20_000, 0.0028, 0.5),
+        ("1D", 20_000, 0.0045, 1.0),
+    ],
+)
+def test_bias_zero_cost_random_walk(
+    freq: str, n: int, sigma: float, barrier: float
+) -> None:
+    bars, signals = _bias_dataset(n=n, freq=freq, sigma=sigma)
     result = run(
         signals,
         bars,
-        ExitSpec(stop="pct", stop_mult=0.5, target="pct", target_pct=0.5),
+        ExitSpec(stop="pct", stop_mult=barrier, target="pct", target_pct=barrier),
         cfd_costs_from_bps(commission_bps=0.0, slippage_bps=0.0, spread_bps=0.0),
-        RunLimits(session_tz="UTC", weekdays=WEEK, close_at_end=False),
+        RunLimits(
+            session_tz="UTC",
+            weekdays=WEEK,
+            close_at_end=False,
+            allow_next_day_entry=freq == "1D",
+        ),
     )
     count, _mean, t_stat = _bias_stats(result)
     assert count >= 2_000
     assert abs(t_stat) < 3.0
 
 
-def test_bias_costs_make_expectancy_negative() -> None:
-    bars, signals = _bias_dataset()
+@pytest.mark.parametrize(
+    ("freq", "n", "sigma", "barrier"),
+    [
+        ("1min", 300_000, 0.00045, 0.5),
+        ("5min", 100_000, 0.0010, 0.5),
+        ("15min", 60_000, 0.0017, 0.5),
+        ("1h", 20_000, 0.0028, 0.5),
+        ("1D", 20_000, 0.0045, 1.0),
+    ],
+)
+def test_bias_costs_make_expectancy_negative(
+    freq: str, n: int, sigma: float, barrier: float
+) -> None:
+    bars, signals = _bias_dataset(n=n, freq=freq, sigma=sigma)
     result = run(
         signals,
         bars,
-        ExitSpec(stop="pct", stop_mult=0.5, target="pct", target_pct=0.5),
+        ExitSpec(stop="pct", stop_mult=barrier, target="pct", target_pct=barrier),
         cfd_costs_from_bps(commission_bps=0.5, slippage_bps=1.0, spread_bps=2.0),
-        RunLimits(session_tz="UTC", weekdays=WEEK, close_at_end=False),
+        RunLimits(
+            session_tz="UTC",
+            weekdays=WEEK,
+            close_at_end=False,
+            allow_next_day_entry=freq == "1D",
+        ),
     )
     count, mean, _t_stat = _bias_stats(result)
     assert count >= 2_000

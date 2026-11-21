@@ -805,7 +805,8 @@ def run_campaign(
                 db_path=db_path,
             )
     feasible_count = sum(1 for item in known.values() if item.feasible)
-    candidates, discarded = _rank1_candidates(current, int(config.validation.folds))
+    folds = int(config.validation.for_timeframe(setup.timeframe).folds)
+    candidates, discarded = _rank1_candidates(current, folds)
     campaigns.mark_done(campaign_id, db_path=db_path)
     oos1: dict[int, dict[str, Any]] = {}
     selected: list[Individual] = []

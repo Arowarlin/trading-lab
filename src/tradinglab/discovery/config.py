@@ -12,6 +12,7 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from ..config import ROOT
+from .timeframes import TIMEFRAMES, normalize_timeframe
 
 ENGINE_PATH = ROOT / "config" / "discovery" / "engine.yaml"
 
@@ -44,6 +45,14 @@ class LimitsConfig(BaseModel):
         return self
 
 
+class TimeframeValidationConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    min_trades_is: int = Field(ge=1)
+    min_trades_fold: int = Field(ge=1)
+    folds: int = Field(ge=2, le=24)
+
+
 class ValidationConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -52,6 +61,39 @@ class ValidationConfig(BaseModel):
     folds: int = Field(ge=2, le=24)
     finalists_max: int = Field(ge=1, le=100)
     corr_cluster: float = Field(ge=-1.0, le=1.0)
+    # Valores congelados por TF antes de ver resultados. Si falta una TF se
+    # usan los tres campos de arriba (compatibilidad con tests y YAML viejos).
+    by_timeframe: dict[str, TimeframeValidationConfig] = Field(default_factory=dict)
+
+    @field_validator("by_timeframe")
+    @classmethod
+    def _known_timeframes(
+        cls, value: dict[str, TimeframeValidationConfig]
+    ) -> dict[str, TimeframeValidationConfig]:
+        clean: dict[str, TimeframeValidationConfig] = {}
+        for name, item in value.items():
+            key = normalize_timeframe(name)
+            if key in clean:
+                raise ValueError(f"timeframe repetido en validation.by_timeframe: {key}")
+            clean[key] = item
+        unknown = set(clean) - set(TIMEFRAMES)
+        if unknown:
+            raise ValueError(
+                "validation.by_timeframe con TF desconocidas: "
+                + ", ".join(sorted(unknown))
+            )
+        return clean
+
+    def for_timeframe(self, timeframe: str) -> TimeframeValidationConfig:
+        key = normalize_timeframe(timeframe)
+        return self.by_timeframe.get(
+            key,
+            TimeframeValidationConfig(
+                min_trades_is=self.min_trades_is,
+                min_trades_fold=self.min_trades_fold,
+                folds=self.folds,
+            ),
+        )
 
 
 class FitnessConfig(BaseModel):
@@ -290,6 +332,7 @@ __all__ = [
     "ProfileConfig",
     "RobustnessConfig",
     "SourceConfig",
+    "TimeframeValidationConfig",
     "ValidationConfig",
     "load_engine_config",
 ]
