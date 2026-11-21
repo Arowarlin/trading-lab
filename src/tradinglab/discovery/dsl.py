@@ -14,13 +14,29 @@ import re
 from typing import Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 
 from .config import load_engine_config
+from .timeframes import (
+    TIMEFRAMES as TF_ORDER,
+)
+from .timeframes import (
+    TimeframeError,
+    higher_timeframes,
+    is_higher,
+    normalize_timeframe,
+)
 
 HHMM = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
-TIMEFRAMES = {"M1", "M5", "M15", "H1", "H4", "D1"}
-HTF_TIMEFRAMES = {"M15", "H1", "H4", "D1"}
+TIMEFRAMES = set(TF_ORDER)
+HTF_TIMEFRAMES = set(higher_timeframes("M1"))
 WEEKDAYS = {"mon", "tue", "wed", "thu", "fri", "sat", "sun"}
 PRICE_FIELDS = {"open", "high", "low", "close", "range", "body"}
 LEVELS = {
@@ -130,8 +146,19 @@ class Exit(BaseModel):
     target: TargetSpec | None = Field(default_factory=TargetSpec)
     breakeven: dict[str, float] | None = None
     trailing: dict[str, float] | None = None
+    # ``time_exit_minutes`` es la unidad nueva. ``time_exit_bars`` se conserva
+    # solo para leer AST archivados; nunca se declaran ambos.
+    time_exit_minutes: int | None = Field(default=None, ge=1, le=525_600)
     time_exit_bars: int | None = Field(default=None, ge=1)
     opposite_signal: bool = False
+
+    @model_validator(mode="after")
+    def _one_time_unit(self) -> "Exit":
+        if self.time_exit_minutes is not None and self.time_exit_bars is not None:
+            raise ValueError(
+                "exit: usa time_exit_minutes o time_exit_bars, no los dos"
+            )
+        return self
 
 
 class Sizing(BaseModel):
@@ -144,7 +171,16 @@ class Limits(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     max_trades_per_day: int = Field(default=2, ge=0, le=100)
+    cooldown_minutes: int | None = Field(default=None, ge=0, le=525_600)
     cooldown_bars: int = Field(default=0, ge=0, le=1000)
+
+    @model_validator(mode="after")
+    def _one_cooldown_unit(self) -> "Limits":
+        if self.cooldown_minutes is not None and self.cooldown_bars:
+            raise ValueError(
+                "limits: usa cooldown_minutes o cooldown_bars, no los dos"
+            )
+        return self
 
 
 class Strategy(BaseModel):
@@ -154,6 +190,9 @@ class Strategy(BaseModel):
     instrument: str
     market: Literal["cfd", "futures"]
     timeframe: str
+    # Minutos de historia que deben existir antes de la primera señal. El
+    # compilador lo convierte a velas de ``timeframe``.
+    warmup_minutes: int | None = Field(default=None, ge=0, le=525_600)
     session: Session = Field(default_factory=Session)
     long_entry: Expr | None = None
     short_entry: Expr | None = None
@@ -172,10 +211,10 @@ class Strategy(BaseModel):
     @field_validator("timeframe")
     @classmethod
     def _timeframe(cls, value: str) -> str:
-        text = str(value or "").strip().upper()
-        if text not in TIMEFRAMES:
-            raise ValueError(f"timeframe no soportado: {value}")
-        return text
+        try:
+            return normalize_timeframe(value)
+        except TimeframeError as exc:
+            raise ValueError(str(exc)) from exc
 
 
 Expr.model_rebuild()
@@ -350,7 +389,12 @@ def _price_direction(expr: Expr | None, *, negated: bool = False) -> str | None:
     return None
 
 
-def _validate_expr(expr: Expr | None, errors: list[str], path: str = "expr") -> None:
+def _validate_expr(
+    expr: Expr | None,
+    errors: list[str],
+    path: str = "expr",
+    base_timeframe: str | None = None,
+) -> None:
     if expr is None:
         return
     kind = expr.kind
@@ -360,7 +404,12 @@ def _validate_expr(expr: Expr | None, errors: list[str], path: str = "expr") -> 
         if kind in {"and", "or"} and len(expr.args) < 2:
             errors.append(f"{path}.{kind} necesita al menos 2 argumentos")
         for index, item in enumerate(expr.args):
-            _validate_expr(item, errors, f"{path}.args[{index}]")
+            _validate_expr(
+                item,
+                errors,
+                f"{path}.args[{index}]",
+                base_timeframe=base_timeframe,
+            )
     elif kind in COMPARE:
         if kind == "between":
             if expr.left is None or expr.low is None or expr.high is None:
@@ -372,20 +421,33 @@ def _validate_expr(expr: Expr | None, errors: list[str], path: str = "expr") -> 
                 errors.append(f"{path}.{kind} necesita left y right")
             elif _same_node(expr.left, expr.right):
                 errors.append(f"{path}.{kind}: compara un nodo consigo mismo")
-        _validate_expr(expr.left, errors, f"{path}.left")
-        _validate_expr(expr.right, errors, f"{path}.right")
+        _validate_expr(
+            expr.left, errors, f"{path}.left", base_timeframe=base_timeframe
+        )
+        _validate_expr(
+            expr.right, errors, f"{path}.right", base_timeframe=base_timeframe
+        )
     elif kind in CROSS:
         if expr.left is None or expr.right is None:
             errors.append(f"{path}.{kind} necesita left y right")
         elif _same_node(expr.left, expr.right):
             errors.append(f"{path}.{kind}: cruza un nodo consigo mismo")
-        _validate_expr(expr.left, errors, f"{path}.left")
-        _validate_expr(expr.right, errors, f"{path}.right")
+        _validate_expr(
+            expr.left, errors, f"{path}.left", base_timeframe=base_timeframe
+        )
+        _validate_expr(
+            expr.right, errors, f"{path}.right", base_timeframe=base_timeframe
+        )
     elif kind in {"held_for", "within_bars"}:
         if len(expr.args) != 1 or expr.n is None or expr.n < 1:
             errors.append(f"{path}.{kind} necesita 1 condición y n >= 1")
         for index, item in enumerate(expr.args):
-            _validate_expr(item, errors, f"{path}.args[{index}]")
+            _validate_expr(
+                item,
+                errors,
+                f"{path}.args[{index}]",
+                base_timeframe=base_timeframe,
+            )
     elif kind == "time_between":
         if not expr.start or not expr.end or not HHMM.match(expr.start) or not HHMM.match(expr.end):
             errors.append(f"{path}.time_between necesita start/end HH:MM")
@@ -426,9 +488,16 @@ def _validate_expr(expr: Expr | None, errors: list[str], path: str = "expr") -> 
     elif kind == "htf":
         if expr.tf not in HTF_TIMEFRAMES:
             errors.append(f"{path}.htf: tf inválido {expr.tf}")
+        elif base_timeframe is not None and not is_higher(base_timeframe, expr.tf):
+            errors.append(
+                f"{path}.htf: {expr.tf} debe ser superior a "
+                f"{base_timeframe} (TF base)"
+            )
         if expr.expr is None:
             errors.append(f"{path}.htf necesita expr")
-        _validate_expr(expr.expr, errors, f"{path}.expr")
+        _validate_expr(
+            expr.expr, errors, f"{path}.expr", base_timeframe=base_timeframe
+        )
     elif kind in {"pattern", "regime"}:
         from .blocks import get_block
 
@@ -457,8 +526,12 @@ def validate(strategy: Strategy | dict) -> list[str]:
         errors.append(f"profundidad {depth(model)} > max_depth {limits.max_depth}")
     if not model.long_entry and not model.short_entry:
         errors.append("la estrategia no tiene entrada larga ni corta")
-    _validate_expr(model.long_entry, errors, "long_entry")
-    _validate_expr(model.short_entry, errors, "short_entry")
+    _validate_expr(
+        model.long_entry, errors, "long_entry", base_timeframe=model.timeframe
+    )
+    _validate_expr(
+        model.short_entry, errors, "short_entry", base_timeframe=model.timeframe
+    )
     long_direction = _price_direction(model.long_entry)
     short_direction = _price_direction(model.short_entry)
     if long_direction is not None and short_direction == long_direction:

@@ -129,6 +129,27 @@ def test_discovery_tiene_prioridad_sobre_mt5(tmp_path: Path) -> None:
     assert "data/cache/discovery" in loaded.path
 
 
+def test_broker_remuestrea_desde_tf_inferior(tmp_path: Path) -> None:
+    base = tmp_path / "history" / "TEST_M5.parquet"
+    base.parent.mkdir(parents=True)
+    _utc_frame(60).to_parquet(base)
+    config = load_engine_config().data_quality.model_copy(
+        update={
+            "sources": {
+                "default": SourceConfig(
+                    path=str(base), timezone="UTC", calendar=None
+                )
+            }
+        }
+    )
+    loaded = load_source("TEST", "M15", config=config, root=tmp_path)
+
+    assert loaded.timeframe == "M15"
+    assert loaded.derived_from == "M5"
+    assert loaded.rows < loaded.rows_raw
+    assert loaded.source == "broker"
+
+
 def test_sin_discovery_usa_mt5(tmp_path: Path) -> None:
     mt5 = tmp_path / "data" / "cache" / "mt5" / "EURUSD_M5.parquet"
     mt5.parent.mkdir(parents=True)

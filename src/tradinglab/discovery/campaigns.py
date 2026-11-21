@@ -35,7 +35,7 @@ import yaml
 
 from ..config import ROOT
 from ..db import connect
-from . import __version__, databank, grid, snapshots
+from . import __version__, databank, genetic, grid, snapshots
 from .config import load_engine_config
 from .data_quality import check_dataset, dataset_hash
 from .data_sources import (
@@ -43,6 +43,7 @@ from .data_sources import (
     load_source,
     normalize_source,
 )
+from .timeframes import TimeframeError, normalize_timeframe, timeframe_minutes
 
 SEGMENTS = ("is", "oos1", "oos2")
 
@@ -103,7 +104,7 @@ def _normalize_segments(
     return normalized
 
 
-def _template_session(template: str, instrument: str) -> dict[str, Any]:
+def template_session(template: str, instrument: str) -> dict[str, Any]:
     path = ROOT / "config" / "discovery" / "templates" / f"{template}.yaml"
     if not path.exists():
         raise CampaignError(f"Sin datos: no existe la plantilla {template}")
@@ -120,10 +121,28 @@ def _template_session(template: str, instrument: str) -> dict[str, Any]:
     }
 
 
+# Alias privado para el código de R2e/R2f que aún lo usa.
+_template_session = template_session
+
+
 def _source_frame(
     instrument: str, timeframe: str, data_source: str = "broker"
 ) -> pd.DataFrame:
-    return load_source(instrument, timeframe, source=data_source).frame
+    try:
+        return load_source(instrument, timeframe, source=data_source).frame
+    except DataSourceError as exc:
+        raise CampaignError(str(exc)) from exc
+
+
+def timeframe_source_error(timeframe: str, data_source: str) -> str | None:
+    """H4/D1 solo se descubren con historia Dukascopy, no con el bróker corto."""
+
+    if timeframe in {"H4", "D1"} and data_source != "dukascopy":
+        return (
+            f"{timeframe} exige datos de Dukascopy; el bróker no tiene "
+            "historia suficiente"
+        )
+    return None
 
 
 def campaign_data_source(campaign: dict[str, Any]) -> str:
@@ -229,16 +248,28 @@ def register(
     """Registra un borrador (o previsualiza con ``dry_run``)."""
 
     instrument = str(instrument or "").strip().upper()
-    timeframe = str(timeframe or "").strip().upper()
-    if not instrument or not timeframe:
-        raise CampaignError("instrument y timeframe son obligatorios")
+    if not instrument:
+        raise CampaignError("instrument es obligatorio")
+    try:
+        timeframe = normalize_timeframe(timeframe)
+        data_source = normalize_source(data_source)
+    except (TimeframeError, DataSourceError) as exc:
+        raise CampaignError(str(exc)) from exc
     mode = str(mode or "ga").strip().lower()
     if mode not in {"ga", "grid"}:
         raise CampaignError(f"modo desconocido: {mode}")
     try:
-        data_source = normalize_source(data_source)
-    except DataSourceError as exc:
+        allowed = genetic.template_timeframes(template)
+    except (ValueError, FileNotFoundError) as exc:
         raise CampaignError(str(exc)) from exc
+    if timeframe not in allowed:
+        raise CampaignError(
+            f"la plantilla {template} no declara {timeframe}; "
+            f"compatibles: {', '.join(allowed)}"
+        )
+    source_error = timeframe_source_error(timeframe, data_source)
+    if source_error is not None:
+        raise CampaignError(source_error)
     from . import costs as discovery_costs
 
     try:
@@ -259,7 +290,7 @@ def register(
         profile_config = engine.profile(profile)
     except KeyError as exc:
         raise CampaignError(str(exc)) from exc
-    session = _template_session(template, instrument)
+    session = template_session(template, instrument)
     grid_spec: dict[str, Any] | None = None
     if mode == "grid":
         try:
@@ -294,6 +325,7 @@ def register(
     config_payload: dict[str, Any] = {
         "instrument": instrument,
         "timeframe": timeframe,
+        "timeframe_minutes": timeframe_minutes(timeframe),
         "template": template,
         "profile": profile,
         "mode": mode,
@@ -882,5 +914,7 @@ __all__ = [
     "register",
     "register_synthetic",
     "supersede",
+    "template_session",
+    "timeframe_source_error",
     "total_tests",
 ]

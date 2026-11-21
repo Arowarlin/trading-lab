@@ -10240,6 +10240,88 @@ def discovery_feasibility_cmd(
         raise typer.Exit(1)
 
 
+@discovery_app.command("feasibility-scan")
+def discovery_feasibility_scan_cmd(
+    template: str = typer.Argument(
+        ..., help="Plantilla de config/discovery/templates"
+    ),
+    symbol: str = typer.Argument(..., help="Símbolo canónico, p. ej. US100"),
+    source: str = typer.Option(
+        "dukascopy", "--source", help="Fuente única: broker | dukascopy"
+    ),
+    account: str = typer.Option(
+        "CFD-001", "--account", help="Cuenta para cost_R"
+    ),
+    is_range: str = typer.Option(
+        None, "--is", help="Tramo IS como inicio:fin (por defecto, engine.yaml)"
+    ),
+) -> None:
+    """TF × factibilidad: solo operaciones y cost_R. Sin PnL ni DSR."""
+
+    from .discovery import feasibility
+
+    selected = None
+    if is_range:
+        start, _, end = str(is_range).partition(":")
+        if not start:
+            raise typer.BadParameter("--is necesita inicio:fin")
+        selected = (start, end or None)
+    try:
+        report = feasibility.scan(
+            template,
+            symbol,
+            source=source,
+            account=account,
+            is_range=selected,
+        )
+    except Exception as exc:  # noqa: BLE001
+        console.print(f"[red]Feasibility-scan imposible:[/red] {exc}")
+        raise typer.Exit(1) from exc
+    table = Table(
+        title=(
+            f"Discovery · feasibility-scan · {template} · {symbol.upper()} · "
+            f"{report['source']}"
+        )
+    )
+    table.add_column("TF")
+    table.add_column("Estado")
+    table.add_column("Estrategias", justify="right")
+    table.add_column("Ops IS", justify="right")
+    table.add_column("Ops/pliegue")
+    table.add_column("Cost_R", justify="right")
+    table.add_column("Velas", justify="right")
+    table.add_column("Min", justify="right")
+    table.add_column("¿Factible?")
+    table.add_column("Motivo")
+    for row in report["timeframes"]:
+        table.add_row(
+            str(row["timeframe"]),
+            str(row["status"]),
+            str(int(row["n_strategies"])),
+            "Sin datos"
+            if row["trades_is"] is None
+            else f"{float(row['trades_is']):.1f}",
+            "/".join(f"{value:.1f}" for value in row["fold_trades"]) or "Sin datos",
+            "Sin datos"
+            if row["cost_r"] is None
+            else f"{float(row['cost_r']):.4f}",
+            "Sin datos"
+            if row["mean_bars"] is None
+            else f"{float(row['mean_bars']):.2f}",
+            "Sin datos"
+            if row["mean_minutes"] is None
+            else f"{float(row['mean_minutes']):.0f}",
+            "sí" if row["passes"] else "NO",
+            "; ".join(row.get("reasons") or []) or "",
+        )
+    console.print(table)
+    if not report["passes"]:
+        console.print(
+            "[yellow]Ninguna temporalidad pasa el gate de viabilidad.[/yellow]"
+        )
+        raise typer.Exit(1)
+
+
 @discovery_app.command("invalidate")
 def discovery_invalidate_cmd(
     campaign_id: str = typer.Argument(..., help="ID de la campaña"),

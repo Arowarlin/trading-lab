@@ -4,6 +4,24 @@ from __future__ import annotations
 
 from . import fastbt
 from .dsl import Strategy
+from .timeframes import minutes_to_bars
+
+
+def time_exit_bars(model: Strategy) -> int | None:
+    """Barras de salida temporal: minutos nuevos o compatibilidad archivada."""
+
+    if model.exit.time_exit_minutes is not None:
+        return max(
+            1,
+            minutes_to_bars(model.exit.time_exit_minutes, model.timeframe),
+        )
+    return model.exit.time_exit_bars
+
+
+def cooldown_bars(model: Strategy) -> int:
+    if model.limits.cooldown_minutes is not None:
+        return minutes_to_bars(model.limits.cooldown_minutes, model.timeframe)
+    return int(model.limits.cooldown_bars or 0)
 
 
 def exit_spec_from_strategy(model: Strategy) -> fastbt.ExitSpec:
@@ -34,7 +52,7 @@ def exit_spec_from_strategy(model: Strategy) -> fastbt.ExitSpec:
         breakeven_at_r=breakeven.get("at_r"),
         trail_atr_mult=trail_mult,
         trail_n=int(trailing.get("n", 14)),
-        time_exit_bars=model.exit.time_exit_bars,
+        time_exit_bars=time_exit_bars(model),
         opposite_signal=model.exit.opposite_signal,
     )
 
@@ -54,10 +72,16 @@ def run_limits_from_strategy(
         flat_at=session.flat_at,
         weekdays=setup.weekdays,
         max_trades_per_day=model.limits.max_trades_per_day,
-        cooldown_bars=model.limits.cooldown_bars,
+        cooldown_bars=cooldown_bars(model),
+        allow_next_day_entry=model.timeframe == "D1",
         close_at_end=close_at_end,
         end_index=end_index,
     )
 
 
-__all__ = ["exit_spec_from_strategy", "run_limits_from_strategy"]
+__all__ = [
+    "cooldown_bars",
+    "exit_spec_from_strategy",
+    "run_limits_from_strategy",
+    "time_exit_bars",
+]

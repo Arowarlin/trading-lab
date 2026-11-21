@@ -1,5 +1,6 @@
 name: intraday_momentum_close_v2
 symmetric: true
+timeframes: [M5, M15, M30, H1]
 description: >
   Momentum intradía de cierre en US100, rejilla fijada antes de mirar
   resultados: retorno de la mañana (09:30 -> 10:00/10:30) y entrada en la
@@ -42,6 +43,7 @@ strategy:
   instrument: US100
   market: cfd
   timeframe: M5
+  warmup_minutes: 7200
   session:
     start: "09:30"
     end: "15:55"
@@ -79,4 +81,4 @@ strategy:
     risk_per_trade_r: 1.0
   limits:
     max_trades_per_day: 1
-    cooldown_bars: 0
+    cooldown_minutes: 0

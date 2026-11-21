@@ -15,9 +15,13 @@ import pandas as pd
 
 from . import compiler, dsl, fastbt, metrics
 from .config import load_engine_config
-from .specs import exit_spec_from_strategy, run_limits_from_strategy
+from .specs import exit_spec_from_strategy, run_limits_from_strategy, time_exit_bars
+from .timeframes import bars_in_window, timeframe_minutes
 
-TIMEFRAME_MINUTES = {"M1": 1, "M5": 5, "M15": 15, "H1": 60, "H4": 240, "D1": 1440}
+TIMEFRAME_MINUTES = {
+    tf: timeframe_minutes(tf)
+    for tf in ("M1", "M5", "M15", "M30", "H1", "H4", "D1")
+}
 
 
 def _walk(expr: dsl.Expr | None):
@@ -42,15 +46,11 @@ def complexity(strategy: dsl.Strategy) -> int:
 
 
 def _session_bars(strategy: dsl.Strategy) -> int:
-    start_h, start_m = (int(part) for part in strategy.session.start.split(":"))
-    end_h, end_m = (int(part) for part in strategy.session.end.split(":"))
-    start = start_h * 60 + start_m
-    end = end_h * 60 + end_m
-    if end <= start:
-        end += 24 * 60
-    minutes = max(1, end - start)
-    tf = TIMEFRAME_MINUTES.get(strategy.timeframe.upper(), 5)
-    return max(1, int(round(minutes / tf)))
+    return bars_in_window(
+        strategy.session.start,
+        strategy.session.end,
+        strategy.timeframe,
+    )
 
 
 def fold_bounds(length: int, folds: int) -> list[tuple[int, int]]:
@@ -114,7 +114,8 @@ def evaluate(
         else dsl.Strategy.model_validate(strategy)
     )
     config = load_engine_config()
-    folds = int(config.validation.folds)
+    validation = config.validation.for_timeframe(model.timeframe)
+    folds = int(validation.folds)
     max_cost_r = (
         float(config.fitness.cost_r_max) if cost_r_max is None else float(cost_r_max)
     )
@@ -221,15 +222,15 @@ def evaluate(
     )
 
     violations: list[str] = []
-    if len(trades) < int(config.validation.min_trades_is):
+    if len(trades) < int(validation.min_trades_is):
         violations.append(
-            f"trades IS {len(trades)} < {config.validation.min_trades_is}"
+            f"trades IS {len(trades)} < {validation.min_trades_is}"
         )
     for row in fold_rows:
-        if int(row["trades"]) < int(config.validation.min_trades_fold):
+        if int(row["trades"]) < int(validation.min_trades_fold):
             violations.append(
                 f"pliegue {row['start']} trades {row['trades']} < "
-                f"{config.validation.min_trades_fold}"
+                f"{validation.min_trades_fold}"
             )
     concentration = full_metrics.get("concentration")
     if concentration is None or float(concentration) > 0.20:
@@ -243,7 +244,7 @@ def evaluate(
     )
     max_bars = max(
         float(_session_bars(model) * 2),
-        float(model.exit.time_exit_bars or 0),
+        float(time_exit_bars(model) or 0),
     )
     if mean_bars > max_bars:
         violations.append(f"tiempo medio {mean_bars:.1f} velas > {max_bars:.0f}")

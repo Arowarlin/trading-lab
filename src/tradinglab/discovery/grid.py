@@ -162,11 +162,20 @@ def _apply_exit(strategy: dict[str, Any], variant: str, spec: dict[str, Any]) ->
             exit_block["target"] = target
         target["type"] = "rr"
         target["rr"] = float(target_rr)
-    time_exit = definition.get("time_exit_bars")
-    if time_exit is None:
+    if "time_exit_minutes" in definition:
         exit_block.pop("time_exit_bars", None)
+        value = definition["time_exit_minutes"]
+        if value is None:
+            exit_block.pop("time_exit_minutes", None)
+        else:
+            exit_block["time_exit_minutes"] = int(value)
     else:
-        exit_block["time_exit_bars"] = int(time_exit)
+        time_exit = definition.get("time_exit_bars")
+        exit_block.pop("time_exit_minutes", None)
+        if time_exit is None:
+            exit_block.pop("time_exit_bars", None)
+        else:
+            exit_block["time_exit_bars"] = int(time_exit)
     session = strategy.setdefault("session", {})
     session["flat_at"] = str(definition.get("flat_at", "15:55"))
 

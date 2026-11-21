@@ -26,11 +26,23 @@ limits:
   max_depth: 4
 
 validation:
+  # Valores por defecto (compatibilidad). El motor usa SIEMPRE
+  # by_timeframe[TF]; estos tres solo cubren campañas antiguas o tests.
   min_trades_is: 100
   min_trades_fold: 15
   folds: 4
   finalists_max: 5
   corr_cluster: 0.7
+  # Congelados el 2026-11-21 ANTES de ejecutar campañas multi-TF. No se
+  # cambian tras ver resultados. H4/D1 exigen fuente Dukascopy.
+  by_timeframe:
+    M1:  {min_trades_is: 200, min_trades_fold: 30, folds: 4}
+    M5:  {min_trades_is: 100, min_trades_fold: 15, folds: 4}
+    M15: {min_trades_is: 60,  min_trades_fold: 10, folds: 4}
+    M30: {min_trades_is: 50,  min_trades_fold: 8,  folds: 4}
+    H1:  {min_trades_is: 40,  min_trades_fold: 6,  folds: 4}
+    H4:  {min_trades_is: 25,  min_trades_fold: 4,  folds: 3}
+    D1:  {min_trades_is: 15,  min_trades_fold: 3,  folds: 3}
 
 fitness:
   # Restricción dura: mediana de (coste ida y vuelta / distancia del stop) en R.

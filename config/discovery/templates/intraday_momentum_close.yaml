@@ -1,5 +1,6 @@
 name: intraday_momentum_close
 symmetric: true
+timeframes: [M5, M15, M30, H1]
 description: >
   Momentum intradía de cierre en US100: el rendimiento del inicio de la sesión
   NY (09:30 → 10:00/10:30/11:00) predice el del tramo final. Entrada en la
@@ -37,13 +38,14 @@ grid:
       kind: exit
       values: ["A", "B"]
   exit_variants:
-    A: {stop_mult: 3.0, target_rr: 1000.0, time_exit_bars: 6, flat_at: "15:55"}
-    B: {stop_mult: 2.0, target_rr: 2.0, time_exit_bars: 6, flat_at: "15:55"}
+    A: {stop_mult: 3.0, target_rr: 1000.0, time_exit_minutes: 30, flat_at: "15:55"}
+    B: {stop_mult: 2.0, target_rr: 2.0, time_exit_minutes: 30, flat_at: "15:55"}
 strategy:
   dsl_version: "1"
   instrument: US100
   market: cfd
   timeframe: M5
+  warmup_minutes: 7200
   session:
     start: "09:30"
     end: "15:55"
@@ -86,10 +88,10 @@ strategy:
   exit:
     stop: {type: atr, mult: 2.0, n: 14}
     target: {type: rr, rr: 2.0}
-    time_exit_bars: 6
+    time_exit_minutes: 30
     opposite_signal: false
   sizing:
     risk_per_trade_r: 1.0
   limits:
     max_trades_per_day: 1
-    cooldown_bars: 0
+    cooldown_minutes: 0

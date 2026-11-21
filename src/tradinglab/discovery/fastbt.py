@@ -136,6 +136,9 @@ class RunLimits:
     weekdays: tuple[int, ...] = (0, 1, 2, 3, 4)
     max_trades_per_day: int | None = None
     cooldown_bars: int = 0
+    # D1: la señal del cierre se ejecuta en el open del día siguiente; no se
+    # cancela al cambiar ``day_id``. En intradía se mantiene la cancelación.
+    allow_next_day_entry: bool = False
     close_at_end: bool = True
     end_index: int | None = None
     execution: str = "open_next"  # open_next | close_signal
@@ -615,6 +618,7 @@ def _core(
     on_signal_end,
     max_per_day,
     cooldown,
+    allow_next_day,
     close_mode,
     close_at_end,
     market_cfd,
@@ -718,7 +722,7 @@ def _core(
         if day_id[i] != cur_day:
             cur_day = day_id[i]
             day_count = 0
-        if pending != 0 and day_id[i] != pending_day:
+        if allow_next_day == 0 and pending != 0 and day_id[i] != pending_day:
             pending = 0
 
         # 1) Salidas al open: señal opuesta o fin de señal (sin look-ahead).
@@ -1094,7 +1098,7 @@ def _session_mask(bars: pd.DataFrame, limits: RunLimits) -> SessionMask:
     start_s = _parse_hhmm(limits.session_start, "session_start")
     end_s = _parse_hhmm(limits.session_end, "session_end")
     flat_s = _parse_hhmm(limits.flat_at, "flat_at")
-    if flat_s is not None and start_s != end_s and flat_s < start_s:
+    if flat_s is not None and start_s < end_s and flat_s < start_s:
         raise FastBtError("flat_at no puede ser anterior a session_start")
     seconds = (
         local.hour.to_numpy() * 3600
@@ -1115,16 +1119,33 @@ def _session_mask(bars: pd.DataFrame, limits: RunLimits) -> SessionMask:
     weekday = np.isin(
         local.day_of_week.to_numpy(), np.asarray(limits.weekdays, dtype=int)
     )
-    flat_flag = np.zeros(n, dtype=bool) if flat_s is None else seconds >= flat_s
-    day_id = (
+    if flat_s is None:
+        flat_flag = np.zeros(n, dtype=bool)
+    else:
+        # Posición relativa al inicio de la sesión. Para 18:00→02:45, el
+        # flat de 02:45 cae 8 h 45 min después del inicio y NO marca la tarde.
+        day_seconds = 24 * 3600
+        relative = (seconds - start_s) % day_seconds
+        duration = (manage_end - start_s) % day_seconds
+        if duration == 0:
+            duration = day_seconds
+        flat_relative = (flat_s - start_s) % day_seconds
+        flat_flag = (relative >= flat_relative) & (relative <= duration)
+    local_day = (
         local.normalize()
         .tz_localize(None)
         .to_numpy(dtype="datetime64[D]")
         .astype(np.int64)
     )
+    day_id = local_day
+    if start_s > end_s:
+        # Sesión que cruza medianoche: las barras anteriores al fin (p. ej.
+        # 02:00) pertenecen a la sesión que empezó el día anterior.
+        before_end = seconds < end_s
+        day_id = local_day - before_end.astype(np.int64)
     return SessionMask(
         allowed=manage_window & weekday,
-        allowed_entry=entry_window & weekday,
+        allowed_entry=entry_window & weekday & ~flat_flag,
         flat_flag=flat_flag,
         day_id=day_id,
     )
@@ -1252,6 +1273,7 @@ def _prepare(
             -1 if limits.max_trades_per_day is None else int(limits.max_trades_per_day)
         ),
         "cooldown": int(limits.cooldown_bars),
+        "allow_next_day": 1 if limits.allow_next_day_entry else 0,
         "close_mode": 1 if limits.execution == "close_signal" else 0,
         "close_at_end": 1 if limits.close_at_end else 0,
         "market_cfd": 1 if market == "cfd" else 0,
@@ -1269,8 +1291,14 @@ def run(
     limits: RunLimits | None = None,
     *,
     prepared: PreparedBars | None = None,
+    collect_metrics: bool = True,
 ) -> FastResult:
-    """Ejecuta las señales sobre barras ya cargadas (sin datos reales aquí)."""
+    """Ejecuta las señales sobre barras ya cargadas (sin datos reales aquí).
+
+    ``collect_metrics=False`` evita calcular expectativa/PF/Sharpe: lo usa el
+    escaneo de viabilidad, que solo necesita operaciones y coste. No cambia la
+    ejecución ni las operaciones.
+    """
 
     limits = limits or RunLimits()
     exit_spec = exit_spec.validated()
@@ -1317,6 +1345,7 @@ def run(
         payload["on_signal_end"],
         payload["max_per_day"],
         payload["cooldown"],
+        payload["allow_next_day"],
         payload["close_mode"],
         payload["close_at_end"],
         payload["market_cfd"],
@@ -1390,7 +1419,7 @@ def run(
     return FastResult(
         trades=trades,
         daily_r=daily_r,
-        metrics=summarize(trades, daily_r),
+        metrics=summarize(trades, daily_r) if collect_metrics else {},
         bar_returns=ledger,
         rejected=int(rejected),
         backend=backend(),
