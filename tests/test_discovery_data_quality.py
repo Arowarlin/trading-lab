@@ -164,6 +164,25 @@ def _mixed_granularity() -> pd.DataFrame:
     )
 
 
+def test_mes_de_una_barra_en_el_borde_no_invalida() -> None:
+    frame = _frame(days=5, start="2024-01-01")
+    edge = frame.iloc[[0]].copy()
+    edge.index = [pd.Timestamp("2023-12-31 22:00", tz="UTC")]
+    frame = pd.concat([edge, frame]).sort_index()
+    report = check_dataset(
+        frame,
+        "US100.cash",
+        "M5",
+        segments={
+            "is": ("2023-12-31", "2024-01-02"),
+            "oos1": ("2024-01-03", "2024-01-04"),
+            "oos2": ("2024-01-05", None),
+        },
+    )
+    assert report.granularity["bad_months"] == []
+    assert report.granularity["useful_start"].startswith("2023-12-31")
+
+
 def test_granularidad_mixta_marca_inicio_util() -> None:
     frame = _mixed_granularity()
     report = check_dataset(
