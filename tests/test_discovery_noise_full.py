@@ -17,6 +17,7 @@ from tradinglab.discovery import (
     databank,
     engine,
     levels,
+    perturb,
     robustness,
 )
 from tradinglab.discovery.config import load_engine_config
@@ -119,8 +120,81 @@ def test_full_noise_pipeline_never_level4(tmp_path) -> None:
         }
         robust = {}
         evaluations = {}
+        pframe, _pcampaign, psetup, pcost = perturb.load_campaign_inputs(
+            campaign_id, frame=frame, db_path=db
+        )
         for item in payload["finalists"]:
             row = finalists[item["strategy_hash"]]
+            noise = perturb.noise_test(
+                item["dsl"],
+                pframe,
+                paths=5,
+                scale_atr=0.1,
+                seed=2 + 10_000,
+                cost=pcost,
+                setup=psetup,
+            )
+            delay = perturb.delay_test(
+                item["dsl"],
+                pframe,
+                entry_delays=(1, 2),
+                exit_delays=(1, 2),
+                cost=pcost,
+                setup=psetup,
+            )
+            execution = perturb.execution_mc(
+                item["dsl"],
+                pframe,
+                skip_frac=0.05,
+                spread_source=perturb.load_spread_histogram(psetup.instrument),
+                slippage_pts=perturb.default_slippage(pcost),
+                paths=5,
+                seed=2 + 20_000,
+                cost=pcost,
+                setup=psetup,
+            )
+            base = noise.get("base")
+            limit = 0.5
+
+            def _passes(value):
+                if value is None or base is None or float(base) <= 0.0:
+                    return False
+                return float(value) > 0.0 and (float(value) / float(base)) >= limit
+
+            delay_entry = (delay.get("entry") or {}).get("1") or {}
+            noise_passed = _passes(noise.get("median"))
+            delay_passed = _passes(delay_entry.get("expectancy_r"))
+            execution_passed = _passes(execution.get("median"))
+            databank.add_validation(
+                row["id"],
+                "perturb_noise",
+                {**noise, "min_median_ratio": limit, "passed": noise_passed},
+                noise_passed,
+                db_path=db,
+            )
+            databank.add_validation(
+                row["id"],
+                "perturb_delay",
+                {
+                    **delay,
+                    "min_median_ratio": limit,
+                    "entry_delay_checked": 1,
+                    "passed": delay_passed,
+                },
+                delay_passed,
+                db_path=db,
+            )
+            databank.add_validation(
+                row["id"],
+                "perturb_execution",
+                {
+                    **execution,
+                    "min_median_ratio": limit,
+                    "passed": execution_passed,
+                },
+                execution_passed,
+                db_path=db,
+            )
             robust[item["strategy_hash"]] = robustness.run(
                 row["id"], frame=frame, db_path=db
             )

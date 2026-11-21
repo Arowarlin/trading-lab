@@ -59,6 +59,13 @@ def test_config_real_tiene_los_valores_de_la_fase_0() -> None:
     assert config.validation.folds == 4
     assert config.validation.finalists_max == 5
     assert config.validation.corr_cluster == pytest.approx(0.7)
+    assert config.perturb.noise_paths == 500
+    assert config.perturb.noise_scale_atr == pytest.approx(0.10)
+    assert config.perturb.entry_delays == [1, 2]
+    assert config.perturb.exit_delays == [1, 2]
+    assert config.perturb.exec_paths == 1000
+    assert config.perturb.exec_skip_frac == pytest.approx(0.05)
+    assert config.perturb.min_median_ratio == pytest.approx(0.5)
     assert config.data_quality.gap_factor == pytest.approx(3)
     assert config.data_quality.max_gap_hours == pytest.approx(4)
     assert config.data_quality.scheduled_gap_share == pytest.approx(0.2)
@@ -101,6 +108,17 @@ def test_config_rechaza_profundidad_incoherente(tmp_path: Path) -> None:
     payload = _base()
     payload["limits"] = {"max_nodes": 4, "max_depth": 3}
     with pytest.raises(ValidationError, match="max_depth"):
+        load_engine_config(_write(tmp_path, payload))
+
+
+def test_config_rechaza_perturb_invalido(tmp_path: Path) -> None:
+    payload = _base()
+    payload["perturb"] = {"noise_paths": 0}
+    with pytest.raises(ValidationError):
+        load_engine_config(_write(tmp_path, payload))
+    payload = _base()
+    payload["perturb"] = {"entry_delays": [0, 1]}
+    with pytest.raises(ValidationError, match="retardos"):
         load_engine_config(_write(tmp_path, payload))
 
 

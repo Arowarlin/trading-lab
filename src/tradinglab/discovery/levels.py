@@ -123,6 +123,12 @@ def evaluate(
     random_oos2 = (tests.get("test_vs_random_oos2") or {}).get("percentile")
     cost15 = (retest.get("cost_x1_5") or {}).get("expectancy_r")
     slip2 = (retest.get("slippage_plus_2") or {}).get("expectancy_r")
+    perturb_noise = tests.get("perturb_noise") or {}
+    perturb_delay = tests.get("perturb_delay") or {}
+    perturb_execution = tests.get("perturb_execution") or {}
+    noise_ok = bool(perturb_noise.get("passed"))
+    delay_ok = bool(perturb_delay.get("passed"))
+    execution_ok = bool(perturb_execution.get("passed"))
     is_finalist = str(strategy["status"]) == "finalist"
     min_trades_oos2 = int(load_engine_config().robustness.min_trades_oos2)
     oos2_trades = (oos2_metrics or {}).get("trades")
@@ -143,6 +149,9 @@ def evaluate(
         and float(is_expectancy) > 0.0
         and cost15 is not None
         and float(cost15) > 0.0
+        and noise_ok
+        and delay_ok
+        and execution_ok
     )
     if level3:
         level = 3
@@ -197,6 +206,13 @@ def evaluate(
             absent = absent or record.get("passed") is None
         if absent and name not in missing:
             missing.append(name)
+    for name, record in (
+        ("perturb_noise", perturb_noise),
+        ("perturb_delay", perturb_delay),
+        ("perturb_execution", perturb_execution),
+    ):
+        if not record or record.get("passed") is None:
+            missing.append(name)
     return {
         "strategy_id": int(strategy_id),
         "campaign_id": str(strategy["campaign_id"]),
@@ -212,6 +228,9 @@ def evaluate(
         "wf_ok": wf_ok,
         "regime_ok": regime_ok,
         "challenge_ok": challenge_ok,
+        "perturb_noise_ok": noise_ok,
+        "perturb_delay_ok": delay_ok,
+        "perturb_execution_ok": execution_ok,
         "test_vs_random_insample_pct": random_insample,
         "test_vs_random_oos2_pct": random_oos2,
         "cost_x1_5_expectancy_r": cost15,

@@ -99,7 +99,15 @@ def _finalist(db, campaign_id: str, *, status: str = "finalist") -> int:
         True,
         db_path=db,
     )
+    _perturb_tests(db, strategy_id)
     return strategy_id
+
+
+def _perturb_tests(db, strategy_id: int) -> None:
+    for name in ("perturb_noise", "perturb_delay", "perturb_execution"):
+        databank.add_validation(
+            strategy_id, name, {"passed": True}, True, db_path=db
+        )
 
 
 def _level4_tests(db, strategy_id: int) -> None:
@@ -369,6 +377,7 @@ def _confirm_db(
             True,
             db_path=db,
         )
+        _perturb_tests(db, strategy_id)
         ids.append(strategy_id)
     databank.set_campaign_counts(campaign_id, n_finalists=count, db_path=db)
     return db, frame, campaign_id, ids
@@ -454,3 +463,38 @@ def test_confirm_without_flag_does_not_read(tmp_path) -> None:
     with pytest.raises(PermissionError, match="approved-by-operator"):
         levels.confirm(ids[0], approved_by_operator=False, frame=frame, db_path=db)
     assert databank.count_holdout_reads(db_path=db) == 0
+
+
+def test_sin_perturb_no_es_nivel3(tmp_path) -> None:
+    db = tmp_path / "discovery.db"
+    campaign_id = _campaign(db)
+    strategy_id = _finalist(db, campaign_id)
+    with databank.connect(db) as con:
+        con.execute(
+            "DELETE FROM disc_validations"
+            " WHERE strategy_id = ? AND test LIKE 'perturb_%'",
+            (strategy_id,),
+        )
+    evaluation = levels.evaluate(strategy_id, db_path=db)
+    assert evaluation["level"] == 2
+    assert evaluation["level3"] is False
+    assert evaluation["perturb_noise_ok"] is False
+    assert "perturb_noise" in evaluation["sin_datos"]
+    assert "perturb_delay" in evaluation["sin_datos"]
+    assert "perturb_execution" in evaluation["sin_datos"]
+
+
+def test_perturb_failure_blocks_level3(tmp_path) -> None:
+    db = tmp_path / "discovery.db"
+    campaign_id = _campaign(db)
+    strategy_id = _finalist(db, campaign_id)
+    with databank.connect(db) as con:
+        con.execute(
+            "UPDATE disc_validations SET passed = 0, result_json = ?"
+            " WHERE strategy_id = ? AND test = 'perturb_noise'",
+            ('{"passed": false}', strategy_id),
+        )
+    evaluation = levels.evaluate(strategy_id, db_path=db)
+    assert evaluation["level"] == 2
+    assert evaluation["level3"] is False
+    assert evaluation["perturb_noise_ok"] is False

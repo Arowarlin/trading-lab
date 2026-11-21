@@ -79,6 +79,25 @@ class RobustnessConfig(BaseModel):
     )
 
 
+class PerturbConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    noise_paths: int = Field(default=500, ge=10, le=10_000)
+    noise_scale_atr: float = Field(default=0.10, gt=0.0, le=1.0)
+    entry_delays: list[int] = Field(default_factory=lambda: [1, 2])
+    exit_delays: list[int] = Field(default_factory=lambda: [1, 2])
+    exec_paths: int = Field(default=1000, ge=10, le=100_000)
+    exec_skip_frac: float = Field(default=0.05, ge=0.0, le=1.0)
+    min_median_ratio: float = Field(default=0.5, gt=0.0, le=2.0)
+
+    @field_validator("entry_delays", "exit_delays")
+    @classmethod
+    def _positive_delays(cls, value: list[int]) -> list[int]:
+        if not value or any(int(day) < 1 for day in value):
+            raise ValueError("los retardos deben ser enteros >= 1")
+        return [int(day) for day in value]
+
+
 class SourceConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -170,6 +189,7 @@ class EngineConfig(BaseModel):
     validation: ValidationConfig
     fitness: FitnessConfig = Field(default_factory=FitnessConfig)
     robustness: RobustnessConfig = Field(default_factory=RobustnessConfig)
+    perturb: PerturbConfig = Field(default_factory=PerturbConfig)
     data_quality: DataQualityConfig
 
     @field_validator("profiles")
@@ -209,6 +229,7 @@ def load_engine_config(path: str | Path | None = None) -> EngineConfig:
         "validation": raw.get("validation") or {},
         "fitness": raw.get("fitness") or {},
         "robustness": raw.get("robustness") or {},
+        "perturb": raw.get("perturb") or {},
         "data_quality": raw.get("data_quality") or {},
     }
     return EngineConfig.model_validate(payload)
@@ -221,6 +242,7 @@ __all__ = [
     "FitnessConfig",
     "GeneticsConfig",
     "LimitsConfig",
+    "PerturbConfig",
     "ProfileConfig",
     "RobustnessConfig",
     "SourceConfig",

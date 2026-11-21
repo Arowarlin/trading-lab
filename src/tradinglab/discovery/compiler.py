@@ -389,16 +389,20 @@ def compile(
     bars: pd.DataFrame,
     *,
     cache: IndicatorCache | None = None,
+    _skip_validation_for_archived: bool = False,
 ) -> Signals:
     """Compila la estrategia en señales booleanas alineadas a ``bars``.
 
     ``cache`` es la LRU del worker; si se pasa, debe pertenecer a este dataset.
+    ``_skip_validation_for_archived`` es privado: solo ``perturb.py`` lo usa y
+    solo tras comprobar que la estrategia ya existe en ``disc_strategies``.
     """
 
     model = strategy if isinstance(strategy, Strategy) else Strategy.model_validate(strategy)
-    errors = validate(model)
-    if errors:
-        raise DslError("; ".join(errors))
+    if not _skip_validation_for_archived:
+        errors = validate(model)
+        if errors:
+            raise DslError("; ".join(errors))
     bars = _require_bars(bars)
     if cache is not None:
         token = id(bars)

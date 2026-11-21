@@ -50,6 +50,16 @@ robustness:
   challenge_paths: 5000
   challenge_accounts: [CFD-001, CFD-006]
 
+perturb:
+  # Pruebas de falsificación: no son hipótesis nuevas y no suman al DSR.
+  noise_paths: 500
+  noise_scale_atr: 0.10
+  entry_delays: [1, 2]
+  exit_delays: [1, 2]
+  exec_paths: 1000
+  exec_skip_frac: 0.05
+  min_median_ratio: 0.5
+
 data_quality:
   # Un hueco es un salto entre velas consecutivas > gap_factor × timeframe.
   gap_factor: 3

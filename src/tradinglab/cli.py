@@ -10245,6 +10245,173 @@ def discovery_robustness_cmd(
     )
 
 
+@discovery_app.command("perturb")
+def discovery_perturb_cmd(
+    strategy_id: int = typer.Argument(..., help="ID de la estrategia"),
+    db: str = typer.Option(None, "--db", help="discovery.db alternativo"),
+) -> None:
+    """Perturbation Lab: ruido, retardos y MC de ejecución (IS+OOS-1)."""
+
+    from .discovery import databank, dsl, levels, perturb
+    from .discovery.config import load_engine_config
+
+    strategy = databank.get_strategy(strategy_id, db_path=db)
+    if strategy is None:
+        console.print(f"[red]Estrategia no encontrada:[/red] {strategy_id}")
+        raise typer.Exit(1)
+    campaign = databank.get_campaign(strategy["campaign_id"], db_path=db)
+    if campaign is None:
+        console.print("[red]Campaña no registrada.[/red]")
+        raise typer.Exit(1)
+    if str(campaign["status"]) != "done":
+        console.print(
+            "[red]Perturb solo sobre una campaña done (IS+OOS-1).[/red] "
+            f"Estado actual: {campaign['status']}."
+        )
+        raise typer.Exit(1)
+
+    config = load_engine_config().perturb
+    try:
+        frame, campaign, setup, cost = perturb.load_campaign_inputs(
+            str(strategy["campaign_id"]), db_path=db
+        )
+        model = dsl.Strategy.model_validate(strategy["dsl"])
+        seed = int(campaign["config"].get("seed", 0))
+        noise = perturb.noise_test(
+            model,
+            frame,
+            paths=int(config.noise_paths),
+            scale_atr=float(config.noise_scale_atr),
+            seed=seed + 10_000,
+            cost=cost,
+            setup=setup,
+            strategy_id=strategy_id,
+            db_path=db,
+        )
+        delay = perturb.delay_test(
+            model,
+            frame,
+            entry_delays=tuple(int(item) for item in config.entry_delays),
+            exit_delays=tuple(int(item) for item in config.exit_delays),
+            cost=cost,
+            setup=setup,
+            strategy_id=strategy_id,
+            db_path=db,
+        )
+        spread_source = perturb.load_spread_histogram(setup.instrument)
+        execution = perturb.execution_mc(
+            model,
+            frame,
+            skip_frac=float(config.exec_skip_frac),
+            spread_source=spread_source,
+            slippage_pts=perturb.default_slippage(cost),
+            paths=int(config.exec_paths),
+            seed=seed + 20_000,
+            cost=cost,
+            setup=setup,
+            strategy_id=strategy_id,
+            db_path=db,
+        )
+    except Exception as exc:  # noqa: BLE001
+        console.print(f"[red]Perturb no disponible:[/red] {exc}")
+        raise typer.Exit(1) from exc
+
+    limit = float(config.min_median_ratio)
+    base = noise.get("base")
+
+    def _passes(value: object) -> bool:
+        if value is None or base is None or float(base) <= 0.0:
+            return False
+        numeric = float(value)
+        return numeric > 0.0 and (numeric / float(base)) >= limit
+
+    noise_passed = _passes(noise.get("median"))
+    first_delay = str(config.entry_delays[0])
+    delay_entry = (delay.get("entry") or {}).get(first_delay) or {}
+    delay_passed = _passes(delay_entry.get("expectancy_r"))
+    execution_passed = _passes(execution.get("median"))
+
+    databank.add_validation(
+        strategy_id,
+        "perturb_noise",
+        {**noise, "min_median_ratio": limit, "passed": noise_passed},
+        noise_passed,
+        db_path=db,
+    )
+    databank.add_validation(
+        strategy_id,
+        "perturb_delay",
+        {
+            **delay,
+            "min_median_ratio": limit,
+            "entry_delay_checked": int(config.entry_delays[0]),
+            "passed": delay_passed,
+        },
+        delay_passed,
+        db_path=db,
+    )
+    databank.add_validation(
+        strategy_id,
+        "perturb_execution",
+        {**execution, "min_median_ratio": limit, "passed": execution_passed},
+        execution_passed,
+        db_path=db,
+    )
+
+    table = Table(title=f"Discovery · perturb {strategy_id} (IS+OOS-1)")
+    table.add_column("Prueba")
+    table.add_column("Base", justify="right")
+    table.add_column("Mediana", justify="right")
+    table.add_column("P10", justify="right")
+    table.add_column("Ratio", justify="right")
+    table.add_column("Pasa")
+    table.add_row(
+        "noise",
+        f"{base:.4f}" if base is not None else "Sin datos",
+        f"{noise['median']:.4f}" if noise.get("median") is not None else "Sin datos",
+        f"{noise['p10']:.4f}" if noise.get("p10") is not None else "Sin datos",
+        f"{noise['ratio']:.3f}" if noise.get("ratio") is not None else "Sin datos",
+        "sí" if noise_passed else "no",
+    )
+    for delay_key, row in sorted((delay.get("entry") or {}).items()):
+        table.add_row(
+            f"delay entrada +{delay_key}",
+            f"{base:.4f}" if base is not None else "Sin datos",
+            f"{row['expectancy_r']:.4f}"
+            if row.get("expectancy_r") is not None
+            else "Sin datos",
+            f"{row['expectancy_r']:.4f}"
+            if row.get("expectancy_r") is not None
+            else "Sin datos",
+            f"{row['ratio']:.3f}" if row.get("ratio") is not None else "Sin datos",
+            "sí" if _passes(row.get("expectancy_r")) else "no",
+        )
+    table.add_row(
+        "execution_mc",
+        f"{base:.4f}" if base is not None else "Sin datos",
+        f"{execution['median']:.4f}"
+        if execution.get("median") is not None
+        else "Sin datos",
+        f"{execution['p10']:.4f}"
+        if execution.get("p10") is not None
+        else "Sin datos",
+        f"{execution['ratio']:.3f}"
+        if execution.get("ratio") is not None
+        else "Sin datos",
+        "sí" if execution_passed else "no",
+    )
+    console.print(table)
+
+    try:
+        evaluation = levels.evaluate(strategy_id, db_path=db)
+        console.print(
+            f"Nivel {evaluation['level']} · veredicto {evaluation['verdict']} · "
+            f"Sin datos: {', '.join(evaluation['sin_datos']) or 'ninguno'}"
+        )
+    except Exception as exc:  # noqa: BLE001
+        console.print(f"[yellow]Nivel no actualizado:[/yellow] {exc}")
+
+
 @discovery_app.command("confirm")
 def discovery_confirm_cmd(
     strategy_id: int = typer.Argument(..., help="ID de la estrategia"),

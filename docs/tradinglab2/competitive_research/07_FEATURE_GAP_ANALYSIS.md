@@ -54,6 +54,28 @@ Umbral propuesto (por defecto, en `engine.yaml`, **fijado antes de ver resultado
 perturbada ≥ 50 % de la base y > 0. Pasa a ser requisito del **nivel 3** (falsificación barata antes de
 gastar la lectura OOS-2).
 
+### Interpretación de la calibración R1
+
+La calibración de R1 (3 finalistas de ruido de 7b + 2 finalistas reales) muestra que **los 3 finalistas de
+ruido pasan** noise, delay y execution (ratios 0,77–1,06). Por tanto:
+
+- El Perturbation Lab detecta **fragilidad de ejecución/tiempo** (caso 258: delay +1 = 0,33), **no suerte**.
+- La **suerte** solo la detectan **OOS-2 + DSR de confirmación + `test_vs_random_oos2`**.
+- La prueba de ruido completa **no debe exigir** que el Perturbation Lab rechace a los finalistas de ruido.
+  El criterio es que **ninguno se confirme** (nivel 4).
+
+| Estrategia | Base | Noise mediana / p10 / ratio | Delay +1 | Delay +2 | Exec mediana / p10 / ratio |
+|---|---:|---|---:|---:|---|
+| 7b 1 año `7f0bf5962f` | 0,0617 | 0,0582 / 0,0208 / 0,944 | 0,0572 / 0,928 | 0,0319 / 0,517 | 0,0548 / 0,0329 / 0,888 |
+| 7b 0,9 años `cf187a0037` | 0,2239 | 0,1915 / 0,1536 / 0,855 | 0,2382 / 1,064 | 0,1739 / 0,776 | 0,2157 / 0,1877 / 0,963 |
+| 7b 0,9 años `45bb817291` | 0,1122 | 0,0862 / 0,0557 / 0,769 | 0,1018 / 0,907 | 0,0800 / 0,713 | 0,1046 / 0,0842 / 0,933 |
+| Real 94 `64af2965` | 0,0376 | 0,0353 / 0,0250 / 0,941 | 0,0190 / 0,507 | 0,0179 / 0,476 | 0,0335 / 0,0238 / 0,891 |
+| Real 258 `07093bb0` | 0,0188 | 0,0221 / 0,0149 / 1,172 | 0,0061 / **0,327** | 0,0030 / 0,160 | 0,0155 / 0,0083 / 0,825 |
+| EA `us100-ftmo1` | Sin datos | Sin datos | Sin datos | Sin datos | Sin datos |
+
+El EA como control queda **Sin datos** en R1: el parquet diario no tiene OHLC ni operaciones; requiere un
+adaptador del motor del EA, fuera de R1.
+
 ## Lo que más mejora la calidad del edge encontrado
 
 1. Arreglar el gate de regímenes (sin él, el nivel 4 nunca es alcanzable: el laboratorio no podría
