@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import typer
 from rich.console import Console
@@ -165,6 +166,75 @@ def exposure_cmd(as_json: bool = typer.Option(False, "--json")) -> None:
         out.print(t)
     elif data["ok"]:
         out.print("[dim]Sin posiciones abiertas.[/dim]")
+
+
+@app.command("onboarding-mtf")
+def onboarding_mtf(
+    accounts: str = typer.Option(
+        "CFD-001,CFD-006", "--accounts", help="Cuentas separadas por coma"
+    ),
+    write: str = typer.Option(
+        None, "--write", help="Ruta del informe Markdown (si se indica, escribe)"
+    ),
+    max_cost_r: float = typer.Option(
+        0.10, "--max-cost-r", help="Umbral cost_R para viable"
+    ),
+) -> None:
+    """Coste por operación × TF frente al R típico (solo lectura de datos)."""
+    from ..discovery.config import load_engine_config
+    from .onboarding_mtf import (
+        build_rows,
+        compute_r_values,
+        render_markdown,
+    )
+
+    account_ids = tuple(
+        item.strip().upper() for item in str(accounts).split(",") if item.strip()
+    )
+    config = load_engine_config()
+    usable = config.data_quality.usable_from or {}
+    symbols = ("US100", "US500", "US30", "XAUUSD", "EURUSD", "GBPUSD", "USDJPY")
+    console.print("Calculando R típico (ATR 14) desde usable_from…")
+    r_values = compute_r_values(symbols, usable_from=usable)
+    rows = build_rows(
+        account_ids,
+        r_values=r_values,
+        config=config,
+        max_cost_r=float(max_cost_r),
+    )
+    table = Table(title="Onboarding multi-timeframe · coste por operación")
+    for column in (
+        "Cuenta",
+        "Símbolo",
+        "TF",
+        "Desde",
+        "R",
+        "Coste",
+        "cost_R",
+        "Viable",
+        "Motivo",
+    ):
+        table.add_column(column)
+    for row in rows:
+        table.add_row(
+            row["account"],
+            row["symbol"],
+            row["timeframe"],
+            row.get("usable_from") or "—",
+            f"{row['r']:.6g}" if row.get("r") is not None else "Sin datos",
+            f"{row['cost']['total']:.6g}"
+            if row.get("cost", {}).get("total") is not None
+            else "Sin datos",
+            f"{row['cost_r']:.4f}" if row.get("cost_r") is not None else "Sin datos",
+            "SÍ" if row.get("viable") else "no",
+            row.get("reason") or "",
+        )
+    console.print(table)
+    if write:
+        path = Path(write)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(render_markdown(rows), encoding="utf-8")
+        console.print(f"[green]Informe escrito:[/green] {path}")
 
 
 @app.command("verify")
