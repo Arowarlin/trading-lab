@@ -15,7 +15,7 @@ from tradinglab.discovery import (
     engine,
 )
 from tradinglab.learning import count_tests
-from tradinglab.propfund.registry import Registry
+from tradinglab.propfund.registry import Registry, load_registry
 
 SEGMENTS = {
     "is": ["2023-01-02", "2023-03-31"],
@@ -295,6 +295,14 @@ def test_edge_map_no_escribe_ni_cuenta_trials(tmp_path: Path, monkeypatch) -> No
     assert db.read_bytes() == before
     assert count_tests(learning, discovery_db=db) == before_count
     assert report["n_combos"] == 1
+
+
+def test_firmas_incluye_cfd006_sin_filtro_y_respeta_filtro() -> None:
+    registry = load_registry()
+    accounts = {item.id for item in edge_map._firm_accounts(registry)}
+    assert {"CFD-001", "CFD-006"} <= accounts
+    filtered = edge_map._firm_accounts(registry, "CFD-001")
+    assert [item.id for item in filtered] == ["CFD-001"]
 
 
 def test_edge_map_y_suggest_sin_read_holdout() -> None:

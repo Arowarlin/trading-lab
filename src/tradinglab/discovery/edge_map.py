@@ -496,6 +496,20 @@ def _automation_status(account, firm) -> tuple[bool, str]:
     return allowed, "Permitida" if allowed else "; ".join(reasons) or "Sin datos"
 
 
+def _firm_accounts(registry, account_filter: str | None = None) -> list[Any]:
+    """Cuentas CFD no plantilla; ``None`` incluye todas (p. ej. CFD-006)."""
+
+    return [
+        account
+        for account in registry.accounts.values()
+        if (
+            not account.template
+            and account.market is Market.CFD
+            and (account_filter is None or account.id == account_filter)
+        )
+    ]
+
+
 def _firm_rows(
     con: sqlite3.Connection,
     *,
@@ -511,12 +525,7 @@ def _firm_rows(
 ) -> list[FirmEdge]:
     registry = registry or load_registry()
     config = load_engine_config()
-    accounts = [
-        account
-        for account in registry.accounts.values()
-        if not account.template and account.market is Market.CFD
-        and (account_filter is None or account.id == account_filter)
-    ]
+    accounts = _firm_accounts(registry, account_filter)
     rows: list[FirmEdge] = []
     bars_cache: dict[str, pd.DataFrame] = {}
     for account in accounts:
