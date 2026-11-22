@@ -96,7 +96,7 @@ def test_calidad_dukascopy_sin_datos(tmp_path: Path) -> None:
 def test_umbrales_por_timeframe() -> None:
     base = load_engine_config().data_quality
     assert quality_config(base, "EURUSD", "M5", "dukascopy").max_gap_hours == 4.0
-    assert quality_config(base, "EURUSD", "D1", "dukascopy").max_gap_hours == 48.0
+    assert quality_config(base, "EURUSD", "D1", "dukascopy").max_gap_hours == 72.0
     assert quality_config(base, "EURUSD", "H4", "dukascopy").gap_factor == 1.5
     assert quality_config(base, "US100", "M5", "dukascopy").source_for("US100").calendar == "nyse"
 
