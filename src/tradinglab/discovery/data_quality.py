@@ -318,6 +318,75 @@ def _calendar_module() -> tuple[dict[int, str], dict[int, int]] | None:
         return None
 
 
+def _market_holiday(day, calendar: str | None) -> str | None:
+    """Festivo de mercado para una fecha (índice NYSE o forex/oro)."""
+    stamp = pd.Timestamp(day)
+    if calendar == "nyse":
+        data = _calendar_module()
+        if data is not None:
+            full, early = data
+            key = int(stamp.strftime("%Y%m%d"))
+            if key in full:
+                return str(full[key])
+            if key in early:
+                return f"cierre temprano {early[key]:04d}"
+    if stamp.month == 12 and stamp.day == 25:
+        return "25-dic"
+    if stamp.month == 1 and stamp.day == 1:
+        return "1-ene"
+    return None
+
+
+def _calendar_gap(
+    start_utc: pd.Timestamp,
+    end_utc: pd.Timestamp,
+    tf_minutes: int,
+    threshold_min: float,
+    calendar: str | None,
+    pause_tz: str,
+) -> tuple[bool, str]:
+    """Clasifica un hueco por sesiones NY, sin tocar umbrales numéricos.
+
+    Una sesión es el intervalo 17:00→17:00 de Nueva York. Se toleran 60 min en
+    los bordes por el cambio de horario. El hueco es real solo si falta al menos
+    una sesión de lunes a viernes que no sea festivo.
+    """
+    zone = ZoneInfo(pause_tz)
+    start = pd.Timestamp(start_utc).tz_convert(zone)
+    end = pd.Timestamp(end_utc).tz_convert(zone)
+    gap_minutes = (end - start).total_seconds() / 60.0
+    first = (start - pd.Timedelta(days=1)).date()
+    last = (end + pd.Timedelta(days=1)).date()
+    weekend = False
+    holidays: list[str] = []
+    for offset in range((last - first).days + 1):
+        day = first + pd.Timedelta(days=offset)
+        session_end = pd.Timestamp(f"{day.isoformat()} 17:00", tz=zone)
+        previous = day - pd.Timedelta(days=1)
+        session_start = pd.Timestamp(f"{previous.isoformat()} 17:00", tz=zone)
+        overlap_start = max(start, session_start)
+        overlap_end = min(end, session_end)
+        overlap = (overlap_end - overlap_start).total_seconds() / 60.0
+        if day.weekday() >= 5:
+            if overlap > 0:
+                weekend = True
+            continue
+        holiday = _market_holiday(day, calendar)
+        if holiday:
+            if overlap > 0:
+                holidays.append(f"{day.isoformat()} {holiday}")
+            continue
+        if overlap >= 23 * 60:
+            return True, f"sesión {day.isoformat()} sin datos"
+        if gap_minutes > threshold_min and overlap > 60:
+            return True, f"sesión {day.isoformat()} parcialmente sin datos"
+    if holidays:
+        return False, "festivo " + ", ".join(holidays)
+    if weekend:
+        return False, "fin de semana"
+    return False, "tolerancia ±1 h"
+
+
 def _gap_analysis(
     frame: pd.DataFrame,
     tf_minutes: int,
@@ -334,10 +403,12 @@ def _gap_analysis(
     threshold = float(config.gap_factor) * tf_minutes
     max_gap = float(config.max_gap_hours) * 60.0
     for previous, current in zip(index[:-1], index[1:]):
-        minutes = (current - previous).total_seconds() / 60.0
-        if minutes <= threshold or minutes >= max_gap:
-            continue
         start = previous + pd.Timedelta(minutes=tf_minutes)
+        minutes = (current - start).total_seconds() / 60.0
+        if minutes <= 0:
+            continue
+        if tf_minutes < 60 and (minutes <= threshold or minutes >= max_gap):
+            continue
         local_start = start.tz_convert(ZoneInfo(pause_tz))
         gaps.append(
             {
@@ -360,6 +431,21 @@ def _gap_analysis(
     calendar_gaps: list[dict] = []
     outside_calendar = 0
     for gap in gaps:
+        if tf_minutes >= 60:
+            real, reason = _calendar_gap(
+                gap["start_utc"],
+                gap["resume_utc"],
+                tf_minutes,
+                threshold,
+                calendar,
+                pause_tz,
+            )
+            gap["reason"] = reason
+            if real:
+                non_scheduled.append(gap)
+            elif gap["minutes"] > threshold:
+                calendar_gaps.append(gap)
+            continue
         share = counts[gap["hhmm"]] / days if days else 0.0
         if share >= float(config.scheduled_gap_share):
             gap["share"] = round(share, 4)
@@ -576,7 +662,7 @@ def check_dataset(
         )
     if calendar_gaps:
         issues.append(
-            f"huecos en festivos/cierres tempranos (informativos): {len(calendar_gaps)}"
+            f"huecos de calendario/cierre semanal (informativos): {len(calendar_gaps)}"
         )
 
     try:

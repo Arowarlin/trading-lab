@@ -8,11 +8,13 @@ import pytest
 
 from tradinglab.discovery.config import load_engine_config
 from tradinglab.discovery.data_quality import (
+    _calendar_gap,
     _gap_analysis,
     check_dataset,
     dataset_hash,
     load_and_check,
 )
+from tradinglab.discovery.source_quality import quality_config
 
 
 def _frame(
@@ -90,7 +92,7 @@ def test_demasiados_huecos_falla() -> None:
     frame = _frame(days=6, start="2024-01-08", sessions=((8, 0, 16, 20),))
     for hour in (9, 10, 13, 14):
         start = pd.Timestamp("2024-01-08 00:00", tz="UTC") + pd.Timedelta(hours=hour)
-        drop = (frame.index >= start) & (frame.index < start + pd.Timedelta(minutes=15))
+        drop = (frame.index >= start) & (frame.index < start + pd.Timedelta(minutes=20))
         frame = frame.loc[~drop]
     report = check_dataset(
         frame,
@@ -371,6 +373,161 @@ def test_pausa_17_ny_en_eurusd_sin_huecos_falsos_por_dst() -> None:
     )
     assert scheduled
     assert non_scheduled == 1
+
+
+def _session_frame(labels: list[str]) -> pd.DataFrame:
+    index = pd.DatetimeIndex(
+        [pd.Timestamp(label, tz="America/New_York") for label in labels]
+    )
+    close = np.arange(len(index), dtype=float) + 100.0
+    return pd.DataFrame(
+        {
+            "open": close,
+            "high": close + 0.5,
+            "low": close - 0.5,
+            "close": close,
+        },
+        index=index,
+    )
+
+
+def _d1_labels(start: str, weeks: int = 3) -> list[str]:
+    first = pd.Timestamp(start)
+    labels: list[str] = []
+    for week in range(weeks):
+        sunday = first + pd.Timedelta(days=7 * week)
+        for offset in range(5):
+            labels.append((sunday + pd.Timedelta(days=offset)).strftime("%Y-%m-%d 17:00"))
+    return labels
+
+
+def _h4_labels(start: str, weeks: int = 2) -> list[str]:
+    first = pd.Timestamp(f"{start} 17:00", tz="America/New_York")
+    labels: list[str] = []
+    for week in range(weeks):
+        begin = first + pd.Timedelta(days=7 * week)
+        labels.extend(
+            stamp.isoformat()
+            for stamp in pd.date_range(begin, periods=30, freq="4h")
+        )
+    return labels
+
+
+def test_d1_fin_de_semana_normal_no_cuenta() -> None:
+    frame = _session_frame(_d1_labels("2024-01-07"))
+    config = quality_config(
+        load_engine_config().data_quality, "US100", "D1", "dukascopy"
+    )
+    _scheduled, non_scheduled, _samples, calendar_gaps, _outside = _gap_analysis(
+        frame,
+        1440,
+        config,
+        pause_tz="America/New_York",
+        calendar="nyse",
+    )
+    assert non_scheduled == 0
+    assert calendar_gaps
+    assert all(item["reason"] == "fin de semana" for item in calendar_gaps)
+
+
+def test_d1_fin_de_semana_con_dst_no_cuenta() -> None:
+    frame = _session_frame(_d1_labels("2024-03-03"))
+    config = quality_config(
+        load_engine_config().data_quality, "US100", "D1", "dukascopy"
+    )
+    _scheduled, non_scheduled, _samples, calendar_gaps, _outside = _gap_analysis(
+        frame,
+        1440,
+        config,
+        pause_tz="America/New_York",
+        calendar="nyse",
+    )
+    assert non_scheduled == 0
+    assert calendar_gaps
+
+
+def test_d1_miercoles_que_falta_si_cuenta() -> None:
+    labels = _d1_labels("2024-01-07")
+    labels.remove("2024-01-09 17:00")  # sesión del miércoles 10
+    frame = _session_frame(labels)
+    config = quality_config(
+        load_engine_config().data_quality, "US100", "D1", "dukascopy"
+    )
+    _scheduled, non_scheduled, samples, _calendar, _outside = _gap_analysis(
+        frame,
+        1440,
+        config,
+        pause_tz="America/New_York",
+        calendar="nyse",
+    )
+    assert non_scheduled == 1
+    assert samples
+    assert "2024-01-10" in samples[0].get("reason", "sesión 2024-01-10")
+
+
+def test_h4_fin_de_semana_no_cuenta_y_sesion_perdida_si() -> None:
+    config = quality_config(
+        load_engine_config().data_quality, "US100", "H4", "dukascopy"
+    )
+    frame = _session_frame(_h4_labels("2024-01-07"))
+    _scheduled, non_scheduled, _samples, calendar_gaps, _outside = _gap_analysis(
+        frame,
+        240,
+        config,
+        pause_tz="America/New_York",
+        calendar="nyse",
+    )
+    assert non_scheduled == 0
+    assert calendar_gaps
+
+    labels = _h4_labels("2024-01-07")
+    labels.remove("2024-01-10T09:00:00-05:00")
+    labels.remove("2024-01-10T13:00:00-05:00")
+    frame = _session_frame(labels)
+    _scheduled, non_scheduled, samples, _calendar, _outside = _gap_analysis(
+        frame,
+        240,
+        config,
+        pause_tz="America/New_York",
+        calendar="nyse",
+    )
+    assert non_scheduled == 1
+    assert samples
+    assert "2024-01-10" in samples[0].get("reason", "sesión 2024-01-10")
+
+
+def test_calendario_viernes_a_lunes_y_jueves_a_domingo() -> None:
+    # Falta el lunes: viernes 19-ene 17:00 -> lunes 22-ene 17:00.
+    real, _reason = _calendar_gap(
+        pd.Timestamp("2024-01-19 17:00", tz="America/New_York"),
+        pd.Timestamp("2024-01-22 17:00", tz="America/New_York"),
+        1440,
+        36 * 60,
+        "nyse",
+        "America/New_York",
+    )
+    assert real is True
+    # Falta el viernes: jueves 18-ene 17:00 -> domingo 21-ene 17:00.
+    real, _reason = _calendar_gap(
+        pd.Timestamp("2024-01-18 17:00", tz="America/New_York"),
+        pd.Timestamp("2024-01-21 17:00", tz="America/New_York"),
+        1440,
+        36 * 60,
+        "nyse",
+        "America/New_York",
+    )
+    assert real is True
+    # Año Nuevo en forex: el 1-ene es festivo.
+    real, reason = _calendar_gap(
+        pd.Timestamp("2023-12-31 17:00", tz="America/New_York"),
+        pd.Timestamp("2024-01-01 18:00", tz="America/New_York"),
+        60,
+        90,
+        None,
+        "America/New_York",
+    )
+    assert real is False
+    assert "festivo" in reason and "2024-01-01" in reason
 
 
 def test_us30_usa_nyse_y_los_demas_sin_calendario() -> None:
