@@ -10441,7 +10441,11 @@ def discovery_edge_map_cmd(
                     if row["net_median_r"] is None
                     else f"{float(row['net_median_r']):.4f}",
                     "Sin datos" if row.get("cost_r") is None else f"{float(row['cost_r']):.4f}",
-                    f"{row['positive_folds_count']}/{row['strategy_total']}",
+                    (
+                        "Sin datos"
+                        if row["raw_median_r"] is None
+                        else f"{row['positive_folds_count']}/{row['strategy_total']}"
+                    ),
                     str(row["candidate_count"]),
                     str(row["confirmed_count"]),
                     str(row["dataset_source"]),

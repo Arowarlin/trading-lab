@@ -1001,7 +1001,11 @@ def render_markdown(report: Mapping[str, Any], *, by: str = "hipotesis") -> str:
                         row["raw_best_r"],
                         row["net_median_r"],
                         row.get("cost_r"),
-                        f"{row['positive_folds_count']}/{row['strategy_total']}",
+                        (
+                            "Sin datos"
+                            if row["raw_median_r"] is None
+                            else f"{row['positive_folds_count']}/{row['strategy_total']}"
+                        ),
                         row["candidate_count"],
                         row["confirmed_count"],
                     )
