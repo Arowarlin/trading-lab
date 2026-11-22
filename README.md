@@ -1285,11 +1285,43 @@ salen de `/api/overview` y `/api/operator` ya existentes: no se añadió ninguna
 ruta ni endpoint.
 
 Inventario congelado en [`docs/ui_inventory.json`](docs/ui_inventory.json):
-17 vistas, 267 ids, 34 llamadas `/api/*`, 6 secciones y 17 pestañas. El test
+20 vistas, 344 ids, 48 llamadas `/api/*`, 6 secciones y 20 pestañas. El test
 `test_inventario_ui_base_sigue_completo` falla si desaparece una vista, pestaña,
-id o llamada; las dos vistas nuevas se añadieron sin retirar ninguna anterior.
+id o llamada; las vistas nuevas se añadieron sin retirar ninguna anterior.
 Capturas Chrome de las 15 pestañas originales antes/después en
 `reports/ui/` (ignorado por git).
+
+### Discovery Lab · consola de solo lectura
+
+La vista **Discovery** (`data-view="discovery"`) lee el databank con conexiones
+`mode=ro` y no ejecuta ni aprueba campañas: aprobar y correr sigue siendo
+exclusivo de la CLI con `--approved-by-operator`. Se organiza en cinco
+pestañas:
+
+- **A · Resumen**: contador DSR completo con su desglose, campañas por estado,
+  `n_total`/`n_evaluado`/`n_efectivo`, finalistas y presupuesto semanal usado.
+- **B · Edge Map**: tabla por hipótesis, cuenta o instrumento, colores por
+  estado y filtro por cuenta. Las cuentas plantilla y `DISCONNECTED` quedan
+  fuera de la capa de firma y se listan aparte como **cuentas sin conectar**.
+- **C · Campañas**: lista y detalle con genealogía, frontera y diagnóstico.
+- **D · Estrategia**: reglas en lenguaje claro, métricas IS/OOS-1, estrés de
+  costes, perturbaciones, PBO, WF, Monte Carlo del challenge y coste por
+  cuenta. La meseta de parámetros y el mapa hora × día se dibujan con los
+  datos ya guardados por `robustness`/`optimizer`; la consola no calcula nada
+  nuevo ni lee OOS-2.
+- **E · Por probar**: `suggest`, siempre etiquetado **por probar**.
+
+API de solo lectura: `GET /api/discovery/summary`, `/campaigns`,
+`/campaign/<id>`, `/strategy/<id>`, `/edge-map?by=...&account=...` y
+`/suggest`. `lab web` acepta `--discovery-db`, `--costs-db` y `--data-root`
+para apuntar a una copia o a otra raíz sin escribir en ella. Lo que no exista
+se muestra como **Sin datos**; no hay botones decorativos ni rutas de
+escritura nuevas (`WRITE_ROUTES` no cambia).
+
+Evidencia Fase 8: suite **1575 passed, 1 skipped**; `ruff` limpio;
+`lab propfund verify` OK; consola levantada en el puerto **8437** desde el
+worktree con las bases de E: en solo lectura y `data_root` temporal, con las
+seis rutas de Discovery respondiendo 200.
 
 Evidencia: `pytest tests/test_console_shell.py -q` → **5 passed**; suite completa
 **410 passed**; `ruff` limpio; `lab doctor` OK.

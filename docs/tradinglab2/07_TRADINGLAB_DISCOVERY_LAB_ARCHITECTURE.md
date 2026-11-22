@@ -75,12 +75,22 @@ Validation Analyst, Portfolio Analyst) con **contratos JSON** validados por pyda
 
 ## 7. Consola: vista nueva "Discovery Lab"
 
-Endpoints GET nuevos en `web.py` (`/api/discovery/summary|campaigns|strategies|strategy|lineage|robustness|portfolio`)
-y POST con CSRF solo para registrar/lanzar/cancelar campañas. Pantallas: A Dashboard, B Builder (formulario
-de campaña), C Evolución (generaciones, frontera, diversidad), D Databank (tabla filtrable), E Detalle
-(reglas, equity, drawdown, distribución, mensual, sesión, régimen, costes, sensibilidad, genealogía,
-validaciones), F Retester/Optimizer, G Robustness, H Portfolio. Tema v4 Quantum. **Cada control conectado a
-una función real o marcado "Próximamente".**
+Endpoints GET de **solo lectura** en `web.py`:
+`/api/discovery/summary`, `/campaigns`, `/campaign/<id>`, `/strategy/<id>`,
+`/edge-map?by=hipotesis|cuenta|instrumento&account=...` y `/suggest`. Ninguno
+lee OOS-2, aprueba, registra ni lanza campañas: eso sigue solo en la CLI con
+flag. La consola no añade rutas a `WRITE_ROUTES`.
+
+Pantallas de la Fase 8: A Resumen (contador DSR, campañas, presupuesto,
+`n_total`/`n_evaluado`/`n_efectivo`), B Edge Map (por hipótesis, cuenta o
+instrumento; colores por estado y filtro por cuenta; plantillas y
+`DISCONNECTED` aparte como "cuentas sin conectar"), C Campañas (lista y detalle
+con genealogía, frontera y diagnóstico), D Estrategia (reglas en lenguaje
+claro, IS/OOS-1, estrés de costes, perturbaciones, PBO, WF, MC del challenge y
+coste por cuenta; meseta y hora × día con los datos ya guardados) y E Por
+probar (`suggest`, etiqueta "por probar"). Tema v4 Quantum. **Cada control
+conectado a una función real; lo que no existe se muestra "Sin datos".**
+Builder, Portfolio y exportadores quedan como fases posteriores.
 
 ## 8. Portfolio Builder
 

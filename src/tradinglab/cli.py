@@ -4861,6 +4861,15 @@ def web(
     no_external: bool = typer.Option(
         False, "--no-external", help="No consultar LM Studio, MT5 ni tareas programadas"
     ),
+    discovery_db: str = typer.Option(
+        None, "--discovery-db", help="discovery.db de solo lectura (por defecto data/)"
+    ),
+    costs_db: str = typer.Option(
+        None, "--costs-db", help="lab.db de costes de solo lectura (por defecto data/lab.db)"
+    ),
+    data_root: str = typer.Option(
+        None, "--data-root", help="Raíz de datos de solo lectura para el Edge Map"
+    ),
 ) -> None:
     """Sirve el panel web local: resumen, bots, agentes, research, riesgo y logs."""
     from .web import serve
@@ -4871,6 +4880,9 @@ def web(
         port=port,
         open_browser=open_browser,
         external=not no_external,
+        discovery_db=discovery_db,
+        costs_db=costs_db,
+        data_root=data_root,
     )
 
 
@@ -10451,6 +10463,12 @@ def discovery_edge_map_cmd(
                     str(row["dataset_source"]),
                 )
     console.print(table)
+    if report.get("disconnected_accounts"):
+        names = ", ".join(
+            f"{item['id']} ({item['firm']})"
+            for item in report["disconnected_accounts"]
+        )
+        console.print(f"[yellow]Cuentas sin conectar:[/yellow] {names} · fuera de la capa de firma")
     if report.get("blocked"):
         for item in report["blocked"]:
             console.print(f"[yellow]{item['timeframe']}:[/yellow] {item['reason']}")

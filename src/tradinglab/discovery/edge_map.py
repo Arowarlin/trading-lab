@@ -30,7 +30,7 @@ from ..config import ROOT
 from ..prop.simulator import monte_carlo
 from ..propfund.constraints import check_strategy
 from ..propfund.instruments import resolve
-from ..propfund.models import Market
+from ..propfund.models import ConnectionState, Market
 from ..propfund.registry import load_registry
 from . import (
     campaigns,
@@ -496,15 +496,41 @@ def _automation_status(account, firm) -> tuple[bool, str]:
     return allowed, "Permitida" if allowed else "; ".join(reasons) or "Sin datos"
 
 
+def _is_firm_account(account: Any) -> bool:
+    return (
+        not account.template
+        and account.market is Market.CFD
+        and account.connection_state is not ConnectionState.DISCONNECTED
+    )
+
+
 def _firm_accounts(registry, account_filter: str | None = None) -> list[Any]:
-    """Cuentas CFD no plantilla; ``None`` incluye todas (p. ej. CFD-006)."""
+    """Cuentas CFD reales y conectadas; ``None`` incluye todas (p. ej. CFD-006)."""
 
     return [
         account
         for account in registry.accounts.values()
+        if _is_firm_account(account)
+        and (account_filter is None or account.id == account_filter)
+    ]
+
+
+def _disconnected_accounts(registry, account_filter: str | None = None) -> list[dict[str, Any]]:
+    """Cuentas CFD reales sin conectar: fuera de la capa de firma."""
+
+    return [
+        {
+            "id": account.id,
+            "firm": account.firm,
+            "program": account.program,
+            "connection_state": str(account.connection_state),
+            "reason": "sin conectar",
+        }
+        for account in registry.accounts.values()
         if (
             not account.template
             and account.market is Market.CFD
+            and account.connection_state is ConnectionState.DISCONNECTED
             and (account_filter is None or account.id == account_filter)
         )
     ]
@@ -706,6 +732,7 @@ def build(
     """Construye el mapa determinista; nunca escribe en las bases."""
 
     config = load_engine_config()
+    registry = registry or load_registry()
     paths = int(
         n_paths if n_paths is not None else config.robustness.challenge_paths
     )
@@ -826,7 +853,7 @@ def build(
                                 else None,
                             }
                         )
-                except EdgeMapError as exc:
+                except Exception as exc:  # noqa: BLE001
                     dataset_source = "Sin datos"
                     verified = False
                     blocked[timeframe] = str(exc)
@@ -892,6 +919,7 @@ def build(
             n_paths=paths,
             registry=registry,
         )
+        disconnected = _disconnected_accounts(registry, account)
     finally:
         con.close()
     rows = sorted(
@@ -909,6 +937,7 @@ def build(
     return {
         "combos": rows,
         "firms": [row.as_dict() for row in firms],
+        "disconnected_accounts": disconnected,
         "blocked": [
             {"timeframe": timeframe, "reason": reason}
             for timeframe, reason in sorted(blocked.items())
@@ -1022,6 +1051,15 @@ def render_markdown(report: Mapping[str, Any], *, by: str = "hipotesis") -> str:
                 + " |"
             )
     lines.append("")
+    if report.get("disconnected_accounts"):
+        lines.append("## Cuentas sin conectar")
+        lines.append("")
+        for item in report["disconnected_accounts"]:
+            lines.append(
+                f"- {item['id']} · {item['firm']} · {item['program']} · "
+                f"{item['connection_state']} · fuera de la capa de firma"
+            )
+        lines.append("")
     lines.append(
         "La etiqueta usa la mediana de la rejilla (grid) o de la frontera de rango 1 (GA). "
         "El mejor valor es informativo y no decide."

@@ -177,6 +177,23 @@ def test_build_determinista_y_sobreajustada_no_candidata(tmp_path: Path) -> None
     assert row["wf_ok"] is False
     assert row["dataset_source"] == "fuente viva"
     assert row["dataset_verified"] is True
+    assert first["disconnected_accounts"] == []
+
+
+def test_build_sin_cache_devuelve_sin_datos(tmp_path: Path) -> None:
+    db = tmp_path / "discovery.db"
+    _campaign(db, campaign_id="edge-sin-cache", mode="ga")
+    report = edge_map.build(
+        db,
+        data_root=tmp_path / "sin-cache",
+        costs_db=tmp_path / "lab.db",
+        registry=Registry(firms={}, accounts={}),
+    )
+    row = report["combos"][0]
+    assert row["state"] == "sobreajustada"  # PBO/WF guardados siguen decidiendo
+    assert row["raw_median_r"] is None
+    assert row["dataset_source"] == "Sin datos"
+    assert any("no existe" in item["reason"] for item in report["blocked"])
 
 
 def test_estado_invalida_y_sin_edge(tmp_path: Path) -> None:
@@ -295,6 +312,40 @@ def test_edge_map_no_escribe_ni_cuenta_trials(tmp_path: Path, monkeypatch) -> No
     assert db.read_bytes() == before
     assert count_tests(learning, discovery_db=db) == before_count
     assert report["n_combos"] == 1
+
+
+def test_capa_firma_excluye_plantilla_y_disconnected() -> None:
+    from types import SimpleNamespace
+
+    from tradinglab.propfund.models import ConnectionState, Market
+
+    def account(name: str, *, template: bool, state) -> SimpleNamespace:
+        return SimpleNamespace(
+            id=name,
+            template=template,
+            market=Market.CFD,
+            connection_state=state,
+            firm="ftmo",
+            program="evaluation",
+        )
+
+    registry = SimpleNamespace(
+        accounts={
+            "CFD-OK": account("CFD-OK", template=False, state=ConnectionState.DEMO),
+            "CFD-OFF": account(
+                "CFD-OFF", template=False, state=ConnectionState.DISCONNECTED
+            ),
+            "CFD-TPL": account("CFD-TPL", template=True, state=ConnectionState.DEMO),
+        }
+    )
+    assert [item.id for item in edge_map._firm_accounts(registry)] == ["CFD-OK"]
+    disconnected = edge_map._disconnected_accounts(registry)
+    assert [item["id"] for item in disconnected] == ["CFD-OFF"]
+    assert disconnected[0]["reason"] == "sin conectar"
+    assert [item.id for item in edge_map._firm_accounts(registry, "CFD-OK")] == [
+        "CFD-OK"
+    ]
+    assert edge_map._disconnected_accounts(registry, "CFD-OK") == []
 
 
 def test_firmas_incluye_cfd006_sin_filtro_y_respeta_filtro() -> None:

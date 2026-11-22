@@ -340,12 +340,22 @@ class LabData:
         *,
         root: Path | str = ROOT,
         db_path: Path | str = DEFAULT_DB,
+        discovery_db: Path | str | None = None,
+        costs_db: Path | str | None = None,
+        data_root: Path | str | None = None,
         external: bool = True,
         operator_service: OperatorService | None = None,
     ) -> None:
         self.settings = settings or get_settings()
         self.root = Path(root)
         self.db_path = Path(db_path)
+        self.discovery_db = Path(
+            discovery_db
+            if discovery_db is not None
+            else self.root / "data" / "discovery.db"
+        )
+        self.costs_db = Path(costs_db) if costs_db is not None else self.db_path
+        self.data_root = Path(data_root) if data_root is not None else self.root
         self.external = external
         self.cache = TTLCache()
         self._action_lock = threading.Lock()
@@ -2439,6 +2449,64 @@ $rows = foreach ($n in $names) {
         with self._action_lock:
             return dict(self._action) if self._action else {"status": "idle"}
 
+    # --------------------------------------------------------------- discovery
+
+    def discovery_summary(self) -> dict:
+        from .discovery import console
+
+        return console.summary(self.discovery_db, self.costs_db)
+
+    def discovery_campaigns(self) -> dict:
+        from .discovery import console
+
+        return console.campaigns_payload(self.discovery_db)
+
+    def discovery_campaign(self, campaign_id: str) -> dict | None:
+        from .discovery import console
+
+        return console.campaign_detail(self.discovery_db, campaign_id)
+
+    def discovery_strategy(self, strategy_id: int) -> dict | None:
+        from .discovery import console
+
+        return console.strategy_detail(self.discovery_db, strategy_id)
+
+    def discovery_edge_map(
+        self, *, by: str = "hipotesis", account: str | None = None
+    ) -> dict:
+        from .discovery import console
+
+        key = f"discovery_edge_map:{by}:{account or ''}"
+
+        def collect() -> dict:
+            return console.edge_map_payload(
+                self.discovery_db,
+                self.costs_db,
+                data_root=self.data_root,
+                by=by,
+                account=account,
+            )
+
+        return self.cache.get(key, 45.0, collect)
+
+    def discovery_suggest(
+        self, *, account: str | None = None, limit: int | None = None
+    ) -> dict:
+        from .discovery import console
+
+        key = f"discovery_suggest:{account or ''}:{limit or ''}"
+
+        def collect() -> dict:
+            return console.suggest_payload(
+                self.discovery_db,
+                self.costs_db,
+                data_root=self.data_root,
+                account=account,
+                limit=limit,
+            )
+
+        return self.cache.get(key, 60.0, collect)
+
 
 # ------------------------------------------------------------------ servidor
 
@@ -2601,6 +2669,53 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 from .propfund.console import payload as propfund_payload
 
                 self._json(propfund_payload(self.server.data.root, include_exposure=True))
+            elif path == "/api/discovery/summary":
+                self._json(self.server.data.discovery_summary())
+            elif path == "/api/discovery/campaigns":
+                self._json(self.server.data.discovery_campaigns())
+            elif path.startswith("/api/discovery/campaign/"):
+                campaign_id = unquote(path[len("/api/discovery/campaign/") :])
+                payload = self.server.data.discovery_campaign(campaign_id)
+                if payload is None:
+                    self._json({"ok": False, "error": "Sin datos"}, status=404)
+                else:
+                    self._json(payload)
+            elif path.startswith("/api/discovery/strategy/"):
+                raw_id = unquote(path[len("/api/discovery/strategy/") :])
+                try:
+                    strategy_id = int(raw_id)
+                except ValueError:
+                    self._error(400, "strategy id inválido")
+                    return
+                payload = self.server.data.discovery_strategy(strategy_id)
+                if payload is None:
+                    self._json({"ok": False, "error": "Sin datos"}, status=404)
+                else:
+                    self._json(payload)
+            elif path == "/api/discovery/edge-map":
+                params = parse_qs(urlparse(self.path).query)
+                by = (params.get("by") or ["hipotesis"])[0]
+                if by not in {"hipotesis", "cuenta", "instrumento"}:
+                    self._error(400, "by debe ser hipotesis, cuenta o instrumento")
+                    return
+                account = (params.get("account") or [None])[0] or None
+                self._json(
+                    self.server.data.discovery_edge_map(by=by, account=account)
+                )
+            elif path == "/api/discovery/suggest":
+                params = parse_qs(urlparse(self.path).query)
+                account = (params.get("account") or [None])[0] or None
+                raw_limit = (params.get("limit") or [None])[0]
+                try:
+                    limit = int(raw_limit) if raw_limit else None
+                except ValueError:
+                    self._error(400, "limit inválido")
+                    return
+                self._json(
+                    self.server.data.discovery_suggest(
+                        account=account, limit=limit
+                    )
+                )
             elif path == "/api/risk":
                 self._json(self.server.data.risk())
             elif path == "/api/market":
@@ -2988,10 +3103,19 @@ def serve(
     port: int = 8420,
     open_browser: bool = True,
     external: bool = True,
+    discovery_db: Path | str | None = None,
+    costs_db: Path | str | None = None,
+    data_root: Path | str | None = None,
 ) -> None:
     """Arranca el panel web hasta Ctrl+C."""
     settings = settings or get_settings()
-    data = LabData(settings, external=external)
+    data = LabData(
+        settings,
+        external=external,
+        discovery_db=discovery_db,
+        costs_db=costs_db,
+        data_root=data_root,
+    )
     server = DashboardServer((host, port), data)
 
     def _warm() -> None:

@@ -1033,6 +1033,18 @@
   .heat-legend { display: flex; align-items: center; gap: 8px; margin-top: 10px; color: var(--muted); font-size: 10px; flex-wrap: wrap; }
   .heat-scale { flex: 1; max-width: 260px; height: 6px; border-radius: 3px; background: linear-gradient(90deg, #f6c453, #2a3441 50%, #4cc9f0); }
   .corr-scale { max-width: 180px; }
+  .disc-tab { display: none; }
+  .disc-tab.active { display: block; }
+  select.input { text-transform: none; width: auto; min-width: 150px; }
+  .disc-heat { display: grid; gap: 3px; min-width: 480px; }
+  .disc-heat .corr-cell { min-height: 27px; font-size: 9.5px; }
+  .disc-heat .head { color: var(--muted); font-size: 9px; text-transform: uppercase; letter-spacing: .06em; background: #111a24; }
+  .disc-pick { cursor: pointer; }
+  .disc-pick:hover { background: rgba(76,201,240,.06); }
+  .disc-kv { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin: 10px 0; }
+  .disc-kv > div { background: #0c1219; border: 1px solid var(--border-soft); border-radius: 7px; padding: 8px 10px; }
+  .disc-kv .k { color: var(--muted); font-size: 9.5px; text-transform: uppercase; letter-spacing: .07em; }
+  .disc-kv .v { font-size: 13px; font-weight: 600; margin-top: 2px; }
   @media (max-width: 700px) {
     .equity-svg { height: 230px; }
     .corr-grid { min-width: 560px; }
@@ -1448,6 +1460,7 @@
       <button class="nav-btn" data-view="bots" title="Bots"><span class="ico">⚙</span> Bots</button>
       <button class="nav-btn" data-view="incubation" title="Incubadora"><span class="ico">⚗</span> Incubadora</button>
       <button class="nav-btn" data-view="research" title="Research"><span class="ico">⌁</span> Research</button>
+      <button class="nav-btn" data-view="discovery" title="Discovery Lab"><span class="ico">◇</span> Discovery</button>
       <button class="nav-btn" data-view="agents" title="Agentes"><span class="ico">✦</span> Agentes</button>
       <button class="nav-btn" data-view="ai-trader" title="IA discrecional"><span class="ico">*</span> IA discrecional</button>
       <div class="nav-label">Portafolios</div>
@@ -2297,6 +2310,114 @@
       </div>
     </section>
 
+    <!-- =========================================================== DISCOVERY -->
+    <section class="view" id="view-discovery">
+      <div class="note" style="margin:0 0 14px">
+        <strong>Discovery Lab · solo lectura.</strong> Esta vista lee el databank y los costes con conexiones
+        <code>mode=ro</code>. No lee OOS-2, no aprueba campañas y no ejecuta nada: aprobar y correr sigue
+        siendo exclusivo de la CLI con flag.
+      </div>
+      <div class="chart-ranges" id="disc-tabs" role="tablist" aria-label="Secciones de Discovery Lab" style="margin-bottom:14px;width:max-content">
+        <button data-disc="resumen" class="active" role="tab">A · Resumen</button>
+        <button data-disc="edge" role="tab">B · Edge Map</button>
+        <button data-disc="campanas" role="tab">C · Campañas</button>
+        <button data-disc="estrategia" role="tab">D · Estrategia</button>
+        <button data-disc="suggest" role="tab">E · Por probar</button>
+      </div>
+
+      <div class="disc-tab active" id="disc-tab-resumen" role="tabpanel">
+        <div class="stats" id="disc-stats"></div>
+        <div class="grid-2 equal">
+          <div class="panel">
+            <div class="panel-head"><h2>Campañas por estado</h2><span class="muted tiny" id="disc-campaign-meta"></span></div>
+            <div id="disc-status"></div>
+          </div>
+          <div class="panel">
+            <div class="panel-head"><h2>Presupuesto semanal</h2><span class="muted tiny">intentos usados / límite</span></div>
+            <div id="disc-budget"></div>
+          </div>
+        </div>
+        <div class="note" id="disc-summary-note" style="margin-top:14px">Sin datos.</div>
+      </div>
+
+      <div class="disc-tab" id="disc-tab-edge" role="tabpanel">
+        <div class="panel">
+          <div class="panel-head">
+            <h2>Edge Map</h2>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <select class="input" id="disc-edge-by" aria-label="Agrupar Edge Map">
+                <option value="hipotesis">Por hipótesis</option>
+                <option value="cuenta">Por cuenta</option>
+                <option value="instrumento">Por instrumento</option>
+              </select>
+              <select class="input" id="disc-edge-account" aria-label="Filtrar por cuenta">
+                <option value="">Todas las cuentas</option>
+              </select>
+              <button class="btn small" id="disc-edge-reload">Actualizar</button>
+            </div>
+          </div>
+          <div id="disc-edge"><div class="empty">Cargando…</div></div>
+          <div id="disc-edge-disconnected"></div>
+          <div class="note">La etiqueta usa la mediana de la rejilla o de la frontera GA. El máximo solo informa. H4/D1 quedan como <b>Sin datos (Dukascopy en descarga)</b>.</div>
+        </div>
+      </div>
+
+      <div class="disc-tab" id="disc-tab-campanas" role="tabpanel">
+        <div class="grid-2 equal">
+          <div class="panel">
+            <div class="panel-head"><h2>Campañas</h2><span class="muted tiny" id="disc-campaigns-meta"></span></div>
+            <div id="disc-campaigns"><div class="empty">Cargando…</div></div>
+          </div>
+          <div class="panel">
+            <div class="panel-head"><h2 id="disc-campaign-title">Detalle</h2><span class="muted tiny">genealogía · frontera · diagnóstico</span></div>
+            <div id="disc-campaign-detail"><div class="empty">Selecciona una campaña.</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="disc-tab" id="disc-tab-estrategia" role="tabpanel">
+        <div class="panel" style="margin-bottom:14px">
+          <div class="panel-head">
+            <h2>Estrategia</h2>
+            <select class="input" id="disc-strategy-select" aria-label="Elegir estrategia">
+              <option value="">Nivel ≥ 2</option>
+            </select>
+          </div>
+          <div id="disc-strategy"><div class="empty">Sin datos.</div></div>
+        </div>
+        <div class="grid-2 equal" style="margin-bottom:14px">
+          <div class="panel">
+            <div class="panel-head"><h2>Meseta de parámetros</h2><span class="muted tiny">robustness · optimizer</span></div>
+            <div id="disc-plateau"><div class="empty">Sin datos.</div></div>
+          </div>
+          <div class="panel">
+            <div class="panel-head"><h2>Hora × día de la semana</h2><span class="muted tiny">informe guardado</span></div>
+            <div id="disc-hourweek"><div class="empty">Sin datos.</div></div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h2>Rachas y coste por cuenta</h2><span class="muted tiny">validaciones guardadas</span></div>
+          <div id="disc-streaks"><div class="empty">Sin datos.</div></div>
+        </div>
+      </div>
+
+      <div class="disc-tab" id="disc-tab-suggest" role="tabpanel">
+        <div class="panel">
+          <div class="panel-head">
+            <h2>Por probar</h2>
+            <div style="display:flex;gap:8px;align-items:center">
+              <select class="input" id="disc-suggest-account" aria-label="Cuenta para suggest">
+                <option value="">Todas las cuentas</option>
+              </select>
+              <button class="btn small" id="disc-suggest-reload">Calcular</button>
+            </div>
+          </div>
+          <div id="disc-suggest"><div class="empty">Pulsa Calcular para ver combinaciones no probadas y viables.</div></div>
+          <div class="note">Todas las filas llevan la etiqueta <b>por probar</b>. No son candidatas, no han pasado PBO, WF ni OOS, y no se registran como pruebas.</div>
+        </div>
+      </div>
+    </section>
+
     <!-- ============================================================ REGISTROS -->
     <section class="view" id="view-logs">
       <div class="logs-layout">
@@ -2389,6 +2510,19 @@ const S = {
   fundEditorAccount: null,
   build: null,
   fp: {},
+  disc: {
+    tab: "resumen",
+    loaded: false,
+    summary: null,
+    campaigns: null,
+    campaign: null,
+    strategy: null,
+    edge: null,
+    suggest: null,
+    by: "hipotesis",
+    account: "",
+    strategyId: null,
+  },
 };
 
 const TITLES = {
@@ -2399,6 +2533,7 @@ const TITLES = {
   incubation: ["Incubadora", "Ciclo de vida, criterios congelados y propuesta forward"],
   "ai-trader": ["IA discrecional", "Operaciones del carril, sombra y lecciones"],
   research: ["Research", "PBO, walk-forward, regímenes y propuestas"],
+  discovery: ["Discovery Lab", "Databank, edge map por firma, campañas, estrategias y por probar"],
   agents: ["Agentes", "TradingAgents lite/deep y sus decisiones"],
   accounts: ["Cuentas", "Fondeo CFD/futuros"],
   fund: ["Fondo", "Límites por cuenta, bolsillos, clústeres y kill-switch"],
@@ -2688,6 +2823,7 @@ function switchView(view, updateHash = true) {
   if (view === "journal") loadJournal();
   if (view === "operator") loadOperator();
   if (view === "learning") loadLearning();
+  if (view === "discovery") loadDiscovery();
   if (view === "logs") loadReports();
   if (view === "decisions") renderDecisions();
   if (view === "repos") renderRepos();
@@ -6515,6 +6651,416 @@ function pfTable(head, rows, empty = "Sin datos") {
   return `<table><thead><tr>${head.map((h) => `<th${h.num ? ' class="num"' : ""}>${esc(h.t || h)}</th>`).join("")}</tr></thead><tbody>${rows.join("")}</tbody></table>`;
 }
 
+/* ------------------------------------------------------------ discovery */
+const DISC_STATE_TONE = {
+  "confirmada nivel 4": "green",
+  "candidata nivel 3": "green",
+  "sobreajustada": "red",
+  "inválida": "red",
+  "sin edge bruto": "yellow",
+  "edge bruto que el coste elimina": "yellow",
+  "solo viabilidad": "yellow",
+  "sin probar": "blue",
+  "no verificable": "yellow",
+};
+const DISC_VERDICT_TONE = { ROBUSTA: "green", MODERADA: "blue", "FRÁGIL": "yellow", SOBREAJUSTADA: "red" };
+
+function discMissing(value, fmt) {
+  if (value === null || value === undefined || value === "") return '<span class="muted tiny">Sin datos</span>';
+  return fmt ? fmt(value) : esc(value);
+}
+function discTag(text, tone) { return `<span class="tag ${tone || "blue"}">${esc(text)}</span>`; }
+function discStateTag(state) { return discTag(state || "Sin datos", DISC_STATE_TONE[state] || "blue"); }
+function discTable(head, rows, empty = "Sin datos") {
+  if (!rows || !rows.length) return `<div class="empty">${esc(empty)}</div>`;
+  const th = head.map((h) => `<th${h && h.num ? ' class="num"' : ""}>${esc(h && h.t ? h.t : h)}</th>`).join("");
+  return `<div class="table-wrap"><table><thead><tr>${th}</tr></thead><tbody>${rows.join("")}</tbody></table></div>`;
+}
+function discHeatColor(value, values) {
+  if (value === null || value === undefined || !isFinite(Number(value))) return "background:#111a24;color:#7f93a6";
+  const max = Math.max(0.0001, ...values.filter((v) => v !== null && v !== undefined && isFinite(Number(v))).map((v) => Math.abs(Number(v))));
+  const ratio = Math.min(1, Math.abs(Number(value)) / max);
+  return Number(value) >= 0
+    ? `background:rgba(76,201,240,${(0.08 + ratio * 0.55).toFixed(3)});color:#e8f1f8`
+    : `background:rgba(246,196,83,${(0.08 + ratio * 0.5).toFixed(3)});color:#1b1508`;
+}
+
+async function loadDiscovery(force = false) {
+  const state = S.disc;
+  if (state.loaded && !force) {
+    renderDiscAll();
+    return;
+  }
+  try {
+    const [summary, campaigns] = await Promise.all([
+      getJSON("/api/discovery/summary"),
+      getJSON("/api/discovery/campaigns"),
+    ]);
+    state.summary = summary;
+    state.campaigns = campaigns;
+    state.loaded = true;
+    renderDiscAll();
+  } catch (err) {
+    setHTML("#disc-stats", `<div class="alert red">No se pudo cargar Discovery Lab: ${esc(err.message)}</div>`);
+  }
+}
+
+function renderDiscAll() {
+  renderDiscSummary();
+  renderDiscCampaigns();
+  populateDiscStrategies();
+  if (S.disc.tab === "edge" && !S.disc.edge) loadDiscEdgeMap();
+  if (S.disc.tab === "estrategia" && !S.disc.strategy) {
+    const first = (S.disc.campaigns?.strategies || [])[0];
+    if (first) loadDiscStrategy(first.id);
+  }
+}
+
+function discSwitch(tab) {
+  S.disc.tab = tab;
+  $$("#disc-tabs button").forEach((btn) => {
+    const active = btn.dataset.disc === tab;
+    btn.classList.toggle("active", active);
+    btn.setAttribute("aria-selected", active ? "true" : "false");
+  });
+  $$(".disc-tab").forEach((panel) => panel.classList.toggle("active", panel.id === `disc-tab-${tab}`));
+  if (tab === "edge" && !S.disc.edge) loadDiscEdgeMap();
+  if (tab === "campanas" && !S.disc.campaign) {
+    const first = (S.disc.campaigns?.campaigns || [])[0];
+    if (first) loadDiscCampaign(first.id);
+  }
+  if (tab === "estrategia" && !S.disc.strategy) {
+    const first = (S.disc.campaigns?.strategies || [])[0];
+    if (first) loadDiscStrategy(first.id);
+  }
+}
+
+function renderDiscSummary() {
+  const s = S.disc.summary || {};
+  const c = s.campaigns || {};
+  const ct = s.count_tests || {};
+  const budget = s.budget || [];
+  const used = budget.reduce((total, item) => total + Number(item.used || 0), 0);
+  const limit = budget.reduce((total, item) => total + Number(item.limit || 0), 0);
+  const stat = (label, value, hint) => `<div class="stat"><div class="label">${esc(label)}</div><div class="value">${value}</div><div class="hint">${esc(hint)}</div></div>`;
+  setHTML("#disc-stats", [
+    stat("Contador DSR", discMissing(ct.total, (v) => num(v, 0)), `lecciones ${ct.lessons ?? "Sin datos"} · trials ${ct.optimization_trials ?? "Sin datos"}`),
+    stat("Campañas", discMissing(c.total, (v) => num(v, 0)), `N total ${c.n_total ?? "Sin datos"}`),
+    stat("Evaluadas", discMissing(c.n_evaluated, (v) => num(v, 0)), `efectivas ${c.n_effective ?? "Sin datos"}`),
+    stat("Finalistas", discMissing(c.n_finalists, (v) => num(v, 0)), "frontera de rango 1"),
+    stat("Presupuesto", `${used}/${limit}`, "intentos de la semana"),
+    stat("Discovery DSR", discMissing(ct.discovery, (v) => num(v, 0)), `holdout ${ct.holdout_reads ?? "Sin datos"}`),
+  ].join(""));
+  const statusRows = Object.entries(c.by_status || {}).sort(([a], [b]) => a.localeCompare(b)).map(([status, count]) =>
+    `<tr><td>${discTag(status, status === "done" ? "green" : (["rejected", "invalid"].includes(status) ? "red" : "blue"))}</td><td class="num">${num(count, 0)}</td></tr>`);
+  setHTML("#disc-status", discTable(["Estado", { t: "Campañas", num: 1 }], statusRows));
+  const budgetRows = budget.map((item) =>
+    `<tr><td class="mono">${esc(item.symbol)}</td><td class="mono tiny">${esc(item.week)}</td><td class="num">${num(item.used, 0)} / ${num(item.limit, 0)}</td><td class="num">${num(item.remaining, 0)}</td><td>${item.exceeded ? discTag("agotado", "red") : discTag("disponible", "green")}</td></tr>`);
+  setHTML("#disc-budget", discTable(["Activo", "Semana", { t: "Usado", num: 1 }, { t: "Restante", num: 1 }, "Estado"], budgetRows, "Sin datos de presupuesto"));
+  setHTML("#disc-summary-note", `<strong>Lectura.</strong> Contador DSR ${num(ct.total, 0)} = lecciones ${ct.lessons ?? 0} + trials ${ct.optimization_trials ?? 0} + holdout ${ct.holdout_reads ?? 0} + intentos ${ct.strategy_trials ?? 0} + incubados ${ct.incubated ?? 0} + campañas ${ct.campaign_registry ?? 0} + discovery ${ct.discovery ?? 0}. Generado ${dateTime(s.generated_at)}.`);
+}
+
+function renderDiscCampaigns() {
+  const rows = S.disc.campaigns?.campaigns || [];
+  setHTML("#disc-campaigns-meta", `${rows.length} campañas`);
+  const html = discTable(
+    ["Campaña", "Instrumento", "TF", "Modo", "Estado", { t: "N total", num: 1 }, { t: "Evaluadas", num: 1 }, { t: "Efectivas", num: 1 }, { t: "Finalistas", num: 1 }, "Creada"],
+    rows.map((row) => `<tr class="disc-pick" data-disc-campaign="${esc(row.id)}">
+      <td><b>${esc(row.template || "Sin datos")}</b><div class="tiny muted mono">${esc(row.id)}</div></td>
+      <td class="mono">${esc(row.instrument)}</td><td class="mono">${esc(row.timeframe)}</td><td>${esc(row.mode)}</td>
+      <td>${discTag(row.status || "Sin datos", row.status === "done" ? "green" : (["rejected", "invalid"].includes(row.status) ? "red" : "blue"))}</td>
+      <td class="num">${discMissing(row.n_total, (v) => num(v, 0))}</td>
+      <td class="num">${discMissing(row.n_evaluated, (v) => num(v, 0))}</td>
+      <td class="num">${discMissing(row.n_effective, (v) => num(v, 0))}</td>
+      <td class="num">${discMissing(row.n_finalists, (v) => num(v, 0))}</td>
+      <td class="tiny muted">${dateTime(row.created_at)}</td></tr>`),
+    "Sin campañas");
+  setHTML("#disc-campaigns", html);
+}
+
+async function loadDiscCampaign(id) {
+  setHTML("#disc-campaign-detail", `<div class="empty">Cargando ${esc(id)}…</div>`);
+  try {
+    const data = await getJSON(`/api/discovery/campaign/${encodeURIComponent(id)}`);
+    S.disc.campaign = data;
+    renderDiscCampaignDetail();
+  } catch (err) {
+    setHTML("#disc-campaign-detail", `<div class="alert red">Sin datos: ${esc(err.message)}</div>`);
+  }
+}
+
+function renderDiscCampaignDetail() {
+  const data = S.disc.campaign;
+  if (!data) return;
+  const c = data.campaign || {};
+  const diag = data.diagnostics || {};
+  setHTML("#disc-campaign-title", esc(c.template || c.id || "Detalle"));
+  const kv = (label, value) => `<div><div class="k">${esc(label)}</div><div class="v">${value}</div></div>`;
+  const header = `<div class="disc-kv">
+    ${kv("Estado", discTag(c.status || "Sin datos", c.status === "done" ? "green" : (["rejected", "invalid"].includes(c.status) ? "red" : "blue")))}
+    ${kv("Modo", esc(c.config?.mode || "Sin datos"))}
+    ${kv("Fuente", esc(c.config?.data_source || "Sin datos"))}
+    ${kv("Coste", esc(c.config?.cost?.mode || "Sin datos"))}
+    ${kv("N total", discMissing(c.n_total, (v) => num(v, 0)))}
+    ${kv("N efectivo", discMissing(c.n_effective, (v) => num(v, 0)))}
+    ${kv("Finalistas", discMissing(diag.n_finalists, (v) => num(v, 0)))}
+    ${kv("Dataset", esc(String(c.dataset_hash || "Sin datos").slice(0, 16)))}
+  </div>`;
+  const generations = discTable(
+    ["Generación", { t: "Estrategias", num: 1 }, { t: "Mejor IS R", num: 1 }, { t: "Frontera", num: 1 }],
+    (data.generations || []).map((g) => `<tr><td class="mono">${num(g.generation, 0)}</td><td class="num">${num(g.strategies, 0)}</td><td class="num">${discMissing(g.best_is_expectancy_r, (v) => num(v, 4))}</td><td class="num">${num(g.frontier, 0)}</td></tr>`),
+    "Sin generaciones");
+  const frontier = discTable(
+    ["Estrategia", "Nivel", "Veredicto", { t: "Rank", num: 1 }, { t: "Crowding", num: 1 }, { t: "IS R", num: 1 }],
+    (data.frontier || []).map((s) => `<tr><td class="mono">#${num(s.id, 0)}</td><td class="num">${num(s.level, 0)}</td><td>${s.verdict ? discTag(s.verdict, DISC_VERDICT_TONE[s.verdict] || "blue") : discTag("Sin datos", "blue")}</td><td class="num">${discMissing(s.rank, (v) => num(v, 0))}</td><td class="num">${discMissing(s.crowding, (v) => num(v, 3))}</td><td class="num">${discMissing(s.is_expectancy_r, (v) => num(v, 4))}</td></tr>`),
+    "Sin frontera");
+  const lineage = discTable(
+    ["Gen", "Estrategia", "Padres", "Operador", { t: "Rank", num: 1 }, { t: "Crowding", num: 1 }, { t: "Δ params", num: 1 }],
+    (data.lineage || []).slice(-14).reverse().map((row) => `<tr><td class="mono">${num(row.generation, 0)}</td><td class="mono">#${num(row.strategy_id, 0)}</td><td class="mono tiny">${esc([row.parent_a, row.parent_b].filter((v) => v !== null && v !== undefined).join(" × ") || "—")}</td><td class="tiny">${esc(row.operator || "Sin datos")}</td><td class="num">${discMissing(row.rank, (v) => num(v, 0))}</td><td class="num">${discMissing(row.crowding, (v) => num(v, 3))}</td><td class="num">${num(Object.keys(row.param_diff || {}).length, 0)}</td></tr>`),
+    "Sin genealogía");
+  const diagHtml = `<div class="chips">${Object.entries(diag.status_counts || {}).map(([key, value]) => `<span class="chip">${esc(key)} ${num(value, 0)}</span>`).join("")}</div>
+    <div class="chips">${Object.entries(diag.level_counts || {}).map(([key, value]) => `<span class="chip">nivel ${esc(key)} ${num(value, 0)}</span>`).join("")}</div>
+    <div class="chips">${Object.entries(diag.origin_counts || {}).map(([key, value]) => `<span class="chip">${esc(key)} ${num(value, 0)}</span>`).join("")}</div>
+    ${diag.last_error ? `<div class="alert red">${esc(diag.last_error)}</div>` : ""}
+    ${diag.reject_reason ? `<div class="alert">${esc(diag.reject_reason)}</div>` : ""}`;
+  setHTML("#disc-campaign-detail", `${header}<h3 class="muted tiny">Evolución por generación</h3>${generations}
+    <h3 class="muted tiny" style="margin-top:12px">Frontera</h3>${frontier}
+    <h3 class="muted tiny" style="margin-top:12px">Diagnóstico</h3>${diagHtml}
+    <h3 class="muted tiny" style="margin-top:12px">Genealogía (últimas 14)</h3>${lineage}`);
+}
+
+async function loadDiscEdgeMap() {
+  const by = $("#disc-edge-by")?.value || S.disc.by || "hipotesis";
+  const account = $("#disc-edge-account")?.value || S.disc.account || "";
+  setHTML("#disc-edge", `<div class="empty">Calculando Edge Map…</div>`);
+  try {
+    const query = `?by=${encodeURIComponent(by)}${account ? `&account=${encodeURIComponent(account)}` : ""}`;
+    const data = await getJSON(`/api/discovery/edge-map${query}`);
+    S.disc.edge = data;
+    S.disc.by = by;
+    S.disc.account = account;
+    renderDiscEdge();
+  } catch (err) {
+    setHTML("#disc-edge", `<div class="alert red">Sin datos: ${esc(err.message)}</div>`);
+  }
+}
+
+function fillDiscAccounts() {
+  const select = $("#disc-edge-account");
+  const suggestSelect = $("#disc-suggest-account");
+  if (!select) return;
+  const report = S.disc.edge?.report || {};
+  const accounts = new Set();
+  (report.firms || []).forEach((row) => accounts.add(row.account));
+  (report.disconnected_accounts || []).forEach((row) => accounts.add(row.id));
+  if (!accounts.size && S.disc.accounts) return;
+  S.disc.accounts = Array.from(accounts).sort();
+  const html = `<option value="">Todas las cuentas</option>` + S.disc.accounts.map((id) => `<option value="${esc(id)}">${esc(id)}</option>`).join("");
+  select.innerHTML = html;
+  select.value = S.disc.account || "";
+  if (suggestSelect) {
+    suggestSelect.innerHTML = `<option value="">Todas las cuentas</option>` + S.disc.accounts.map((id) => `<option value="${esc(id)}">${esc(id)}</option>`).join("");
+  }
+}
+
+function renderDiscEdge() {
+  const data = S.disc.edge;
+  if (!data) return;
+  const report = data.report || {};
+  fillDiscAccounts();
+  const disconnected = report.disconnected_accounts || [];
+  setHTML("#disc-edge-disconnected", disconnected.length
+    ? `<div class="note"><strong>Cuentas sin conectar:</strong> ${disconnected.map((row) => `${esc(row.id)} (${esc(row.firm)})`).join(", ")}. Quedan fuera de la capa de firma.</div>`
+    : "");
+  if (data.view === "cuenta") {
+    const rows = (report.firms || []).map((row) => `<tr>
+      <td class="mono"><b>${esc(row.account)}</b></td><td>${esc(row.firm)}</td><td class="mono">#${num(row.strategy_id, 0)}</td><td class="num">${num(row.level, 0)}</td>
+      <td>${row.verdict ? discTag(row.verdict, DISC_VERDICT_TONE[row.verdict] || "blue") : discTag("Sin datos", "blue")}</td>
+      <td class="num">${discMissing(row.pbo, (v) => num(v, 4))}</td><td>${row.wf_ok === null || row.wf_ok === undefined ? discTag("Sin datos", "blue") : discTag(row.wf_ok ? "sí" : "no", row.wf_ok ? "green" : "red")}</td>
+      <td class="num">${discMissing(row.net_expectancy_r, (v) => num(v, 4))}</td><td class="num">${discMissing(row.cost_r, (v) => num(v, 4))}</td>
+      <td class="num">${discMissing(row.trades, (v) => num(v, 0))}</td><td class="num">${discMissing(row.pass_rate, (v) => pct(v, 1))}</td>
+      <td>${discTag(row.automation_allowed ? "sí" : "no", row.automation_allowed ? "green" : "yellow")}</td>
+      <td>${discTag(row.candidate ? "sí" : "no", row.candidate ? "green" : "red")}</td><td>${esc(row.confirm_status || "Sin datos")}</td></tr>`);
+    setHTML("#disc-edge", discTable(["Cuenta", "Firma", "Estrategia", "Nivel", "Veredicto", "PBO", "WF", "Neto R", "Cost_R", "Ops", "P(pasar)", "Auto", "Candidata", "Confirmación"], rows, "Sin datos · la capa de firma no tiene estrategias nivel ≥ 2"));
+    return;
+  }
+  const rows = [];
+  (data.by || []).forEach((group) => {
+    (group.rows || []).forEach((row) => {
+      rows.push(`<tr><td class="mono"><b>${esc(row.template)}</b><div class="tiny muted">${esc(group.group)}</div></td><td class="mono">${esc(row.instrument)}</td><td class="mono">${esc(row.timeframe)}</td><td class="tiny">${esc(row.source)}</td>
+        <td>${discStateTag(row.state)}</td><td class="num">${discMissing(row.raw_median_r, (v) => num(v, 4))}</td><td class="num">${discMissing(row.raw_best_r, (v) => num(v, 4))}</td>
+        <td class="num">${discMissing(row.net_median_r, (v) => num(v, 4))}</td><td class="num">${discMissing(row.cost_r, (v) => num(v, 4))}</td>
+        <td class="num">${row.raw_median_r === null || row.raw_median_r === undefined ? "Sin datos" : `${num(row.positive_folds_count, 0)}/${num(row.strategy_total, 0)}`}</td>
+        <td class="num">${num(row.candidate_count, 0)}</td><td class="num">${num(row.confirmed_count, 0)}</td><td class="tiny">${esc(row.dataset_source || "Sin datos")}</td></tr>`);
+    });
+  });
+  setHTML("#disc-edge", discTable(["Hipótesis", "Instrumento", "TF", "Fuente", "Estado", "Bruto mediana", "Bruto mejor", "Neto mediana", "Cost_R", "Ops+", "Candidatas", "Confirmadas", "Datos"], rows, "Sin datos"));
+}
+
+function populateDiscStrategies() {
+  const select = $("#disc-strategy-select");
+  if (!select) return;
+  const strategies = S.disc.campaigns?.strategies || [];
+  select.innerHTML = `<option value="">Nivel ≥ 2</option>` + strategies.map((item) =>
+    `<option value="${esc(item.id)}">#${esc(item.id)} · ${esc(item.family || "Sin datos")} · ${esc(item.timeframe)} · N${esc(item.level)}${item.verdict ? " · " + esc(item.verdict) : ""}</option>`).join("");
+  if (S.disc.strategyId) select.value = String(S.disc.strategyId);
+}
+
+async function loadDiscStrategy(id) {
+  if (!id) return;
+  S.disc.strategyId = Number(id);
+  setHTML("#disc-strategy", `<div class="empty">Cargando estrategia #${esc(id)}…</div>`);
+  try {
+    const data = await getJSON(`/api/discovery/strategy/${encodeURIComponent(id)}`);
+    S.disc.strategy = data;
+    const select = $("#disc-strategy-select");
+    if (select) select.value = String(id);
+    renderDiscStrategy();
+  } catch (err) {
+    setHTML("#disc-strategy", `<div class="alert red">Sin datos: ${esc(err.message)}</div>`);
+  }
+}
+
+function renderDiscStrategy() {
+  const d = S.disc.strategy;
+  if (!d) return;
+  const st = d.strategy || {};
+  const chip = discTag(st.verdict_chip || "Sin datos", DISC_VERDICT_TONE[st.verdict_chip] || "blue");
+  const kv = (label, value) => `<div><div class="k">${esc(label)}</div><div class="v">${value}</div></div>`;
+  const header = `<div class="disc-kv">
+    ${kv("Veredicto", chip)}
+    ${kv("Familia", esc(st.family || "Sin datos"))}
+    ${kv("Instrumento", esc(st.instrument || "Sin datos"))}
+    ${kv("TF", esc(st.timeframe || "Sin datos"))}
+    ${kv("Nivel", num(st.level, 0))}
+    ${kv("Origen", esc(st.origin || "Sin datos"))}
+    ${kv("Generación", num(st.generation, 0))}
+    ${kv("Estado", esc(st.status || "Sin datos"))}
+  </div>`;
+  const rules = (d.rules || []).length
+    ? `<ul class="small">${d.rules.map((line) => `<li>${esc(line)}</li>`).join("")}</ul>`
+    : `<div class="empty">Sin datos</div>`;
+  const metricRows = (d.metrics?.rows || []).map((row) => {
+    const m = row.metrics?.is || row.metrics || {};
+    return `<tr><td class="mono">${esc(row.segment)}</td><td class="tiny">${esc(row.cost_profile || "Sin datos")}</td><td class="num">${discMissing(row.trades_count, (v) => num(v, 0))}</td>
+      <td class="num">${discMissing(m.expectancy_r, (v) => num(v, 4))}</td><td class="num">${discMissing(m.profit_factor, (v) => num(v, 2))}</td>
+      <td class="num">${discMissing(m.sharpe_daily, (v) => num(v, 2))}</td><td class="num">${discMissing(m.max_dd_r, (v) => num(v, 2))}</td>
+      <td class="num">${discMissing(m.win_rate, (v) => pct(v, 1))}</td><td class="num">${discMissing(m.cost_delta_r, (v) => num(v, 4))}</td></tr>`;
+  });
+  const metrics = discTable(["Segmento", "Coste", { t: "Ops", num: 1 }, { t: "Exp R", num: 1 }, { t: "PF", num: 1 }, { t: "Sharpe", num: 1 }, { t: "Max DD", num: 1 }, { t: "Win", num: 1 }, { t: "Δ coste", num: 1 }], metricRows);
+  const pbo = d.pbo || {};
+  const wf = d.wf || {};
+  const pboWf = `<div class="disc-kv">
+    ${kv("PBO", discMissing(pbo.pbo, (v) => num(v, 4)))}
+    ${kv("P(pérdida OOS)", discMissing(pbo.prob_oos_loss, (v) => num(v, 4)))}
+    ${kv("Cortes PBO", discMissing(pbo.n_slices, (v) => num(v, 0)))}
+    ${kv("Variantes PBO", discMissing(pbo.n_variants, (v) => num(v, 0)))}
+    ${kv("WF", wf.ok === null || wf.ok === undefined ? discTag("Sin datos", "blue") : discTag(wf.ok ? "ok" : "fallido", wf.ok ? "green" : "red"))}
+    ${kv("WF veredicto", esc(wf.verdict || "Sin datos"))}
+    ${kv("WF eficiencia", discMissing(wf.efficiency, (v) => num(v, 3)))}
+    ${kv("WF estabilidad", discMissing(wf.stability, (v) => num(v, 3)))}
+    ${kv("WF folds", discMissing(wf.n_folds, (v) => num(v, 0)))}
+  </div>`;
+  const stress = d.cost_stress || {};
+  const stressRows = ["base", "cost_x1_5", "cost_x2", "slippage_plus_1", "slippage_plus_2"].map((key) => {
+    const item = stress[key] || {};
+    return `<tr><td class="mono">${esc(key)}</td><td class="num">${discMissing(item.expectancy_r, (v) => num(v, 4))}</td><td class="num">${discMissing(item.profit_factor, (v) => num(v, 2))}</td><td class="num">${discMissing(item.max_dd_r, (v) => num(v, 2))}</td><td class="num">${discMissing(item.trades, (v) => num(v, 0))}</td></tr>`;
+  });
+  const stressFlags = `<div class="chips">
+    <span class="chip">coste ×1,5 ${stress.stress_cost_x1_5_ok === undefined ? "Sin datos" : (stress.stress_cost_x1_5_ok ? "ok" : "falla")}</span>
+    <span class="chip">slippage +2 ${stress.slippage_plus_2_ok === undefined ? "Sin datos" : (stress.slippage_plus_2_ok ? "ok" : "falla")}</span>
+  </div>`;
+  const perturbRows = Object.entries(d.perturbations || {}).map(([name, item]) => {
+    const value = item || {};
+    return `<tr><td class="mono">${esc(name)}</td><td>${value.passed === undefined ? discTag("Sin datos", "blue") : discTag(value.passed ? "ok" : "falla", value.passed ? "green" : "red")}</td><td class="num">${discMissing(value.ratio, (v) => num(v, 3))}</td><td class="num">${discMissing(value.p10, (v) => num(v, 4))}</td><td class="num">${discMissing(value.positive_frac, (v) => pct(v, 1))}</td></tr>`;
+  });
+  const challengeRows = Object.entries(d.challenge_accounts || {}).map(([account, item]) =>
+    `<tr><td class="mono"><b>${esc(account)}</b></td><td>${esc(item.firm || "Sin datos")}</td><td class="num">${discMissing(item.pass_rate, (v) => pct(v, 1))}</td><td class="num">${discMissing(item.breach_rate, (v) => pct(v, 1))}</td>
+      <td class="num">${discMissing(item.median_days_to_pass, (v) => num(v, 0))}</td><td class="num">${discMissing(item.p90_days_to_pass, (v) => num(v, 0))}</td><td class="num">${discMissing(item.paths, (v) => num(v, 0))}</td><td class="tiny">${esc(item.rules || "Sin datos")}</td></tr>`);
+  const costRows = (d.costs_by_account || []).map((item) =>
+    `<tr><td class="mono"><b>${esc(item.account)}</b></td><td>${esc(item.firm)}</td><td>${discTag(item.connected ? "conectada" : "sin conectar", item.connected ? "green" : "yellow")}</td>
+      <td class="num">${discMissing(item.spread_price, (v) => num(v, 5))}</td><td class="num">${discMissing(item.spread_p75_price, (v) => num(v, 5))}</td>
+      <td class="tiny">${esc(item.commission_type || "Sin datos")} ${item.commission_value === null || item.commission_value === undefined ? "" : num(item.commission_value, 4)}</td>
+      <td class="num">${discMissing(item.slippage_price, (v) => num(v, 5))}</td><td class="tiny">${esc(item.source || "Sin datos")}</td><td>${item.verified ? discTag("verificado", "green") : discTag("sin verificar", "yellow")}</td></tr>`);
+  const streaks = d.streaks || {};
+  setHTML("#disc-strategy", `${header}
+    <h3 class="muted tiny">Reglas en lenguaje claro</h3>${rules}
+    <h3 class="muted tiny" style="margin-top:12px">Métricas IS / OOS-1</h3>${metrics}
+    <div class="note">OOS-2 no se muestra: esta consola no lo lee. La lista de segmentos excluye cualquier evaluación OOS-2.</div>
+    <h3 class="muted tiny" style="margin-top:12px">PBO y walk-forward</h3>${pboWf}
+    <h3 class="muted tiny" style="margin-top:12px">Estrés de costes</h3>${discTable(["Escenario", { t: "Exp R", num: 1 }, { t: "PF", num: 1 }, { t: "Max DD", num: 1 }, { t: "Ops", num: 1 }], stressRows)}${stressFlags}
+    <h3 class="muted tiny" style="margin-top:12px">Perturbaciones</h3>${discTable(["Prueba", "Pasa", { t: "Ratio", num: 1 }, { t: "p10", num: 1 }, { t: "Positivas", num: 1 }], perturbRows)}
+    <h3 class="muted tiny" style="margin-top:12px">Monte Carlo del challenge por cuenta</h3>${discTable(["Cuenta", "Firma", { t: "P(pasar)", num: 1 }, { t: "P(breach)", num: 1 }, { t: "Días mediana", num: 1 }, { t: "Días p90", num: 1 }, { t: "Paths", num: 1 }, "Reglas"], challengeRows, "Sin datos de challenge")}
+    <h3 class="muted tiny" style="margin-top:12px">Coste por cuenta</h3>${discTable(["Cuenta", "Firma", "Estado", { t: "Spread", num: 1 }, { t: "Spread p75", num: 1 }, "Comisión", { t: "Slippage", num: 1 }, "Fuente", "Verificado"], costRows, "Sin datos de coste")}
+    <h3 class="muted tiny" style="margin-top:12px">Rachas</h3><div class="disc-kv">
+      ${kv("Racha ganadora máxima", discMissing(streaks.max_winning_streak, (v) => num(v, 0)))}
+      ${kv("Racha perdedora máxima", discMissing(streaks.max_losing_streak, (v) => num(v, 0)))}
+    </div>
+    ${(d.validation_errors || []).length ? `<div class="alert red">${d.validation_errors.map(esc).join("<br>")}</div>` : ""}`);
+  renderDiscPlateau(d.plateau);
+  renderDiscHourWeek(d.hour_weekday);
+}
+
+function renderDiscPlateau(plateau) {
+  const parameters = plateau?.parameters || [];
+  if (!parameters.length) {
+    setHTML("#disc-plateau", `<div class="empty">Sin datos</div>`);
+    return;
+  }
+  const values = [];
+  parameters.forEach((item) => ["minus", "base", "plus"].forEach((key) => {
+    const value = item.metrics?.[key]?.expectancy_r;
+    if (value !== null && value !== undefined) values.push(Number(value));
+  }));
+  const head = `<div class="corr-cell head">Parámetro</div><div class="corr-cell head">−</div><div class="corr-cell head">base</div><div class="corr-cell head">+</div>`;
+  const cells = parameters.map((item) => {
+    const label = String(item.name || "Sin datos");
+    const short = label.length > 34 ? `${label.slice(0, 32)}…` : label;
+    return `<div class="corr-label" title="${esc(label)}">${esc(short)}</div>` + ["minus", "base", "plus"].map((key) => {
+      const value = item.metrics?.[key]?.expectancy_r;
+      return `<div class="corr-cell" style="${discHeatColor(value, values)}" title="${esc(key)} ${esc(item[key] ?? "Sin datos")}">${value === null || value === undefined ? "Sin datos" : num(value, 3)}</div>`;
+    }).join("");
+  }).join("");
+  setHTML("#disc-plateau", `<div class="heatmap-wrap"><div class="disc-heat" style="grid-template-columns:minmax(150px,1.5fr) repeat(3,minmax(62px,1fr))">${head}${cells}</div></div>
+    <div class="heat-legend"><span>−</span><span class="heat-scale"></span><span>+</span><span>expectativa R · ${esc(plateau.note || "meseta guardada")}</span></div>`);
+}
+
+function renderDiscHourWeek(hourWeekday) {
+  const groups = hourWeekday?.groups || {};
+  const keys = Object.keys(groups);
+  if (!keys.length) {
+    setHTML("#disc-hourweek", `<div class="empty">Sin datos</div>`);
+    return;
+  }
+  const days = ["Lun", "Mar", "Mié", "Jue", "Vie"];
+  const hours = Array.from(new Set(keys.map((key) => key.split(":")[0]))).sort();
+  const values = Object.values(groups).map((item) => Number(item.expectancy_r)).filter((v) => isFinite(v));
+  const head = `<div class="corr-cell head">Hora</div>` + days.map((day) => `<div class="corr-cell head">${day}</div>`).join("");
+  const cells = hours.map((hour) => `<div class="corr-label">${esc(hour)}:00</div>` + days.map((_, index) => {
+    const item = groups[`${hour}:${index}`];
+    if (!item) return `<div class="corr-cell" style="background:#111a24;color:#7f93a6">—</div>`;
+    return `<div class="corr-cell" style="${discHeatColor(item.expectancy_r, values)}" title="${esc(hour)}:00 · ${esc(item.trades ?? "Sin datos")} ops">${num(item.expectancy_r, 2)}</div>`;
+  }).join("")).join("");
+  setHTML("#disc-hourweek", `<div class="heatmap-wrap"><div class="disc-heat" style="grid-template-columns:52px repeat(5,minmax(48px,1fr))">${head}${cells}</div></div>
+    <div class="heat-legend"><span>pérdida</span><span class="heat-scale"></span><span>ganancia</span><span>expectativa R por hora y día</span></div>`);
+}
+
+async function loadDiscSuggest() {
+  const account = $("#disc-suggest-account")?.value || "";
+  setHTML("#disc-suggest", `<div class="empty">Calculando combinaciones viables…</div>`);
+  try {
+    const data = await getJSON(`/api/discovery/suggest${account ? `?account=${encodeURIComponent(account)}` : ""}`);
+    S.disc.suggest = data;
+    const rows = (data.rows || []).map((row) => `<tr><td class="mono"><b>${esc(row.template)}</b></td><td class="mono">${esc(row.instrument)}</td><td class="mono">${esc(row.timeframe)}</td><td class="tiny">${esc(row.source)}</td>
+      <td class="mono tiny">${esc(row.session || "Sin datos")}</td><td class="tiny">${esc((row.accounts || []).join(", ") || "Sin datos")}</td>
+      <td class="num">${discMissing(row.trades_is, (v) => num(v, 0))}</td><td class="num">${discMissing(row.cost_r, (v) => num(v, 4))}</td><td>${discTag("por probar", "blue")}</td><td class="tiny">${esc(row.constraint || "Sin datos")}</td></tr>`);
+    const blocked = (data.blocked || []).map((item) => `<div class="note">${esc(item.timeframe)}: ${esc(item.reason)}</div>`).join("");
+    setHTML("#disc-suggest", discTable(["Hipótesis", "Instrumento", "TF", "Fuente", "Sesión", "Cuentas", { t: "Ops IS", num: 1 }, { t: "Cost_R", num: 1 }, "Etiqueta", "Restricción"], rows, "Sin datos · no hay combinaciones no probadas y viables") + blocked);
+  } catch (err) {
+    setHTML("#disc-suggest", `<div class="alert red">Sin datos: ${esc(err.message)}</div>`);
+  }
+}
+
 async function loadPropFund() {
   try {
     S.propfund = await getJSON("/api/propfund");
@@ -7531,6 +8077,19 @@ function init() {
     renderAsset();
   });
   $("#reload-logs").addEventListener("click", () => { S.selectedLog = null; loadAll(true); });
+  $$("#disc-tabs button").forEach((btn) => btn.addEventListener("click", () => discSwitch(btn.dataset.disc)));
+  $("#disc-edge-by").addEventListener("change", () => { S.disc.edge = null; loadDiscEdgeMap(); });
+  $("#disc-edge-account").addEventListener("change", () => { S.disc.edge = null; loadDiscEdgeMap(); });
+  $("#disc-edge-reload").addEventListener("click", () => { S.disc.edge = null; loadDiscEdgeMap(); });
+  $("#disc-campaigns").addEventListener("click", (event) => {
+    const row = event.target.closest("[data-disc-campaign]");
+    if (row) loadDiscCampaign(row.dataset.discCampaign);
+  });
+  $("#disc-strategy-select").addEventListener("change", (event) => {
+    if (event.target.value) loadDiscStrategy(event.target.value);
+  });
+  $("#disc-suggest-reload").addEventListener("click", loadDiscSuggest);
+  $("#disc-suggest-account").addEventListener("change", loadDiscSuggest);
   $("#modal-close").addEventListener("click", closeModal);
   $("#modal").addEventListener("click", (event) => { if (event.target.id === "modal") closeModal(); });
   document.addEventListener("keydown", (event) => {

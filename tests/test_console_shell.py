@@ -40,6 +40,7 @@ def test_barra_lateral_con_secciones_y_todas_las_vistas() -> None:
         "incubation",
         "ai-trader",
         "research",
+        "discovery",
         "agents",
         "accounts",
         "fund",
@@ -164,6 +165,41 @@ def test_inventario_ui_base_sigue_completo() -> None:
 
     api_calls = set(re.findall(r"/api/[A-Za-z0-9_./?&=${}:-]*", text))
     assert api_calls == set(inventory["api_calls"])
+
+
+def test_vista_discovery_lab_solo_lectura() -> None:
+    text = INDEX.read_text(encoding="utf-8")
+    for marker in (
+        'id="view-discovery"',
+        'data-view="discovery"',
+        'id="disc-tabs"',
+        'id="disc-stats"',
+        'id="disc-edge"',
+        'id="disc-edge-by"',
+        'id="disc-edge-account"',
+        'id="disc-campaigns"',
+        'id="disc-campaign-detail"',
+        'id="disc-strategy"',
+        'id="disc-strategy-select"',
+        'id="disc-plateau"',
+        'id="disc-hourweek"',
+        'id="disc-suggest"',
+        "function loadDiscovery(",
+        "function renderDiscStrategy(",
+        "function renderDiscPlateau(",
+        "function renderDiscHourWeek(",
+        "/api/discovery/summary",
+        "/api/discovery/edge-map",
+        'id="view-learning"',
+    ):
+        assert marker in text, marker
+    assert "A · Resumen" in text
+    assert "B · Edge Map" in text
+    assert "C · Campañas" in text
+    assert "D · Estrategia" in text
+    assert "E · Por probar" in text
+    assert "No lee OOS-2, no aprueba campañas" in text
+    assert "no ejecuta nada" in text
 
 
 def test_ranking_de_modelos_en_pestana_agentes() -> None:
