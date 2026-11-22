@@ -6,9 +6,10 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from tradinglab.discovery.config import load_engine_config
+from tradinglab.discovery.config import SessionSegment, load_engine_config
 from tradinglab.discovery.data_quality import (
     _calendar_gap,
+    _calendar_gap_session,
     _gap_analysis,
     check_dataset,
     dataset_hash,
@@ -466,34 +467,29 @@ def test_d1_miercoles_que_falta_si_cuenta() -> None:
 
 
 def test_h4_fin_de_semana_no_cuenta_y_sesion_perdida_si() -> None:
-    config = quality_config(
-        load_engine_config().data_quality, "US100", "H4", "dukascopy"
-    )
-    frame = _session_frame(_h4_labels("2024-01-07"))
-    _scheduled, non_scheduled, _samples, calendar_gaps, _outside = _gap_analysis(
-        frame,
+    session = SessionSegment(friday_close="16:15", sunday_open="17:00")
+    real, _reason = _calendar_gap_session(
+        pd.Timestamp("2024-01-12 16:15", tz="America/New_York"),
+        pd.Timestamp("2024-01-14 17:00", tz="America/New_York"),
         240,
-        config,
-        pause_tz="America/New_York",
-        calendar="nyse",
+        6 * 60,
+        "nyse",
+        session,
+        "America/New_York",
     )
-    assert non_scheduled == 0
-    assert calendar_gaps
+    assert real is False
 
-    labels = _h4_labels("2024-01-07")
-    labels.remove("2024-01-10T09:00:00-05:00")
-    labels.remove("2024-01-10T13:00:00-05:00")
-    frame = _session_frame(labels)
-    _scheduled, non_scheduled, samples, _calendar, _outside = _gap_analysis(
-        frame,
+    real, reason = _calendar_gap_session(
+        pd.Timestamp("2024-01-10 09:00", tz="America/New_York"),
+        pd.Timestamp("2024-01-10 17:00", tz="America/New_York"),
         240,
-        config,
-        pause_tz="America/New_York",
-        calendar="nyse",
+        6 * 60,
+        "nyse",
+        session,
+        "America/New_York",
     )
-    assert non_scheduled == 1
-    assert samples
-    assert "2024-01-10" in samples[0].get("reason", "sesión 2024-01-10")
+    assert real is True
+    assert "2024-01-10" in reason
 
 
 def test_calendario_viernes_a_lunes_y_jueves_a_domingo() -> None:
@@ -568,4 +564,46 @@ def test_us30_usa_nyse_y_los_demas_sin_calendario() -> None:
     assert report.calendar_gaps
     assert any("2024-07-04" in item["start"] for item in report.calendar_gaps)
     assert report.calendar["name"] == "nyse"
+
+
+def test_sin_sesion_configurada_el_comportamiento_es_el_anterior() -> None:
+    # Tres semanas H1 continuas; se borra la segunda semana completa.
+    labels = []
+    first = pd.Timestamp("2024-01-07 17:00", tz="America/New_York")
+    for week in range(3):
+        begin = first + pd.Timedelta(days=7 * week)
+        end = begin + pd.Timedelta(days=5)
+        labels.extend(
+            stamp.isoformat() for stamp in pd.date_range(begin, end, freq="h", inclusive="left")
+        )
+    missing = pd.Timestamp("2024-01-15", tz="America/New_York")
+    labels = [
+        label
+        for label in labels
+        if not (
+            pd.Timestamp(label).date() >= missing.date()
+            and pd.Timestamp(label).date() < (missing + pd.Timedelta(days=5)).date()
+        )
+    ]
+    frame = _session_frame(labels)
+    config = quality_config(
+        load_engine_config().data_quality, "TEST", "H1", "dukascopy"
+    )
+    assert config.session_for("dukascopy", "TEST", pd.Timestamp("2024-01-16").date()) is None
+
+    legacy = _gap_analysis(
+        frame, 60, config, pause_tz="America/New_York", calendar=None
+    )
+    con_contexto = _gap_analysis(
+        frame,
+        60,
+        config,
+        pause_tz="America/New_York",
+        calendar=None,
+        symbol="TEST",
+        source="dukascopy",
+    )
+    assert legacy[1] == con_contexto[1] == 1
+    assert len(legacy[3]) == len(con_contexto[3])
+    assert legacy[2][0]["start"] == con_contexto[2][0]["start"]
 

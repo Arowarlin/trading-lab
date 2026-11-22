@@ -172,3 +172,349 @@ data_quality:
       path: data/cache/mt5/{symbol}_{tf}.parquet
       timezone: UTC
       calendar: null
+
+
+  sessions:
+    # Sin sesión estable (<60%): dukascopy:US100, US500, US30, XAUUSD.
+    "broker:US100":
+      segments:
+        - start: "2022-01-01"
+          end: "2026-12-31"
+          friday_close: "16:50"
+          sunday_open: "18:00"
+          pause_start: "16:50"
+          pause_end: "18:05"
+          short_close: "16:50"
+    "broker:US500":
+      segments:
+        - start: "2022-01-01"
+          end: "2026-12-31"
+          friday_close: "16:50"
+          sunday_open: "18:00"
+          pause_start: "16:50"
+          pause_end: "18:05"
+          short_close: "16:50"
+    "broker:US30":
+      segments:
+        - start: "2022-01-01"
+          end: "2026-12-31"
+          friday_close: "16:50"
+          sunday_open: "18:00"
+          pause_start: "16:50"
+          pause_end: "18:05"
+          short_close: "16:50"
+    "broker:XAUUSD":
+      segments:
+        - start: "2022-01-01"
+          end: "2026-12-31"
+          friday_close: "16:50"
+          sunday_open: "18:00"
+          pause_start: "16:50"
+          pause_end: "18:05"
+          short_close: "16:50"
+    "dukascopy:EURUSD":
+      segments:
+        - start: "2003-01-01"
+          end: "2003-12-31"
+          friday_close: "17:00"
+          sunday_open: "17:00"
+          pause_start: null
+          pause_end: null
+          short_close: null
+        - start: "2004-01-01"
+          end: "2004-12-31"
+          friday_close: "17:00"
+          sunday_open: "17:00"
+          pause_start: null
+          pause_end: null
+          short_close: null
+        - start: "2005-01-01"
+          end: "2009-12-31"
+          friday_close: "17:00"
+          sunday_open: "17:00"
+          pause_start: null
+          pause_end: null
+          short_close: null
+        - start: "2010-01-01"
+          end: "2010-12-31"
+          friday_close: "17:00"
+          sunday_open: "17:00"
+          pause_start: null
+          pause_end: null
+          short_close: null
+        - start: "2011-01-01"
+          end: "2018-12-31"
+          friday_close: "17:00"
+          sunday_open: "17:00"
+          pause_start: null
+          pause_end: null
+          short_close: null
+        - start: "2019-01-01"
+          end: "2019-12-31"
+          friday_close: "17:00"
+          sunday_open: "17:00"
+          pause_start: "17:00"
+          pause_end: "18:00"
+          short_close: null
+        - start: "2020-01-01"
+          end: "2020-12-31"
+          friday_close: "17:00"
+          sunday_open: "17:00"
+          pause_start: null
+          pause_end: null
+          short_close: null
+        - start: "2021-01-01"
+          end: "2021-12-31"
+          friday_close: "17:00"
+          sunday_open: "17:00"
+          pause_start: null
+          pause_end: null
+          short_close: null
+        - start: "2022-01-01"
+          end: "2024-12-31"
+          friday_close: "17:00"
+          sunday_open: "17:00"
+          pause_start: null
+          pause_end: null
+          short_close: null
+        - start: "2025-01-01"
+          end: "2025-12-31"
+          friday_close: "17:00"
+          sunday_open: "17:00"
+          pause_start: "17:10"
+          pause_end: "17:25"
+          short_close: null
+        - start: "2026-01-01"
+          end: "2026-12-31"
+          friday_close: "17:00"
+          sunday_open: "17:00"
+          pause_start: null
+          pause_end: null
+          short_close: null
+    "broker:EURUSD":
+      segments:
+        - start: "2022-01-01"
+          end: "2023-12-31"
+          friday_close: "16:55"
+          sunday_open: "17:00"
+          pause_start: "16:55"
+          pause_end: "17:05"
+          short_close: "16:55"
+        - start: "2024-01-01"
+          end: "2025-12-31"
+          friday_close: "16:55"
+          sunday_open: "17:00"
+          pause_start: "16:55"
+          pause_end: "17:05"
+          short_close: "16:55"
+        - start: "2026-01-01"
+          end: "2026-12-31"
+          friday_close: "16:55"
+          sunday_open: "17:00"
+          pause_start: "16:55"
+          pause_end: "17:05"
+          short_close: "16:55"
+    "dukascopy:GBPUSD":
+      segments:
+        - start: "2003-01-01"
+          end: "2003-12-31"
+          friday_close: "17:00"
+          sunday_open: "17:00"
+          pause_start: null
+          pause_end: null
+          short_close: null
+        - start: "2004-01-01"
+          end: "2004-12-31"
+          friday_close: "17:00"
+          sunday_open: "17:00"
+          pause_start: null
+          pause_end: null
+          short_close: null
+        - start: "2005-01-01"
+          end: "2009-12-31"
+          friday_close: "17:00"
+          sunday_open: "17:00"
+          pause_start: null
+          pause_end: null
+          short_close: null
+        - start: "2010-01-01"
+          end: "2010-12-31"
+          friday_close: "17:00"
+          sunday_open: "17:00"
+          pause_start: null
+          pause_end: null
+          short_close: null
+        - start: "2011-01-01"
+          end: "2011-12-31"
+          friday_close: "17:00"
+          sunday_open: "17:00"
+          pause_start: "17:05"
+          pause_end: "17:20"
+          short_close: null
+        - start: "2012-01-01"
+          end: "2017-12-31"
+          friday_close: "17:00"
+          sunday_open: "17:00"
+          pause_start: null
+          pause_end: null
+          short_close: null
+        - start: "2018-01-01"
+          end: "2018-12-31"
+          friday_close: "17:00"
+          sunday_open: "17:00"
+          pause_start: "17:30"
+          pause_end: "18:15"
+          short_close: null
+        - start: "2019-01-01"
+          end: "2019-12-31"
+          friday_close: "17:00"
+          sunday_open: "17:00"
+          pause_start: "17:00"
+          pause_end: "18:00"
+          short_close: null
+        - start: "2020-01-01"
+          end: "2020-12-31"
+          friday_close: "17:00"
+          sunday_open: "17:00"
+          pause_start: null
+          pause_end: null
+          short_close: null
+        - start: "2021-01-01"
+          end: "2021-12-31"
+          friday_close: "17:00"
+          sunday_open: "17:00"
+          pause_start: null
+          pause_end: null
+          short_close: null
+        - start: "2022-01-01"
+          end: "2026-12-31"
+          friday_close: "17:00"
+          sunday_open: "17:00"
+          pause_start: null
+          pause_end: null
+          short_close: null
+    "broker:GBPUSD":
+      segments:
+        - start: "2022-01-01"
+          end: "2023-12-31"
+          friday_close: "16:55"
+          sunday_open: "17:00"
+          pause_start: "16:55"
+          pause_end: "17:05"
+          short_close: "16:55"
+        - start: "2024-01-01"
+          end: "2025-12-31"
+          friday_close: "16:55"
+          sunday_open: "17:00"
+          pause_start: "16:55"
+          pause_end: "17:05"
+          short_close: "16:55"
+        - start: "2026-01-01"
+          end: "2026-12-31"
+          friday_close: "16:55"
+          sunday_open: "17:00"
+          pause_start: "16:55"
+          pause_end: "17:05"
+          short_close: "16:55"
+    "dukascopy:USDJPY":
+      segments:
+        - start: "2003-01-01"
+          end: "2003-12-31"
+          friday_close: "17:00"
+          sunday_open: "17:00"
+          pause_start: null
+          pause_end: null
+          short_close: null
+        - start: "2004-01-01"
+          end: "2004-12-31"
+          friday_close: "17:00"
+          sunday_open: "17:00"
+          pause_start: null
+          pause_end: null
+          short_close: null
+        - start: "2005-01-01"
+          end: "2009-12-31"
+          friday_close: "17:00"
+          sunday_open: "17:00"
+          pause_start: null
+          pause_end: null
+          short_close: null
+        - start: "2010-01-01"
+          end: "2010-12-31"
+          friday_close: "17:00"
+          sunday_open: "17:00"
+          pause_start: null
+          pause_end: null
+          short_close: null
+        - start: "2011-01-01"
+          end: "2011-12-31"
+          friday_close: "17:00"
+          sunday_open: "17:00"
+          pause_start: null
+          pause_end: null
+          short_close: null
+        - start: "2012-01-01"
+          end: "2012-12-31"
+          friday_close: "17:00"
+          sunday_open: "17:00"
+          pause_start: "17:20"
+          pause_end: "17:50"
+          short_close: null
+        - start: "2013-01-01"
+          end: "2018-12-31"
+          friday_close: "17:00"
+          sunday_open: "17:00"
+          pause_start: null
+          pause_end: null
+          short_close: null
+        - start: "2019-01-01"
+          end: "2019-12-31"
+          friday_close: "17:00"
+          sunday_open: "17:00"
+          pause_start: "17:00"
+          pause_end: "18:00"
+          short_close: null
+        - start: "2020-01-01"
+          end: "2020-12-31"
+          friday_close: "17:00"
+          sunday_open: "17:00"
+          pause_start: null
+          pause_end: null
+          short_close: null
+        - start: "2021-01-01"
+          end: "2021-12-31"
+          friday_close: "17:00"
+          sunday_open: "17:00"
+          pause_start: "17:15"
+          pause_end: "17:25"
+          short_close: null
+        - start: "2022-01-01"
+          end: "2026-12-31"
+          friday_close: "17:00"
+          sunday_open: "17:00"
+          pause_start: null
+          pause_end: null
+          short_close: null
+    "broker:USDJPY":
+      segments:
+        - start: "2022-01-01"
+          end: "2023-12-31"
+          friday_close: "16:55"
+          sunday_open: "17:00"
+          pause_start: "16:55"
+          pause_end: "17:05"
+          short_close: "16:55"
+        - start: "2024-01-01"
+          end: "2025-12-31"
+          friday_close: "16:55"
+          sunday_open: "17:00"
+          pause_start: "16:55"
+          pause_end: "17:05"
+          short_close: "16:55"
+        - start: "2026-01-01"
+          end: "2026-12-31"
+          friday_close: "16:55"
+          sunday_open: "17:00"
+          pause_start: "16:55"
+          pause_end: "17:05"
+          short_close: "16:55"

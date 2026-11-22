@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass, field
+from datetime import date
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -29,7 +30,8 @@ from zoneinfo import ZoneInfo
 import numpy as np
 import pandas as pd
 
-from .config import DataQualityConfig, load_engine_config
+from . import calendars
+from .config import DataQualityConfig, SessionSegment, load_engine_config
 from .data_sources import DataSourceError, load_source
 
 DEFAULT_TIMEZONE = "UTC"
@@ -387,6 +389,131 @@ def _calendar_gap(
     return False, "tolerancia ±1 h"
 
 
+def _minutes_hhmm(value: str | None) -> int | None:
+    if value is None:
+        return None
+    hour, minute = (int(part) for part in str(value).split(":"))
+    return hour * 60 + minute
+
+
+def _minutes_hhmm_int(value: int) -> int:
+    return (int(value) // 100) * 60 + int(value) % 100
+
+
+def _session_ts(day: date, minutes: int, zone: ZoneInfo) -> pd.Timestamp:
+    return pd.Timestamp(f"{day.isoformat()} 00:00", tz=zone) + pd.Timedelta(
+        minutes=minutes
+    )
+
+
+def _expected_intervals(
+    day: date,
+    session: SessionSegment,
+    calendar: str | None,
+    zone: ZoneInfo,
+) -> tuple[list[tuple[pd.Timestamp, pd.Timestamp]], list[str]]:
+    """Tramos con mercado abierto para un día, según horario y calendario."""
+    holiday = calendars.holiday_reason(calendar, day)
+    if holiday:
+        return [], ["festivo"]
+    weekday = day.weekday()
+    if weekday == 5:
+        return [], ["fin de semana"]
+    if weekday == 6:
+        start_min = _minutes_hhmm(session.sunday_open)
+        if start_min is None:
+            return [], ["horario"]
+        end_min = 24 * 60
+    else:
+        start_min = 0
+        end_min = 24 * 60
+        if weekday == 4:
+            friday = _minutes_hhmm(session.friday_close)
+            if friday is None:
+                return [], ["horario"]
+            end_min = min(end_min, friday)
+    causes: list[str] = []
+    if calendar == calendars.FX_METAL and calendars.is_fx_short_day(day):
+        short = _minutes_hhmm(session.short_close)
+        if short is not None:
+            end_min = min(end_min, short)
+            causes.append("cierre temprano")
+        else:
+            causes.append("sesión corta no derivada")
+    early = calendars.early_close_hhmm(calendar, day)
+    if early is not None:
+        end_min = min(end_min, _minutes_hhmm_int(early))
+        causes.append("cierre temprano")
+    if start_min >= end_min:
+        return [], causes or ["horario"]
+    intervals = [(start_min, end_min)]
+    pause_start = _minutes_hhmm(session.pause_start)
+    pause_end = _minutes_hhmm(session.pause_end)
+    if weekday < 5 and pause_start is not None and pause_end is not None:
+        if start_min < pause_start < pause_end < end_min:
+            intervals = [(start_min, pause_start), (pause_end, end_min)]
+            causes.append("pausa")
+    starts = [_session_ts(day, start, zone) for start, _ in intervals]
+    ends = [_session_ts(day, end, zone) for _, end in intervals]
+    return list(zip(starts, ends)), causes
+
+
+def _calendar_gap_session(
+    start_utc: pd.Timestamp,
+    end_utc: pd.Timestamp,
+    tf_minutes: int,
+    threshold_min: float,
+    calendar: str | None,
+    session: SessionSegment | None,
+    pause_tz: str,
+) -> tuple[bool, str]:
+    """Clasificación con horario derivado del instrumento (R2j)."""
+    if (
+        session is None
+        or session.friday_close is None
+        or session.sunday_open is None
+    ):
+        return _calendar_gap(
+            start_utc,
+            end_utc,
+            tf_minutes,
+            threshold_min,
+            calendar,
+            pause_tz,
+        )
+    zone = ZoneInfo(pause_tz)
+    start = pd.Timestamp(start_utc).tz_convert(zone)
+    end = pd.Timestamp(end_utc).tz_convert(zone)
+    first = (start - pd.Timedelta(days=1)).date()
+    last = (end + pd.Timedelta(days=1)).date()
+    causes: list[str] = []
+    total_overlap = 0.0
+    for offset in range((last - first).days + 1):
+        day = first + pd.Timedelta(days=offset)
+        intervals, day_causes = _expected_intervals(day, session, calendar, zone)
+        if start.date() <= day <= end.date():
+            causes.extend(day_causes)
+        for interval_start, interval_end in intervals:
+            overlap_start = max(start, interval_start)
+            overlap_end = min(end, interval_end)
+            overlap = (overlap_end - overlap_start).total_seconds() / 60.0
+            if overlap > 0:
+                total_overlap += overlap
+                if overlap > 60:
+                    return True, f"sesión {day.isoformat()} sin datos"
+    if total_overlap > 60:
+        return True, "solape de sesión sin datos"
+    if "festivo" in causes:
+        return False, "festivo"
+    if "cierre temprano" in causes:
+        return False, "cierre temprano"
+    if "pausa" in causes:
+        return False, "pausa"
+    if "fin de semana" in causes:
+        return False, "fin de semana"
+    return False, "horario"
+
+
 def _gap_analysis(
     frame: pd.DataFrame,
     tf_minutes: int,
@@ -394,6 +521,8 @@ def _gap_analysis(
     *,
     pause_tz: str,
     calendar: str | None,
+    symbol: str | None = None,
+    source: str | None = None,
 ) -> tuple[list[dict], int, list[dict], list[dict], int]:
     index = _utc_index(frame.index).sort_values()
     if len(index) < 2:
@@ -432,7 +561,12 @@ def _gap_analysis(
     outside_calendar = 0
     for gap in gaps:
         if tf_minutes >= 60:
-            real, reason = _calendar_gap(
+            session = None
+            if symbol and source:
+                session = config.session_for(
+                    source, symbol, gap["start"].date()
+                )
+            legacy_real, legacy_reason = _calendar_gap(
                 gap["start_utc"],
                 gap["resume_utc"],
                 tf_minutes,
@@ -440,8 +574,26 @@ def _gap_analysis(
                 calendar,
                 pause_tz,
             )
+            if session is None:
+                gap["reason"] = legacy_reason
+                if legacy_real:
+                    non_scheduled.append(gap)
+                elif gap["minutes"] > threshold:
+                    calendar_gaps.append(gap)
+                continue
+            real, reason = _calendar_gap_session(
+                gap["start_utc"],
+                gap["resume_utc"],
+                tf_minutes,
+                threshold,
+                calendar,
+                session,
+                pause_tz,
+            )
             gap["reason"] = reason
-            if real:
+            if legacy_real and not real:
+                calendar_gaps.append(gap)
+            elif legacy_real and real:
                 non_scheduled.append(gap)
             elif gap["minutes"] > threshold:
                 calendar_gaps.append(gap)
@@ -502,6 +654,7 @@ def check_dataset(
     cache_path: str | Path | None = None,
     config: DataQualityConfig | None = None,
     source: dict | None = None,
+    data_source: str | None = None,
 ) -> QualityReport:
     """Valida un DataFrame OHLC ya cargado. No descarga ni escribe nada."""
     config = config or load_engine_config().data_quality
@@ -632,6 +785,8 @@ def check_dataset(
         config,
         pause_tz=pause_tz,
         calendar=calendar_name,
+        symbol=symbol,
+        source=data_source,
     )
     if calendar_name is None:
         issues.append("sin calendario: festivos no verificables (no se inventan fechas)")

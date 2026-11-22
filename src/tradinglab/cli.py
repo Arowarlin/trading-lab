@@ -9940,6 +9940,54 @@ def discovery_fetch_dukascopy_cmd(
     console.print(table)
 
 
+@discovery_app.command("derive-sessions")
+def discovery_derive_sessions_cmd(
+    symbol: str = typer.Argument(..., help="US100 | US500 | US30 | XAUUSD | EURUSD | GBPUSD | USDJPY"),
+    source: str = typer.Option("dukascopy", "--source", help="dukascopy | broker"),
+    start_year: int = typer.Option(None, "--start-year"),
+    end_year: int = typer.Option(2026, "--end-year"),
+) -> None:
+    """Deriva por año la moda semanal del horario de sesión (solo lectura)."""
+    from .discovery import sessions
+
+    try:
+        result = sessions.derive_sessions(
+            symbol,
+            source,
+            start_year=start_year,
+            end_year=int(end_year),
+        )
+    except Exception as exc:  # noqa: BLE001
+        console.print(f"[red]No se pudo derivar:[/red] {exc}")
+        raise typer.Exit(1) from exc
+    table = Table(
+        title=f"Discovery · sesiones · {result['symbol']} · {result['source']}"
+    )
+    for column in ("Año", "Viernes", "%", "Domingo", "%", "Pausa", "%", "Corta", "%", "Estado"):
+        table.add_column(column)
+    for year in result["years"]:
+        if year.reasons == ["sin datos"]:
+            table.add_row(str(year.year), "Sin datos", "", "", "", "", "", "", "", "SIN DATOS")
+            continue
+        table.add_row(
+            str(year.year),
+            year.friday_close or "—",
+            f"{year.friday_share:.0%}" if year.friday_share is not None else "—",
+            year.sunday_open or "—",
+            f"{year.sunday_share:.0%}" if year.sunday_share is not None else "—",
+            f"{year.pause_start}→{year.pause_end}" if year.pause_start else "—",
+            f"{year.pause_share:.0%}" if year.pause_share is not None else "—",
+            year.short_close or "—",
+            f"{year.short_share:.0%}" if year.short_share is not None else "—",
+            "ESTABLE" if year.stable else "INESTABLE: " + "; ".join(year.reasons),
+        )
+    console.print(table)
+    console.print(sessions.yaml_block(result))
+    if not result["stable"]:
+        console.print("[yellow]Símbolo/fuente inestable: no escribir en engine.yaml.[/yellow]")
+        raise typer.Exit(1)
+
+
 @discovery_app.command("compare-dukascopy")
 def discovery_compare_dukascopy_cmd(
     symbol: str = typer.Argument(

@@ -5,6 +5,7 @@ Solo lee el YAML: no escribe archivos, no consulta MT5 y no arranca workers.
 
 from __future__ import annotations
 
+from datetime import date
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -186,6 +187,62 @@ class SourceConfig(BaseModel):
         return value
 
 
+class SessionSegment(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    start: str | None = None
+    end: str | None = None
+    friday_close: str | None = None
+    sunday_open: str | None = None
+    pause_start: str | None = None
+    pause_end: str | None = None
+    short_close: str | None = None
+
+    @field_validator(
+        "friday_close",
+        "sunday_open",
+        "pause_start",
+        "pause_end",
+        "short_close",
+    )
+    @classmethod
+    def _valid_hhmm(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        text = str(value).strip()
+        try:
+            hour, minute = (int(part) for part in text.split(":"))
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"hora inválida: {value}") from exc
+        if not (0 <= hour <= 23 and 0 <= minute <= 59):
+            raise ValueError(f"hora inválida: {value}")
+        return f"{hour:02d}:{minute:02d}"
+
+    @field_validator("start", "end")
+    @classmethod
+    def _valid_date(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        try:
+            date.fromisoformat(str(value))
+        except ValueError as exc:
+            raise ValueError(f"fecha inválida: {value}") from exc
+        return str(value)
+
+    @model_validator(mode="after")
+    def _range(self) -> "SessionSegment":
+        if self.start and self.end:
+            if date.fromisoformat(self.start) > date.fromisoformat(self.end):
+                raise ValueError("el tramo de sesión termina antes de empezar")
+        return self
+
+
+class SessionConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    segments: list[SessionSegment] = Field(min_length=1)
+
+
 class DataQualityConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -212,6 +269,7 @@ class DataQualityConfig(BaseModel):
             )
         }
     )
+    sessions: dict[str, SessionConfig] | None = None
 
     @field_validator("pause_tz")
     @classmethod
@@ -248,6 +306,32 @@ class DataQualityConfig(BaseModel):
             if name.lower() == key:
                 return tz
         return self.session_tz.get("default", "America/New_York")
+
+    def session_for(
+        self, source: str, symbol: str, day: date
+    ) -> SessionSegment | None:
+        """Tramo de sesión vigente para una fuente, símbolo y fecha."""
+        if not self.sessions:
+            return None
+        key = f"{str(source).strip().lower()}:{str(symbol).strip().lower()}"
+        candidates = [
+            key,
+            f"{str(source).strip().lower()}:{str(symbol).split('.')[0].strip().lower()}",
+        ]
+        config = None
+        for name, value in self.sessions.items():
+            if str(name).strip().lower() in candidates:
+                config = value
+                break
+        if config is None:
+            return None
+        for segment in config.segments:
+            if segment.start and day < date.fromisoformat(segment.start):
+                continue
+            if segment.end and day > date.fromisoformat(segment.end):
+                continue
+            return segment
+        return None
 
     def source_for(self, symbol: str) -> "SourceConfig":
         key = str(symbol or "").strip().lower()
@@ -331,6 +415,8 @@ __all__ = [
     "PerturbConfig",
     "ProfileConfig",
     "RobustnessConfig",
+    "SessionConfig",
+    "SessionSegment",
     "SourceConfig",
     "TimeframeValidationConfig",
     "ValidationConfig",

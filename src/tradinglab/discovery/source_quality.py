@@ -13,6 +13,7 @@ from typing import Any
 import pandas as pd
 
 from ..config import ROOT
+from .calendars import FX_METAL, NYSE
 from .config import DataQualityConfig, SourceConfig, load_engine_config
 from .data_quality import check_dataset
 from .data_sources import DataSourceError, load_source, normalize_source
@@ -20,6 +21,7 @@ from .fetch_dukascopy import SYMBOLS
 from .resample import TIMEFRAMES
 
 NYSE_SYMBOLS = {"US100", "US500", "US30"}
+FX_METAL_SYMBOLS = {"XAUUSD", "EURUSD", "GBPUSD", "USDJPY"}
 
 # (gap_factor, max_gap_hours) por temporalidad. Los huecos >= max_gap son
 # cierres de sesión/fin de semana; el resto se cuenta como hueco real.
@@ -46,10 +48,16 @@ def quality_config(
         "gap_factor": gap_factor,
         "max_gap_hours": max_gap,
     }
-    if source == "dukascopy" and str(symbol).upper() in NYSE_SYMBOLS:
+    if str(symbol).upper() in NYSE_SYMBOLS:
         sources = dict(base.sources)
         sources[str(symbol).upper()] = SourceConfig(
-            path="", timezone="UTC", calendar="nyse"
+            path="", timezone="UTC", calendar=NYSE
+        )
+        updates["sources"] = sources
+    elif str(symbol).upper() in FX_METAL_SYMBOLS:
+        sources = dict(base.sources)
+        sources[str(symbol).upper()] = SourceConfig(
+            path="", timezone="UTC", calendar=FX_METAL
         )
         updates["sources"] = sources
     return base.model_copy(update=updates)
@@ -133,6 +141,7 @@ def quality_for_source(
         cache_path=loaded.path,
         config=qconfig,
         source=loaded.as_dict(),
+        data_source=source_key,
     )
     data = report.as_dict()
     missing, sample = missing_weekdays(loaded.frame, key)

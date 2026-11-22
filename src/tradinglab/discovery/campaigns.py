@@ -178,6 +178,7 @@ def _quality(
         timeframe,
         segments={key: tuple(value) for key, value in segments.items()},
         config=quality_config(engine.data_quality, instrument, timeframe, data_source),
+        data_source=data_source,
     )
     if report.status == "fail":
         detail = "; ".join(report.issues[:5]) or "sin detalle"
