@@ -6,6 +6,7 @@ import copy
 from dataclasses import replace
 
 import pandas as pd
+import pytest
 
 from tradinglab.discovery import fastbt, fitness, jobs
 from tradinglab.discovery.engine import synthetic_frame
@@ -69,6 +70,18 @@ def test_cost_r_tight_stop_not_feasible_wide_stop_feasible() -> None:
     assert any("coste_R" in reason for reason in tight["violations"])
     assert wide["cost_r"] is not None and wide["cost_r"] <= 0.10
     assert wide["feasible"], wide["violations"]
+
+
+def test_guarda_expectativa_bruta_sin_cambiar_seleccion() -> None:
+    frame, setup, cost, prepared = _setup()
+    result = fitness.evaluate(_strategy(2.0), frame, cost, setup, prepared)
+    assert result["metrics"]["raw_expectancy_r"] is not None
+    assert result["metrics"]["raw"]["raw_expectancy_r"] == pytest.approx(
+        result["metrics"]["raw_expectancy_r"]
+    )
+    assert result["metrics"]["is"]["gross_expectancy_r"] is not None
+    assert result["metrics"]["is"]["expectancy_r"] is not None
+    assert "fitness" in result["metrics"]
 
 
 def test_folds_do_not_carry_state() -> None:

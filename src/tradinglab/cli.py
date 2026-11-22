@@ -10322,6 +10322,210 @@ def discovery_feasibility_scan_cmd(
         raise typer.Exit(1)
 
 
+@discovery_app.command("edge-map")
+def discovery_edge_map_cmd(
+    by: str = typer.Option(
+        "hipotesis", "--by", help="hipotesis | cuenta | instrumento"
+    ),
+    account: str = typer.Option(None, "--account", help="Filtrar una cuenta"),
+    discovery_db: str = typer.Option(
+        None, "--discovery-db", help="discovery.db (solo lectura)"
+    ),
+    costs_db: str = typer.Option(
+        None, "--costs-db", help="lab.db de costes (solo lectura)"
+    ),
+    data_root: str = typer.Option(
+        None, "--data-root", help="Raíz de datos/snapshots (solo lectura)"
+    ),
+    no_dukascopy: bool = typer.Option(
+        False,
+        "--no-dukascopy",
+        help="No leer Dukascopy (descarga en curso); H4/D1 Sin datos",
+    ),
+    mc_paths: int = typer.Option(
+        None, "--mc-paths", help="Caminos del Monte Carlo del challenge"
+    ),
+) -> None:
+    """Edge Map: hipótesis × instrumento × TF × fuente y capa de firma."""
+
+    from .discovery import databank, edge_map
+
+    if by not in {"hipotesis", "cuenta", "instrumento"}:
+        raise typer.BadParameter("--by debe ser hipotesis, cuenta o instrumento")
+    try:
+        report = edge_map.build(
+            discovery_db or databank.DEFAULT_DISCOVERY_DB,
+            costs_db=costs_db or databank.LAB_DB,
+            data_root=data_root or ROOT,
+            account=account,
+            allow_dukascopy=not no_dukascopy,
+            n_paths=mc_paths,
+        )
+    except Exception as exc:  # noqa: BLE001
+        console.print(f"[red]Edge Map imposible:[/red] {exc}")
+        raise typer.Exit(1) from exc
+    if by == "cuenta":
+        table = Table(title="Discovery · Edge Map · por cuenta")
+        for column in (
+            "Cuenta",
+            "Firma",
+            "Estrategia",
+            "Nivel",
+            "Veredicto",
+            "PBO",
+            "WF",
+            "Neto R",
+            "Cost_R",
+            "Ops",
+            "P(pasar)",
+            "Auto",
+            "Candidata",
+            "Confirmación",
+        ):
+            table.add_column(column)
+        for row in report["firms"]:
+            table.add_row(
+                str(row["account"]),
+                str(row["firm"]),
+                str(row["strategy_id"]),
+                str(row["level"]),
+                str(row["verdict"] or "Sin datos"),
+                "Sin datos" if row["pbo"] is None else f"{float(row['pbo']):.4f}",
+                "Sin datos" if row["wf_ok"] is None else ("sí" if row["wf_ok"] else "no"),
+                "Sin datos"
+                if row["net_expectancy_r"] is None
+                else f"{float(row['net_expectancy_r']):.4f}",
+                "Sin datos" if row["cost_r"] is None else f"{float(row['cost_r']):.4f}",
+                str(row["trades"]),
+                "Sin datos"
+                if row["pass_rate"] is None
+                else f"{float(row['pass_rate']) * 100:.1f}%",
+                "sí" if row["automation_allowed"] else "no",
+                "sí" if row["candidate"] else "no",
+                str(row["confirm_status"]),
+            )
+    else:
+        table = Table(title=f"Discovery · Edge Map · por {by}")
+        for column in (
+            "Hipótesis",
+            "Instrumento",
+            "TF",
+            "Fuente",
+            "Estado",
+            "Bruto mediana",
+            "Bruto mejor",
+            "Neto mediana",
+            "Cost_R",
+            "Ops+",
+            "Candidatas",
+            "Confirmadas",
+            "Datos",
+        ):
+            table.add_column(column)
+        groups = edge_map.group_by(report, by)
+        for group in groups:
+            for row in group["rows"]:
+                table.add_row(
+                    str(row["template"]),
+                    str(row["instrument"]),
+                    str(row["timeframe"]),
+                    str(row["source"]),
+                    str(row["state"]),
+                    "Sin datos"
+                    if row["raw_median_r"] is None
+                    else f"{float(row['raw_median_r']):.4f}",
+                    "Sin datos"
+                    if row["raw_best_r"] is None
+                    else f"{float(row['raw_best_r']):.4f}",
+                    "Sin datos"
+                    if row["net_median_r"] is None
+                    else f"{float(row['net_median_r']):.4f}",
+                    "Sin datos" if row.get("cost_r") is None else f"{float(row['cost_r']):.4f}",
+                    f"{row['positive_folds_count']}/{row['strategy_total']}",
+                    str(row["candidate_count"]),
+                    str(row["confirmed_count"]),
+                    str(row["dataset_source"]),
+                )
+    console.print(table)
+    if report.get("blocked"):
+        for item in report["blocked"]:
+            console.print(f"[yellow]{item['timeframe']}:[/yellow] {item['reason']}")
+    files = edge_map.export(report, by="hipotesis")
+    console.print(
+        f"[dim]Exportado: {files['markdown']} · {files['json']} · "
+        f"combos {report['n_combos']} · firmas {report['n_firms']}[/dim]"
+    )
+
+
+@discovery_app.command("suggest")
+def discovery_suggest_cmd(
+    account: str = typer.Option(None, "--account", help="Cuenta objetivo"),
+    discovery_db: str = typer.Option(
+        None, "--discovery-db", help="discovery.db (solo lectura)"
+    ),
+    costs_db: str = typer.Option(
+        None, "--costs-db", help="lab.db de costes (solo lectura)"
+    ),
+    data_root: str = typer.Option(
+        None, "--data-root", help="Raíz de datos (solo lectura)"
+    ),
+    no_dukascopy: bool = typer.Option(
+        False, "--no-dukascopy", help="No leer Dukascopy (descarga en curso)"
+    ),
+    limit: int = typer.Option(None, "--limit", help="Máximo de combinaciones"),
+) -> None:
+    """Combinaciones NO probadas y viables; etiqueta siempre 'por probar'."""
+
+    from .discovery import databank, edge_map
+
+    try:
+        report = edge_map.suggest(
+            account,
+            discovery_db=discovery_db or databank.DEFAULT_DISCOVERY_DB,
+            costs_db=costs_db or databank.LAB_DB,
+            data_root=data_root or ROOT,
+            allow_dukascopy=not no_dukascopy,
+            limit=limit,
+        )
+    except Exception as exc:  # noqa: BLE001
+        console.print(f"[red]Suggest imposible:[/red] {exc}")
+        raise typer.Exit(1) from exc
+    table = Table(title="Discovery · combinaciones por probar")
+    for column in (
+        "Plantilla",
+        "Instrumento",
+        "TF",
+        "Fuente",
+        "Sesión",
+        "Cuentas",
+        "Ops IS",
+        "Ops/pliegue",
+        "Cost_R",
+        "Etiqueta",
+    ):
+        table.add_column(column)
+    for row in report["rows"]:
+        table.add_row(
+            str(row["template"]),
+            str(row["instrument"]),
+            str(row["timeframe"]),
+            str(row["source"]),
+            str(row["session"]),
+            ", ".join(row["accounts"]),
+            str(row["trades_is"]),
+            "/".join(str(value) for value in row["fold_trades"]),
+            "Sin datos" if row["cost_r"] is None else f"{float(row['cost_r']):.4f}",
+            str(row["label"]),
+        )
+    console.print(table)
+    for item in report.get("blocked") or []:
+        console.print(f"[yellow]{item['timeframe']}:[/yellow] {item['reason']}")
+    console.print(
+        f"[dim]{report['n_rows']} combinaciones por probar; "
+        "no son candidatas y no se ha registrado nada.[/dim]"
+    )
+
+
 @discovery_app.command("invalidate")
 def discovery_invalidate_cmd(
     campaign_id: str = typer.Argument(..., help="ID de la campaña"),

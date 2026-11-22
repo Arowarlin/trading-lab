@@ -256,6 +256,7 @@ def evaluate(
         -float(node_count),
         -float(cost_drop),
     ]
+    raw_expectancy = full_metrics.get("gross_expectancy_r")
     raws = {
         "expectancy_r": median_expectancy,
         "positive_fraction": positive_fraction,
@@ -267,10 +268,14 @@ def evaluate(
         "cost_drop": cost_drop,
         "mean_bars": mean_bars,
         "concentration": concentration,
+        "raw_expectancy_r": raw_expectancy,
+        "raw_total_r": full_metrics.get("gross_total_r"),
     }
     metrics_payload = {
         "fitness": fitness,
         "raw": raws,
+        "raw_expectancy_r": raw_expectancy,
+        "raw_total_r": full_metrics.get("gross_total_r"),
         "folds": fold_rows,
         "violations": violations,
         "cost_r": cost_r,

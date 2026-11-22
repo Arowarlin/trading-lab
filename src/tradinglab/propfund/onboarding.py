@@ -647,7 +647,8 @@ def _template_dir() -> Path:
 def _default_bars_loader(symbol: str, timeframe: str) -> pd.DataFrame:
     from ..discovery.data_sources import load_source
 
-    return load_source(symbol, timeframe, source="broker").frame
+    source = "dukascopy" if str(timeframe).upper() in {"H4", "D1"} else "broker"
+    return load_source(symbol, timeframe, source=source).frame
 
 
 def _data_symbol(canonical: str, config: Any) -> str:
@@ -812,7 +813,8 @@ def scan_templates(
                     flat_at=model.session.flat_at,
                     weekdays=WEEKDAYS,
                     max_trades_per_day=model.limits.max_trades_per_day,
-                    cooldown_bars=model.limits.cooldown_bars,
+                    cooldown_bars=specs.cooldown_bars(model),
+                    allow_next_day_entry=model.timeframe == "D1",
                 )
                 trailing = model.exit.trailing or {}
                 prepared = fastbt.prepare(
@@ -902,7 +904,9 @@ def scan_templates(
 # --------------------------------------------------------------------------- matriz
 
 
-def _read_level3(discovery_db: str | Path) -> list[dict[str, Any]]:
+def _read_level3(
+    discovery_db: str | Path, *, min_level: int = 3
+) -> list[dict[str, Any]]:
     path = Path(discovery_db)
     if not path.exists():
         return []
@@ -914,7 +918,8 @@ def _read_level3(discovery_db: str | Path) -> list[dict[str, Any]]:
         con.row_factory = sqlite3.Row
         try:
             rows = con.execute(
-                "SELECT * FROM disc_strategies WHERE level >= 3 ORDER BY id"
+                "SELECT * FROM disc_strategies WHERE level >= ? ORDER BY id",
+                (int(min_level),),
             ).fetchall()
         except sqlite3.OperationalError:
             return []
@@ -1026,8 +1031,9 @@ def recompute_level3(
     bars_loader: Callable[[str, str], pd.DataFrame] | None = None,
     n_paths: int | None = None,
     now: datetime | None = None,
+    min_level: int = 3,
 ) -> dict[str, Any]:
-    """Recalcula estrategias nivel >= 3 con el coste y las reglas de la cuenta.
+    """Recalcula estrategias nivel >= ``min_level`` con coste/reglas de cuenta.
 
     No reoptimiza, no escribe ``disc_*`` y no lee OOS-2. Si el dataset de la
     campaña no coincide con el hash sellado, lo marca y el resultado es
@@ -1039,7 +1045,7 @@ def recompute_level3(
     from ..discovery.costs import build_cost_book
     from ..prop.simulator import monte_carlo
 
-    strategies = _read_level3(discovery_db)
+    strategies = _read_level3(discovery_db, min_level=int(min_level))
     if not strategies:
         return {
             "rows": [],
@@ -1059,6 +1065,7 @@ def recompute_level3(
             "instrument": str(strategy.get("instrument") or "Sin datos"),
             "timeframe": str(strategy.get("timeframe") or "Sin datos"),
             "level": int(strategy.get("level") or 1),
+            "verdict": strategy.get("verdict"),
             "status": str(strategy.get("status") or "Sin datos"),
         }
         if campaign is None:
@@ -1122,7 +1129,8 @@ def recompute_level3(
                 flat_at=model.session.flat_at,
                 weekdays=WEEKDAYS,
                 max_trades_per_day=model.limits.max_trades_per_day,
-                cooldown_bars=model.limits.cooldown_bars,
+                cooldown_bars=specs.cooldown_bars(model),
+                allow_next_day_entry=model.timeframe == "D1",
             )
             trailing = model.exit.trailing or {}
             prepared = fastbt.prepare(
@@ -1324,17 +1332,18 @@ def build_summary(
 ) -> dict[str, Any]:
     max_cost = float(config.fitness.cost_r_max)
     min_trades = int(config.validation.min_trades_is)
-    candidates = []
+    suggestions = []
     for row in scan.get("rows", []):
         if row.get("status") != "ok":
             continue
         if row.get("compatible") is not True:
             continue
-        if int(row.get("trades_is") or 0) < min_trades:
+        validation = config.validation.for_timeframe(row.get("timeframe") or "M5")
+        if int(row.get("trades_is") or 0) < int(validation.min_trades_is):
             continue
         if row.get("cost_r") is None or float(row["cost_r"]) > max_cost:
             continue
-        candidates.append(
+        suggestions.append(
             {
                 "template": row["template"],
                 "instrument": row["instrument"],
@@ -1343,9 +1352,10 @@ def build_summary(
                 "trades_is": int(row["trades_is"]),
                 "cost_r": float(row["cost_r"]),
                 "constraint": row["constraint"],
+                "label": "por probar",
             }
         )
-    candidates.sort(key=lambda item: (item["cost_r"], -item["trades_is"]))
+    suggestions.sort(key=lambda item: (item["cost_r"], -item["trades_is"]))
     cheaper = [row for row in comparisons.get("rows", []) if row["target_cheaper"]]
     return {
         "target_account": account.id,
@@ -1361,10 +1371,10 @@ def build_summary(
             for row in cheaper
         ],
         "comparisons": list(comparisons.get("rows", [])),
-        "candidates": candidates[:5],
-        "candidate_note": (
-            "Sugerencia para una campaña específica; la campaña la decide y "
-            "aprueba el operador. No se ha registrado nada."
+        "suggestions": suggestions[:5],
+        "suggestion_note": (
+            "Combinaciones por probar; no son candidatas ni se ha registrado "
+            "nada. La campaña la decide y aprueba el operador."
         ),
         "matrix_note": matrix.get("note", ""),
         "cost_r_max": max_cost,
@@ -1731,9 +1741,9 @@ def render_markdown(report: Mapping[str, Any]) -> str:
     else:
         lines.append("Sin datos para comparar el coste con otras cuentas.")
     lines.append("")
-    lines.append("### 6.2 Combinaciones candidatas")
+    lines.append("### 6.2 Combinaciones por probar")
     lines.append("")
-    if summary.get("candidates"):
+    if summary.get("suggestions"):
         lines.extend(
             _table(
                 ["Plantilla", "Instrumento", "Sesión", "TF", "Operaciones IS", "cost_R", "Compatibilidad"],
@@ -1747,12 +1757,12 @@ def render_markdown(report: Mapping[str, Any]) -> str:
                         _num(row["cost_r"]),
                         row["constraint"],
                     ]
-                    for row in summary["candidates"]
+                    for row in summary["suggestions"]
                 ],
             )
         )
         lines.append("")
-        lines.append(summary.get("candidate_note") or "")
+        lines.append(summary.get("suggestion_note") or "")
     else:
         lines.append(
             "Sin combinaciones que cumplan a la vez: compatible, "
@@ -1832,14 +1842,21 @@ def onboard(
         "n_rows": 0,
     }
     if scan and account.market is Market.CFD and costs.get("status") == "ok":
-        scan_payload = scan_templates(
-            account,
-            firm,
-            program,
-            registry=reg,
+        from ..discovery import edge_map
+
+        scan_payload = edge_map.suggest(
+            account.id,
+            discovery_db=discovery_db,
             costs_db=costs_db,
             bars_loader=bars_loader,
-            now=moment,
+            registry=reg,
+        )
+        scan_payload.update(
+            {
+                "runs": [],
+                "cost_mode": "target",
+                "cost_account": account.id,
+            }
         )
     elif scan and account.market is Market.CFD:
         warnings.append("Mapa de viabilidad Sin datos: la cuenta no tiene coste completo.")

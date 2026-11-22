@@ -262,7 +262,8 @@ def test_onboarding_simulado_sin_mt5_real_y_sin_dsr(tmp_path, monkeypatch) -> No
     assert (report["symbols"]["symbols"][0]["broker_symbol"]) == "NDX100"
     assert report["costs"]["status"] == "ok"
     assert round(report["costs"]["hourly"]["US100"]["hours"]["7"], 6) == 1.12
-    assert report["scan"]["n_rows"] == 5
+    assert report["scan"]["n_rows"] == 0
+    assert report["scan"]["label"] == "por probar"
     assert report["scan"]["cost_mode"] == "target"
     assert report["matrix"]["rows"] == []
     assert "nivel ≥ 3" in report["matrix"]["note"]

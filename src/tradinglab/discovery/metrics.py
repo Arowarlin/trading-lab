@@ -28,6 +28,18 @@ def _net_rs(trades: Iterable[Any]) -> list[float]:
     return values
 
 
+def _gross_rs(trades: Iterable[Any]) -> list[float]:
+    values: list[float] = []
+    for trade in trades:
+        value = getattr(trade, "r_gross", None)
+        if value is None:
+            continue
+        number = float(value)
+        if math.isfinite(number):
+            values.append(number)
+    return values
+
+
 def expectancy_r(trades: Iterable[Any]) -> float | None:
     values = _net_rs(trades)
     return float(np.mean(values)) if values else None
@@ -111,9 +123,12 @@ def cost_sensitivity(trades: Iterable[Any], point: float = 0.01) -> tuple[float 
 def summarize(trades: Iterable[Any], daily_r: pd.Series | None, point: float = 0.01) -> dict[str, Any]:
     trades = list(trades)
     values = np.asarray(_net_rs(trades), dtype=float)
+    gross = np.asarray(_gross_rs(trades), dtype=float)
     plus, delta = cost_sensitivity(trades, point)
     wins = values[values > 0]
     losses = values[values < 0]
+    gross_wins = gross[gross > 0]
+    gross_losses = gross[gross < 0]
     return {
         "trades": len(trades),
         "expectancy_r": expectancy_r(trades),
@@ -127,6 +142,14 @@ def summarize(trades: Iterable[Any], daily_r: pd.Series | None, point: float = 0
         "avg_loss_r": float(losses.mean()) if losses.size else None,
         "cost_plus_1pt_r": plus,
         "cost_delta_r": delta,
+        # Coste 0: solo se usa para el Edge Map; no cambia la selección.
+        "gross_expectancy_r": float(gross.mean()) if gross.size else None,
+        "gross_total_r": float(gross.sum()) if gross.size else 0.0,
+        "gross_profit_factor": (
+            float(gross_wins.sum() / abs(gross_losses.sum()))
+            if gross_losses.size and gross_wins.size
+            else None
+        ),
     }
 
 
