@@ -183,6 +183,27 @@ def test_mes_de_una_barra_en_el_borde_no_invalida() -> None:
     assert report.granularity["useful_start"].startswith("2023-12-31")
 
 
+def test_mes_disperso_marca_inicio_util() -> None:
+    first = _frame(days=5, start="2024-01-01")
+    sparse = _frame(days=1, start="2024-02-01")
+    dense = _frame(days=5, start="2024-03-01")
+    frame = pd.concat([first, sparse, dense]).sort_index()
+    report = check_dataset(
+        frame,
+        "US100.cash",
+        "M5",
+        segments={
+            "is": ("2024-03-01", "2024-03-03"),
+            "oos1": ("2024-03-04", "2024-03-05"),
+            "oos2": ("2024-03-06", None),
+        },
+    )
+    assert report.granularity["useful_start"].startswith("2024-03-01")
+    assert "2024-02" in {
+        item["month"] for item in report.granularity["bad_months"]
+    }
+
+
 def test_granularidad_mixta_marca_inicio_util() -> None:
     frame = _mixed_granularity()
     report = check_dataset(

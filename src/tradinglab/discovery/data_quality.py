@@ -179,7 +179,16 @@ def _granularity(index: pd.DatetimeIndex, tf_minutes: int) -> dict:
         }
     series = pd.Series(index, index=index)
     months: list[dict] = []
-    for period, group in series.groupby(series.index.strftime("%Y-%m")):
+    monthly_rows = [
+        len(pd.DatetimeIndex(group))
+        for _, group in series.groupby(series.index.strftime("%Y-%m"))
+    ]
+    dense_rows = [rows for rows in monthly_rows if rows > 1]
+    median_rows = float(np.median(dense_rows)) if dense_rows else 0.0
+    total_months = len(monthly_rows)
+    for position, (period, group) in enumerate(
+        series.groupby(series.index.strftime("%Y-%m"))
+    ):
         stamps = pd.DatetimeIndex(group)
         if len(stamps) < 2:
             median = None
@@ -190,10 +199,19 @@ def _granularity(index: pd.DatetimeIndex, tf_minutes: int) -> dict:
         # Un mes con una sola barra es un borde de la serie (p. ej. la sesión
         # D1 que empieza el último día del mes anterior); no se puede evaluar
         # su granularidad y no debe invalidar los meses anteriores.
-        good = (
+        granular = (
             len(stamps) == 1
             or (median is not None and abs(float(median) - tf_minutes) < 0.5)
         )
+        # Un mes con menos de la mitad de barras que el mes típico es un
+        # histórico disperso (Dukascopy antiguo), no un inicio útil.
+        dense = (
+            len(stamps) == 1
+            or position in {0, total_months - 1}
+            or median_rows <= 0
+            or len(stamps) >= 0.5 * median_rows
+        )
+        good = granular and dense
         months.append(
             {
                 "month": str(period),
