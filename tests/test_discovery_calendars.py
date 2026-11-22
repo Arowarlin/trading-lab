@@ -6,8 +6,13 @@ import pandas as pd
 
 from tradinglab.discovery import calendars
 from tradinglab.discovery.config import SessionSegment
-from tradinglab.discovery.data_quality import _calendar_gap_session
-from tradinglab.discovery.sessions import derive_year
+from tradinglab.discovery.data_quality import _calendar_gap, _calendar_gap_session
+from tradinglab.discovery.sessions import (
+    YearSession,
+    build_segments,
+    derive_year,
+    yaml_block,
+)
 from tradinglab.nyse_calendar import EARLY_CLOSES, FULL_HOLIDAYS
 
 NY = "America/New_York"
@@ -221,3 +226,94 @@ def test_derive_sessions_ignora_miercoles_y_viernes_faltantes() -> None:
     assert result.pause_start == "15:00"
     assert result.pause_end == "16:00"
     assert result.stable is True
+
+
+def test_sin_sesion_usa_calendario_completo_good_friday_2019() -> None:
+    real, reason = _calendar_gap(
+        pd.Timestamp("2019-04-18 17:00", tz=NY),
+        pd.Timestamp("2019-04-19 17:00", tz=NY),
+        1440,
+        36 * 60,
+        calendars.NYSE,
+        NY,
+    )
+    assert real is False
+    assert "Viernes Santo" in reason
+
+
+def test_regresion_2021_2027_festivos_nyse() -> None:
+    for key in FULL_HOLIDAYS:
+        day = pd.Timestamp(str(key)).date()
+        real, _reason = _calendar_gap(
+            pd.Timestamp(f"{day} 00:00", tz=NY),
+            pd.Timestamp(f"{day} 17:00", tz=NY),
+            1440,
+            36 * 60,
+            calendars.NYSE,
+            NY,
+        )
+        assert real is False, key
+    real, reason = _calendar_gap(
+        pd.Timestamp("2025-01-09 00:00", tz=NY),
+        pd.Timestamp("2025-01-09 17:00", tz=NY),
+        1440,
+        36 * 60,
+        calendars.NYSE,
+        NY,
+    )
+    assert real is False
+    assert "Carter" in reason
+
+
+def test_build_segments_corta_en_anio_inestable_y_no_hereda_pausa() -> None:
+    years = [
+        YearSession(
+            year=2018,
+            friday_close="16:15",
+            sunday_open="18:00",
+            stable=True,
+        ),
+        YearSession(
+            year=2019,
+            friday_close="16:15",
+            sunday_open="18:00",
+            pause_start="16:15",
+            pause_end="18:00",
+            stable=True,
+        ),
+        YearSession(year=2020, stable=False, reasons=["domingo 56% < 60%"]),
+        YearSession(
+            year=2021,
+            friday_close="16:15",
+            sunday_open="18:00",
+            stable=True,
+        ),
+    ]
+    segments = build_segments(years)
+    assert [(item.start, item.end) for item in segments] == [
+        ("2018-01-01", "2018-12-31"),
+        ("2019-01-01", "2019-12-31"),
+        ("2021-01-01", "2021-12-31"),
+    ]
+    assert segments[0].pause_start is None
+    assert segments[1].pause_start == "16:15"
+    assert segments[2].pause_start is None
+
+
+def test_yaml_block_escribe_tramos_parciales() -> None:
+    result = {
+        "source": "dukascopy",
+        "symbol": "US100",
+        "segments": [
+            SessionSegment(
+                start="2015-01-01",
+                end="2015-12-31",
+                friday_close="16:00",
+                sunday_open="18:00",
+            )
+        ],
+    }
+    text = yaml_block(result)
+    assert '"dukascopy:US100"' in text
+    assert '"2015-01-01"' in text
+    assert "friday_close" in text

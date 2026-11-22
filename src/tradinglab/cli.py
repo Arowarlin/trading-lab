@@ -9988,6 +9988,57 @@ def discovery_derive_sessions_cmd(
         raise typer.Exit(1)
 
 
+@discovery_app.command("usable-from")
+def discovery_usable_from_cmd(
+    source: str = typer.Option(None, "--source", help="dukascopy | broker"),
+    symbol: str = typer.Option(None, "--symbol", help="Símbolo; vacío = los 7"),
+    tf: str = typer.Option(None, "--tf", help="Timeframe; vacío = todos"),
+    write: bool = typer.Option(
+        False, "--write", help="Escribe data_quality.usable_from en engine.yaml"
+    ),
+) -> None:
+    """Primera fecha usable por fuente:símbolo:TF (historia recortada no FAIL)."""
+    from .discovery import usability
+
+    sources = (
+        (str(source).strip().lower(),)
+        if source
+        else usability.SOURCES
+    )
+    symbols = (
+        (str(symbol).strip().upper(),) if symbol else usability.SYMBOLS
+    )
+    timeframes = (
+        (str(tf).strip().upper(),) if tf else usability.TIMEFRAMES
+    )
+    try:
+        results = usability.compute_all(
+            sources=sources, symbols=symbols, timeframes=timeframes
+        )
+    except Exception as exc:  # noqa: BLE001
+        console.print(f"[red]No se pudo calcular usable_from:[/red] {exc}")
+        raise typer.Exit(1) from exc
+    table = Table(title="Discovery · usable_from")
+    for column in ("Clave", "Desde", "Estado", "Huecos", "Año", "Motivo"):
+        table.add_column(column)
+    for key, item in sorted(results.items()):
+        table.add_row(
+            key,
+            item.get("date") or "—",
+            str(item.get("status") or "fail").upper(),
+            str(item.get("gaps", 0)),
+            str(item.get("year") or "—"),
+            item.get("reason") or "",
+        )
+    console.print(table)
+    console.print(usability.yaml_block(results))
+    if write:
+        path = usability.write_usable_from(results)
+        console.print(f"[green]Escrito:[/green] {path}")
+    else:
+        console.print("[yellow]Sin --write no se escribe engine.yaml.[/yellow]")
+
+
 @discovery_app.command("compare-dukascopy")
 def discovery_compare_dukascopy_cmd(
     symbol: str = typer.Argument(

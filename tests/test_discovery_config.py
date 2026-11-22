@@ -7,6 +7,7 @@ import yaml
 from pydantic import ValidationError
 
 from tradinglab.discovery.config import ENGINE_PATH, load_engine_config
+from tradinglab.discovery.usability import write_usable_from
 
 
 def _base() -> dict:
@@ -153,3 +154,49 @@ def test_config_rechaza_yaml_roto(tmp_path: Path) -> None:
 def test_config_perfil_desconocido() -> None:
     with pytest.raises(KeyError, match="perfil"):
         load_engine_config().profile("inexistente")
+
+
+def test_usable_from_lookup(tmp_path: Path) -> None:
+    payload = _base()
+    payload["data_quality"]["usable_from"] = {
+        "DUKASCOPY:US100:H1": "2018-01-02"
+    }
+    config = load_engine_config(_write(tmp_path, payload))
+    assert (
+        config.data_quality.usable_from_for("dukascopy", "US100", "H1").isoformat()
+        == "2018-01-02"
+    )
+    assert (
+        config.data_quality.usable_from_for(
+            "dukascopy", "US100.cash", "H1"
+        ).isoformat()
+        == "2018-01-02"
+    )
+    assert config.data_quality.usable_from_for("dukascopy", "US100", "M5") is None
+
+
+def test_usable_from_fecha_invalida(tmp_path: Path) -> None:
+    payload = _base()
+    payload["data_quality"]["usable_from"] = {"dukascopy:US100:H1": "2018-13-02"}
+    with pytest.raises(ValidationError, match="usable_from"):
+        load_engine_config(_write(tmp_path, payload))
+
+
+def test_write_usable_from_reemplaza_bloque(tmp_path: Path) -> None:
+    path = tmp_path / "engine.yaml"
+    path.write_text(
+        "data_quality:\n  gap_factor: 3\n  sessions: {}\n", encoding="utf-8"
+    )
+    values = {
+        "dukascopy:US100:H1": {"date": "2018-01-02"},
+        "dukascopy:US500:H1": {"date": None},
+    }
+    write_usable_from(values, path)
+    first = path.read_text(encoding="utf-8")
+    assert 'usable_from:' in first
+    assert '"dukascopy:US100:H1": "2018-01-02"' in first
+    assert "US500" not in first
+    write_usable_from(values, path)
+    second = path.read_text(encoding="utf-8")
+    assert second.count("usable_from:") == 1
+    assert second.count('"dukascopy:US100:H1"') == 1

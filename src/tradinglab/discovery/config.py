@@ -270,6 +270,7 @@ class DataQualityConfig(BaseModel):
         }
     )
     sessions: dict[str, SessionConfig] | None = None
+    usable_from: dict[str, str] | None = None
 
     @field_validator("pause_tz")
     @classmethod
@@ -299,6 +300,20 @@ class DataQualityConfig(BaseModel):
         if missing:
             raise ValueError(f"faltan tramos: {', '.join(sorted(missing))}")
         return value
+
+    @field_validator("usable_from")
+    @classmethod
+    def _valid_usable_from(cls, value: dict[str, str] | None) -> dict[str, str] | None:
+        if value is None:
+            return None
+        out: dict[str, str] = {}
+        for key, text in value.items():
+            try:
+                day = date.fromisoformat(str(text))
+            except (TypeError, ValueError) as exc:
+                raise ValueError(f"usable_from inválido para {key}: {text}") from exc
+            out[str(key)] = day.isoformat()
+        return out
 
     def tz_for(self, symbol: str) -> str:
         key = str(symbol or "").strip().lower()
@@ -331,6 +346,24 @@ class DataQualityConfig(BaseModel):
             if segment.end and day > date.fromisoformat(segment.end):
                 continue
             return segment
+        return None
+
+    def usable_from_for(
+        self, source: str, symbol: str, timeframe: str
+    ) -> date | None:
+        """Primera fecha usable declarada para fuente:símbolo:TF, si existe."""
+        if not self.usable_from:
+            return None
+        src = str(source).strip().lower()
+        sym = str(symbol).strip().lower()
+        tf = str(timeframe).strip().upper()
+        candidates = {
+            f"{src}:{sym}:{tf}".lower(),
+            f"{src}:{sym.split('.')[0]}:{tf}".lower(),
+        }
+        for name, value in self.usable_from.items():
+            if str(name).strip().lower() in candidates:
+                return date.fromisoformat(value)
         return None
 
     def source_for(self, symbol: str) -> "SourceConfig":

@@ -292,10 +292,13 @@ def test_hueco_en_cierre_temprano_es_informativo() -> None:
     frames = []
     for day in days:
         begin = pd.Timestamp(f"{day} 08:00", tz="UTC")
-        index = pd.date_range(begin, begin + pd.Timedelta(hours=12), freq="5min", inclusive="left")
+        hours = 14 if day == "2024-11-29" else 12
+        index = pd.date_range(
+            begin, begin + pd.Timedelta(hours=hours), freq="5min", inclusive="left"
+        )
         if day == "2024-11-29":
-            drop = (index >= pd.Timestamp(f"{day} 17:00", tz="UTC")) & (
-                index < pd.Timestamp(f"{day} 19:00", tz="UTC")
+            drop = (index >= pd.Timestamp(f"{day} 18:00", tz="UTC")) & (
+                index < pd.Timestamp(f"{day} 20:00", tz="UTC")
             )
             index = index[~drop]
         close = np.arange(len(index), dtype=float) + 100.0

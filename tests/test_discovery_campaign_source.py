@@ -9,6 +9,7 @@ import pandas as pd
 import pytest
 
 from tradinglab.discovery import campaigns, jobs
+from tradinglab.discovery.config import load_engine_config
 from tradinglab.discovery.data_sources import DataSourceError, load_source
 
 SEGMENTS = {
@@ -73,6 +74,44 @@ def test_source_invalida_rechazada(tmp_path: Path) -> None:
             data_source="mixta",
             db_path=tmp_path / "discovery.db",
         )
+
+
+def test_usable_from_rechaza_rango_anterior_y_acepta_posterior(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    engine = load_engine_config()
+    patched = engine.model_copy(deep=True)
+    patched.data_quality.usable_from = {"dukascopy:US100:M5": "2024-01-15"}
+    monkeypatch.setattr(campaigns, "load_engine_config", lambda: patched)
+    db = tmp_path / "discovery.db"
+    with pytest.raises(campaigns.CampaignError, match="usable_from"):
+        campaigns.register(
+            "US100",
+            "M5",
+            "ny_open_vol_filter",
+            "small",
+            segments=SEGMENTS,
+            frame=_frame(),
+            data_source="dukascopy",
+            db_path=db,
+        )
+    ok_segments = {
+        "is": ["2024-01-15", "2024-01-20"],
+        "oos1": ["2024-01-21", "2024-02-05"],
+        "oos2": ["2024-02-06", None],
+    }
+    campaign = campaigns.register(
+        "US100",
+        "M5",
+        "ny_open_vol_filter",
+        "small",
+        segments=ok_segments,
+        frame=_frame(),
+        campaign_id="usable-ok",
+        data_source="dukascopy",
+        db_path=db,
+    )
+    assert campaign["campaign_id"] == "usable-ok"
 
 
 def test_segmentos_leen_el_snapshot_de_una_sola_fuente(tmp_path: Path) -> None:

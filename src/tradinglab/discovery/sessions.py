@@ -1,8 +1,9 @@
-"""Derivación de horarios de sesión por fuente y símbolo (R2j).
+"""Derivación de horarios de sesión por fuente y símbolo (R2j-b).
 
 No usa mínimos ni máximos: cada valor es la **moda semanal** del año. Si la moda
 no cubre al menos el 60 % de las semanas con datos, el año se marca inestable y
-el símbolo/fuente no se escribe en ``engine.yaml``.
+queda **sin tramo**; los años estables a ambos lados no se fusionan. Un símbolo
+puede escribirse con varios tramos parciales.
 """
 
 from __future__ import annotations
@@ -171,7 +172,7 @@ def derive_year(frame: pd.DataFrame, year: int, tf_minutes: int) -> YearSession:
         result.pause_start = None
         result.pause_end = None
         result.pause_share = None
-    if not _inside(result.short_close, 11 * 60, 17 * 60):
+    if not _inside(result.short_close, 11 * 60, 15 * 60):
         result.short_close = None
         result.short_share = None
 
@@ -206,21 +207,52 @@ def derive_year(frame: pd.DataFrame, year: int, tf_minutes: int) -> YearSession:
     return result
 
 
-def _short_mode(frame: pd.DataFrame, tf_minutes: int) -> tuple[str | None, float | None]:
-    local = frame.index.tz_convert("America/New_York")
-    close = local + pd.Timedelta(minutes=tf_minutes)
-    mask = (local.month == 12) & local.day.isin([24, 31])
-    if not mask.any():
-        return None, None
-    values = pd.Series(
-        [_rounded(stamp, 5) for stamp in close[mask]],
-        index=local[mask].normalize(),
-    ).groupby(level=0).last()
-    value, share, _ = _mode(list(values))
-    minutes = _minutes(value)
-    if minutes is None or not (11 * 60 <= minutes <= 17 * 60):
-        return None, share
-    return value, share
+def build_segments(years: list[YearSession]) -> list[SessionSegment]:
+    """Un tramo por bloque de años consecutivos estables con valores idénticos.
+
+    Un año inestable corta el bloque: los años estables a ambos lados no se
+    fusionan aunque sus valores coincidan. Un año estable sin pausa produce un
+    tramo sin pausa; no se hereda del año vecino.
+    """
+    segments: list[SessionSegment] = []
+    current: SessionSegment | None = None
+    for year in years:
+        if not year.stable:
+            if current is not None:
+                segments.append(current)
+                current = None
+            continue
+        values = (
+            year.friday_close,
+            year.sunday_open,
+            year.pause_start,
+            year.pause_end,
+            year.short_close,
+        )
+        if current is not None:
+            same = (
+                current.friday_close,
+                current.sunday_open,
+                current.pause_start,
+                current.pause_end,
+                current.short_close,
+            ) == values
+            if same:
+                current = current.model_copy(update={"end": f"{year.year}-12-31"})
+                continue
+            segments.append(current)
+        current = SessionSegment(
+            start=f"{year.year}-01-01",
+            end=f"{year.year}-12-31",
+            friday_close=year.friday_close,
+            sunday_open=year.sunday_open,
+            pause_start=year.pause_start,
+            pause_end=year.pause_end,
+            short_close=year.short_close,
+        )
+    if current is not None:
+        segments.append(current)
+    return segments
 
 
 def derive_sessions(
@@ -252,66 +284,31 @@ def derive_sessions(
             if len({stamp.date() for stamp in local[local.year == year]}) < 200
         }
         years = [year for year in years if year.year not in partial]
-    stable = bool(years) and all(
+    all_stable = bool(years) and all(
         year.stable for year in years if year.reasons != ["sin datos"]
     )
-    segments: list[SessionSegment] = []
-    current: SessionSegment | None = None
-    for year in years:
-        if not year.stable:
-            continue
-        if current is None:
-            current = SessionSegment(
-                start=f"{year.year}-01-01",
-                end=f"{year.year}-12-31",
-                friday_close=year.friday_close,
-                sunday_open=year.sunday_open,
-                pause_start=year.pause_start,
-                pause_end=year.pause_end,
-                short_close=year.short_close,
-            )
-            continue
-        same = (
-            current.friday_close == year.friday_close
-            and current.sunday_open == year.sunday_open
-            and current.pause_start == year.pause_start
-            and current.pause_end == year.pause_end
-            and current.short_close == year.short_close
-        )
-        if same:
-            current = current.model_copy(update={"end": f"{year.year}-12-31"})
-        else:
-            segments.append(current)
-            current = SessionSegment(
-                start=f"{year.year}-01-01",
-                end=f"{year.year}-12-31",
-                friday_close=year.friday_close,
-                sunday_open=year.sunday_open,
-                pause_start=year.pause_start,
-                pause_end=year.pause_end,
-                short_close=year.short_close,
-            )
-    if current is not None:
-        segments.append(current)
-    short_value, short_share = _short_mode(loaded.frame, tf_minutes)
-    if short_value is None or short_share is None or short_share < STABLE_SHARE:
-        short_value = None
-    for segment in segments:
-        segment.short_close = short_value
+    segments = build_segments(years)
+    stable = bool(segments)
     return {
         "symbol": key,
         "source": source_key,
         "timeframe": timeframe,
         "years": years,
         "stable": stable,
+        "all_stable": all_stable,
+        "unstable_years": [
+            year.year
+            for year in years
+            if not year.stable and year.reasons != ["sin datos"]
+        ],
         "segments": segments,
     }
 
 
 def yaml_block(result: dict) -> str:
     """YAML de ``data_quality.sessions`` para pegar tal cual."""
-    if not result["stable"]:
-        return f"# {result['source']}:{result['symbol']} INESTABLE"
+    if not result["segments"]:
+        return f"# {result['source']}:{result['symbol']} SIN TRAMOS ESTABLES"
     lines = [f'  "{result["source"]}:{result["symbol"]}":', "    segments:"]
     for segment in result["segments"]:
         lines.append(f'      - start: "{segment.start}"')
@@ -332,7 +329,7 @@ def yaml_block(result: dict) -> str:
 
 
 def session_config(result: dict) -> SessionConfig | None:
-    if not result["stable"] or not result["segments"]:
+    if not result["segments"]:
         return None
     return SessionConfig(segments=result["segments"])
 
@@ -341,6 +338,7 @@ __all__ = [
     "INDEX_SYMBOLS",
     "STABLE_SHARE",
     "YearSession",
+    "build_segments",
     "derive_sessions",
     "derive_year",
     "session_config",

@@ -168,10 +168,23 @@ def _quality(
     timeframe: str,
     segments: dict[str, list[str | None]],
     data_source: str = "broker",
+    *,
+    enforce_usable_from: bool = True,
 ) -> tuple[Any, str]:
     from .source_quality import quality_config
 
     engine = load_engine_config()
+    if enforce_usable_from:
+        limit = engine.data_quality.usable_from_for(
+            data_source, instrument, timeframe
+        )
+        if limit is not None:
+            start_date = _start_ts(segments["is"][0]).date()
+            if start_date < limit:
+                raise CampaignError(
+                    "campaña empieza antes de usable_from "
+                    f"({start_date} < {limit})"
+                )
     report = check_dataset(
         frame,
         instrument,
@@ -658,6 +671,7 @@ def supersede(
         old["timeframe"],
         segments,
         campaign_data_source(old),
+        enforce_usable_from=False,
     )
     snapshot_frame = _hash_range(source, old["is_start"], resolved_end)
     digest = dataset_hash(snapshot_frame)
