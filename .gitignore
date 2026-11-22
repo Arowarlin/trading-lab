@@ -20,6 +20,7 @@ reports/
 .pytest_cache/
 .ruff_cache/
 *.egg-info/
+.orquestador/
 
 vendor/
 .env
@@ -30,3 +31,6 @@ config/telegram.yaml
 data/telegram_state.json
 # Informes de TradingAgents generados en la raiz
 20??-??-??/
+
+# Protocolo de relevo Claude/OpenCode (no versionado)
+.orquestador/
