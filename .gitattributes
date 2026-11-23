@@ -1,0 +1,30 @@
+# Texto: normaliza a LF en el repositorio y en el checkout.
+* text=auto eol=lf
+
+# Binarios: nunca normalizar.
+*.parquet binary
+*.db binary
+*.sqlite binary
+*.sqlite3 binary
+*.ex5 binary
+*.ex4 binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.pdf binary
+*.zip binary
+*.gz binary
+*.7z binary
+*.xlsx binary
+*.xls binary
+*.npy binary
+*.npz binary
+*.pkl binary
+*.pickle binary
+*.joblib binary
+*.so binary
+*.dll binary
+*.pyd binary
+*.exe binary

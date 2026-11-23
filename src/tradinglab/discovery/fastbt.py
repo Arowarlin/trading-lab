@@ -1151,6 +1151,48 @@ def _session_mask(bars: pd.DataFrame, limits: RunLimits) -> SessionMask:
     )
 
 
+def session_mask(
+    bars: pd.DataFrame,
+    limits: RunLimits,
+    *,
+    prepared: PreparedBars | None = None,
+) -> SessionMask:
+    """Máscara de sesión reutilizando la caché de ``prepared`` si existe."""
+
+    if prepared is not None:
+        if prepared.bars is not bars:
+            raise FastBtError("prepared no corresponde a estas barras")
+        key = _mask_key(limits)
+        mask = prepared.masks.get(key)
+        if mask is None:
+            mask = _session_mask(bars, limits)
+            prepared.masks[key] = mask
+        return mask
+    return _session_mask(bars, limits)
+
+
+def atr_window(
+    bars: pd.DataFrame,
+    window: int,
+    *,
+    prepared: PreparedBars | None = None,
+) -> np.ndarray:
+    """ATR en array, reutilizando la caché de ``prepared`` si existe."""
+
+    value = int(window)
+    if value < 1:
+        raise FastBtError("la ventana ATR debe ser >= 1")
+    if prepared is not None:
+        if prepared.bars is not bars:
+            raise FastBtError("prepared no corresponde a estas barras")
+        cached = prepared.atr.get(value)
+        if cached is None:
+            cached = atr_series(bars, value).to_numpy(dtype=float)
+            prepared.atr[value] = cached
+        return cached
+    return atr_series(bars, value).to_numpy(dtype=float)
+
+
 def prepare(
     bars: pd.DataFrame,
     cost: Any,
@@ -1463,10 +1505,12 @@ __all__ = [
     "SessionMask",
     "Signals",
     "Trade",
+    "atr_window",
     "backend",
     "cfd_costs_from_bps",
     "cost_from_profile",
     "prepare",
     "run",
+    "session_mask",
     "set_backend",
 ]

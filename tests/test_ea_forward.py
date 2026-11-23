@@ -21,6 +21,7 @@ from tradinglab.lifecycle import (
     criteria_hash,
     evaluate_criteria,
     pre_register_external,
+    reset_external_forward,
     start_external_forward,
 )
 
@@ -368,3 +369,92 @@ def test_forward_solo_cuenta_del_ea(tmp_path):
     trades = ea_forward._closed(db, ea)
     assert len(trades) == 1
     assert trades[0].exit_fill_id == demo_exit
+
+
+def test_reset_external_forward_conserva_criterios_y_evento(tmp_path):
+    db = tmp_path / "lab.db"
+    init_db(db)
+    pre_register_external(
+        db,
+        bot="ea:us100-ftmo1",
+        asset="US100.cash",
+        criteria=EA_CRITERIA,
+    )
+    start_external_forward(db, bot="ea:us100-ftmo1", first_date="2026-11-16")
+    row = reset_external_forward(
+        db,
+        bot="ea:us100-ftmo1",
+        start_date="2026-11-23",
+        reason="EA v3.2 instalado 2026-11-23; fills v3 del 11-16/11-18 excluidos",
+        authorization="OPERADOR 2026-11-23: Sí, reiniciar hoy",
+    )
+    assert row["start_date"] == "2026-11-23"
+    assert row["end_date"] == "2027-01-22"
+    assert row["criteria_hash"] == FROZEN_HASH
+    assert row["frozen_at"]
+    with connect(db) as con:
+        event = con.execute(
+            "SELECT from_state, to_state, actor, reason FROM lifecycle_events "
+            "ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+    assert event["from_state"] == "incubando"
+    assert event["to_state"] == "incubando"
+    assert event["actor"] == "operador"
+    assert "fills v3 del 11-16/11-18 excluidos" in event["reason"]
+    assert "Sí, reiniciar hoy" in event["reason"]
+
+
+def test_cli_forward_reset_sin_flag_no_cambia(tmp_path, monkeypatch):
+    from typer.testing import CliRunner
+
+    import tradinglab.cli as cli_mod
+    import tradinglab.config as config_mod
+
+    db = tmp_path / "lab.db"
+    init_db(db)
+    pre_register_external(
+        db, bot="ea:us100-ftmo1", asset="US100.cash", criteria=EA_CRITERIA
+    )
+    monkeypatch.setattr(config_mod, "DEFAULT_DB", db)
+    runner = CliRunner()
+    result = runner.invoke(
+        cli_mod.app,
+        [
+            "ea",
+            "forward-reset",
+            "us100-ftmo1",
+            "--start",
+            "2026-11-23",
+            "--reason",
+            "prueba",
+        ],
+    )
+    assert result.exit_code == 0
+    with connect(db) as con:
+        row = con.execute(
+            "SELECT start_date FROM lifecycle_bots WHERE bot='ea:us100-ftmo1'"
+        ).fetchone()
+    assert row["start_date"] is None
+
+    result = runner.invoke(
+        cli_mod.app,
+        [
+            "ea",
+            "forward-reset",
+            "us100-ftmo1",
+            "--start",
+            "2026-11-23",
+            "--reason",
+            "prueba",
+            "--approved-by-operator",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    with connect(db) as con:
+        row = con.execute(
+            "SELECT start_date, end_date, criteria_hash FROM lifecycle_bots "
+            "WHERE bot='ea:us100-ftmo1'"
+        ).fetchone()
+    assert row["start_date"] == "2026-11-23"
+    assert row["end_date"] == "2027-01-22"
+    assert row["criteria_hash"] == FROZEN_HASH

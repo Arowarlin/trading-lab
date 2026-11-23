@@ -257,6 +257,7 @@ def register(
     data_source: str = "broker",
     frame: pd.DataFrame | None = None,
     dry_run: bool = False,
+    controls: bool = True,
     now: Any | None = None,
     db_path: str | Path | None = None,
 ) -> dict[str, Any]:
@@ -384,6 +385,15 @@ def register(
         },
         "engine_version": __version__,
     }
+    if controls:
+        config_payload["controls"] = {
+            "test_vs_random_direction": {
+                "version": 1,
+                "simulations": 1000,
+                "percentile_min": 90,
+                "scope": "campaigns registered from 2026-11-23",
+            }
+        }
     if grid_spec is not None:
         config_payload["grid"] = grid_spec
         config_payload["grid_size"] = n_total
@@ -537,6 +547,7 @@ def register_synthetic(
         data_source=data_source,
         frame=frame,
         dry_run=False,
+        controls=False,
         db_path=db_path,
     )
     identifier = str(campaign["campaign_id"])

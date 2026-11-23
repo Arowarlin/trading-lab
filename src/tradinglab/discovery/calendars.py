@@ -13,6 +13,7 @@ from datetime import date, timedelta
 
 NYSE = "nyse"
 FX_METAL = "fx_metal"
+CME = "cme"
 
 # Cierres especiales que no forman parte del calendario regular de NYSE.
 NYSE_SPECIAL_CLOSURES: dict[int, str] = {
@@ -165,6 +166,68 @@ def is_special_closure(day: date) -> bool:
     return _key(day) in NYSE_SPECIAL_CLOSURES
 
 
+def cme_holidays(start: int = 2010, end: int = 2030) -> dict[int, str]:
+    """Cierres completos de los futuros de índices CME (Globex).
+
+    Reglas para el producto de índice (ES/NQ): Año Nuevo, Viernes Santo,
+    Memorial, Juneteenth (desde 2022), 4 de julio, Labor, Acción de Gracias y
+    Navidad, con observados. MLK y Presidents no cierran el índice; los
+    productos de tipos tienen su propio horario y no se mezclan aquí.
+    """
+
+    out: dict[int, str] = {}
+    for year in range(start - 1, end + 2):
+        for day, label in (
+            (date(year, 1, 1), "Año Nuevo"),
+            (_good_friday(year), "Viernes Santo"),
+            (_last_weekday(year, 5, 0), "Memorial"),
+            (date(year, 7, 4), "4 de julio"),
+            (_nth_weekday(year, 9, 0, 1), "Labor"),
+            (_nth_weekday(year, 11, 3, 4), "Acción de Gracias"),
+            (date(year, 12, 25), "Navidad"),
+        ):
+            if year > end:
+                continue
+            observed = _observed(day)
+            _add(
+                out,
+                observed,
+                label if observed == day else f"{label} (observado)",
+            )
+        if year >= 2022:
+            juneteenth = date(year, 6, 19)
+            observed = _observed(juneteenth)
+            _add(
+                out,
+                observed,
+                "Juneteenth" if observed == juneteenth else "Juneteenth (observado)",
+            )
+    return {key: value for key, value in out.items() if start <= key // 10000 <= end}
+
+
+def cme_early_closes(start: int = 2010, end: int = 2030) -> dict[int, int]:
+    """Sesiones cortas del índice CME, en hora de Nueva York (HHMM).
+
+    Víspera del 4 de julio y Nochebuena a las 13:00; día después de Acción de
+    Gracias a las 13:15. Solo se anotan si son días hábiles y no festivos.
+    """
+
+    holidays = cme_holidays(start, end)
+    out: dict[int, int] = {}
+    for year in range(start, end + 1):
+        july3 = date(year, 7, 3)
+        if july3.weekday() < 5 and _key(july3) not in holidays:
+            out[_key(july3)] = 1300
+        christmas_eve = date(year, 12, 24)
+        if christmas_eve.weekday() < 5 and _key(christmas_eve) not in holidays:
+            out[_key(christmas_eve)] = 1300
+        thanksgiving = _nth_weekday(year, 11, 3, 4)
+        black_friday = thanksgiving + timedelta(days=1)
+        if _key(black_friday) not in holidays:
+            out[_key(black_friday)] = 1315
+    return out
+
+
 def is_holiday(calendar: str | None, day: date) -> bool:
     if calendar == NYSE:
         return (
@@ -173,6 +236,8 @@ def is_holiday(calendar: str | None, day: date) -> bool:
         )
     if calendar == FX_METAL:
         return _key(day) in fx_metal_holidays(2003, 2030)
+    if calendar == CME:
+        return _key(day) in cme_holidays(2010, 2030)
     return False
 
 
@@ -184,12 +249,16 @@ def holiday_reason(calendar: str | None, day: date) -> str | None:
         return nyse_holidays(2003, 2030).get(key)
     if calendar == FX_METAL:
         return fx_metal_holidays(2003, 2030).get(key)
+    if calendar == CME:
+        return cme_holidays(2010, 2030).get(key)
     return None
 
 
 def early_close_hhmm(calendar: str | None, day: date) -> int | None:
     if calendar == NYSE:
         return nyse_early_closes(2003, 2030).get(_key(day))
+    if calendar == CME:
+        return cme_early_closes(2010, 2030).get(_key(day))
     return None
 
 
@@ -200,9 +269,12 @@ def is_fx_short_day(day: date) -> bool:
 
 
 __all__ = [
+    "CME",
     "FX_METAL",
     "NYSE",
     "NYSE_SPECIAL_CLOSURES",
+    "cme_early_closes",
+    "cme_holidays",
     "early_close_hhmm",
     "fx_metal_holidays",
     "holiday_reason",

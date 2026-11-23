@@ -105,6 +105,9 @@ def evaluate(
     cache=None,
     cost_r_max: float | None = None,
     cost_book=None,
+    campaign_id: str = "",
+    drift_simulations: int = 0,
+    drift_percentile_min: float = 90.0,
 ) -> dict[str, Any]:
     """Evalúa una estrategia congelada en IS y devuelve el vector de fitness."""
 
@@ -282,6 +285,31 @@ def evaluate(
         "complexity": node_count,
         "is": dict(full_metrics),
     }
+    drift_info: dict[str, Any] | None = None
+    if int(drift_simulations) > 0:
+        try:
+            from . import drift as drift_control
+
+            drift_info = drift_control.evaluate(
+                bars,
+                exit_spec,
+                base_limits,
+                full,
+                cost=cost,
+                prepared=prepared,
+                campaign_id=campaign_id,
+                simulations=int(drift_simulations),
+                percentile_min=float(drift_percentile_min),
+            )
+        except Exception as exc:  # noqa: BLE001 - el control no tumba el job
+            drift_info = {
+                "percentile": None,
+                "simulations": int(drift_simulations),
+                "percentile_min": float(drift_percentile_min),
+                "passed": False,
+                "error": f"{type(exc).__name__}: {exc}",
+            }
+        metrics_payload["drift"] = drift_info
     metrics_payload.update(cost_info)
     return {
         "strategy_hash": dsl.strategy_hash(model),
@@ -294,6 +322,7 @@ def evaluate(
         "daily_returns": full_daily,
         "trades_count": len(trades),
         "metrics": metrics_payload,
+        "drift": drift_info,
     }
 
 

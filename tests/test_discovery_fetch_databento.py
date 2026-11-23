@@ -247,7 +247,7 @@ def test_data_source_databento_remuestrea(tmp_path) -> None:
     loaded = load_source("US100", "M5", source="databento", root=tmp_path)
     assert loaded.source == "databento"
     assert loaded.derived_from == "M1"
-    assert loaded.calendar is None
+    assert loaded.calendar == "cme"
     assert str(loaded.frame.index.tz) == "UTC"
     assert loaded.rows == 6
 
@@ -332,7 +332,12 @@ def test_sesion_cme_declarada() -> None:
     assert session.sunday_open == "18:00"
     assert session.pause_start == "17:00"
     assert session.pause_end == "18:00"
-    assert quality_config(config, "US100", "M5", "databento").source_for("US100").calendar is None
+    assert (
+        quality_config(config, "US100", "M5", "databento")
+        .source_for("US100")
+        .calendar
+        == "cme"
+    )
 
 
 def test_derive_sessions_acepta_databento(monkeypatch) -> None:
@@ -406,5 +411,5 @@ def test_data_check_acepta_databento(tmp_path) -> None:
     ).to_parquet(path)
     data = quality_for_source("US100", "M1", source="databento", root=tmp_path)
     assert data["source_name"] == "databento"
-    assert data["calendar"]["name"] is None
+    assert data["calendar"]["name"] == "cme"
     assert data["status"] in {"ok", "warn", "fail"}

@@ -13,7 +13,7 @@ from typing import Any
 import pandas as pd
 
 from ..config import ROOT
-from .calendars import FX_METAL, NYSE
+from .calendars import CME, FX_METAL, NYSE
 from .config import DataQualityConfig, SourceConfig, load_engine_config
 from .data_quality import check_dataset
 from .data_sources import DataSourceError, load_source, normalize_source
@@ -49,12 +49,10 @@ def quality_config(
         "max_gap_hours": max_gap,
     }
     if str(source).strip().lower() == "databento":
-        # Los futuros CME no siguen el calendario NYSE/FX: las sesiones
-        # (pausa 17:00-18:00 NY, viernes 17:00) quedan como hipótesis en
-        # engine.yaml hasta derivarlas con datos.
+        # Futuros CME: festivos y sesiones cortas del índice, por reglas.
         sources = dict(base.sources)
         sources[str(symbol).upper()] = SourceConfig(
-            path="", timezone="UTC", calendar=None
+            path="", timezone="UTC", calendar=CME
         )
         updates["sources"] = sources
     elif str(symbol).upper() in NYSE_SYMBOLS:

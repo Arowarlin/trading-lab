@@ -23,6 +23,7 @@ from pathlib import Path
 import pandas as pd
 
 from ..config import ROOT
+from .calendars import CME
 from .config import DataQualityConfig, SourceConfig, load_engine_config
 from .timeframes import normalize_timeframe, timeframe_minutes
 
@@ -219,9 +220,9 @@ def load_source(
             timeframe=target,
             path=path_text,
             timezone="UTC",
-            # Los festivos/cierres de CME no están modelados: se declaran como
-            # hipótesis de sesión en engine.yaml y se derivarán con datos.
-            calendar=None,
+            # Los futuros CME usan el calendario de índice (festivos y
+            # sesiones cortas); la pausa diaria sigue viniendo de engine.yaml.
+            calendar=CME,
             rows_raw=int(len(raw)),
             rows=int(len(frame)),
             adjusted=0,

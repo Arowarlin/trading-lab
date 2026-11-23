@@ -119,6 +119,7 @@ def campaign_results(
                 reason = f"rank {rank} > 0 (dominada, fuera del frente)"
             gross = isd.get("gross_expectancy_r")
             costs = isd.get("cost_by_account") or {}
+            drift = metrics.get("drift") or {}
             verdict, verdict_source = _selection_verdict(
                 row["verdict"], row["status"], rank
             )
@@ -133,6 +134,9 @@ def campaign_results(
                     "profit_factor": isd.get("profit_factor"),
                     "positive_folds": positive,
                     "folds": len(folds),
+                    "drift_percentile": drift.get("percentile"),
+                    "drift_percentile_min": drift.get("percentile_min"),
+                    "drift_passed": drift.get("passed"),
                     "rank": rank,
                     "level": int(row["level"] or 1),
                     "status": row["status"],

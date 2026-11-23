@@ -398,6 +398,23 @@ def _rank1_candidates(
     candidates: list[Individual] = []
     discarded: list[tuple[Individual, str]] = []
     for item in feasible_rank1:
+        drift = (item.metrics or {}).get("drift") or {}
+        drift_percentile = drift.get("percentile")
+        if drift:
+            minimum = float(drift.get("percentile_min") or 90.0)
+            if drift_percentile is None or float(drift_percentile) < minimum:
+                detail = (
+                    "sin datos"
+                    if drift_percentile is None
+                    else f"{float(drift_percentile):.1f}"
+                )
+                discarded.append(
+                    (
+                        item,
+                        f"descartado: percentil deriva {detail} < {minimum:g}",
+                    )
+                )
+                continue
         full_is = (item.metrics.get("is") or {}).get("expectancy_r")
         if full_is is None or float(full_is) <= 0:
             discarded.append(

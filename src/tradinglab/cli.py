@@ -3020,6 +3020,53 @@ def ea_forward_cmd(
     console.print(table)
 
 
+@ea_app.command("forward-reset")
+def ea_forward_reset_cmd(
+    ea_id: str = typer.Argument("us100-ftmo1", help="ID del EA"),
+    start: str = typer.Option(..., "--start", help="Nueva fecha de inicio YYYY-MM-DD"),
+    reason: str = typer.Option(..., "--reason", help="Motivo del reinicio"),
+    approved_by_operator: bool = typer.Option(
+        False,
+        "--approved-by-operator",
+        help="Obligatorio: el operador aprueba reiniciar el reloj",
+    ),
+) -> None:
+    """Reinicia el reloj del forward externo sin borrar fills antiguos."""
+    from .config import DEFAULT_DB
+    from .lifecycle import LifecycleError, reset_external_forward
+
+    bot = f"ea:{ea_id}"
+    if not approved_by_operator:
+        console.print(
+            "[yellow]Sin --approved-by-operator no se cambia nada.[/yellow]"
+        )
+        return
+    authorization = (
+        "OPERADOR 2026-11-23: \"Sí, reiniciar hoy\". EA v3.2 instalado y "
+        "verificado; fills v3 del 11-16/11-18 excluidos."
+    )
+    try:
+        row = reset_external_forward(
+            DEFAULT_DB,
+            bot=bot,
+            start_date=start,
+            reason=reason,
+            authorization=authorization,
+        )
+    except (LifecycleError, ValueError) as exc:
+        console.print(f"[red]No se pudo reiniciar:[/red] {exc}")
+        raise typer.Exit(2) from exc
+    table = Table(title=f"Forward reset · {bot}")
+    table.add_column("Campo", style="bold")
+    table.add_column("Valor")
+    table.add_row("Inicio", str(row.get("start_date")))
+    table.add_row("Fin", str(row.get("end_date")))
+    table.add_row("Frozen at", str(row.get("frozen_at")))
+    table.add_row("Criteria", str(row.get("criteria_hash")))
+    table.add_row("Reason", reason)
+    console.print(table)
+
+
 @ea_app.command("horizon")
 def ea_horizon_cmd(
     ea_id: str = typer.Argument("us100-ftmo1", help="ID del EA"),
@@ -11288,6 +11335,7 @@ def discovery_results_cmd(
         "cost_R CF6",
         "PF",
         "Pliegues+",
+        "Pctl deriva",
         "Nivel",
         "Estado",
         "Veredicto",
@@ -11324,6 +11372,11 @@ def discovery_results_cmd(
             if row.get("profit_factor") is not None
             else "Sin datos",
             f"{row.get('positive_folds', 0)}/{row.get('folds', 0)}",
+            (
+                f"{float(row['drift_percentile']):.1f}"
+                if row.get("drift_percentile") is not None
+                else "Sin datos"
+            ),
             str(row.get("level", 1)),
             str(row.get("status") or "Sin datos"),
             str(row.get("verdict") or "Sin datos"),

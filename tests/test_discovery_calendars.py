@@ -317,3 +317,63 @@ def test_yaml_block_escribe_tramos_parciales() -> None:
     assert '"dukascopy:US100"' in text
     assert '"2015-01-01"' in text
     assert "friday_close" in text
+
+
+def test_cme_indices_festivos_y_sesiones_cortas() -> None:
+    assert calendars.is_holiday(
+        calendars.CME, pd.Timestamp("2024-03-29").date()
+    )  # Viernes Santo
+    assert calendars.is_holiday(
+        calendars.CME, pd.Timestamp("2024-07-04").date()
+    )
+    assert calendars.is_holiday(
+        calendars.CME, pd.Timestamp("2024-11-28").date()
+    )
+    assert calendars.is_holiday(
+        calendars.CME, pd.Timestamp("2024-12-25").date()
+    )
+    # MLK y Presidents no cierran el índice CME.
+    assert not calendars.is_holiday(
+        calendars.CME, pd.Timestamp("2024-01-15").date()
+    )
+    assert not calendars.is_holiday(
+        calendars.CME, pd.Timestamp("2024-02-19").date()
+    )
+    # Víspera del 4 de julio y día después de Acción de Gracias.
+    assert (
+        calendars.early_close_hhmm(
+            calendars.CME, pd.Timestamp("2024-07-03").date()
+        )
+        == 1300
+    )
+    assert (
+        calendars.early_close_hhmm(
+            calendars.CME, pd.Timestamp("2024-11-29").date()
+        )
+        == 1315
+    )
+    # Si la Nochebuena observada es festivo, no se marca como sesión corta.
+    assert (
+        calendars.early_close_hhmm(
+            calendars.CME, pd.Timestamp("2021-12-24").date()
+        )
+        is None
+    )
+    assert calendars.is_holiday(
+        calendars.CME, pd.Timestamp("2021-12-24").date()
+    )
+
+
+def test_cme_good_friday_no_cuenta_como_hueco() -> None:
+    session = _session(friday_close="17:00", sunday_open="18:00")
+    real, reason = _calendar_gap_session(
+        pd.Timestamp("2024-03-29 00:00", tz=NY),
+        pd.Timestamp("2024-03-31 18:00", tz=NY),
+        1440,
+        36 * 60,
+        calendars.CME,
+        session,
+        NY,
+    )
+    assert real is False
+    assert "festivo" in reason

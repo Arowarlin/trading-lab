@@ -360,6 +360,60 @@ def start_external_forward(
     return dict(updated)
 
 
+def reset_external_forward(
+    db_path: str | Path,
+    *,
+    bot: str,
+    start_date: str,
+    reason: str,
+    authorization: str,
+    actor: str = "operador",
+) -> dict:
+    """Reinicia el reloj de un forward externo sin borrar fills antiguos.
+
+    Cambia ``start_date``/``end_date`` y ``frozen_at``; conserva criterios y
+    ``criteria_hash``. Los fills anteriores quedan fuera de la ventana porque
+    los informes filtran por ``start_date``. Deja un evento con el motivo y la
+    autorización literal.
+    """
+    init_db(db_path)
+    start = date.fromisoformat(str(start_date))
+    with connect(db_path) as con:
+        row = con.execute(
+            "SELECT * FROM lifecycle_bots WHERE bot = ?", (bot,)
+        ).fetchone()
+        if row is None:
+            raise LifecycleError(f"bot no registrado: {bot}")
+        criteria = json.loads(row["criteria"] or "{}")
+        window_days = int(criteria.get("window_days", 60) or 60)
+        end = start + timedelta(days=window_days)
+        now = utcnow()
+        con.execute(
+            "UPDATE lifecycle_bots SET start_date=?, end_date=?, updated_at=?, "
+            "frozen_at=? WHERE bot=?",
+            (start.isoformat(), end.isoformat(), now, now, bot),
+        )
+        event_reason = f"{reason} | autorización: {authorization}"
+        con.execute(
+            "INSERT INTO lifecycle_events"
+            "(ts, bot, from_state, to_state, actor, reason, criteria_hash) "
+            "VALUES(?,?,?,?,?,?,?)",
+            (
+                now,
+                bot,
+                row["state"],
+                row["state"],
+                actor,
+                event_reason[:2000],
+                row["criteria_hash"],
+            ),
+        )
+        updated = con.execute(
+            "SELECT * FROM lifecycle_bots WHERE bot = ?", (bot,)
+        ).fetchone()
+    return dict(updated)
+
+
 def _drift_for(db_path: str | Path, bot: str, settings: Settings) -> dict:
     try:
         from .drift import build_drift
@@ -715,6 +769,7 @@ __all__ = [
     "evaluate_criteria",
     "evaluate_incubation",
     "pre_register_external",
+    "reset_external_forward",
     "start_external_forward",
     "events",
     "gate_eligible",

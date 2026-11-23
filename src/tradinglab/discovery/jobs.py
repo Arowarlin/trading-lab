@@ -79,6 +79,9 @@ class QueueSetup:
     point: float = 0.01
     data_source: str = "broker"
     cache_limit_bytes: int = 0
+    campaign_id: str = ""
+    drift_simulations: int = 0
+    drift_percentile_min: float = 0.0
     bars: pd.DataFrame | None = None  # solo tests/benchmark sintéticos
 
     def as_dict(self, *, include_bars: bool = False) -> dict[str, Any]:
@@ -105,6 +108,8 @@ class QueueSetup:
         cost = config.get("cost") or {}
         session = config.get("session") or {}
         limits = config.get("limits") or {}
+        controls = config.get("controls") or {}
+        random_control = controls.get("test_vs_random_direction") or {}
         configured_accounts = tuple(
             str(account).strip().upper()
             for account in (cost.get("accounts") or ())
@@ -139,6 +144,11 @@ class QueueSetup:
             point=float(config.get("point", 0.01)),
             data_source=str(config.get("data_source") or "broker"),
             cache_limit_bytes=int(config.get("cache_limit_bytes", 0)),
+            campaign_id=str(campaign.get("id") or ""),
+            drift_simulations=int(random_control.get("simulations") or 0),
+            drift_percentile_min=float(
+                random_control.get("percentile_min") or 0.0
+            ),
             bars=bars,
         ).validated()
 
@@ -159,6 +169,12 @@ class QueueSetup:
             raise QueueError("Sin datos: cost_accounts vacío")
         if self.cost_mode == "target" and len(self.cost_accounts) != 1:
             raise QueueError("cost_mode target exige exactamente una cuenta")
+        if int(self.drift_simulations) < 0:
+            raise QueueError("drift_simulations no puede ser negativo")
+        if int(self.drift_simulations) > 0 and not (
+            0.0 < float(self.drift_percentile_min) <= 100.0
+        ):
+            raise QueueError("drift_percentile_min debe estar en (0, 100]")
         return replace(
             self,
             instrument=str(self.instrument).upper(),
@@ -419,6 +435,9 @@ def _evaluate_job(task: tuple[int, str, str]) -> dict[str, Any]:
                 state["prepared"],
                 cache=cache,
                 cost_book=state.get("cost_book"),
+                campaign_id=setup.campaign_id,
+                drift_simulations=setup.drift_simulations,
+                drift_percentile_min=setup.drift_percentile_min,
             )
             series = fit["daily_returns"]
             return {
@@ -432,6 +451,7 @@ def _evaluate_job(task: tuple[int, str, str]) -> dict[str, Any]:
                 "fitness": fit["fitness"],
                 "feasible": fit["feasible"],
                 "violations": fit["violations"],
+                "drift": fit.get("drift"),
                 "cost_r": fit["cost_r"],
                 "complexity": fit["complexity"],
                 "folds": fit["folds"],
