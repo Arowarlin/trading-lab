@@ -9940,6 +9940,152 @@ def discovery_fetch_dukascopy_cmd(
     console.print(table)
 
 
+@discovery_app.command("fetch-databento")
+def discovery_fetch_databento_cmd(
+    symbols: str = typer.Option(
+        "NQ,ES,YM,GC,6E,6B,6J",
+        "--symbols",
+        help="Raíces Databento o símbolos internos separados por coma",
+    ),
+    schema: str = typer.Option(
+        "ohlcv-1m", "--schema", help="ohlcv-1m | ohlcv-1h"
+    ),
+    roll: str = typer.Option(
+        "c", "--roll", help="c = calendario | v = volumen"
+    ),
+    start: str = typer.Option(
+        None, "--start", help="Inicio UTC; por defecto, inicio del dataset"
+    ),
+    end: str = typer.Option(
+        None, "--end", help="Fin UTC exclusivo; por defecto, última fecha"
+    ),
+    estimate_only: bool = typer.Option(
+        True,
+        "--estimate-only/--download",
+        help="Por defecto solo estima; --download exige --i-approve-cost",
+    ),
+    approve_cost: float = typer.Option(
+        None,
+        "--i-approve-cost",
+        help="USD aprobados; debe coincidir con la estimación para descargar",
+    ),
+    adjust: str = typer.Option(
+        "none", "--adjust", help="none = precios sin ajustar | back = por diferencia"
+    ),
+    roll_table: str = typer.Option(
+        None, "--roll-table", help="JSON de rolls para --adjust back"
+    ),
+) -> None:
+    """Estima el coste de Databento y, solo con aprobación, descarga OHLCV."""
+    from .discovery import fetch_databento
+
+    try:
+        roots = [
+            fetch_databento.normalize_symbol(part)
+            for part in str(symbols).split(",")
+            if str(part).strip()
+        ]
+        if not roots:
+            raise typer.BadParameter("--symbols no puede estar vacío")
+
+        def _fmt_bytes(value: int) -> str:
+            size = float(value)
+            for unit in ("B", "KB", "MB", "GB", "TB"):
+                if size < 1024.0 or unit == "TB":
+                    return f"{size:.2f} {unit}"
+                size /= 1024.0
+            return f"{size:.2f} TB"
+
+        if estimate_only:
+            estimate = fetch_databento.estimate(
+                roots, schema=schema, roll=roll, start=start, end=end
+            )
+            table = Table(
+                title=f"Discovery · Databento · coste estimado · {estimate.schema}"
+            )
+            for column in (
+                "Símbolo",
+                "Continuo",
+                "Roll",
+                "Registros",
+                "Tamaño",
+                "Coste USD",
+            ):
+                table.add_column(column)
+            for row in estimate.rows:
+                table.add_row(
+                    row.symbol,
+                    row.continuous,
+                    fetch_databento.ROLL_NAMES.get(row.roll, row.roll),
+                    f"{row.records:,}",
+                    _fmt_bytes(row.billable_bytes),
+                    f"{row.cost_usd:.6f}",
+                )
+            table.add_row(
+                "TOTAL",
+                "",
+                fetch_databento.ROLL_NAMES.get(estimate.roll, estimate.roll),
+                f"{estimate.total_records:,}",
+                _fmt_bytes(estimate.total_billable_bytes),
+                f"{estimate.total_cost_usd:.6f}",
+            )
+            console.print(table)
+            console.print(
+                f"[dim]Rango: {estimate.start} → {estimate.end} (fin exclusivo). "
+                "Solo estimación: no se ha descargado nada.[/dim]"
+            )
+            console.print(
+                "[yellow]Para descargar hace falta:[/yellow] "
+                f"--download --i-approve-cost {estimate.total_cost_usd:.2f}"
+            )
+            return
+
+        if approve_cost is None:
+            raise typer.BadParameter(
+                "--download exige --i-approve-cost con el importe estimado"
+            )
+        result = fetch_databento.download(
+            roots,
+            schema=schema,
+            roll=roll,
+            start=start,
+            end=end,
+            approved_cost=float(approve_cost),
+            adjust=adjust,
+            roll_table=roll_table,
+        )
+    except Exception as exc:  # noqa: BLE001
+        console.print(f"[red]Databento:[/red] {exc}")
+        raise typer.Exit(1) from exc
+
+    table = Table(title=f"Discovery · Databento · descarga · {result['schema']}")
+    for column in (
+        "Símbolo",
+        "Roll",
+        "Filas",
+        "Inicio UTC",
+        "Fin UTC",
+        "Coste USD",
+        "Ruta",
+    ):
+        table.add_column(column)
+    for row in result["rows"]:
+        table.add_row(
+            row["symbol"],
+            fetch_databento.ROLL_NAMES.get(row["roll"], row["roll"]),
+            f"{row['rows']:,}",
+            row["start"],
+            row["end"],
+            f"{row['cost_usd']:.6f}",
+            row["path"],
+        )
+    console.print(table)
+    console.print(
+        f"[green]Descargado:[/green] {result['estimated_cost_usd']:.6f} USD "
+        f"(aprobado {result['approved_cost_usd']:.6f})"
+    )
+
+
 @discovery_app.command("derive-sessions")
 def discovery_derive_sessions_cmd(
     symbol: str = typer.Argument(..., help="US100 | US500 | US30 | XAUUSD | EURUSD | GBPUSD | USDJPY"),

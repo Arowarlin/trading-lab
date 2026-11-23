@@ -20,6 +20,9 @@ informe de calidad de `discovery/data_quality.py`.
 - **Contrato continuo**: construido localmente con roll por volumen o fecha fija (5 días hábiles antes
   del vencimiento), **ajuste por diferencia** para señales y precios **no ajustados** para ejecución y
   costes. Se guardan ambos y la tabla de rolls.
+- **Símbolos** (`discovery/fetch_databento.py`): NQ→US100, ES→US500, YM→US30, GC→XAUUSD,
+  6E→EURUSD, 6B→GBPUSD y 6J→USDJPY. El 6J cotiza USD por JPY; USDJPY se obtiene invirtiendo
+  barra a barra (`open=1/open`, `high=1/low`, `low=1/high`, `close=1/close`) y conservando el volumen.
 - **ProjectX**: queda para ejecución en Practice cuando haya API (doc 08, fase 10).
 
 ## 3. Controles de calidad (`discovery/data_quality.py`)
