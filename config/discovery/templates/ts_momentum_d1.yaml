@@ -1,0 +1,67 @@
+name: ts_momentum_d1
+symmetric: true
+timeframes: [D1]
+valid_timeframes: [D1]
+description: >-
+  Momentum de serie temporal en D1: cruce de dos medias largas, stop ATR,
+  trailing y salida máxima a 60 días para dejar correr la tendencia. Familia
+  distinta de las plantillas intradía y de la reversión al rango asiático.
+hypothesis: >-
+  Los precios de índices, oro y divisas persisten en horizontes de semanas o
+  meses por infrarreacción a noticias, rebalanceo lento y flujo de trend
+  followers. Si el cruce de medias largas captura esa persistencia, la
+  expectativa bruta debe superar el coste en varios regímenes, no en uno.
+  Referencias: Moskowitz/Ooi/Pedersen (JFE 2012) y Hurst/Ooi/Pedersen (JPM 2017).
+invalidation: >-
+  Se invalida si, después de costes (spread p75 + slippage + comisión), la
+  expectativa neta no es positiva y estable en IS y robustez. No se lee OOS-2.
+parameter_space:
+  fast_n: [20, 50, 100]
+  slow_n: [150, 200, 250]
+  stop_mult: [2.5, 3.0, 3.5]
+grid:
+  dimensions:
+    - name: fast_n
+      kind: path
+      path: long_entry.left.n
+      values: [20, 50, 100]
+    - name: slow_n
+      kind: path
+      path: long_entry.right.n
+      values: [150, 200, 250]
+    - name: stop_mult
+      kind: path
+      path: exit.stop.mult
+      values: [2.5, 3.0, 3.5]
+strategy:
+  dsl_version: "1"
+  instrument: XAUUSD
+  market: cfd
+  timeframe: D1
+  warmup_minutes: 288000
+  session:
+    start: "00:00"
+    end: "23:59"
+    flat_at: "23:59"
+    or_minutes: 15
+  long_entry:
+    kind: cross_up
+    left: {kind: indicator, ind: sma, n: 50}
+    right: {kind: indicator, ind: sma, n: 200}
+  short_entry:
+    kind: cross_down
+    left: {kind: indicator, ind: sma, n: 50}
+    right: {kind: indicator, ind: sma, n: 200}
+  exit:
+    stop: {type: atr, mult: 3.0, n: 14}
+    target: {type: rr, rr: 1000.0}
+    trailing: {n: 14, mult: 3.0}
+    # Sin target práctico; 60 días es el máximo razonable para una tendencia
+    # D1 y desbloquea el gate de tiempo medio sin recortar la cola.
+    time_exit_minutes: 86400
+    opposite_signal: false
+  sizing:
+    risk_per_trade_r: 1.0
+  limits:
+    max_trades_per_day: 1
+    cooldown_minutes: 0

@@ -67,6 +67,16 @@ def test_grid_estructura_bloqueada() -> None:
     assert len(skeletons) == 1
 
 
+def test_grid_long_only_conserva_short_null() -> None:
+    strategies = grid.grid_strategies(
+        "d1_extension_reversion", instrument="XAUUSD", timeframe="D1"
+    )
+    assert len(strategies) == 27
+    assert all(item["short_entry"] is None for item in strategies)
+    assert all(dsl.validate(item) == [] for item in strategies)
+    assert {item["exit"]["stop"]["mult"] for item in strategies} == {1.5, 2.0, 2.5}
+
+
 def test_grid_campaign_n_total_y_preflight(tmp_path) -> None:
     db = tmp_path / "discovery.db"
     frame = engine.synthetic_frame(years=0.5, seed=20261121)

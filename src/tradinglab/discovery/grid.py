@@ -219,7 +219,11 @@ def grid_strategies(
                 _apply_volatility(data, str(value))
             elif kind == "exit":
                 _apply_exit(data, str(value), spec)
-        data["short_entry"] = genetic.mirror_expr(data.get("long_entry"))
+        if genetic.template_symmetric(template):
+            data["short_entry"] = genetic.mirror_expr(data.get("long_entry"))
+        # Plantilla long-only: se conserva su ``short_entry`` (normalmente None)
+        # en vez de fabricar un espejo que duplicaría nodos y cambiaría la
+        # hipótesis.
         errors = dsl.validate(data)
         if errors:
             raise GridError(

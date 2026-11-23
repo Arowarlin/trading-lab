@@ -65,6 +65,9 @@ def test_plantillas_declaran_timeframes_compatibles() -> None:
         "M30",
         "H1",
     )
+    assert genetic.template_timeframes("ts_momentum_d1") == ("D1",)
+    assert genetic.template_timeframes("donchian_vol_h4") == ("H4",)
+    assert genetic.template_timeframes("d1_extension_reversion") == ("D1",)
     for name in (
         "asia_range_reversion",
         "intraday_momentum_close",

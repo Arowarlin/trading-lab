@@ -1,0 +1,79 @@
+name: donchian_vol_h4
+symmetric: true
+timeframes: [H4]
+valid_timeframes: [H4]
+description: >-
+  Ruptura del canal Donchian en H4 con filtro de volatilidad alta. Familia de
+  breakout/tendencia, distinta de las plantillas intradía de rango de apertura.
+hypothesis: >-
+  Una ruptura del máximo de N barras señala que el mercado absorbió la liquidez
+  del rango y entra en descubrimiento de precio; las colas positivas del
+  breakout aparecen sobre todo cuando la volatilidad sale de un régimen
+  comprimido. El filtro ATR percentil evita rupturas en mercados dormidos,
+  donde el spread pesa más que el movimiento. Referencias: sistemas
+  Donchian/Turtle (Dennis/Eckhardt; Faith, 2007) y volatility breakout.
+invalidation: >-
+  Se invalida si la ruptura filtrada no supera el coste de forma estable en IS
+  y robustez, o si el filtro de volatilidad deja tan pocas operaciones que la
+  muestra no permite concluir. No se lee OOS-2.
+parameter_space:
+  channel_n: [20, 40, 55]
+  vol_pct: [0.6, 0.7, 0.8]
+  stop_mult: [1.5, 2.0, 2.5]
+grid:
+  dimensions:
+    - name: channel_n
+      kind: path
+      path: long_entry.args[0].right.n
+      values: [20, 40, 55]
+    - name: vol_pct
+      kind: path
+      path: long_entry.args[1].params.pct
+      values: [0.6, 0.7, 0.8]
+    - name: stop_mult
+      kind: path
+      path: exit.stop.mult
+      values: [1.5, 2.0, 2.5]
+strategy:
+  dsl_version: "1"
+  instrument: XAUUSD
+  market: cfd
+  timeframe: H4
+  warmup_minutes: 14400
+  session:
+    start: "00:00"
+    end: "23:59"
+    flat_at: "23:59"
+    or_minutes: 15
+  long_entry:
+    kind: and
+    args:
+      - kind: cross_up
+        left: {kind: price, price: close}
+        right: {kind: level, level: donchian_high, n: 40}
+      - kind: regime
+        regime: vol_high
+        n: 14
+        lookback: 100
+        params: {pct: 0.7}
+  short_entry:
+    kind: and
+    args:
+      - kind: cross_down
+        left: {kind: price, price: close}
+        right: {kind: level, level: donchian_low, n: 40}
+      - kind: regime
+        regime: vol_high
+        n: 14
+        lookback: 100
+        params: {pct: 0.7}
+  exit:
+    stop: {type: atr, mult: 2.0, n: 14}
+    target: {type: rr, rr: 2.0}
+    time_exit_minutes: 7200
+    opposite_signal: false
+  sizing:
+    risk_per_trade_r: 1.0
+  limits:
+    max_trades_per_day: 1
+    cooldown_minutes: 240
