@@ -153,6 +153,7 @@ def candidate_strategies(
             instrument=campaign.get("instrument"),
             timeframe=campaign.get("timeframe"),
             session=campaign_config.get("session"),
+            grid_spec=campaign_config.get("grid"),
         )
         population = len(strategies)
     else:

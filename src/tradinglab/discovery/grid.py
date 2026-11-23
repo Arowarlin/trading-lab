@@ -26,12 +26,7 @@ class GridError(ValueError):
     pass
 
 
-def load_grid(template: str) -> dict[str, Any]:
-    path = TEMPLATE_DIR / f"{template}.yaml"
-    if not path.exists():
-        raise GridError(f"Sin datos: no existe la plantilla {template}")
-    payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    spec = payload.get("grid")
+def validate_grid(spec: dict[str, Any], template: str) -> dict[str, Any]:
     if not isinstance(spec, dict):
         raise GridError(f"la plantilla {template} no declara grid")
     dimensions = spec.get("dimensions")
@@ -66,8 +61,19 @@ def load_grid(template: str) -> dict[str, Any]:
     return copy.deepcopy(spec)
 
 
-def grid_size(template: str) -> int:
-    spec = load_grid(template)
+def load_grid(template: str) -> dict[str, Any]:
+    path = TEMPLATE_DIR / f"{template}.yaml"
+    if not path.exists():
+        raise GridError(f"Sin datos: no existe la plantilla {template}")
+    payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    spec = payload.get("grid")
+    if not isinstance(spec, dict):
+        raise GridError(f"la plantilla {template} no declara grid")
+    return validate_grid(spec, template)
+
+
+def grid_size(template: str, *, grid_spec: dict[str, Any] | None = None) -> int:
+    spec = validate_grid(grid_spec, template) if grid_spec else load_grid(template)
     size = 1
     for dimension in spec["dimensions"]:
         size *= len(dimension["values"])
@@ -186,8 +192,13 @@ def grid_strategies(
     instrument: str | None = None,
     timeframe: str | None = None,
     session: dict[str, Any] | None = None,
+    grid_spec: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
-    spec = load_grid(template)
+    spec = (
+        validate_grid(grid_spec, template)
+        if grid_spec is not None
+        else load_grid(template)
+    )
     base = genetic.configured_template(
         template,
         instrument=instrument,
@@ -220,4 +231,4 @@ def grid_strategies(
     return strategies
 
 
-__all__ = ["GridError", "grid_size", "grid_strategies", "load_grid"]
+__all__ = ["GridError", "grid_size", "grid_strategies", "load_grid", "validate_grid"]

@@ -253,6 +253,7 @@ def register(
     cost_accounts: list[str] | None = None,
     cost_mode: str = "best",
     mode: str = "ga",
+    grid_spec: dict[str, Any] | None = None,
     data_source: str = "broker",
     frame: pd.DataFrame | None = None,
     dry_run: bool = False,
@@ -305,21 +306,22 @@ def register(
     except KeyError as exc:
         raise CampaignError(str(exc)) from exc
     session = template_session(template, instrument)
-    grid_spec: dict[str, Any] | None = None
     if mode == "grid":
         try:
-            grid_spec = grid.load_grid(template)
+            grid_spec = grid_spec or grid.load_grid(template)
             grid_strategies = grid.grid_strategies(
                 template,
                 instrument=instrument,
                 timeframe=timeframe,
                 session=session,
+                grid_spec=grid_spec,
             )
         except Exception as exc:  # noqa: BLE001
             raise CampaignError(f"rejilla inválida: {exc}") from exc
         n_total = len(grid_strategies)
     else:
         n_total = int(profile_config.population * (profile_config.generations + 1))
+        grid_spec = None
 
     source = frame if frame is not None else _source_frame(
         instrument, timeframe, data_source
@@ -354,8 +356,7 @@ def register(
         "oos2_end": normalized["oos2"][1],
         "segments": normalized,
         "dataset_hash": digest,
-        "n_total": n_total,
-        "cost": {
+        "n_total": n_total,        "cost": {
             "account": selected_costs[0],
             "firm": selected_firm,
             "use_p75": bool(use_p75),
@@ -386,6 +387,8 @@ def register(
     if grid_spec is not None:
         config_payload["grid"] = grid_spec
         config_payload["grid_size"] = n_total
+    if grid_spec is not None:
+        config_payload["grid"] = grid_spec
     config_json = json.dumps(config_payload, sort_keys=True, ensure_ascii=False)
     config_hash = hashlib.sha256(config_json.encode("utf-8")).hexdigest()
     identifier = str(campaign_id or "").strip()
@@ -447,6 +450,39 @@ def register(
         raise CampaignError("no se pudo registrar la campaña")
     campaign["campaign_id"] = campaign["id"]
     return campaign
+
+
+def register_from_spec(
+    spec_path: str | Path,
+    *,
+    frame: pd.DataFrame | None = None,
+    dry_run: bool = False,
+    db_path: str | Path | None = None,
+) -> dict[str, Any]:
+    """Registra un borrador desde una especificación YAML (no aprueba)."""
+    from .spec import load_spec
+
+    campaign = load_spec(spec_path)
+    payload = campaign["config"]
+    cost = payload.get("cost") or {}
+    return register(
+        campaign["instrument"],
+        campaign["timeframe"],
+        campaign["template"],
+        payload["profile"],
+        segments=payload["segments"],
+        seed=int(payload["seed"]),
+        campaign_id=campaign["campaign_id"],
+        mode=payload["mode"],
+        grid_spec=payload.get("grid"),
+        data_source=payload["data_source"],
+        use_p75=bool(cost.get("use_p75", True)),
+        cost_accounts=cost.get("accounts"),
+        cost_mode=str(cost.get("mode") or "best"),
+        frame=frame,
+        dry_run=dry_run,
+        db_path=db_path,
+    )
 
 
 def register_synthetic(

@@ -10148,6 +10148,9 @@ def discovery_register_cmd(
     oos2_range: str = typer.Option(None, "--oos2", help="OOS-2 como inicio:fin (fin vacío = última vela)"),
     seed: int = typer.Option(0, "--seed"),
     campaign_id: str = typer.Option(None, "--campaign-id"),
+    spec: str = typer.Option(
+        None, "--spec", help="Especificación YAML (incluye grid y segmentos)"
+    ),
     cost_account: list[str] = typer.Option(
         None,
         "--cost-account",
@@ -10179,21 +10182,29 @@ def discovery_register_cmd(
             segments[name] = _range(value, f"--{name}")
 
     try:
-        campaign = campaigns.register(
-            instrument,
-            tf,
-            template,
-            profile,
-            segments=segments,
-            seed=seed,
-            campaign_id=campaign_id,
-            mode=mode,
-            data_source=data_source,
-            cost_accounts=cost_account,
-            cost_mode=cost_mode,
-            dry_run=dry_run,
-            db_path=db,
-        )
+        if spec:
+            campaign = campaigns.register_from_spec(
+                spec, dry_run=dry_run, db_path=db
+            )
+            data_source = str(
+                (campaign.get("config") or {}).get("data_source") or data_source
+            )
+        else:
+            campaign = campaigns.register(
+                instrument,
+                tf,
+                template,
+                profile,
+                segments=segments,
+                seed=seed,
+                campaign_id=campaign_id,
+                mode=mode,
+                data_source=data_source,
+                cost_accounts=cost_account,
+                cost_mode=cost_mode,
+                dry_run=dry_run,
+                db_path=db,
+            )
     except campaigns.CampaignError as exc:
         console.print(f"[red]Rechazada:[/red] {exc}")
         raise typer.Exit(1) from exc

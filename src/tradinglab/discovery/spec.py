@@ -13,7 +13,7 @@ import pandas as pd
 import yaml
 
 from ..propfund.registry import load_registry
-from . import campaigns, genetic
+from . import campaigns, genetic, grid
 from .config import load_engine_config
 from .data_sources import DataSourceError, normalize_source
 from .timeframes import normalize_timeframe
@@ -62,6 +62,12 @@ def load_spec(path: str | Path) -> dict[str, Any]:
     mode = str(data.get("mode") or "ga").strip().lower()
     if mode not in {"ga", "grid"}:
         raise SpecError(f"modo desconocido: {mode}")
+    grid_spec = data.get("grid")
+    if mode == "grid":
+        try:
+            grid_spec = grid.validate_grid(grid_spec, template)
+        except grid.GridError as exc:
+            raise SpecError(f"grid inválido: {exc}") from exc
     seed = int(data.get("seed", 0))
     raw_segments = data.get("segments") or {}
     if not raw_segments:
@@ -89,15 +95,31 @@ def load_spec(path: str | Path) -> dict[str, Any]:
     if instrument not in account.allowed_instruments:
         raise SpecError(f"{account_id} no permite {instrument}")
     firm = str(data.get("firm") or registry.firm_of(account_id).id).strip().lower()
+    cost_accounts = [
+        str(item).strip().upper()
+        for item in (data.get("cost_accounts") or [account_id])
+        if str(item).strip()
+    ]
+    cost_mode = str(data.get("cost_mode") or "target").strip().lower()
+    if cost_mode not in {"best", "worst", "target"}:
+        raise SpecError(f"cost_mode desconocido: {cost_mode}")
+    if cost_mode == "target" and len(cost_accounts) != 1:
+        raise SpecError("cost_mode target exige una sola cuenta")
+    for cost_account in cost_accounts:
+        candidate = registry.accounts.get(cost_account)
+        if candidate is None:
+            raise SpecError(f"cuenta de coste no registrada: {cost_account}")
+        if instrument not in candidate.allowed_instruments:
+            raise SpecError(f"{cost_account} no permite {instrument}")
     session = data.get("session") or campaigns.template_session(
         template, instrument
     )
     cost = data.get("cost") or {
-        "account": account_id,
+        "account": cost_accounts[0],
         "firm": firm,
-        "use_p75": True,
-        "accounts": [account_id],
-        "mode": "target",
+        "use_p75": bool(data.get("use_p75", True)),
+        "accounts": cost_accounts,
+        "mode": cost_mode,
     }
     config_payload: dict[str, Any] = {
         "instrument": instrument,
@@ -124,8 +146,13 @@ def load_spec(path: str | Path) -> dict[str, Any]:
             "trail_n": 14,
         },
     }
+    if grid_spec is not None:
+        config_payload["grid"] = grid_spec
+    campaign_id = str(
+        data.get("campaign_id") or f"spec-{target.stem}"
+    ).strip()
     return {
-        "campaign_id": f"spec:{target.stem}",
+        "campaign_id": campaign_id,
         "status": "draft",
         "instrument": instrument,
         "timeframe": timeframe,

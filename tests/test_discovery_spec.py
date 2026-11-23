@@ -58,9 +58,61 @@ def test_preflight_y_feasibility_spec_no_tocan_db(tmp_path: Path) -> None:
     preflight = engine.preflight_spec(path)
     report = feasibility.check_spec(path, bars=frame)
 
-    assert preflight["campaign_id"] == "spec:spec"
+    assert preflight["campaign_id"] == "spec-spec"
     assert preflight["generated"] == preflight["population"] == 40
-    assert report["campaign_id"] == "spec:spec"
+    assert report["campaign_id"] == "spec-spec"
     assert report["n_checked"] == 40
     assert count_tests(DEFAULT_DB) == before_tests
     assert _campaign_rows() == before_rows
+
+
+def test_register_from_spec_no_aprueba(tmp_path: Path) -> None:
+    from tradinglab.discovery import campaigns, databank
+
+    path = tmp_path / "grid.yaml"
+    path.write_text(
+        """
+campaign_id: c1-test
+instrument: US100
+timeframe: M5
+template: asia_range_reversion
+profile: small
+mode: grid
+seed: 2
+data_source: dukascopy
+account: CFD-001
+cost_mode: best
+cost_accounts: [CFD-001, CFD-006]
+segments:
+  is: ["2023-01-02", "2023-09-30"]
+  oos1: ["2023-10-01", "2023-11-30"]
+  oos2: ["2023-12-01", null]
+grid:
+  dimensions:
+    - name: regime
+      kind: path
+      path: long_entry.args[1].params.threshold
+      values: [15, 20, 25]
+    - name: stop
+      kind: path
+      path: exit.stop.mult
+      values: [1.5, 2.0, 2.5]
+    - name: target
+      kind: path
+      path: exit.target.rr
+      values: [1.5, 2.0, 2.5]
+""",
+        encoding="utf-8",
+    )
+    db = tmp_path / "discovery.db"
+    campaign = campaigns.register_from_spec(
+        path,
+        frame=engine.synthetic_frame(years=1.0, seed=2),
+        db_path=db,
+    )
+    assert campaign["campaign_id"] == "c1-test"
+    assert campaign["status"] == "draft"
+    assert campaign["n_total"] == 27
+    assert campaign["config"]["mode"] == "grid"
+    assert len(campaign["config"]["grid"]["dimensions"]) == 3
+    assert databank.get_campaign("c1-test", db_path=db) is not None
