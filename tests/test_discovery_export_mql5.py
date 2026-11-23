@@ -37,6 +37,12 @@ def _strategy(name: str = "synthetic_trend") -> dict:
     return copy.deepcopy(SYNTHETIC_STRATEGIES[name])
 
 
+def _text(path: Path) -> str:
+    """Texto normalizado: el checkout puede convertir LF a CRLF."""
+
+    return path.read_text(encoding="utf-8").replace("\r\n", "\n")
+
+
 def _assert_mql5_sane(source: str) -> None:
     assert source.count("{") == source.count("}")
     assert "WEEKDAY_TEST" not in source
@@ -94,11 +100,11 @@ def test_golden_samples_and_traces(tmp_path: Path) -> None:
         expected_trace = GENERATED / f"{name}.trace.csv"
         expected_manifest = GENERATED / f"{name}.manifest.json"
         assert expected_mq5.exists(), f"falta el golden {expected_mq5}"
-        assert result.mq5_path.read_bytes() == expected_mq5.read_bytes()
+        assert _text(result.mq5_path) == _text(expected_mq5)
         _assert_mql5_sane(result.mq5_path.read_text(encoding="utf-8"))
         assert result.trace_path is not None
-        assert result.trace_path.read_bytes() == expected_trace.read_bytes()
-        assert result.manifest_path.read_bytes() == expected_manifest.read_bytes()
+        assert _text(result.trace_path) == _text(expected_trace)
+        assert _text(result.manifest_path) == _text(expected_manifest)
         assert result.trace_path.read_text(encoding="utf-8").startswith("bar_time,side,entry,stop,target\n")
 
 
