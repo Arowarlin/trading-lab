@@ -1,0 +1,33 @@
+{
+  "account": "CFD-001",
+  "blocks": [
+    "ema"
+  ],
+  "drawdown_mode": "static",
+  "exporter_version": "1.0.0",
+  "file": "synthetic_trend.mq5",
+  "firm": "ftmo",
+  "instrument": "US100",
+  "magic": 507577745,
+  "risk": {
+    "daily_loss": 5000.0,
+    "max_loss": 10000.0,
+    "per_trade_risk_pct": 0.5
+  },
+  "sha256": "b80fab8a9251880929c299ef002a07ec4a7d17e0f812c6916ecda51070c17801",
+  "strategy_hash": "b939df9164d8664420a467ff197be58a6eed0ac0a372319f165331de9bd9b732",
+  "template": {
+    "name": "ninguna",
+    "sha256": null,
+    "version": "n/a"
+  },
+  "timeframe": "M5",
+  "trace_file": "synthetic_trend.trace.csv",
+  "weekdays": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ]
+}

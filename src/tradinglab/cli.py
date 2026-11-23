@@ -11402,5 +11402,95 @@ def discovery_confirm_cmd(
     )
 
 
+@discovery_app.command("export-mql5")
+def discovery_export_mql5_cmd(
+    strategy_id: int | None = typer.Option(
+        None, "--strategy-id", help="ID de disc_strategies"
+    ),
+    spec: str | None = typer.Option(
+        None, "--spec", help="YAML con strategy/dsl, template y account"
+    ),
+    out: str = typer.Option(
+        "reports/export/", "--out", help="directorio de salida"
+    ),
+    account: str | None = typer.Option(
+        None, "--account", help="cuenta de config/propfund (riesgo y limites)"
+    ),
+    template: str | None = typer.Option(
+        None, "--template", help="plantilla de config/discovery/templates"
+    ),
+    daily_loss: float | None = typer.Option(
+        None, "--daily-loss", help="perdida diaria si el perfil no la declara"
+    ),
+    max_loss: float | None = typer.Option(
+        None, "--max-loss", help="perdida total si el perfil no la declara"
+    ),
+    risk_pct: float | None = typer.Option(
+        None, "--risk-pct", help="riesgo por operacion en % (perfil por defecto)"
+    ),
+    weekdays: str | None = typer.Option(
+        None, "--weekdays", help="dias 0..6 separados por coma (0=lunes)"
+    ),
+    db: str | None = typer.Option(None, "--db", help="discovery.db alternativo"),
+) -> None:
+    """Exporta una estrategia a un EA MQL5 determinista (no ejecuta el Tester)."""
+
+    if (strategy_id is None) == (spec is None):
+        console.print("[red]Usa exactamente uno de --strategy-id o --spec.[/red]")
+        raise typer.Exit(2)
+    days: tuple[int, ...] | None = None
+    if weekdays:
+        try:
+            days = tuple(int(part.strip()) for part in weekdays.split(",") if part.strip())
+        except ValueError as exc:
+            console.print(f"[red]--weekdays invalido:[/red] {weekdays}")
+            raise typer.Exit(2) from exc
+    from .discovery.export_mql5 import (
+        ExportError,
+        export_spec,
+        export_strategy_id,
+    )
+
+    try:
+        if strategy_id is not None:
+            result = export_strategy_id(
+                strategy_id,
+                out_dir=out,
+                account_id=account,
+                template=template,
+                daily_loss=daily_loss,
+                max_loss=max_loss,
+                risk_pct=risk_pct,
+                weekdays=days,
+                db_path=db,
+            )
+        else:
+            assert spec is not None
+            result = export_spec(
+                spec,
+                out_dir=out,
+                account_id=account,
+                template=template,
+                daily_loss=daily_loss,
+                max_loss=max_loss,
+                risk_pct=risk_pct,
+                weekdays=days,
+            )
+    except ExportError as exc:
+        console.print(f"[red]Exportacion rechazada:[/red] {exc}")
+        raise typer.Exit(1) from exc
+    table = Table(title="Discovery · export MQL5")
+    table.add_column("Campo", style="bold")
+    table.add_column("Valor")
+    table.add_row("EA", str(result.mq5_path))
+    table.add_row("Manifest", str(result.manifest_path))
+    table.add_row("sha256", result.sha256)
+    table.add_row("Genoma", result.strategy_hash)
+    table.add_row("Magic", str(result.magic))
+    table.add_row("Cuenta", f"{result.account} ({result.firm})")
+    table.add_row("Bloques", ", ".join(result.blocks) or "ninguno")
+    console.print(table)
+
+
 if __name__ == "__main__":
     main()

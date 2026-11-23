@@ -1,0 +1,35 @@
+{
+  "account": "CFD-001",
+  "blocks": [
+    "bos_up",
+    "level:opening_range_high",
+    "range_expansion"
+  ],
+  "drawdown_mode": "static",
+  "exporter_version": "1.0.0",
+  "file": "synthetic_breakout.mq5",
+  "firm": "ftmo",
+  "instrument": "US100",
+  "magic": 556374321,
+  "risk": {
+    "daily_loss": 5000.0,
+    "max_loss": 10000.0,
+    "per_trade_risk_pct": 0.5
+  },
+  "sha256": "9bc5618e8dc38ab83348720aae73a5c8cc9d1689908e98b219422255beae10dd",
+  "strategy_hash": "50d8a1315516aef9bd08ec12fe02c5136f83c3d4f62dc918e4299ec68cbfe797",
+  "template": {
+    "name": "ninguna",
+    "sha256": null,
+    "version": "n/a"
+  },
+  "timeframe": "M5",
+  "trace_file": "synthetic_breakout.trace.csv",
+  "weekdays": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ]
+}
