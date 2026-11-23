@@ -265,13 +265,15 @@ def derive_sessions(
 ) -> dict:
     key = str(symbol).strip().upper()
     source_key = str(source).strip().lower()
-    if source_key not in {"dukascopy", "broker"}:
+    if source_key not in {"dukascopy", "broker", "databento"}:
         raise ValueError(f"fuente no soportada: {source}")
     if start_year is None:
-        start_year = 2013 if key in INDEX_SYMBOLS else 2003
-    timeframe = "M1" if source_key == "dukascopy" else "M5"
+        start_year = 2010 if source_key == "databento" else 2013 if key in INDEX_SYMBOLS else 2003
+    timeframe = (
+        "M1" if source_key == "dukascopy" else "H1" if source_key == "databento" else "M5"
+    )
     loaded = load_source(key, timeframe, source=source_key, root=root)
-    tf_minutes = 1 if timeframe == "M1" else 5
+    tf_minutes = {"M1": 1, "M5": 5, "H1": 60}[timeframe]
     years = [
         derive_year(loaded.frame, year, tf_minutes)
         for year in range(start_year, end_year + 1)

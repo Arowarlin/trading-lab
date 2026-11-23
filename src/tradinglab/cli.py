@@ -9880,7 +9880,7 @@ def discovery_data_check_cmd(
     symbol: str = typer.Argument(..., help="Símbolo CFD, p. ej. US100.cash"),
     tf: str = typer.Option("M5", "--tf", help="Timeframe"),
     source: str = typer.Option(
-        "broker", "--source", help="broker | dukascopy"
+        "broker", "--source", help="broker | dukascopy | databento"
     ),
     all_tf: bool = typer.Option(
         False, "--all-tf", help="Matriz de las 7 temporalidades"
@@ -10272,7 +10272,7 @@ def discovery_fetch_databento_cmd(
 @discovery_app.command("derive-sessions")
 def discovery_derive_sessions_cmd(
     symbol: str = typer.Argument(..., help="US100 | US500 | US30 | XAUUSD | EURUSD | GBPUSD | USDJPY"),
-    source: str = typer.Option("dukascopy", "--source", help="dukascopy | broker"),
+    source: str = typer.Option("dukascopy", "--source", help="dukascopy | broker | databento"),
     start_year: int = typer.Option(None, "--start-year"),
     end_year: int = typer.Option(2026, "--end-year"),
 ) -> None:
@@ -10319,7 +10319,7 @@ def discovery_derive_sessions_cmd(
 
 @discovery_app.command("usable-from")
 def discovery_usable_from_cmd(
-    source: str = typer.Option(None, "--source", help="dukascopy | broker"),
+    source: str = typer.Option(None, "--source", help="dukascopy | broker | databento"),
     symbol: str = typer.Option(None, "--symbol", help="Símbolo; vacío = los 7"),
     tf: str = typer.Option(None, "--tf", help="Timeframe; vacío = todos"),
     write: bool = typer.Option(

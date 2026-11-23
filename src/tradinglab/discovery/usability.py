@@ -10,6 +10,7 @@ No cambia umbrales ni escribe nada salvo que el llamador lo pida.
 
 from __future__ import annotations
 
+import re
 from collections import Counter
 from datetime import date
 from pathlib import Path
@@ -175,25 +176,43 @@ def yaml_block(results: dict[str, dict]) -> str:
 def write_usable_from(
     results: dict[str, dict], path: str | Path | None = None
 ) -> Path:
-    """Sustituye el bloque ``data_quality.usable_from`` conservando el resto."""
+    """Actualiza ``data_quality.usable_from`` conservando las demás claves.
+
+    ``results`` puede ser un subconjunto (p. ej. solo ``databento``); las
+    entradas que no aparecen se conservan. Una entrada con ``date=None`` se
+    ignora y no borra una clave anterior.
+    """
     from .config import ENGINE_PATH
 
     target = Path(path) if path else ENGINE_PATH
     text = target.read_text(encoding="utf-8")
     lines = text.splitlines()
-    output: list[str] = []
-    skipping = False
-    for line in lines:
+    start = None
+    end = None
+    for index, line in enumerate(lines):
         if line == "  usable_from:":
-            skipping = True
-            continue
-        if skipping:
-            if line.startswith("    "):
-                continue
-            skipping = False
-        output.append(line)
-    block = yaml_block(results).splitlines()
-    output.extend(block)
+            start = index
+            end = index + 1
+            while end < len(lines) and lines[end].startswith("    "):
+                end += 1
+            break
+    existing: dict[str, str] = {}
+    if start is not None and end is not None:
+        pattern = re.compile(r'^\s{4}"([^"]+)":\s*"([^"]*)"\s*$')
+        for line in lines[start + 1 : end]:
+            match = pattern.match(line)
+            if match:
+                existing[match.group(1)] = match.group(2)
+    for key, item in results.items():
+        value = (item or {}).get("date")
+        if value:
+            existing[str(key)] = str(value)
+    block = ["  usable_from:"]
+    block.extend(f'    "{key}": "{value}"' for key, value in sorted(existing.items()))
+    if start is None or end is None:
+        output = lines + block
+    else:
+        output = lines[:start] + block + lines[end:]
     target.write_text("\n".join(output).rstrip() + "\n", encoding="utf-8")
     return target
 

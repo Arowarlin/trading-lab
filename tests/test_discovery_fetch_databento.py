@@ -335,6 +335,36 @@ def test_sesion_cme_declarada() -> None:
     assert quality_config(config, "US100", "M5", "databento").source_for("US100").calendar is None
 
 
+def test_derive_sessions_acepta_databento(monkeypatch) -> None:
+    from types import SimpleNamespace
+
+    from tradinglab.discovery import sessions
+
+    index = pd.date_range("2024-01-02", "2024-03-28", freq="h", tz="UTC")
+    local = index.tz_convert("America/New_York")
+    index = index[(local.day_of_week < 5) & (local.hour >= 18) & (local.hour <= 22)]
+    values = pd.Series(range(len(index)), dtype=float) + 100.0
+    frame = pd.DataFrame(
+        {
+            "open": values.values,
+            "high": values.values + 0.5,
+            "low": values.values - 0.5,
+            "close": values.values,
+            "volume": 1.0,
+        },
+        index=index,
+    )
+    monkeypatch.setattr(
+        sessions,
+        "load_source",
+        lambda *args, **kwargs: SimpleNamespace(frame=frame),
+    )
+    result = sessions.derive_sessions("US100", "databento", start_year=2024, end_year=2024)
+    assert result["source"] == "databento"
+    assert result["timeframe"] == "H1"
+    assert "databento:US100" in sessions.yaml_block(result)
+
+
 def test_usable_from_acepta_databento() -> None:
     from tradinglab.discovery.usability import compute_usable_from
 

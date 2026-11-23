@@ -182,10 +182,15 @@ def test_usable_from_fecha_invalida(tmp_path: Path) -> None:
         load_engine_config(_write(tmp_path, payload))
 
 
-def test_write_usable_from_reemplaza_bloque(tmp_path: Path) -> None:
+def test_write_usable_from_conserva_otras_claves(tmp_path: Path) -> None:
     path = tmp_path / "engine.yaml"
     path.write_text(
-        "data_quality:\n  gap_factor: 3\n  sessions: {}\n", encoding="utf-8"
+        "data_quality:\n"
+        "  gap_factor: 3\n"
+        "  sessions: {}\n"
+        "  usable_from:\n"
+        '    "broker:US500:H1": "2020-01-01"\n',
+        encoding="utf-8",
     )
     values = {
         "dukascopy:US100:H1": {"date": "2018-01-02"},
@@ -195,7 +200,8 @@ def test_write_usable_from_reemplaza_bloque(tmp_path: Path) -> None:
     first = path.read_text(encoding="utf-8")
     assert 'usable_from:' in first
     assert '"dukascopy:US100:H1": "2018-01-02"' in first
-    assert "US500" not in first
+    assert '"broker:US500:H1": "2020-01-01"' in first
+    assert '"dukascopy:US500:H1"' not in first
     write_usable_from(values, path)
     second = path.read_text(encoding="utf-8")
     assert second.count("usable_from:") == 1
