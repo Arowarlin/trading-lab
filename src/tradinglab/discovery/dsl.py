@@ -52,7 +52,7 @@ LEVELS = {
 COMPARE = {"gt", "lt", "ge", "le", "between"}
 CROSS = {"cross_up", "cross_down"}
 LOGICAL = {"and", "or", "not"}
-TEMPORAL = {"held_for", "within_bars", "time_between", "weekday_in"}
+TEMPORAL = {"held_for", "within_bars", "time_between", "weekday_in", "month_turn"}
 OPERANDS = {"const", "price", "level", "indicator", "htf", "pattern", "regime"}
 KINDS = OPERANDS | LOGICAL | COMPARE | CROSS | TEMPORAL
 
@@ -71,6 +71,7 @@ class Expr(BaseModel):
     low: float | None = None
     high: float | None = None
     n: int | None = None
+    m: int | None = None
     value: float | None = None
     src: str | None = None
     ind: str | None = None
@@ -350,6 +351,20 @@ def _has_price(expr: Expr | None) -> bool:
     return False
 
 
+def _contains_kind(expr: Expr | None, kind: str) -> bool:
+    if expr is None:
+        return False
+    if expr.kind == kind:
+        return True
+    for child in expr.args:
+        if _contains_kind(child, kind):
+            return True
+    return any(
+        _contains_kind(child, kind)
+        for child in (expr.left, expr.right, expr.expr)
+    )
+
+
 def _price_direction(expr: Expr | None, *, negated: bool = False) -> str | None:
     """Dirección de la primera condición que compara un precio.
 
@@ -459,6 +474,21 @@ def _validate_expr(
         for day in expr.days:
             if str(day).lower() not in WEEKDAYS:
                 errors.append(f"{path}.weekday_in: día inválido {day}")
+    elif kind == "month_turn":
+        if expr.n is None or expr.m is None:
+            errors.append(f"{path}.month_turn necesita n y m")
+        else:
+            if not 1 <= int(expr.n) <= 3:
+                errors.append(f"{path}.month_turn: n debe estar en 1..3")
+            if not 2 <= int(expr.m) <= 4:
+                errors.append(f"{path}.month_turn: m debe estar en 2..4")
+        if (
+            expr.args
+            or expr.left is not None
+            or expr.right is not None
+            or expr.expr is not None
+        ):
+            errors.append(f"{path}.month_turn no admite hijos")
     elif kind == "const":
         if expr.value is None:
             errors.append(f"{path}.const necesita value")
@@ -526,6 +556,14 @@ def validate(strategy: Strategy | dict) -> list[str]:
         errors.append(f"profundidad {depth(model)} > max_depth {limits.max_depth}")
     if not model.long_entry and not model.short_entry:
         errors.append("la estrategia no tiene entrada larga ni corta")
+    if _contains_kind(model.short_entry, "month_turn"):
+        errors.append("short_entry: month_turn solo se admite en long_entry")
+    if model.long_entry is not None and model.long_entry.kind != "month_turn":
+        if _contains_kind(model.long_entry, "month_turn"):
+            errors.append("long_entry: month_turn debe ser la raíz de la entrada")
+    if model.long_entry is not None and model.long_entry.kind == "month_turn":
+        if model.short_entry is not None:
+            errors.append("month_turn es long-only: short_entry debe ser null")
     _validate_expr(
         model.long_entry, errors, "long_entry", base_timeframe=model.timeframe
     )

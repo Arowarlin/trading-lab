@@ -1,0 +1,65 @@
+name: turn_of_month
+# Long-only: la hipótesis es asimétrica (flujos de nóminas/fondos compran
+# índices al inicio del mes). Un corto espejo no tiene la misma justificación
+# económica y duplicaría las pruebas; por eso no se fabrica short_entry.
+symmetric: false
+timeframes: [D1]
+valid_timeframes: [D1]
+description: >-
+  Efecto cambio de mes en índices de EE. UU.: comprar al cierre del día hábil
+  N antes de fin de mes y vender al cierre del día hábil M del mes siguiente.
+  Solo D1; la entrada y la salida son cierres de sesión exactos del calendario
+  NYSE.
+hypothesis: >-
+  "Los índices de EE. UU. concentran una parte desproporcionada de su
+  rentabilidad entre el último día hábil del mes y los primeros días hábiles
+  del siguiente, por flujos de nóminas, fondos y rebalanceos. Si es real,
+  comprar en esa ventana supera a comprar en días aleatorios del mismo número
+  y duración." Referencias: Ariel (1987), "A Monthly Effect in Stock Returns";
+  Lakonishok & Smidt (1988), "Are Seasonal Anomalies Real? A Ninety-Year
+  Perspective"; McConnell & Xu (2008), "Equity Returns at the Turn of the
+  Month".
+invalidation: >-
+  Se invalida si la ventana no supera el coste de forma estable en IS y el
+  control de deriva largo (misma duración, entradas aleatorias largas) no la
+  deja por encima del percentil 90, o si el efecto desaparece al cambiar de
+  índice o de década. No se lee OOS-2.
+parameter_space:
+  n: [1, 2, 3]
+  m: [2, 3, 4]
+grid:
+  dimensions:
+    - name: n
+      kind: path
+      path: long_entry.n
+      values: [1, 2, 3]
+    - name: m
+      kind: path
+      path: long_entry.m
+      values: [2, 3, 4]
+strategy:
+  dsl_version: "1"
+  instrument: US100
+  market: cfd
+  timeframe: D1
+  warmup_minutes: 0
+  session:
+    start: "00:00"
+    end: "23:59"
+    flat_at: "23:59"
+    or_minutes: 15
+  long_entry:
+    kind: month_turn
+    n: 1
+    m: 2
+  short_entry: null
+  exit:
+    # Stop de catástrofe, NO optimizado: 3×ATR(14) D1 cubre un hueco de varios
+    # días sin confundirse con el ruido normal; la salida real es el calendario.
+    stop: {type: atr, mult: 3.0, n: 14}
+    target: null
+  sizing:
+    risk_per_trade_r: 1.0
+  limits:
+    max_trades_per_day: 1
+    cooldown_minutes: 0

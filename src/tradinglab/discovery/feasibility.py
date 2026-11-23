@@ -285,6 +285,7 @@ def _check_context(
                         signals.long_entry,
                         signals.short_entry,
                         max(int(start), int(signals.valid_from)),
+                        exit_index=signals.exit_index,
                     )
                     fold_limits = specs.run_limits_from_strategy(
                         model, setup, end_index=end, close_at_end=True
@@ -298,10 +299,7 @@ def _check_context(
                         prepared=prepared,
                     )
                     fold_trades.append(len(fold_result.trades))
-                max_bars = max(
-                    float(fitness._session_bars(model) * 2),
-                    float(specs.time_exit_bars(model) or 0),
-                )
+                max_bars = fitness.max_holding_bars(model)
                 if trades_is < min_trades_is:
                     reasons.append(f"trades IS {trades_is} < {min_trades_is}")
                 for fold_index, count in enumerate(fold_trades, 1):
@@ -576,6 +574,7 @@ def _scan_timeframe(
                         signals.long_entry,
                         signals.short_entry,
                         max(int(start), int(signals.valid_from)),
+                        exit_index=signals.exit_index,
                     )
                     fold_limits = specs.run_limits_from_strategy(
                         model, setup, end_index=end, close_at_end=True
@@ -590,10 +589,7 @@ def _scan_timeframe(
                         collect_metrics=False,
                     )
                     fold_trades.append(len(fold_result.trades))
-                max_bars = max(
-                    float(fitness._session_bars(model) * 2),
-                    float(specs.time_exit_bars(model) or 0),
-                )
+                max_bars = fitness.max_holding_bars(model)
                 if trades_is < validation.min_trades_is:
                     reasons.append(
                         f"trades IS {trades_is} < {validation.min_trades_is}"

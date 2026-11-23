@@ -157,7 +157,7 @@ class QueueSetup:
             raise QueueError("el setup necesita instrument")
         if not str(self.timeframe or "").strip():
             raise QueueError("el setup necesita timeframe")
-        if self.data_source not in {"broker", "dukascopy"}:
+        if self.data_source not in {"broker", "dukascopy", "databento"}:
             raise QueueError(f"fuente no soportada: {self.data_source!r}")
         if not str(self.account or "").strip():
             raise QueueError("el setup necesita account")

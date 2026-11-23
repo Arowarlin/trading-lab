@@ -7,6 +7,7 @@ from datetime import date
 import pandas as pd
 import pytest
 
+from tradinglab.discovery import campaigns
 from tradinglab.discovery import fetch_databento as db
 from tradinglab.discovery.config import load_engine_config
 from tradinglab.discovery.data_sources import DataSourceError, load_source
@@ -413,3 +414,72 @@ def test_data_check_acepta_databento(tmp_path) -> None:
     assert data["source_name"] == "databento"
     assert data["calendar"]["name"] == "cme"
     assert data["status"] in {"ok", "warn", "fail"}
+
+def _tom_spec(confirm: bool) -> str:
+    flag = "confirmation_only: true\n" if confirm else ""
+    return (
+        f"{flag}"
+        "campaign_id: test-tom-confirm\n"
+        "instrument: US100\n"
+        "timeframe: D1\n"
+        "template: turn_of_month\n"
+        "profile: small\n"
+        "mode: grid\n"
+        "seed: 1\n"
+        "data_source: databento\n"
+        "account: CFD-001\n"
+        "firm: ftmo\n"
+        "cost_mode: best\n"
+        "cost_accounts: [CFD-001, CFD-006]\n"
+        "segments:\n"
+        '  is: ["2010-06-06", "2024-06-30"]\n'
+        '  oos1: ["2024-07-01", "2025-06-30"]\n'
+        '  oos2: ["2025-07-01", null]\n'
+        "grid:\n"
+        "  dimensions:\n"
+        "    - {name: n, kind: path, path: long_entry.n, values: [1, 2]}\n"
+        "    - {name: m, kind: path, path: long_entry.m, values: [2, 3]}\n"
+    )
+
+
+def test_spec_confirmacion_permite_databento_d1(tmp_path) -> None:
+    from tradinglab.discovery.spec import load_spec
+
+    path = tmp_path / "tom-confirm.yaml"
+    path.write_text(_tom_spec(True), encoding="utf-8")
+    campaign = load_spec(path)
+    assert campaign["confirmation_only"] is True
+    assert campaign["config"]["confirmation_only"] is True
+    assert campaign["config"]["data_source"] == "databento"
+    assert campaign["timeframe"] == "D1"
+
+
+def test_spec_sin_confirmacion_rechaza_databento_d1(tmp_path) -> None:
+    from tradinglab.discovery.spec import SpecError, load_spec
+
+    path = tmp_path / "tom-normal.yaml"
+    path.write_text(_tom_spec(False), encoding="utf-8")
+    with pytest.raises(SpecError, match="D1 exige datos de Dukascopy"):
+        load_spec(path)
+
+
+def test_register_sigue_bloqueando_databento_d1(tmp_path) -> None:
+    frame = pd.DataFrame(
+        {
+            "open": [100.0] * 30,
+            "high": [101.0] * 30,
+            "low": [99.0] * 30,
+            "close": [100.0] * 30,
+        },
+        index=pd.date_range("2024-01-02", periods=30, freq="D", tz="UTC"),
+    )
+    with pytest.raises(campaigns.CampaignError, match="D1 exige datos de Dukascopy"):
+        campaigns.register(
+            "US100",
+            "D1",
+            "turn_of_month",
+            data_source="databento",
+            frame=frame,
+            dry_run=True,
+            db_path=tmp_path / "discovery.db",
+        )

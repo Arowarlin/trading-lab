@@ -53,6 +53,22 @@ def _session_bars(strategy: dsl.Strategy) -> int:
     )
 
 
+def max_holding_bars(strategy: dsl.Strategy) -> float:
+    """Cota estructural del tiempo en mercado permitido por la plantilla."""
+
+    limit = max(
+        float(_session_bars(strategy) * 2),
+        float(time_exit_bars(strategy) or 0),
+    )
+    entry = strategy.long_entry
+    if entry is not None and entry.kind == "month_turn":
+        # La salida es un día del mes siguiente, no un número fijo de velas:
+        # el hueco puede incluir fin de semana y festivos. No es un umbral de
+        # optimización, solo la cota estructural de la ventana N + M.
+        limit = max(limit, float((entry.n or 1) + (entry.m or 2) + 5))
+    return limit
+
+
 def fold_bounds(length: int, folds: int) -> list[tuple[int, int]]:
     if folds < 1:
         raise ValueError("folds debe ser >= 1")
@@ -168,6 +184,7 @@ def evaluate(
             signals.long_entry,
             signals.short_entry,
             max(int(start), int(signals.valid_from)),
+            exit_index=signals.exit_index,
         )
         fold_limits = run_limits_from_strategy(
             model, setup, end_index=end, close_at_end=True
@@ -245,10 +262,7 @@ def evaluate(
     mean_bars = (
         float(np.mean([trade.bars_held for trade in trades])) if trades else 0.0
     )
-    max_bars = max(
-        float(_session_bars(model) * 2),
-        float(time_exit_bars(model) or 0),
-    )
+    max_bars = max_holding_bars(model)
     if mean_bars > max_bars:
         violations.append(f"tiempo medio {mean_bars:.1f} velas > {max_bars:.0f}")
 

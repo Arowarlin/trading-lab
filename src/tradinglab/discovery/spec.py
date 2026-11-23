@@ -55,6 +55,16 @@ def load_spec(path: str | Path) -> dict[str, Any]:
     except DataSourceError as exc:
         raise SpecError(str(exc)) from exc
     source_error = campaigns.timeframe_source_error(timeframe, source)
+    confirmation_only = bool(data.get("confirmation_only", False))
+    if (
+        source_error
+        and confirmation_only
+        and source == "databento"
+        and timeframe == "D1"
+    ):
+        # Espejo de confirmación: el registro real sigue bloqueado en
+        # campaigns.timeframe_source_error; esta excepción solo vive en la spec.
+        source_error = None
     if source_error:
         raise SpecError(source_error)
     profile = str(data.get("profile") or "small").strip().lower()
@@ -145,6 +155,7 @@ def load_spec(path: str | Path) -> dict[str, Any]:
             "stop_n": 14,
             "trail_n": 14,
         },
+        "confirmation_only": confirmation_only,
     }
     if grid_spec is not None:
         config_payload["grid"] = grid_spec
@@ -165,6 +176,7 @@ def load_spec(path: str | Path) -> dict[str, Any]:
         "oos2_end": segments["oos2"][1],
         "config": config_payload,
         "spec_path": str(target),
+        "confirmation_only": confirmation_only,
     }
 
 

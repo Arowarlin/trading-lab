@@ -2,7 +2,8 @@
 
 ``compile(strategy, bars)`` evalúa el AST con numpy/pandas y devuelve
 ``Signals(long_entry, short_entry, valid_from)``. Todas las señales usan barras
-cerradas; la entrada se ejecuta en el open siguiente (Fase 3). El índice de
+cerradas; la entrada se ejecuta en el open siguiente (Fase 3), salvo
+``month_turn``, que lleva ``exit_index`` y entra/sale al cierre. El índice de
 ``bars`` debe ser tz-aware (UTC, como devuelve ``discovery.data_sources``).
 """
 
@@ -13,6 +14,7 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
+from . import calendars
 from . import indicators_ext as ext
 from .blocks import get_block
 from .config import load_engine_config
@@ -40,6 +42,10 @@ class Signals:
     long_entry: np.ndarray
     short_entry: np.ndarray
     valid_from: int = 0
+    # Solo para estrategias de calendario (month_turn): índice de la vela de
+    # salida para la entrada de cada vela, o -1. El motor entra al cierre de la
+    # vela de señal y sale al cierre de ``exit_index[i]``.
+    exit_index: np.ndarray | None = None
 
     def arrays(self, n: int) -> tuple[np.ndarray, np.ndarray, int]:
         """Copia, valida y enmascara las señales antes de ``valid_from``."""
@@ -374,6 +380,34 @@ def _warmup(expr: Expr | None, bars: pd.DataFrame, tz: str, strategy: Strategy) 
     return 0
 
 
+def _month_turn_signals(
+    bars: pd.DataFrame, tz: str, n: int, m: int
+) -> tuple[np.ndarray, np.ndarray]:
+    """Señal de entrada al cierre y vela de salida del efecto cambio de mes."""
+
+    local = bars.index.tz_convert(tz)
+    dates = [stamp.date() for stamp in local]
+    last_pos: dict = {}
+    for position, day in enumerate(dates):
+        last_pos[day] = position
+    if not dates:
+        return (
+            np.zeros(len(bars), dtype=bool),
+            np.full(len(bars), -1, dtype=np.int64),
+        )
+    pairs = calendars.month_turn_pairs(min(dates), max(dates), n, m)
+    long_entry = np.zeros(len(bars), dtype=bool)
+    exit_index = np.full(len(bars), -1, dtype=np.int64)
+    for entry_day, exit_day in pairs:
+        entry_pos = last_pos.get(entry_day)
+        exit_pos = last_pos.get(exit_day)
+        if entry_pos is None or exit_pos is None or exit_pos <= entry_pos:
+            continue
+        long_entry[entry_pos] = True
+        exit_index[entry_pos] = exit_pos
+    return long_entry, exit_index
+
+
 def compile(
     strategy: Strategy | dict,
     bars: pd.DataFrame,
@@ -405,7 +439,15 @@ def compile(
     evaluator = _Evaluator(bars, model, tz, cache=cache)
     length = len(bars)
     zeros = np.zeros(length, dtype=bool)
-    if model.long_entry is not None:
+    exit_index: np.ndarray | None = None
+    if model.long_entry is not None and model.long_entry.kind == "month_turn":
+        long_entry, exit_index = _month_turn_signals(
+            bars,
+            tz,
+            int(model.long_entry.n or 1),
+            int(model.long_entry.m or 2),
+        )
+    elif model.long_entry is not None:
         long_values = evaluator.eval(model.long_entry)
         if long_values.dtype != bool:
             raise DslError("long_entry debe ser booleana")
@@ -439,7 +481,12 @@ def compile(
     short_entry = short_entry & mask
     long_entry[:valid_from] = False
     short_entry[:valid_from] = False
-    return Signals(long_entry=long_entry, short_entry=short_entry, valid_from=valid_from)
+    return Signals(
+        long_entry=long_entry,
+        short_entry=short_entry,
+        valid_from=valid_from,
+        exit_index=exit_index,
+    )
 
 
 __all__ = ["Signals", "compile"]

@@ -56,6 +56,7 @@ REASONS = {
     5: "opposite_signal",
     6: "end_of_data",
     7: "signal_end",
+    8: "calendar_exit",
 }
 
 
@@ -981,6 +982,231 @@ def _core(
     )
 
 
+def _calendar_core(
+    open_,
+    high,
+    low,
+    close,
+    long_sig,
+    short_sig,
+    allowed,
+    allowed_entry,
+    atr,
+    entry_bps,
+    stop_bps,
+    target_bps,
+    fut_price,
+    stop_kind,
+    stop_mult,
+    stop_pct,
+    stop_fixed,
+    target_kind,
+    target_rr,
+    target_pct,
+    target_fixed,
+    close_at_end,
+    start_idx,
+    end_idx,
+    calendar_exit,
+):
+    """Entrada al cierre y salida al cierre de ``calendar_exit``.
+
+    Variante mínima del motor de eventos para ``month_turn``: una posición,
+    stop/objetivo opcionales y salida de calendario. No usa señales de salida
+    ni límites diarios; la estrategia genera como máximo una entrada al mes.
+    """
+
+    n = len(open_)
+    ent_i = np.full(n, -1, dtype=np.int64)
+    ex_i = np.full(n, -1, dtype=np.int64)
+    side_arr = np.zeros(n, dtype=np.int64)
+    ent_px = np.full(n, np.nan, dtype=np.float64)
+    ex_px = np.full(n, np.nan, dtype=np.float64)
+    stop0 = np.full(n, np.nan, dtype=np.float64)
+    tgt0 = np.full(n, np.nan, dtype=np.float64)
+    reason_arr = np.zeros(n, dtype=np.int64)
+    ent_cost = np.full(n, np.nan, dtype=np.float64)
+    ex_cost = np.full(n, np.nan, dtype=np.float64)
+    risk_arr = np.full(n, np.nan, dtype=np.float64)
+    r_gross = np.full(n, np.nan, dtype=np.float64)
+    r_cost = np.full(n, np.nan, dtype=np.float64)
+    r_net = np.full(n, np.nan, dtype=np.float64)
+    held = np.zeros(n, dtype=np.int64)
+    count = 0
+    pos = 0
+    entry_i = -1
+    entry_p = 0.0
+    stop_p = 0.0
+    tgt_p = 0.0
+    risk_d = 0.0
+    ent_b = 0.0
+    exit_target = -1
+
+    for i in range(end_idx + 1):
+        if pos == 0:
+            if i >= start_idx and allowed_entry[i] and (long_sig[i] or short_sig[i]):
+                side = 1 if long_sig[i] else -1
+                ep = close[i]
+                if stop_kind == 0:
+                    dist = stop_mult * atr[i]
+                elif stop_kind == 1:
+                    dist = ep * stop_pct / 100.0
+                else:
+                    dist = (ep - stop_fixed) * side
+                if dist > 0.0 and np.isfinite(dist):
+                    sp = ep - side * dist
+                    tp = 0.0
+                    has_target = target_kind != 3
+                    if has_target:
+                        if target_kind == 0:
+                            tp = ep + side * target_rr * dist
+                        elif target_kind == 1:
+                            tp = ep + side * ep * target_pct / 100.0
+                        else:
+                            tp = target_fixed
+                        if (side == 1 and tp <= ep) or (side == -1 and tp >= ep):
+                            has_target = False
+                    pos = side
+                    entry_i = i
+                    entry_p = ep
+                    stop_p = sp
+                    tgt_p = tp if has_target else np.nan
+                    risk_d = dist
+                    ent_b = entry_bps[i]
+                    exit_target = (
+                        int(calendar_exit[i]) if calendar_exit[i] > i else -1
+                    )
+            continue
+
+        exit_now = False
+        price = 0.0
+        exit_bps = 0.0
+        reason = 0
+        if exit_target >= 0 and i >= exit_target:
+            price = close[i]
+            exit_bps = stop_bps[i]
+            reason = 8
+            exit_now = True
+        elif allowed[i]:
+            hit_stop = False
+            hit_target = False
+            if pos == 1:
+                hit_stop = low[i] <= stop_p
+            else:
+                hit_stop = high[i] >= stop_p
+            if target_kind != 3:
+                if pos == 1:
+                    hit_target = high[i] >= tgt_p
+                else:
+                    hit_target = low[i] <= tgt_p
+            if hit_stop:
+                if pos == 1:
+                    price = stop_p if stop_p < open_[i] else open_[i]
+                else:
+                    price = stop_p if stop_p > open_[i] else open_[i]
+                exit_bps = stop_bps[i]
+                reason = 1
+                exit_now = True
+            elif hit_target:
+                if pos == 1:
+                    price = tgt_p if tgt_p < high[i] else high[i]
+                else:
+                    price = tgt_p if tgt_p > low[i] else low[i]
+                exit_bps = target_bps[i]
+                reason = 2
+                exit_now = True
+        if not exit_now and close_at_end and i == end_idx:
+            price = close[i]
+            exit_bps = stop_bps[i]
+            reason = 6
+            exit_now = True
+
+        if exit_now:
+            ent_i[count] = entry_i
+            ex_i[count] = i
+            side_arr[count] = pos
+            ent_px[count] = entry_p
+            ex_px[count] = price
+            stop0[count] = stop_p
+            tgt0[count] = tgt_p
+            reason_arr[count] = reason
+            ent_cost[count] = ent_b
+            ex_cost[count] = exit_bps
+            held[count] = i - entry_i
+            if pos == 1:
+                gross_frac = price / entry_p - 1.0
+            else:
+                gross_frac = 1.0 - price / entry_p
+            rg = gross_frac * entry_p / risk_d
+            rc = (
+                (ent_b + exit_bps) / 10_000.0 * entry_p / risk_d
+                + 2.0 * fut_price / risk_d
+            )
+            risk_arr[count] = risk_d
+            r_gross[count] = rg
+            r_cost[count] = rc
+            r_net[count] = rg - rc
+            count += 1
+            pos = 0
+            exit_target = -1
+
+    if pos != 0 and close_at_end and end_idx >= 0:
+        price = close[end_idx]
+        exit_bps = stop_bps[end_idx]
+        ent_i[count] = entry_i
+        ex_i[count] = end_idx
+        side_arr[count] = pos
+        ent_px[count] = entry_p
+        ex_px[count] = price
+        stop0[count] = stop_p
+        tgt0[count] = tgt_p
+        reason_arr[count] = 6
+        ent_cost[count] = ent_b
+        ex_cost[count] = exit_bps
+        held[count] = end_idx - entry_i
+        if pos == 1:
+            gross_frac = price / entry_p - 1.0
+        else:
+            gross_frac = 1.0 - price / entry_p
+        rg = gross_frac * entry_p / risk_d
+        rc = (
+            (ent_b + exit_bps) / 10_000.0 * entry_p / risk_d
+            + 2.0 * fut_price / risk_d
+        )
+        risk_arr[count] = risk_d
+        r_gross[count] = rg
+        r_cost[count] = rc
+        r_net[count] = rg - rc
+        count += 1
+
+    return (
+        count,
+        0,
+        ent_i,
+        ex_i,
+        side_arr,
+        ent_px,
+        ex_px,
+        stop0,
+        tgt0,
+        reason_arr,
+        ent_cost,
+        ex_cost,
+        risk_arr,
+        r_gross,
+        r_cost,
+        r_net,
+        held,
+    )
+
+
+_calendar_core_compiled = (
+    njit(cache=True)(_calendar_core)
+    if (HAVE_NUMBA and not _DISABLED)
+    else _calendar_core
+)
+
+
 _core_compiled = njit(cache=True)(_core) if (HAVE_NUMBA and not _DISABLED) else _core
 
 
@@ -1354,46 +1580,82 @@ def run(
         signals, bars, exit_spec, limits, panel, market, prepared
     )
 
-    result = _core_compiled(
-        payload["open_"],
-        payload["high"],
-        payload["low"],
-        payload["close"],
-        payload["long_sig"],
-        payload["short_sig"],
-        payload["allowed"],
-        payload["allowed_entry"],
-        payload["flat_flag"],
-        payload["day_id"],
-        payload["atr"],
-        payload["trail_dist"],
-        payload["entry_bps"],
-        payload["stop_bps"],
-        payload["target_bps"],
-        payload["spread_bps"],
-        payload["fut_price"],
-        payload["stop_kind"],
-        payload["stop_mult"],
-        payload["stop_pct"],
-        payload["stop_fixed"],
-        payload["target_kind"],
-        payload["target_rr"],
-        payload["target_pct"],
-        payload["target_fixed"],
-        payload["be_at_r"],
-        payload["trail_on"],
-        payload["time_exit_bars"],
-        payload["opposite"],
-        payload["on_signal_end"],
-        payload["max_per_day"],
-        payload["cooldown"],
-        payload["allow_next_day"],
-        payload["close_mode"],
-        payload["close_at_end"],
-        payload["market_cfd"],
-        payload["start_idx"],
-        payload["end_idx"],
-    )
+    if signals.exit_index is not None:
+        if limits.execution == "close_signal":
+            raise FastBtError("calendar_exit no admite execution=close_signal")
+        exit_index = np.asarray(signals.exit_index, dtype=np.int64).reshape(-1)
+        if len(exit_index) != len(bars):
+            raise FastBtError(
+                "signals.exit_index debe tener una entrada por barra"
+            )
+        result = _calendar_core_compiled(
+            payload["open_"],
+            payload["high"],
+            payload["low"],
+            payload["close"],
+            payload["long_sig"],
+            payload["short_sig"],
+            payload["allowed"],
+            payload["allowed_entry"],
+            payload["atr"],
+            payload["entry_bps"],
+            payload["stop_bps"],
+            payload["target_bps"],
+            payload["fut_price"],
+            payload["stop_kind"],
+            payload["stop_mult"],
+            payload["stop_pct"],
+            payload["stop_fixed"],
+            payload["target_kind"],
+            payload["target_rr"],
+            payload["target_pct"],
+            payload["target_fixed"],
+            payload["close_at_end"],
+            payload["start_idx"],
+            payload["end_idx"],
+            exit_index,
+        )
+    else:
+        result = _core_compiled(
+            payload["open_"],
+            payload["high"],
+            payload["low"],
+            payload["close"],
+            payload["long_sig"],
+            payload["short_sig"],
+            payload["allowed"],
+            payload["allowed_entry"],
+            payload["flat_flag"],
+            payload["day_id"],
+            payload["atr"],
+            payload["trail_dist"],
+            payload["entry_bps"],
+            payload["stop_bps"],
+            payload["target_bps"],
+            payload["spread_bps"],
+            payload["fut_price"],
+            payload["stop_kind"],
+            payload["stop_mult"],
+            payload["stop_pct"],
+            payload["stop_fixed"],
+            payload["target_kind"],
+            payload["target_rr"],
+            payload["target_pct"],
+            payload["target_fixed"],
+            payload["be_at_r"],
+            payload["trail_on"],
+            payload["time_exit_bars"],
+            payload["opposite"],
+            payload["on_signal_end"],
+            payload["max_per_day"],
+            payload["cooldown"],
+            payload["allow_next_day"],
+            payload["close_mode"],
+            payload["close_at_end"],
+            payload["market_cfd"],
+            payload["start_idx"],
+            payload["end_idx"],
+        )
     (
         count,
         rejected,

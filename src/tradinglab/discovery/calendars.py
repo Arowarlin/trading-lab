@@ -268,6 +268,59 @@ def is_fx_short_day(day: date) -> bool:
     )
 
 
+def nyse_trading_days(year: int, month: int) -> list[date]:
+    """Días hábiles NYSE de un mes (sin fines de semana ni festivos)."""
+
+    if not 1 <= int(month) <= 12:
+        raise ValueError(f"mes inválido: {month}")
+    first = date(int(year), int(month), 1)
+    if month == 12:
+        last = date(year, 12, 31)
+    else:
+        last = date(year, month + 1, 1) - timedelta(days=1)
+    days: list[date] = []
+    day = first
+    while day <= last:
+        if day.weekday() < 5 and not is_holiday(NYSE, day):
+            days.append(day)
+        day += timedelta(days=1)
+    return days
+
+
+def month_turn_pairs(
+    start: date, end: date, n: int, m: int
+) -> list[tuple[date, date]]:
+    """Pares (entrada, salida) del efecto cambio de mes.
+
+    Entrada en el cierre del día hábil ``n`` antes de fin de mes (1 = último
+    día hábil) y salida en el cierre del día hábil ``m`` del mes siguiente
+    (1 = primer día hábil). Solo se devuelven los meses con un mes siguiente
+    completamente dentro de ``[start, end]`` para no inventar el cierre.
+    """
+
+    n = int(n)
+    m = int(m)
+    if n < 1 or m < 1:
+        raise ValueError("n y m deben ser >= 1")
+    out: list[tuple[date, date]] = []
+    year = int(start.year)
+    month = int(start.month)
+    while (year, month) <= (end.year, end.month):
+        if month == 12:
+            next_year, next_month = year + 1, 1
+        else:
+            next_year, next_month = year, month + 1
+        trading = nyse_trading_days(year, month)
+        following = nyse_trading_days(next_year, next_month)
+        if len(trading) >= n and len(following) >= m:
+            entry = trading[-n]
+            exit_day = following[m - 1]
+            if start <= entry <= end and start <= exit_day <= end:
+                out.append((entry, exit_day))
+        year, month = next_year, next_month
+    return out
+
+
 __all__ = [
     "CME",
     "FX_METAL",
@@ -281,6 +334,8 @@ __all__ = [
     "is_fx_short_day",
     "is_holiday",
     "is_special_closure",
+    "month_turn_pairs",
     "nyse_early_closes",
     "nyse_holidays",
+    "nyse_trading_days",
 ]

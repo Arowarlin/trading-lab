@@ -165,6 +165,7 @@ def test_ventaja_sintetica_pasa() -> None:
     result = _evaluate(_edge_frame(), strategy)
     drift = result["drift"]
     assert drift["trades"] > 20
+    assert drift["long_fraction"] == pytest.approx(1.0)
     assert float(drift["percentile"]) >= 90.0
     assert drift["passed"] is True
 
@@ -255,6 +256,28 @@ def _individual(metrics: dict) -> Individual:
     )
     item.rank = 0
     return item
+
+
+def test_percentil_solo_largo_no_toca_los_cortos() -> None:
+    from tradinglab.discovery.drift import percentile
+
+    r_long = np.linspace(0.0, 1.0, 50)
+    r_short = np.full(50, -99.0)
+    result = percentile(
+        strategy_expectancy=0.5,
+        trades=10,
+        long_fraction=1.0,
+        mean_bars=3.0,
+        r_long=r_long,
+        r_short=r_short,
+        eligible=np.arange(50),
+        simulations=100,
+        seed=7,
+    )
+    assert result["long_fraction"] == pytest.approx(1.0)
+    assert result["random_expectancy_mean_r"] is not None
+    assert result["random_expectancy_mean_r"] >= 0.0
+    assert result["random_expectancy_mean_r"] <= 1.0
 
 
 def test_rank1_exige_percentil_solo_si_la_evaluacion_lo_trae() -> None:

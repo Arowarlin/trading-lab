@@ -20,7 +20,7 @@ from .mirror import mirror_expr
 from .timeframes import normalize_timeframe
 
 BOOL_KINDS = {"and", "or", "not", "gt", "lt", "ge", "le", "between", "cross_up", "cross_down",
-              "held_for", "within_bars", "time_between", "weekday_in", "pattern", "regime", "htf"}
+              "held_for", "within_bars", "time_between", "weekday_in", "month_turn", "pattern", "regime", "htf"}
 TEMPLATE_DIR = ROOT / "config" / "discovery" / "templates"
 
 
