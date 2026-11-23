@@ -26,6 +26,10 @@ function Write-Log([string]$Message) {
     Add-Content -Path $log -Value ("{0} {1}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), $Message) -Encoding utf8
 }
 
+$runId = [guid]::NewGuid().ToString("N").Substring(0, 12)
+Write-Log ("INICIO forward demo execute run_id={0} utc={1} force={2}" -f `
+    $runId, (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), $Force)
+
 $utc = [DateTime]::UtcNow
 $isWeekday = $utc.DayOfWeek -notin @([DayOfWeek]::Saturday, [DayOfWeek]::Sunday)
 $minuteOfDay = $utc.Hour * 60 + $utc.Minute
@@ -33,9 +37,10 @@ $minuteOfDay = $utc.Hour * 60 + $utc.Minute
 # Londres 07:00-16:00 + margen de cierre hasta 16:30.
 $inTokyo = $minuteOfDay -ge 0 -and $minuteOfDay -le (4 * 60 + 30)
 $inLondon = $minuteOfDay -ge (7 * 60) -and $minuteOfDay -le (16 * 60 + 30)
-# US100 swing: la primera barra H4 del dia UTC es 00:00-04:00; se evalua en
-# los primeros 5 minutos tras su cierre (04:00-04:04 UTC), una vez al dia.
-$inUs100 = $minuteOfDay -ge (4 * 60) -and $minuteOfDay -le (4 * 60 + 4)
+# US100 swing: la vela H4 02:00-06:00 (invierno) o 01:00-05:00 (verano) se
+# evalua en los primeros 5 minutos tras su cierre (06:00-06:04 UTC), una vez al
+# dia. La ventana de la senal sigue siendo la apertura de la barra 00:00-04:00.
+$inUs100 = $minuteOfDay -ge (6 * 60) -and $minuteOfDay -le (6 * 60 + 4)
 $inWindow = $isWeekday -and ($inTokyo -or $inLondon -or $inUs100)
 
 # Registro diario del guardián: una línea por día UTC con las sesiones en
@@ -66,13 +71,14 @@ if ($lastGuardian -ne $todayKey) {
 # en los primeros 5 minutos tras el cierre de la vela.
 $barPhase = $utc.Minute % 15
 if (-not $Force -and (-not $inWindow -or $barPhase -gt 4)) {
+    Write-Log ("FIN forward demo execute run_id={0} motivo=fuera_ventana" -f $runId)
     Send-TaskHeartbeat -Root $root -Check "intradayforward" -Status "ok"
     exit 0
 }
 
 $mutex = New-Object System.Threading.Mutex($false, "TradingLab-IntradayForward")
 if (-not $mutex.WaitOne(0)) {
-    Write-Log "otra ejecución en curso; se omite"
+    Write-Log ("FIN forward demo execute run_id={0} motivo=mutex" -f $runId)
     Send-TaskHeartbeat -Root $root -Check "intradayforward" -Status "ok"
     exit 0
 }
@@ -97,7 +103,7 @@ function Invoke-Forward([string]$BotIds, [string]$Label) {
     $out | ForEach-Object {
         Add-Content -Path $log -Value ([string]$_) -Encoding utf8
     }
-    Write-Log ("FIN {0} exit={1}" -f $Label, $code)
+    Write-Log ("FIN {0} exit={1} run_id={2}" -f $Label, $code, $runId)
     return $code
 }
 
@@ -107,13 +113,12 @@ function Invoke-ForwardDryRun([string]$BotId) {
     $out | ForEach-Object {
         Add-Content -Path $log -Value ([string]$_) -Encoding utf8
     }
-    Write-Log ("FIN dry-run {0} exit={1}" -f $BotId, $code)
+    Write-Log ("FIN dry-run {0} exit={1} run_id={2}" -f $BotId, $code, $runId)
     return $code
 }
 
 try {
     Set-Location $root
-    Write-Log ("INICIO forward demo execute utc={0} force={1}" -f $utc.ToString("yyyy-MM-dd HH:mm:ss"), $Force)
     $code = 0
     if ($inTokyo -or $inLondon -or $Force) {
         $code = Invoke-Forward $existingBots "forward existentes"
@@ -133,7 +138,7 @@ try {
             $code = $us100
         }
     }
-    Write-Log "FIN forward demo execute exit=$code"
+    Write-Log ("FIN forward demo execute run_id={0} exit={1}" -f $runId, $code)
     if ($code -ne 0) {
         $null = & $lab alerts send intraday_forward_failed -m ("Forward demo execute fallo exit={0} en {1} UTC" -f $code, $utc.ToString("yyyy-MM-dd HH:mm")) --severity error 2>&1
         Send-TaskHeartbeat -Root $root -Check "intradayforward" -Status "fail"
@@ -141,6 +146,11 @@ try {
     }
     Send-TaskHeartbeat -Root $root -Check "intradayforward" -Status "ok"
     exit 0
+}
+catch {
+    Write-Log ("FIN forward demo execute run_id={0} error={1}" -f $runId, $_.Exception.Message)
+    Send-TaskHeartbeat -Root $root -Check "intradayforward" -Status "fail"
+    exit 1
 }
 finally {
     $mutex.ReleaseMutex()

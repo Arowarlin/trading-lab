@@ -1,5 +1,19 @@
 {
   "algorithm": "sha256 (CRLF normalizado a LF)",
+  "authorizations": [
+    {
+      "changes": [
+        "ftmo_forward: max-trades por bot 1 / cuenta 2",
+        "ftmo_forward: frescura por edad de last_bar_utc de la cuenta",
+        "ftmo_forward: ventana de ejecución us100-trend-d1 06:00-06:04 UTC",
+        "ftmo_risk: mt5.py registra la fuente por login",
+        "ftmo_forward: trazabilidad INICIO/FIN + run_id"
+      ],
+      "date": "2026-11-23",
+      "literal": "EA: \"Instalar la v3.2\". Max trades forward: \"1 por bot, 2 por cuenta\". Archivos protegidos: \"Sí, los dos\": (a) frescura por edad de la última vela, (b) us100-trend-d1 de 04:00 a 06:00 UTC. DSR: \"Mantener 1730\".",
+      "scope": "COLA-carriles"
+    }
+  ],
   "groups": {
     "ai_trader": {
       "description": "Carril IA discrecional ai_trader (solo demo, cuenta ftmo_demo).",
@@ -49,11 +63,11 @@
     "ftmo_forward": {
       "description": "Las dos estrategias forward fijas del carril FTMO (eurusd-london-pullback-forward, usdjpy-tokyo-breakout-forward) y la incubación us100-trend-d1.",
       "files": {
-        "config/intraday_forward.yaml": "4abdfd53f876f2743407b5d56f25e56ed4553a6ad4a991b0427cacb0a6764194",
-        "scripts/intraday_forward_execute.ps1": "e2194daba07bbadb42d4e212695c9a3122ea613090e83bf94509f13dcde688fb",
+        "config/intraday_forward.yaml": "7c2ec75bc517ea7897bf31ebc25acfc24be06c33ee33cf69090761a585763af4",
+        "scripts/intraday_forward_execute.ps1": "270c1d5fd49d48aa4464305cffa25a58a67e7edd34577aa8742322e2880046d8",
         "scripts/intraday_forward_signal.ps1": "c131bf8ab83768c547aef62a9a00e1d4a70702bb53edf736ce482bea96a4634b",
         "src/tradinglab/asset_aliases.py": "103577641e38714d117730bc4b7e2d274bbebd134fb19d6f9bb5a84095ae5f8f",
-        "src/tradinglab/forward_intraday.py": "080b3faab337fda99756d34c7b73e2b9b4b0eff256e68d0dc8fd58b6c2b13b89",
+        "src/tradinglab/forward_intraday.py": "b14dee974a8d3f28c8f572aa55858278eab4849fc6a9e36d4722be357c1bb719",
         "src/tradinglab/intraday.py": "22c10f1b490d396f5229b669631191a96843985b5176b9750bfac7f9d3705db0",
         "src/tradinglab/strategies/swing.py": "cfcede9e47d2752bd8d8c079a7a341dd28fc19708f2eb6edf55ab16c2afdb47f",
         "src/tradinglab/swing.py": "361afbd268f151e9c755f58a0bf22cc0a5b0976185919177a897a06106dfba34"
@@ -66,7 +80,7 @@
         "config/prop_templates.yaml": "e4c8be816420dd337b580583a1ed9a2e542461290e052cc80bba9ec4e391f9dc",
         "mql5/TradingLabGuardian.mq5": "bdd94e1c060a1996713ca98d780b1d5e8f45f9ad6b06c1b4dc7d104c054705d0",
         "src/tradinglab/account_daily.py": "217e2eb4ee60709d6956ad9bd02c2424357d13d827e3d6ffb06319fda1036c72",
-        "src/tradinglab/execution/mt5.py": "b0a58818e6a399324b900bf7ce8929062ddcb9481e3bd4a7889c5dcc41fb33d6",
+        "src/tradinglab/execution/mt5.py": "a88d57ad755f96e59e4aad160a75cc39fed746680e0a8432b8f0a332dabccbe0",
         "src/tradinglab/execution/mt5_offsets.py": "9535fbfe22242c002dd122a2a386be67d42a82f096b678a13f6b5bf3f2557dd5",
         "src/tradinglab/guardian.py": "a9bbeda2b6dce38e97de3d780a7361d828632ab7ba89ee08329bc829c3637559",
         "src/tradinglab/prop/__init__.py": "2b5f0229b536875861f8c5a94b0b7ccec5b2474ee14c6950be58e6461f0da816",

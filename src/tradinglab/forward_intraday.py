@@ -55,6 +55,9 @@ MIN_BARS = 210
 DEFAULT_CLOSE_ATTEMPTS = 3
 DEFAULT_CLOSE_RETRY_S = 0.5
 FORWARD_BOT_PREFIX = "forward:"
+# Límite por cuenta del carril forward, decidido por el operador el 2026-11-23:
+# 1 por bot (cada bot lo declara) y 2 por cuenta.
+FORWARD_ACCOUNT_MAX_TRADES_PER_DAY = 2
 TIMEFRAME_MINUTES = {
     "M1": 1,
     "M5": 5,
@@ -1147,7 +1150,13 @@ def run_forward_bot(
 
     # Datos frescos y reloj sano: sin esto no se abre nada. El cierre de una
     # posición ya está gestionado antes (rama `position is not None`).
-    fresh = check_freshness(symbol, bot.timeframe, db_path=db_path)
+    fresh = check_freshness(
+        symbol,
+        bot.timeframe,
+        db_path=db_path,
+        use_bar_age=True,
+        source=f"mt5:{health.get('login')}" if health.get("login") else "mt5",
+    )
     guards["freshness"] = f"{fresh['status']}: {fresh['reason']}"
     if fresh["status"] == FRESHNESS_FALLA:
         stale_reason = f"datos obsoletos: {fresh['reason']}"
@@ -1333,25 +1342,31 @@ def run_forward_bot(
 
     bot_trades = _today_trade_count(db_path, bot.id, now=moment)
     account_trades = _today_trade_count(db_path, None, now=moment)
-    max_trades = min(
+    bot_max = min(
         bot.max_trades_per_day,
         profile.max_trades_per_day or bot.max_trades_per_day,
-        limits.max_trades_per_day or bot.max_trades_per_day,
     )
-    if bot_trades >= max_trades:
+    account_max = min(
+        FORWARD_ACCOUNT_MAX_TRADES_PER_DAY,
+        limits.max_trades_per_day or FORWARD_ACCOUNT_MAX_TRADES_PER_DAY,
+    )
+    guards["max_trades"] = (
+        f"bot {bot_trades}/{bot_max} cuenta {account_trades}/{account_max}"
+    )
+    if bot_trades >= bot_max:
         _record_signal(
             db_path,
             bot,
             symbol,
             signal,
             price,
-            f"blocked max_trades {bot_trades}/{max_trades}",
+            f"blocked max_trades {bot_trades}/{bot_max}",
         )
         return _blocked(
             bot,
             symbol,
             signal,
-            f"máximo de trades/día alcanzado ({bot_trades}/{max_trades})",
+            f"máximo de trades/día alcanzado ({bot_trades}/{bot_max})",
             price=price,
             atr_value=atr_value,
             guards=guards,
@@ -1428,7 +1443,7 @@ def run_forward_bot(
             ),
             limits=limits,
             max_risk_pct=profile.max_risk_pct,
-            max_trades_per_day=max_trades,
+            max_trades_per_day=account_max,
             proposed_risk_usd=risk_usd,
             symbol_open_risk_usd=risk["by_symbol"].get(symbol.upper(), 0.0),
             symbol_risk_cap_usd=symbol_cap_usd(account, symbol, balance),

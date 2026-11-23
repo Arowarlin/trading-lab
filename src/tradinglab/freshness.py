@@ -242,21 +242,41 @@ def _iso(value: datetime | str | None) -> str | None:
 
 
 def latest(
-    symbol: str, timeframe: str, *, db_path: str | Path | None = None
+    symbol: str,
+    timeframe: str,
+    *,
+    db_path: str | Path | None = None,
+    source: str | None = None,
+    use_bar_age: bool = False,
 ) -> dict | None:
-    """Último registro de frescura de un símbolo y timeframe."""
+    """Último registro de frescura de un símbolo y timeframe.
+
+    ``source`` filtra la fuente/cuenta (p. ej. ``mt5``). ``use_bar_age``
+    ordena por ``last_bar_utc``: la barra más reciente manda, no la descarga
+    más reciente. Sin esa opción se conserva el orden histórico por descarga.
+    """
     path = db_path or DEFAULT_DB
     if not Path(path).exists():
         return None
+    clauses = ["symbol = ?", "timeframe = ?"]
+    params: list[Any] = [str(symbol).upper(), str(timeframe)]
+    if source:
+        clauses.append("source = ?")
+        params.append(str(source))
+    order = (
+        "datetime(last_bar_utc) DESC, datetime(fetched_at_utc) DESC, id DESC"
+        if use_bar_age
+        else "datetime(fetched_at_utc) DESC, id DESC"
+    )
     try:
         with connect(path) as con:
-            # Manda la descarga más reciente, no la última fila insertada:
-            # leer un caché viejo (otro rango start/end) no puede tapar un
-            # refresco posterior con una fecha anterior.
             row = con.execute(
-                "SELECT * FROM data_freshness WHERE symbol = ? AND timeframe = ? "
-                "ORDER BY datetime(fetched_at_utc) DESC, id DESC LIMIT 1",
-                (str(symbol).upper(), str(timeframe)),
+                "SELECT * FROM data_freshness WHERE "
+                + " AND ".join(clauses)
+                + " ORDER BY "
+                + order
+                + " LIMIT 1",
+                tuple(params),
             ).fetchone()
     except Exception:
         return None
@@ -270,6 +290,8 @@ def check(
     *,
     db_path: str | Path | None = None,
     config_path: Path | None = None,
+    source: str | None = None,
+    use_bar_age: bool = False,
 ) -> dict:
     """Estado de frescura: `ok`, `aviso` o `falla` (sin dato -> `falla`)."""
     moment = _now(now)
@@ -277,7 +299,13 @@ def check(
     aviso_s, falla_s = limits.get(
         str(timeframe), limits.get("default", DEFAULT_THRESHOLDS["default"])
     )
-    row = latest(symbol, timeframe, db_path=db_path)
+    row = latest(
+        symbol,
+        timeframe,
+        db_path=db_path,
+        source=source,
+        use_bar_age=use_bar_age,
+    )
     base = {
         "symbol": str(symbol).upper(),
         "timeframe": str(timeframe),
@@ -300,10 +328,12 @@ def check(
 
     last_bar = _parse(row.get("last_bar_utc"))
     fetched = _parse(row.get("fetched_at_utc"))
-    # La edad que manda es la de la DESCARGA: es la frecuencia esperada de
-    # refresco. La edad de la barra se informa aparte (con datos diarios la
-    # marca de la barra es a medianoche y daría falsos avisos).
-    reference = fetched or last_bar
+    if use_bar_age:
+        reference = last_bar
+    else:
+        # Compatibilidad: la edad de la descarga es la frecuencia esperada de
+        # refresco. El forward usa `use_bar_age=True` para exigir la vela.
+        reference = fetched or last_bar
     age_s = (moment - reference).total_seconds() if reference else None
     bar_age_s = (moment - last_bar).total_seconds() if last_bar else None
     base.update(
@@ -315,6 +345,14 @@ def check(
             "bar_age_s": bar_age_s,
         }
     )
+    if use_bar_age and last_bar is None:
+        base.update(
+            {
+                "status": STATUS_FALLA,
+                "reason": "sin datos: la descarga no tiene last_bar_utc",
+            }
+        )
+        return base
     if age_s is None:
         base.update(
             {"status": STATUS_FALLA, "reason": "sin datos: la descarga no tiene fecha"}
@@ -324,7 +362,11 @@ def check(
         base.update(
             {
                 "status": STATUS_AVISO,
-                "reason": f"la descarga es futura ({age_s:.0f} s): revisa el reloj",
+                "reason": (
+                    f"la vela es futura ({age_s:.0f} s): revisa el reloj"
+                    if use_bar_age
+                    else f"la descarga es futura ({age_s:.0f} s): revisa el reloj"
+                ),
             }
         )
         return base
@@ -332,7 +374,13 @@ def check(
         base.update(
             {
                 "status": STATUS_FALLA,
-                "reason": f"datos viejos: {age_s / 60:.0f} min sin refrescar (falla a {falla_s / 60:.0f} min)",
+                "reason": (
+                    f"vela vieja: {age_s / 60:.0f} min desde {row.get('last_bar_utc')} "
+                    f"(falla a {falla_s / 60:.0f} min)"
+                    if use_bar_age
+                    else f"datos viejos: {age_s / 60:.0f} min sin refrescar "
+                    f"(falla a {falla_s / 60:.0f} min)"
+                ),
             }
         )
         return base
@@ -340,11 +388,26 @@ def check(
         base.update(
             {
                 "status": STATUS_AVISO,
-                "reason": f"datos retrasados: {age_s / 60:.0f} min sin refrescar (aviso a {aviso_s / 60:.0f} min)",
+                "reason": (
+                    f"vela retrasada: {age_s / 60:.0f} min desde "
+                    f"{row.get('last_bar_utc')} (aviso a {aviso_s / 60:.0f} min)"
+                    if use_bar_age
+                    else f"datos retrasados: {age_s / 60:.0f} min sin refrescar "
+                    f"(aviso a {aviso_s / 60:.0f} min)"
+                ),
             }
         )
         return base
-    base.update({"status": STATUS_OK, "reason": f"datos frescos: {age_s / 60:.1f} min"})
+    base.update(
+        {
+            "status": STATUS_OK,
+            "reason": (
+                f"vela fresca: {age_s / 60:.1f} min"
+                if use_bar_age
+                else f"datos frescos: {age_s / 60:.1f} min"
+            ),
+        }
+    )
     return base
 
 

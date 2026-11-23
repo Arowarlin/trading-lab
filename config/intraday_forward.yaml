@@ -6,7 +6,8 @@
 #
 # enabled:true = forward demo automático en la próxima ventana de sesión.
 # La tarea programada usa `--execute --confirm FORWARD-DEMO`; volumen mínimo,
-# máximo 1 trade/día por bot y cierre obligatorio por sesión.
+# máximo 1 trade/día por bot y 2 por cuenta (decisión del operador 2026-11-23),
+# y cierre obligatorio por sesión.
 version: 1
 account: ftmo_demo
 # Defensa de equity (HWM + zonas + circuit breaker diario):
@@ -53,13 +54,13 @@ bots:
     notes: "Forward experimental; backtest Sharpe -4.63, MaxDD -8.1%."
 
   # Swing CFD demo. La señal es diaria (trend_daily_atr: 50/200 + régimen 200)
-  # y la ejecución es la primera barra H4 del día UTC (00:00-04:00), evaluada
-  # al cierre de esa barra (04:00 UTC). No hay force_exit: la posición puede
-  # dormir varios días. FTMO Swing permite mantener overnight y fin de semana;
-  # esta demo no impone restricción de overnight, así que solo la cierran la
-  # señal contraria o el stop. `exposure` se aplica sobre el volumen mínimo:
-  # si 0,75 × mínimo cae por debajo del mínimo del bróker, se usa el mínimo
-  # (el tamaño efectivo es el 100 % del mínimo, documentado aquí).
+  # y la ejecución es la vela H4 02:00-06:00 (invierno) / 01:00-05:00 (verano),
+  # evaluada al cierre 06:00 UTC. No hay force_exit: la posición puede dormir
+  # varios días. FTMO Swing permite mantener overnight y fin de semana; esta
+  # demo no impone restricción de overnight, así que solo la cierran la señal
+  # contraria o el stop. `exposure` se aplica sobre el volumen mínimo: si 0,75
+  # × mínimo cae por debajo del mínimo del bróker, se usa el mínimo (el tamaño
+  # efectivo es el 100 % del mínimo, documentado aquí).
   - id: us100-trend-d1
     canonical_symbol: US100.cash
     strategy: trend_daily_atr

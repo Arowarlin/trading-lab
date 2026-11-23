@@ -704,6 +704,54 @@ def test_max_trades_dia_bloquea(tmp_path, guards) -> None:
     assert broker.submit_calls == []
 
 
+def test_limite_cuenta_permite_segundo_bot(tmp_path, guards, monkeypatch) -> None:
+    from tradinglab.prop.guard import evaluate_account as real_evaluate
+
+    monkeypatch.setattr(fwd, "evaluate_account", real_evaluate)
+    db = tmp_path / "lab.db"
+    _seed_alias(db)
+    _seed_order(db, _tokyo_bot(), NOW)
+    broker = FakeBroker()
+    decision = fwd.run_forward_bot(
+        _bot(),
+        broker,
+        _settings(),
+        db_path=db,
+        now=NOW,
+        strategy_fn=_strategy(1),
+    )
+    assert decision.action == "open_long"
+    assert decision.guards["max_trades"] == "bot 0/1 cuenta 1/2"
+
+
+def test_limite_cuenta_bloquea_tercer_forward(tmp_path, guards, monkeypatch) -> None:
+    from tradinglab.prop.guard import evaluate_account as real_evaluate
+
+    monkeypatch.setattr(fwd, "evaluate_account", real_evaluate)
+    db = tmp_path / "lab.db"
+    _seed_alias(db)
+    _seed_order(db, _tokyo_bot(), NOW)
+    _seed_order(
+        db,
+        _bot(id="otro-forward", magic=20261159),
+        NOW,
+    )
+    broker = FakeBroker()
+    decision = fwd.run_forward_bot(
+        _bot(),
+        broker,
+        _settings(),
+        db_path=db,
+        now=NOW,
+        strategy_fn=_strategy(1),
+    )
+    assert decision.action == "bloqueado"
+    assert "guard de cuenta" in decision.reason
+    assert "máximo de operaciones diarias" in decision.reason
+    assert decision.guards["max_trades"] == "bot 0/1 cuenta 2/2"
+    assert broker.submit_calls == []
+
+
 def test_defense_report_no_bloquea(tmp_path, guards) -> None:
     db = tmp_path / "lab.db"
     _seed_alias(db)
@@ -795,6 +843,25 @@ def test_fuera_de_ventana_no_abre(tmp_path, guards) -> None:
     )
     assert decision.action == "bloqueado"
     assert "ventana de entrada" in decision.reason
+
+
+def test_bar_in_entry_window_h4_invierno_y_verano() -> None:
+    bot = _bot(
+        entry_start=time(0, tzinfo=timezone.utc),
+        entry_end=time(4, tzinfo=timezone.utc),
+    )
+    # Invierno: vela H4 02:00-06:00, cerrada a las 06:00.
+    assert fwd._bar_in_entry_window(
+        bot,
+        pd.Timestamp("2026-11-10 02:00", tz="UTC"),
+        datetime(2026, 11, 10, 6, 2, tzinfo=timezone.utc),
+    )
+    # Verano (DST): vela H4 01:00-05:00, cerrada a las 05:00.
+    assert fwd._bar_in_entry_window(
+        bot,
+        pd.Timestamp("2026-07-14 01:00", tz="UTC"),
+        datetime(2026, 7, 14, 6, 2, tzinfo=timezone.utc),
+    )
 
 
 def test_datos_obsoletos_bloquea(tmp_path, guards) -> None:

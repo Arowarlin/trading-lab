@@ -81,6 +81,67 @@ def test_un_registro_viejo_no_tapa_el_refresco_mas_reciente(tmp_path):
     assert check("SPY", "1d", NOW, db_path=db)["status"] == STATUS_OK
 
 
+def test_forward_frescura_usa_edad_de_la_vela(tmp_path):
+    db = tmp_path / "lab.db"
+    init_db(db)
+    # Descarga vieja (3 h) pero vela reciente (10 min): no debe bloquear.
+    record(
+        "US100",
+        "M15",
+        last_bar_utc=NOW - timedelta(minutes=10),
+        fetched_at_utc=NOW - timedelta(hours=3),
+        source="mt5",
+        db_path=db,
+    )
+    fresh = check(
+        "US100", "M15", NOW, db_path=db, use_bar_age=True, source="mt5"
+    )
+    assert fresh["status"] == STATUS_OK
+    assert fresh["bar_age_s"] == pytest.approx(600.0)
+
+    # Descarga reciente pero vela de 2025: debe fallar.
+    record(
+        "XAUUSD",
+        "M15",
+        last_bar_utc=datetime(2025, 1, 3, 23, 45, tzinfo=timezone.utc),
+        fetched_at_utc=NOW - timedelta(seconds=10),
+        source="mt5",
+        db_path=db,
+    )
+    stale = check(
+        "XAUUSD", "M15", NOW, db_path=db, use_bar_age=True, source="mt5"
+    )
+    assert stale["status"] == STATUS_FALLA
+    assert "vela vieja" in stale["reason"]
+
+
+def test_forward_frescura_filtra_por_fuente(tmp_path):
+    db = tmp_path / "lab.db"
+    init_db(db)
+    record(
+        "EURUSD",
+        "M15",
+        last_bar_utc=NOW - timedelta(minutes=10),
+        fetched_at_utc=NOW,
+        source="yahoo",
+        db_path=db,
+    )
+    record(
+        "EURUSD",
+        "M15",
+        last_bar_utc=datetime(2025, 1, 3, 23, 45, tzinfo=timezone.utc),
+        fetched_at_utc=NOW,
+        source="mt5",
+        db_path=db,
+    )
+    assert check(
+        "EURUSD", "M15", NOW, db_path=db, use_bar_age=True, source="yahoo"
+    )["status"] == STATUS_OK
+    assert check(
+        "EURUSD", "M15", NOW, db_path=db, use_bar_age=True, source="mt5"
+    )["status"] == STATUS_FALLA
+
+
 def test_yahoo_frescura_usa_la_hora_del_sidecar(tmp_path, monkeypatch):
     """La fecha de descarga sale del .meta.json, no del mtime del parquet."""
     from tradinglab.data import yahoo

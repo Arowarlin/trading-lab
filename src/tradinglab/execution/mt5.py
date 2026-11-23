@@ -496,7 +496,12 @@ class MT5Broker:
         try:
             from ..freshness import record
 
-            record(symbol, key, last_bar_utc=df.index[-1], source="mt5")
+            record(
+                symbol,
+                key,
+                last_bar_utc=df.index[-1],
+                source=f"mt5:{self.login}" if self.login else "mt5",
+            )
         except Exception:
             pass
         return df[[c for c in cols if c in df.columns]].astype(float)
