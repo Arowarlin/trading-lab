@@ -116,7 +116,7 @@ firms:
     website: https://fundingpips.com
     platforms: [mt5, matchtrader, ctrader]
     execution_providers: [mt5]
-    rules_version: "2026-11-21.1"
+    rules_version: "2026-11-23.1"
     # Reglas comprobables del registro. Solo se declaran las que se leyeron en
     # la web oficial; el resto queda Sin datos (unknown) y no bloquea.
     # Fuente común: 2 Step Standard / Free Trial (consultada 2026-11-21).
@@ -219,8 +219,11 @@ firms:
           - {key: ea_policy, value: "Terceros solo gestor de trades/riesgo; automatización completa solo con EA propio y prueba de propiedad", phase: evaluation, status: verified_official, source: {url: "https://help.fundingpips.com/hc/en-us/articles/34505029138449-Trading-Conduct-and-Security-Standards", consulted_at: 2026-11-21, kind: official}}
           - {key: rewards, value: false, phase: evaluation, status: verified_official, source: {url: "https://help.fundingpips.com/hc/en-us/articles/45363484760209-Free-Trial", consulted_at: 2026-11-21, kind: official}, notes: "El Trial no paga recompensas ni convierte a Master"}
           - {key: concurrent_accounts, value: 1, unit: trial, phase: evaluation, status: verified_official, source: {url: "https://help.fundingpips.com/hc/en-us/articles/45363484760209-Free-Trial", consulted_at: 2026-11-21, kind: official}}
-          - {key: daily_loss_base, value: higher_of_balance_or_equity, phase: evaluation, status: needs_verification, notes: "Dato del operador 2026-11-22: 5 % desde el mayor de balance o equidad al inicio del día, flotante incluido, reinicio a medianoche del servidor."}
-          - {key: reset_time, value: "00:00 server", phase: evaluation, status: needs_verification}
+          - {key: daily_loss_base, value: higher_of_balance_or_equity, phase: evaluation, status: verified_operator_panel_2026-11-23, notes: "Panel 2026-11-23: Todays Starting Equity 100,000 y Balance Threshold 95,000; 5 % desde el MAYOR de balance o equidad al inicio del día, flotante incluido."}
+          - {key: reset_time, value: "00:00 server", phase: evaluation, status: verified_operator_panel_2026-11-23, notes: "Panel a las 09:57 de Santo Domingo (UTC-4): Resets in 08:04:39 → 22:00 UTC = 17:00 Nueva York = 00:00 UTC+2 en invierno."}
+          - {key: reset_tz, value: Etc/GMT-2, phase: evaluation, status: verified_operator_panel_2026-11-23, notes: "Invierno: servidor UTC+2, 00:00 = 22:00 UTC = 17:00 NY. En verano, si el servidor pasa a UTC+3 por DST, el código deriva Etc/GMT-3 del offset real y el reset sigue a las 17:00 NY; verificar el offset al adjuntar."}
+          - {key: max_duration_days, value: 14, unit: calendar_days_per_phase, phase: evaluation, status: verified_operator_panel_2026-11-23, notes: "Duración máxima del reto actual: 14 días; fin 2026-12-07."}
+          - {key: trial_end_date, value: "2026-12-07", phase: evaluation, status: verified_operator_panel_2026-11-23, notes: "Fecha límite del Trial actual (inicio 2026-11-23 + 14 días)."}
           - {key: commission_per_lot_usd, value: 5.0, unit: usd_per_lot_round_trip, phase: evaluation, instrument: forex_metals, status: needs_verification, notes: "5 USD por lote ida y vuelta en forex y metales; índices y energía 0."}
 
   - id: fxify

@@ -301,7 +301,7 @@ class _FakeMeasureBroker:
         self.shutdown_called = False
 
     def connect(self):
-        return {"login": 40000453530, "server": "FundingPips-Trial", "mode": "demo", "connected": True}
+        return {"login": 40000459328, "server": "FundingPips-Trial", "mode": "demo", "connected": True}
 
     def copy_ticks(self, symbol, start, end):
         return pd.DataFrame(

@@ -193,6 +193,8 @@ def test_fundingpips_cfd006_es_2step_standard():
 
     reg = load_registry()
     account = reg.accounts["CFD-006"]
+    assert account.login == 40000459328
+    assert account.server == "FundingPips-Trial"
     assert account.limits.daily_loss == 5_000
     assert account.limits.max_loss == 10_000
     assert account.limits.profit_target == 8_000
@@ -225,6 +227,23 @@ def test_fundingpips_cfd006_es_2step_standard():
     )
     assert rules[("max_risk_per_trade_pct", "funded", "all")].value == 0.02
 
+    trial = reg.firms["fundingpips"].program("fundingpips_trial")
+    assert trial is not None
+    trial_rules = {
+        (rule.key, rule.phase, rule.instrument): rule for rule in trial.rules
+    }
+    panel = "verified_operator_panel_2026-11-23"
+    from tradinglab.propfund.models import VerificationStatus
+
+    assert VerificationStatus(panel).is_verified
+    assert trial_rules[("daily_loss_base", "evaluation", "all")].status.value == panel
+    assert trial_rules[("reset_time", "evaluation", "all")].status.value == panel
+    assert trial_rules[("reset_tz", "evaluation", "all")].value == "Etc/GMT-2"
+    assert trial_rules[("reset_tz", "evaluation", "all")].status.value == panel
+    assert trial_rules[("max_duration_days", "evaluation", "all")].value == 14
+    assert trial_rules[("max_duration_days", "evaluation", "all")].status.value == panel
+    assert trial_rules[("trial_end_date", "evaluation", "all")].value == "2026-12-07"
+
 
 def test_cfd006_rules_para_mc_declaran_equity_y_avisan_del_mayor():
     from tradinglab.propfund.registry import load_registry
@@ -241,6 +260,9 @@ def test_cfd006_rules_para_mc_declaran_equity_y_avisan_del_mayor():
     assert rules.reset_time == "00:00"
     assert rules.reset_tz == "Etc/GMT-2"
     assert "MAYOR de balance o equidad" in rules.notes
+    summer = _rules_from_account(account, {"server_utc_offset_hours": 3})
+    assert summer.reset_tz == "Etc/GMT-3"
+    assert summer.reset_time == "00:00"
 
 
 def test_fundingpips_comision_ida_y_vuelta_no_se_duplica():

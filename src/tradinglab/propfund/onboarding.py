@@ -33,7 +33,6 @@ from .models import (
     Market,
     Program,
     PropAccount,
-    VerificationStatus,
 )
 from .registry import Registry, load_registry
 from .snapshots import _rules_from_account, default_broker_factory
@@ -107,7 +106,8 @@ def _source_of(rules: Iterable[Any]) -> dict[str, Any] | None:
 
 
 def _verified(rule: Any) -> bool:
-    return getattr(rule, "status", None) is VerificationStatus.VERIFIED_OFFICIAL
+    status = getattr(rule, "status", None)
+    return bool(status is not None and status.is_verified)
 
 
 def _row(
@@ -134,7 +134,9 @@ def _row(
         "label": label,
         "value": getattr(primary, "value", None),
         "display": display if display is not None else _fmt_value(primary),
-        "verification_status": "verified_official" if _verified(primary) else "unverified",
+        "verification_status": (
+            primary.status.value if _verified(primary) else "unverified"
+        ),
         "source_url": source.get("url") if source else None,
         "consulted_at": source.get("consulted_at") if source else None,
         "note": note or str(getattr(primary, "notes", "") or ""),
@@ -374,8 +376,8 @@ def collect_rules(
         "website": firm.website,
         "rules_version": firm.rules_version,
         "rows": rows,
-        "verified": sum(1 for row in rows if row["verification_status"] == "verified_official"),
-        "unverified": sum(1 for row in rows if row["verification_status"] != "verified_official"),
+        "verified": sum(1 for row in rows if row["verification_status"] != "unverified"),
+        "unverified": sum(1 for row in rows if row["verification_status"] == "unverified"),
     }
 
 

@@ -53,12 +53,17 @@ class AutomationPermission(StrEnum):
 class VerificationStatus(StrEnum):
     VERIFIED_OFFICIAL = "verified_official"    # leído en la fuente oficial de la firma
     VERIFIED_SECONDARY = "verified_secondary"  # varias fuentes secundarias coinciden
+    # Confirmado por el operador contra el panel real de la firma (captura/fecha).
+    VERIFIED_OPERATOR_PANEL_2026_11_23 = "verified_operator_panel_2026-11-23"
     NEEDS_VERIFICATION = "needs_verification"
     UNKNOWN = "unknown"
 
     @property
     def is_verified(self) -> bool:
-        return self is VerificationStatus.VERIFIED_OFFICIAL
+        return self in {
+            VerificationStatus.VERIFIED_OFFICIAL,
+            VerificationStatus.VERIFIED_OPERATOR_PANEL_2026_11_23,
+        }
 
 
 class ConnectionState(StrEnum):

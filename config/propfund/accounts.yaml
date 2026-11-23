@@ -99,7 +99,7 @@ accounts:
     template: false
     protected: false
     terminal_path: 'C:\Program Files\Darwinex MetaTrader 5\terminal64.exe'
-    login: 40000453530
+    login: 40000459328
     server: FundingPips-Trial
     allowed_instruments: [US100, US500, US30, XAUUSD, EURUSD, GBPUSD, USDJPY]
     broker_symbols: {US100: NDX100, US500: SPX500, US30: DJI30, XAUUSD: XAUUSD, EURUSD: EURUSD, GBPUSD: GBPUSD, USDJPY: USDJPY}
@@ -108,19 +108,22 @@ accounts:
     risk: {per_trade_risk_pct: 0.005, daily_risk_pct: 0.02, max_trades_per_day: 3, max_open_positions: 3, buffer_vs_firm_pct: 0.20, max_cost_r: 0.20}
     automation_acknowledged: false
     notes: >
-      FundingPips Free Trial, cuenta 40000453530, servidor FundingPips-Trial,
-      100.000 USD, DEMO. Modelo confirmado por el operador el 2026-11-22:
+      FundingPips Free Trial, cuenta 40000459328, servidor FundingPips-Trial,
+      100.000 USD, DEMO. Cuenta anterior 40000453530 retirada del panel el
+      2026-11-23. Modelo confirmado por el operador el 2026-11-22:
       2-Step Standard. Fase 1 objetivo 8 % (8.000 USD), fase 2 5 %; pérdida
       diaria 5 % (5.000 USD) medida desde el MAYOR de balance o equidad al
-      inicio del día, flotante incluido, reinicio a medianoche del servidor;
-      pérdida máxima 10 % ESTÁTICA (10.000 USD); mínimo 3 días de trading por
-      fase. Comisión 5 USD por lote ida y vuelta en forex y metales; índices y
-      energía 0. Cuenta fondeada: 3 % por idea (<50K) / 2 % (>=50K); el riesgo
-      interno de 0,5 % por trade queda por debajo. Trial: 14 días por fase,
-      sin Master ni recompensas; EAs de terceros solo como gestor y
-      automatización completa solo con EA propio y prueba de propiedad; sin
-      restricciones de noticias en evaluación y overnight/weekend permitido.
-      Solo snapshot/spreads de lectura: no se enrutan órdenes a esta cuenta.
+      inicio del día, flotante incluido, reinicio a medianoche del servidor
+      (22:00 UTC = 17:00 Nueva York = 00:00 UTC+2 en invierno); pérdida máxima
+      10 % ESTÁTICA (10.000 USD); mínimo 3 días de trading por fase. Duración
+      máxima del reto actual: 14 días, fin 2026-12-07. Comisión 5 USD por lote
+      ida y vuelta en forex y metales; índices y energía 0. Cuenta fondeada:
+      3 % por idea (<50K) / 2 % (>=50K); el riesgo interno de 0,5 % por trade
+      queda por debajo. Trial: 14 días por fase, sin Master ni recompensas; EAs
+      de terceros solo como gestor y automatización completa solo con EA propio
+      y prueba de propiedad; sin restricciones de noticias en evaluación y
+      overnight/weekend permitido. Solo snapshot/spreads de lectura: no se
+      enrutan órdenes a esta cuenta.
 
   # --- Plantillas Futures ---------------------------------------------------
   - id: FUT-001

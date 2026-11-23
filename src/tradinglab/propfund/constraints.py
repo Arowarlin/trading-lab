@@ -17,7 +17,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Mapping
 
-from .models import Firm, FirmRule, Program, PropAccount, VerificationStatus
+from .models import Firm, FirmRule, Program, PropAccount
 
 CONSTRAINT_KEYS = (
     "news_trading",
@@ -128,7 +128,7 @@ def _has_news_filter(node: Any) -> bool:
 def _unknown(rule: FirmRule | None) -> bool:
     if rule is None or rule.value is None:
         return True
-    return rule.status is not VerificationStatus.VERIFIED_OFFICIAL
+    return not rule.status.is_verified
 
 
 @dataclass(frozen=True)
@@ -294,7 +294,11 @@ def constraint_rows(
             display = "Sin datos"
         else:
             display = str(value)
-        status = "verified_official" if not _unknown(rule) else "unverified"
+        status = (
+            rule.status.value
+            if rule is not None and not _unknown(rule)
+            else "unverified"
+        )
         source = rule.source if rule is not None else None
         rows.append(
             {
