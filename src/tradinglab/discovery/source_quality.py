@@ -1,4 +1,4 @@
-"""Calidad de datos por fuente (bróker/Dukascopy) y temporalidad.
+"""Calidad de datos por fuente (bróker/Dukascopy/Databento) y temporalidad.
 
 Reutiliza ``data_quality.check_dataset`` sin duplicar sus comprobaciones. Solo
 cambia los umbrales de hueco según el timeframe para que un fin de semana no se
@@ -48,7 +48,16 @@ def quality_config(
         "gap_factor": gap_factor,
         "max_gap_hours": max_gap,
     }
-    if str(symbol).upper() in NYSE_SYMBOLS:
+    if str(source).strip().lower() == "databento":
+        # Los futuros CME no siguen el calendario NYSE/FX: las sesiones
+        # (pausa 17:00-18:00 NY, viernes 17:00) quedan como hipótesis en
+        # engine.yaml hasta derivarlas con datos.
+        sources = dict(base.sources)
+        sources[str(symbol).upper()] = SourceConfig(
+            path="", timezone="UTC", calendar=None
+        )
+        updates["sources"] = sources
+    elif str(symbol).upper() in NYSE_SYMBOLS:
         sources = dict(base.sources)
         sources[str(symbol).upper()] = SourceConfig(
             path="", timezone="UTC", calendar=NYSE

@@ -456,6 +456,30 @@ data_quality:
           pause_start: "16:55"
           pause_end: "17:05"
           short_close: null
+    # Hipótesis CME Globex (Databento): pausa diaria 17:00-18:00 NY y cierre
+    # del viernes a las 17:00. No hay calendario de festivos CME: se derivará
+    # con datos cuando la caché de futuros exista.
+    "databento:US100":
+      segments: &cme_session
+        - start: "2010-01-01"
+          end: "2026-12-31"
+          friday_close: "17:00"
+          sunday_open: "18:00"
+          pause_start: "17:00"
+          pause_end: "18:00"
+          short_close: null
+    "databento:US500":
+      segments: *cme_session
+    "databento:US30":
+      segments: *cme_session
+    "databento:XAUUSD":
+      segments: *cme_session
+    "databento:EURUSD":
+      segments: *cme_session
+    "databento:GBPUSD":
+      segments: *cme_session
+    "databento:USDJPY":
+      segments: *cme_session
   usable_from:
     "broker:EURUSD:D1": "2021-08-31"
     "broker:EURUSD:H1": "2020-01-01"

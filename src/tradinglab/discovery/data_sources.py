@@ -5,6 +5,8 @@
   localiza en ``America/New_York`` y se convierte a UTC.
 * Los símbolos descargados por ``discovery fetch`` se leen primero de
   ``data/cache/discovery/<SYMBOL>_<TF>.parquet`` (UTC).
+* ``databento`` lee ``data/cache/databento/<SYMBOL>_M1.parquet`` (o ``_H1``)
+  en UTC y remuestrea con el corte de sesión CME de las 18:00 NY.
 * El resto usa ``data/cache/mt5/<SYMBOL>_<TF>.parquet`` (o el mapa
   ``data_quality.sources`` de ``config/discovery/engine.yaml``).
 * Los timestamps ambiguos o inexistentes nunca se inventan: se eligen con
@@ -24,7 +26,7 @@ from ..config import ROOT
 from .config import DataQualityConfig, SourceConfig, load_engine_config
 from .timeframes import normalize_timeframe, timeframe_minutes
 
-DATA_SOURCES = ("broker", "dukascopy")
+DATA_SOURCES = ("broker", "dukascopy", "databento")
 
 
 class DataSourceError(RuntimeError):
@@ -181,6 +183,53 @@ def load_source(
     source_key = normalize_source(source)
     config = config or load_engine_config().data_quality
     spec = config.source_for(symbol)
+    if source_key == "databento":
+        from .fetch_databento import cache_path as databento_path
+        from .fetch_databento import load_cache as load_databento
+        from .resample import resample_session
+
+        target = normalize_timeframe(timeframe)
+        minutes = timeframe_minutes(target)
+        schema = "ohlcv-1h" if minutes >= 60 else "ohlcv-1m"
+        source_schema = schema
+        path = databento_path(symbol, source_schema, root=root)
+        source_tf = "H1" if source_schema == "ohlcv-1h" else "M1"
+        if not path.exists() and source_schema == "ohlcv-1h":
+            fallback = databento_path(symbol, "ohlcv-1m", root=root)
+            if fallback.exists():
+                path = fallback
+                source_schema = "ohlcv-1m"
+                source_tf = "M1"
+        if not path.exists():
+            raise DataSourceError(f"Sin datos: no existe {path}")
+        try:
+            raw = load_databento(symbol, source_schema, root=root)
+        except Exception as exc:  # noqa: BLE001
+            raise DataSourceError(str(exc)) from exc
+        frame = (
+            raw
+            if source_tf == target
+            else resample_session(raw, target, cut_hour=18)
+        )
+        path_text = (
+            path.relative_to(root).as_posix() if path.is_relative_to(root) else str(path)
+        )
+        return LoadedSource(
+            symbol=str(symbol).upper(),
+            timeframe=target,
+            path=path_text,
+            timezone="UTC",
+            # Los festivos/cierres de CME no están modelados: se declaran como
+            # hipótesis de sesión en engine.yaml y se derivarán con datos.
+            calendar=None,
+            rows_raw=int(len(raw)),
+            rows=int(len(frame)),
+            adjusted=0,
+            dropped=0,
+            frame=frame,
+            source="databento",
+            derived_from=source_tf if source_tf != target else None,
+        )
     if source_key == "dukascopy":
         from .fetch_dukascopy import cache_path as dukascopy_path
         from .fetch_dukascopy import load_cache as load_dukascopy

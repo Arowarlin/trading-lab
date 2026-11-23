@@ -23,7 +23,7 @@ from .data_sources import load_source
 from .source_quality import quality_config
 from .timeframes import TIMEFRAMES, timeframe_minutes
 
-SOURCES = ("dukascopy", "broker")
+SOURCES = ("dukascopy", "broker", "databento")
 SYMBOLS = ("US100", "US500", "US30", "XAUUSD", "EURUSD", "GBPUSD", "USDJPY")
 
 
