@@ -184,9 +184,14 @@ discovery_app = typer.Typer(
     no_args_is_help=True,
     help="Discovery Lab: datos CFD/M1, calidad y campañas (sin campañas automáticas).",
 )
+portfolio_app = typer.Typer(
+    no_args_is_help=True,
+    help="Portfolio Lab: correlación, solape y reto de fondeo sin optimizar pesos.",
+)
 
 app.add_typer(propfund_app, name="propfund")
 app.add_typer(discovery_app, name="discovery")
+app.add_typer(portfolio_app, name="portfolio")
 
 
 def _harden_stdio() -> None:
@@ -7634,6 +7639,67 @@ def portfolio_simulate_cmd(
         )
     )
     console.print(f"[green]Tabla generada[/green] · {files['md']} · {files['json']}")
+
+
+@portfolio_app.command("analyze")
+def portfolio_analyze_cmd(
+    strategies: str = typer.Option(..., "--strategies", help="CSV: A,B,... (syn-0, ftmo-eurusd, id)"),
+    account: str = typer.Option(..., "--account", help="Cuenta CFD declarada, p. ej. CFD-001"),
+    paths: int = typer.Option(2_000, "--paths", min=2),
+    seed: int = typer.Option(42, "--seed"),
+    block_size: int = typer.Option(5, "--block-size", min=1),
+    as_json: bool = typer.Option(False, "--json", help="Salida JSON compacta"),
+) -> None:
+    """Analiza cartera vs cada estrategia sola ante las reglas de la firma."""
+    from .portfolio_lab import analyze
+
+    try:
+        payload = analyze(
+            strategies,
+            account,
+            paths=paths,
+            seed=seed,
+            block_size=block_size,
+        )
+    except Exception as exc:
+        console.print(f"[red]No se pudo analizar la cartera:[/red] {exc}")
+        raise typer.Exit(1) from exc
+    if as_json:
+        typer.echo(json.dumps(payload, ensure_ascii=False, separators=(",", ":"), default=str))
+        return
+    table = Table(title=f"Portfolio Lab · {account} · {payload['firm']}")
+    table.add_column("Candidato")
+    table.add_column("P(pasar)", justify="right")
+    table.add_column("P(romper día)", justify="right")
+    table.add_column("P(romper máx.)", justify="right")
+    table.add_column("Días al objetivo", justify="right")
+    results = payload["challenge"]["results"]
+
+    def _pct(value: object) -> str:
+        return "Sin datos" if value is None else f"{float(value):.1%}"
+
+    for label, row in results.items():
+        table.add_row(
+            str(label),
+            _pct(row["p_pasar_fase1"]),
+            _pct(row["p_romper_diario"]),
+            _pct(row["p_romper_maximo"]),
+            str(row["dias_medianos_objetivo"]),
+        )
+    console.print(table)
+    console.print(
+        Panel(
+            f"{len(payload['members'])} series · {payload['alignment']['days']} días · "
+            f"riesgo por 1R {payload['risk_usd_per_r']} USD\n"
+            + "\n".join(f"- {method}: {text}" for method, text in payload["verdict"].items()),
+            title="Veredicto",
+        )
+    )
+    correlation = payload["correlation"]
+    console.print(
+        f"Correlaciones: {correlation['labels']} · "
+        f"matriz {correlation['matrix']} · tope por idea {payload['cap_note']}"
+    )
 
 
 @app.command("research-costs")

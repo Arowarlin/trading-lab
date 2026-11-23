@@ -1902,6 +1902,29 @@ Costes: **0 de 10 variantes frágiles** con 2/20 bps; el drag de costes es
 5,8–10,2 puntos porcentuales sobre el retorno total de la muestra. No cambia
 ningún criterio de propuesta.
 
+### Portfolio Lab (R7, solo análisis)
+
+```powershell
+lab portfolio analyze --strategies syn-50 --account CFD-001
+lab portfolio analyze --strategies fwd:US100.cash:orb_5m,fwd:XAUUSD:vwap_bounce --account CFD-006 --json
+```
+
+Tokens admitidos: `syn-0` / `syn-50` / `syn-90` (tres series sintéticas
+equicorrelacionadas), `fwd:SIMBOLO:SETUP` (operaciones forward cerradas de
+`ai_trades`, solo `pnl / risk_usd` con fecha de cierre) o ids numéricos de
+discovery (solo tramos IS y OOS-1). Los antiguos alias `ftmo-eurusd`,
+`ftmo-usdjpy` y `us100-trend-d1` **se rechazan con "Sin datos"**: sus parquets
+traen equity/retornos del subyacente, sin riesgo inicial por operación; convertirlos
+a R sería una conversión silenciosa inválida.
+
+Los días sin operación se rellenan a 0 R pero **no cuentan como pérdida** ni en
+la correlación de pérdidas. Mide correlación, pérdidas simultáneas sobre días en
+que ambas series operaron, solape temporal, exposición por símbolo y reparte
+riesgo con tres reglas fijas: igual, inversa a la volatilidad y tope por idea de
+la firma; **no optimiza pesos**. El Monte Carlo de reto se delega a
+`prop.simulator` (protegido, solo se llama). `--json` devuelve el informe
+completo. No envía órdenes ni lee holdout.
+
 Criterios de propuesta: pasa ≥ 35%, revienta ≤ 15%, OOS ≥ 25%, Sharpe > 0,
 ≥ 20 trades, **DSR ≥ 90%**, **WF positivos ≥ 2/4**, **PBO ≤ 30% global y por
 activo**, **walk-forward global con veredicto `ok`**, **régimen aprobado en
