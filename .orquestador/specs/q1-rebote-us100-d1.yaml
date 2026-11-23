@@ -1,0 +1,41 @@
+# Q1 — rebote tras ventas fuertes en US100 D1 (Dukascopy).
+# Hipótesis literal (escrita antes de calcular nada):
+# "Tras una caída extrema de corto plazo en un índice que sigue en tendencia
+#  larga, el precio rebota en los días siguientes porque la caída es
+#  sobrerreacción y liquidez, no un cambio de régimen. Comprar la extensión
+#  debe superar el coste de una operación de varios días y ser estable en los
+#  tres pliegues."
+# Referencia: Boyarchenko, Larsen & Whelan (2023), reversión asimétrica tras
+# ventas fuertes. Solo lado largo; la plantilla d1_extension_reversion ya fija
+# RSI(2), SMA(200), zscore y target 1R. Sin código nuevo.
+campaign_id: q1-rebote-us100-d1
+instrument: US100
+timeframe: D1
+template: d1_extension_reversion
+profile: small
+mode: grid
+seed: 72
+data_source: dukascopy
+account: CFD-001
+firm: ftmo
+cost_mode: best
+cost_accounts: [CFD-001, CFD-006]
+segments:
+  is: ["2014-01-01", "2024-06-30"]
+  oos1: ["2024-07-01", "2025-06-30"]
+  oos2: ["2025-07-01", null]
+# 3 z_n × 3 z_entry × 3 stop_mult = 27 combinaciones.
+grid:
+  dimensions:
+    - name: z_n
+      kind: path
+      path: long_entry.args[0].left.n
+      values: [10, 20, 30]
+    - name: z_entry
+      kind: path
+      path: long_entry.args[0].right.value
+      values: [-1.5, -2.0, -2.5]
+    - name: stop_mult
+      kind: path
+      path: exit.stop.mult
+      values: [1.5, 2.0, 2.5]
