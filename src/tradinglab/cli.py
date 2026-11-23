@@ -10923,6 +10923,86 @@ def discovery_run_cmd(
     )
 
 
+@discovery_app.command("results")
+def discovery_results_cmd(
+    campaign_id: str = typer.Argument(..., help="ID de la campaña"),
+    db: str = typer.Option(None, "--db", help="discovery.db alternativo"),
+    json_output: bool = typer.Option(False, "--json", help="Salida JSON"),
+) -> None:
+    """Resultados IS por estrategia: nivel, estado, veredicto, bruto/neto y motivo."""
+    from .discovery import databank, results
+
+    try:
+        report = results.campaign_results(
+            campaign_id, db_path=db or databank.DEFAULT_DISCOVERY_DB
+        )
+    except Exception as exc:  # noqa: BLE001
+        console.print(f"[red]Results imposible:[/red] {exc}")
+        raise typer.Exit(1) from exc
+    if json_output:
+        console.print_json(
+            data=json.dumps(report, ensure_ascii=False, default=str)
+        )
+        return
+    campaign = report["campaign"]
+    table = Table(
+        title=f"Discovery · results {campaign_id} · "
+        f"{campaign['instrument']} {campaign['timeframe']}"
+    )
+    for column in (
+        "ID",
+        "Params",
+        "Ops",
+        "Bruto R",
+        "Neto R",
+        "cost_R CF1",
+        "cost_R CF6",
+        "PF",
+        "Pliegues+",
+        "Nivel",
+        "Estado",
+        "Veredicto",
+        "Motivo",
+    ):
+        table.add_column(column)
+    for row in report["rows"]:
+        params = row.get("params") or {}
+        cost = row.get("cost_by_account") or {}
+        table.add_row(
+            str(row["id"]),
+            "thr={threshold} stop={stop} rr={target_rr}".format(**params)
+            if params
+            else "Sin datos",
+            str(row.get("trades") or 0),
+            f"{float(row['gross_r']):.4f}"
+            if row.get("gross_r") is not None
+            else "Sin datos",
+            f"{float(row['net_r']):.4f}"
+            if row.get("net_r") is not None
+            else "Sin datos",
+            f"{float(cost['CFD-001']):.4f}"
+            if cost.get("CFD-001") is not None
+            else "Sin datos",
+            f"{float(cost['CFD-006']):.4f}"
+            if cost.get("CFD-006") is not None
+            else "Sin datos",
+            f"{float(row['profit_factor']):.4f}"
+            if row.get("profit_factor") is not None
+            else "Sin datos",
+            f"{row.get('positive_folds', 0)}/{row.get('folds', 0)}",
+            str(row.get("level", 1)),
+            str(row.get("status") or "Sin datos"),
+            str(row.get("verdict") or "Sin datos"),
+            str(row.get("reason") or ""),
+        )
+    console.print(table)
+    console.print(
+        f"[dim]{campaign['status']} · n_total {campaign['n_total']} · "
+        f"evaluados {campaign['n_evaluated']} · finalistas {campaign['n_finalists']} · "
+        "solo IS; OOS-2 no se lee.[/dim]"
+    )
+
+
 @discovery_app.command("show")
 def discovery_show_cmd(
     strategy_id: int = typer.Argument(..., help="ID de la estrategia"),

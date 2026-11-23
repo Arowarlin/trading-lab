@@ -212,20 +212,20 @@ def _frontier_ids(con: sqlite3.Connection, campaign_id: str) -> list[int]:
 def _tested_keys(con: sqlite3.Connection) -> set[tuple[str, str, str, str]]:
     keys: set[tuple[str, str, str, str]] = set()
     for row in con.execute(
-        "SELECT instrument, timeframe, template, config_json FROM disc_campaigns"
+        "SELECT instrument, timeframe, template, config_json, n_evaluated"
+        " FROM disc_campaigns"
     ):
         try:
             config = json.loads(row["config_json"] or "{}")
         except ValueError:
             config = {}
-        keys.add(
-            (
-                str(row["template"] or ""),
-                _canonical(row["instrument"]),
-                str(row["timeframe"] or "").upper(),
-                str(config.get("data_source") or "broker").lower(),
-            )
-        )
+        template = str(row["template"] or "")
+        instrument = _canonical(row["instrument"])
+        timeframe = str(row["timeframe"] or "").upper()
+        source = str(config.get("data_source") or "broker").lower()
+        keys.add((template, instrument, timeframe, source))
+        if int(row["n_evaluated"] or 0) > 0:
+            keys.add((template, instrument, timeframe, "*"))
     return keys
 
 
@@ -1283,7 +1283,12 @@ def suggest(
                 for symbol in account_item.allowed_instruments:
                     canonical = _canonical(symbol)
                     key = (template, canonical, timeframe, source)
-                    if key in tested:
+                    if key in tested or (
+                        template,
+                        canonical,
+                        timeframe,
+                        "*",
+                    ) in tested:
                         continue
                     existing = rows.get(key)
                     if existing is not None and account_item.id in existing["accounts"]:
