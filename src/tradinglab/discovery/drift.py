@@ -170,6 +170,24 @@ def _fill_outcomes(
                 held_short[i] = held
 
 
+def _entry_risk(
+    exit_spec: fastbt.ExitSpec,
+    atr: np.ndarray,
+    entry_price: float,
+    index: int,
+    side: int,
+) -> float | None:
+    if exit_spec.stop == "atr":
+        value = float(atr[index - 1]) * float(exit_spec.stop_mult)
+    elif exit_spec.stop == "pct":
+        value = entry_price * float(exit_spec.stop_mult) / 100.0
+    else:
+        value = (entry_price - float(exit_spec.stop_price or 0.0)) * side
+    if not (value > 0.0) or not np.isfinite(value):
+        return None
+    return float(value)
+
+
 def outcome_tables(
     bars: pd.DataFrame,
     exit_spec: fastbt.ExitSpec,
@@ -177,6 +195,7 @@ def outcome_tables(
     panel: fastbt.CostPanel,
     prepared: fastbt.PreparedBars | None,
     horizon: int,
+    swap_model=None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Resultado de una entrada aleatoria en cada vela, por lado.
 
@@ -224,6 +243,36 @@ def outcome_tables(
         & np.r_[False, mask.allowed_entry[:-1]]
         & (np.isfinite(r_long) | np.isfinite(r_short))
     ).astype(np.int64)
+    if swap_model is not None:
+        open_values = bars["open"].to_numpy(dtype=float)
+        index = bars.index
+        for position in range(len(bars)):
+            if position == 0:
+                continue
+            entry_price = float(open_values[position])
+            for side, values, held_values in (
+                (1, r_long, held_long),
+                (-1, r_short, held_short),
+            ):
+                held = int(held_values[position])
+                if held <= 0 or not np.isfinite(values[position]):
+                    continue
+                exit_position = position + held
+                if exit_position >= len(bars):
+                    continue
+                risk = _entry_risk(
+                    exit_spec, atr, entry_price, position, side
+                )
+                if risk is None:
+                    continue
+                swap_r = swap_model.r(
+                    side="long" if side == 1 else "short",
+                    entry_price=entry_price,
+                    risk_price=risk,
+                    entry_time=index[position],
+                    exit_time=index[exit_position],
+                )
+                values[position] += swap_r
     return r_long, r_short, held_long, held_short, eligible
 
 
@@ -366,7 +415,8 @@ def evaluate(
     )
     control_spec = replace(exit_spec, target=None)
     r_long, r_short, held_long, held_short, eligible = outcome_tables(
-        bars, control_spec, limits, panel, prepared, max(1, horizon)
+        bars, control_spec, limits, panel, prepared, max(1, horizon),
+        swap_model=getattr(cost, "swap", None),
     )
     long_held = held_long[eligible]
     long_held = long_held[long_held > 0]

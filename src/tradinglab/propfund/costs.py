@@ -21,6 +21,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import pandas as pd
 import yaml
 
 from ..config import ROOT
@@ -29,6 +30,7 @@ from .models import Market
 
 LEGACY_COSTS_PATH = ROOT / "config" / "costs.yaml"
 PROPFUND_COSTS_PATH = ROOT / "config" / "propfund" / "costs.yaml"
+SWAP_PATH = ROOT / "config" / "propfund" / "swap.yaml"
 
 # Nombre del símbolo en config/costs.yaml (tabla FTMO verificada) por id canónico.
 _FTMO_COST_KEYS = {
@@ -56,6 +58,16 @@ class CostProfile:
     nfa_fee_per_side: float | None = None
     swap_long_per_lot: float | None = None
     swap_short_per_lot: float | None = None
+    # Datos MT5 en crudo: el modo decide la conversion (points, interest...).
+    swap_long: float | None = None
+    swap_short: float | None = None
+    swap_mode: int | None = None
+    swap_rollover3days: int | None = None
+    swap_rollover_hour: str | None = None
+    swap_rollover_tz: str | None = None
+    point: float | None = None
+    swap_source: str | None = None
+    swap_measured_at: str | None = None
     source: str = ""
     verified: bool = False
     measured_at: str | None = None
@@ -85,6 +97,164 @@ class CostEstimate:
             "cost_r": None if self.cost_r is None else round(self.cost_r, 4),
             "source": self.source,
         }
+
+
+def rollover_units(
+    entry_time,
+    exit_time,
+    *,
+    tz: str = "America/New_York",
+    hour: int = 17,
+    triple_day: int | None = None,
+) -> int:
+    """Noches de swap entre entrada y salida, con el triple del bróker.
+
+    Cuenta los cierres diarios (por defecto 17:00 NY, que es 00:00 del servidor)
+    estrictamente posteriores a la entrada y hasta la salida. Solo lunes a
+    viernes; el día triple del servidor se aplica al cierre NY anterior
+    (servidor 00:00 = NY 17:00 del día anterior). El fin de semana queda
+    cubierto por el triple, como en el rollover estándar.
+    """
+
+    start = pd.Timestamp(entry_time)
+    end = pd.Timestamp(exit_time)
+    if start.tzinfo is None or end.tzinfo is None:
+        raise ValueError("entry_time/exit_time deben tener zona horaria")
+    if end <= start:
+        return 0
+    local_start = start.tz_convert(tz)
+    local_end = end.tz_convert(tz)
+    units = 0
+    day = local_start.normalize()
+    last = local_end.normalize()
+    while day <= last:
+        boundary = day + pd.Timedelta(hours=int(hour))
+        if start < boundary <= end and boundary.weekday() < 5:
+            # 17:00 NY + 7 h = 00:00 del servidor del día siguiente. MT5
+            # enumera 0=domingo; Python 0=lunes: (weekday + 2) % 7.
+            server_day = (boundary.weekday() + 2) % 7
+            units += 3 if triple_day is not None and server_day == int(triple_day) else 1
+        day += pd.Timedelta(days=1)
+    return int(units)
+
+
+@dataclass(frozen=True)
+class SwapSpec:
+    """Swap medido de MT5 y su conversión a R por operación."""
+
+    long: float
+    short: float
+    mode: int
+    triple_day: int | None = None
+    point: float | None = None
+    rollover_hour: int = 17
+    rollover_tz: str = "America/New_York"
+
+    @classmethod
+    def from_profile(cls, profile: CostProfile) -> "SwapSpec | None":
+        if (
+            profile.swap_mode is None
+            or profile.swap_long is None
+            or profile.swap_short is None
+        ):
+            return None
+        hour = 17
+        raw_hour = str(profile.swap_rollover_hour or "17:00")
+        try:
+            hour = int(raw_hour.split(":")[0])
+        except (TypeError, ValueError):
+            hour = 17
+        return cls(
+            long=float(profile.swap_long),
+            short=float(profile.swap_short),
+            mode=int(profile.swap_mode),
+            triple_day=(
+                None
+                if profile.swap_rollover3days is None
+                else int(profile.swap_rollover3days)
+            ),
+            point=None if profile.point is None else float(profile.point),
+            rollover_hour=hour,
+            rollover_tz=str(profile.swap_rollover_tz or "America/New_York"),
+        )
+
+    def units(self, entry_time, exit_time) -> int:
+        return rollover_units(
+            entry_time,
+            exit_time,
+            tz=self.rollover_tz,
+            hour=self.rollover_hour,
+            triple_day=self.triple_day,
+        )
+
+    def total_usd(
+        self,
+        *,
+        side: str,
+        price: float,
+        contract_size: float,
+        lots: float,
+        nights: int,
+    ) -> float:
+        """Swap en USD (negativo = coste) para ``nights`` noches ponderadas."""
+
+        count = int(nights)
+        if count == 0:
+            return 0.0
+        raw = self.long if str(side).lower() == "long" else self.short
+        if self.mode == 0:
+            return 0.0
+        if self.mode == 1:
+            if self.point is None:
+                raise ValueError("swap mode points sin point")
+            return raw * self.point * contract_size * lots * count
+        if self.mode == 5:
+            return price * contract_size * lots * (raw / 100.0 / 360.0) * count
+        raise ValueError(f"swap mode {self.mode} no soportado")
+
+    def per_night_r(
+        self,
+        *,
+        side: str,
+        entry_price: float,
+        risk_price: float,
+    ) -> float:
+        risk = float(risk_price)
+        if not (risk > 0.0):
+            raise ValueError("risk_price debe ser > 0")
+        raw = self.long if str(side).lower() == "long" else self.short
+        if self.mode == 0:
+            return 0.0
+        if self.mode == 1:
+            if self.point is None:
+                raise ValueError("swap mode points sin point")
+            return float(raw * self.point / risk)
+        if self.mode == 5:
+            return float(entry_price * (raw / 100.0 / 360.0) / risk)
+        raise ValueError(f"swap mode {self.mode} no soportado")
+
+    def r(
+        self,
+        *,
+        side: str,
+        entry_price: float,
+        risk_price: float,
+        entry_time,
+        exit_time,
+    ) -> float:
+        """Swap en R (positivo = crédito, negativo = coste), nocturno."""
+
+        units = self.units(entry_time, exit_time)
+        if units == 0:
+            return 0.0
+        return float(
+            self.per_night_r(
+                side=side,
+                entry_price=entry_price,
+                risk_price=risk_price,
+            )
+            * units
+        )
 
 
 def _yaml(path: Path) -> dict:
@@ -137,6 +307,27 @@ def load_profile(account: str, symbol: str, *, firm: str | None = None,
     for key, value in entry.items():
         if key in profile.__dataclass_fields__ and value is not None:
             setattr(profile, key, value)
+
+    swap_entry = (
+        ((_yaml(SWAP_PATH).get("accounts") or {}).get(account) or {})
+        .get("symbols", {})
+        .get(item.id)
+        or {}
+    )
+    for key in (
+        "swap_long",
+        "swap_short",
+        "swap_mode",
+        "swap_rollover3days",
+        "swap_rollover_hour",
+        "swap_rollover_tz",
+        "point",
+        "swap_source",
+        "swap_measured_at",
+    ):
+        value = swap_entry.get(key)
+        if value is not None:
+            setattr(profile, key, value)
     return profile
 
 
@@ -181,11 +372,28 @@ def estimate_cfd(profile: CostProfile, *, lots: float, price: float,
         comp["slippage"] = profile.slippage_price * size * lots * 2
 
     if nights:
-        swap = profile.swap_long_per_lot if side == "long" else profile.swap_short_per_lot
-        if swap is None:
-            missing.append("swap")
+        spec = SwapSpec.from_profile(profile)
+        if spec is not None:
+            try:
+                comp["swap"] = spec.total_usd(
+                    side=side,
+                    price=price,
+                    contract_size=size,
+                    lots=lots,
+                    nights=int(nights),
+                )
+            except ValueError as exc:
+                missing.append(f"swap:{exc}")
         else:
-            comp["swap"] = -float(swap) * lots * nights  # swap negativo = coste
+            swap = (
+                profile.swap_long_per_lot
+                if side == "long"
+                else profile.swap_short_per_lot
+            )
+            if swap is None:
+                missing.append("swap")
+            else:
+                comp["swap"] = -float(swap) * lots * nights  # swap negativo = coste
 
     total = sum(comp.values())
     cost_r = (total / risk_usd) if risk_usd else None
@@ -223,8 +431,10 @@ def estimate_futures(profile: CostProfile, *, contracts: int, risk_usd: float | 
 __all__ = [
     "CostEstimate",
     "CostProfile",
+    "SwapSpec",
     "broker_symbol",
     "estimate_cfd",
     "estimate_futures",
     "load_profile",
+    "rollover_units",
 ]

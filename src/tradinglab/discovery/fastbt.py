@@ -25,7 +25,7 @@ se ignoran. La fecha de ``max_trades_per_day`` y los cortes de sesión,
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date
 from typing import Any, Mapping
 
@@ -33,7 +33,7 @@ import numpy as np
 import pandas as pd
 
 from ..indicators import atr as atr_series
-from ..propfund.costs import CostProfile, estimate_cfd, estimate_futures
+from ..propfund.costs import CostProfile, SwapSpec, estimate_cfd, estimate_futures
 from ..propfund.instruments import resolve
 from ..propfund.models import Market
 from .compiler import Signals
@@ -259,6 +259,7 @@ class CfdProfileCosts:
         self.contract_size = contract_size or _resolve_contract_size(profile.symbol)
         self.spread_bps_by_hour = spread_bps_by_hour
         self.use_p75 = use_p75
+        self.swap = SwapSpec.from_profile(profile)
         spread = (
             profile.spread_p75_price
             if use_p75 and profile.spread_p75_price is not None
@@ -560,6 +561,7 @@ class Trade:
     r_gross: float | None
     r_cost: float | None
     r_net: float | None
+    swap_r: float | None = None
 
     @property
     def side_sign(self) -> int:
@@ -1704,6 +1706,37 @@ def run(
         )
 
     daily: dict[date, float] = {}
+    swap_model = getattr(cost, "swap", None)
+    if swap_model is not None and not getattr(cost, "swap_managed", False):
+        adjusted: list[Trade] = []
+        for trade in trades:
+            if (
+                trade.r_net is None
+                or trade.risk_price is None
+                or not np.isfinite(float(trade.risk_price))
+                or float(trade.risk_price) <= 0
+            ):
+                adjusted.append(trade)
+                continue
+            swap_r = swap_model.r(
+                side=trade.side,
+                entry_price=trade.entry_price,
+                risk_price=float(trade.risk_price),
+                entry_time=trade.entry_time,
+                exit_time=trade.exit_time,
+            )
+            if swap_r:
+                adjusted.append(
+                    replace(
+                        trade,
+                        r_cost=float(trade.r_cost or 0.0) - swap_r,
+                        r_net=float(trade.r_net) + swap_r,
+                        swap_r=swap_r,
+                    )
+                )
+            else:
+                adjusted.append(trade)
+        trades = adjusted
     for trade in trades:
         if trade.r_net is None:
             continue

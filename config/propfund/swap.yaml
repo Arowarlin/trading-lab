@@ -1,0 +1,158 @@
+# R9c — swap medido en MT5 (attach-only) para el coste del Discovery Lab.
+#
+# * ``swap_long`` / ``swap_short`` son los valores crudos de ``symbol_info``.
+# * ``swap_mode``: 1 = points, 5 = interest_current (MT5).
+# * ``swap_rollover3days``: día triple en día de servidor (0=domingo).
+# * ``swap_rollover_hour``/``swap_rollover_tz``: 00:00 del servidor equivale a
+#   17:00 de Nueva York; MT5 no expone la hora, se usa el corte de sesión NY.
+# * Medición attach-only, login verificado antes y después. Sin órdenes.
+version: 1
+measured_at: '2026-11-23T22:57:47+00:00'
+source: >-
+  MT5 symbol_info; CFD-001 login 1515349730 (FTMO-Demo) y CFD-006 login
+  40000459328 (FundingPips-Trial); servidor 00:00 = 17:00 America/New_York.
+accounts:
+  CFD-001:
+    symbols:
+      US100:
+        swap_long: 1076.28
+        swap_short: -1677.49
+        swap_mode: 1
+        swap_rollover3days: 5
+        swap_rollover_hour: "17:00"
+        swap_rollover_tz: America/New_York
+        point: 0.01
+        swap_source: 'MT5 US100.cash, 2026-11-23, login 1515349730'
+        swap_measured_at: '2026-11-23T22:57:47+00:00'
+      US500:
+        swap_long: 32.83
+        swap_short: -198.56
+        swap_mode: 1
+        swap_rollover3days: 5
+        swap_rollover_hour: "17:00"
+        swap_rollover_tz: America/New_York
+        point: 0.01
+        swap_source: 'MT5 US500.cash, 2026-11-23, login 1515349730'
+        swap_measured_at: '2026-11-23T22:57:47+00:00'
+      US30:
+        swap_long: -391.97
+        swap_short: -760.67
+        swap_mode: 1
+        swap_rollover3days: 5
+        swap_rollover_hour: "17:00"
+        swap_rollover_tz: America/New_York
+        point: 0.01
+        swap_source: 'MT5 US30.cash, 2026-11-23, login 1515349730'
+        swap_measured_at: '2026-11-23T22:57:47+00:00'
+      XAUUSD:
+        swap_long: -54.46
+        swap_short: -15.0
+        swap_mode: 1
+        swap_rollover3days: 3
+        swap_rollover_hour: "17:00"
+        swap_rollover_tz: America/New_York
+        point: 0.01
+        swap_source: 'MT5 XAUUSD, 2026-11-23, login 1515349730'
+        swap_measured_at: '2026-11-23T22:57:47+00:00'
+      EURUSD:
+        swap_long: -8.44
+        swap_short: 0.19
+        swap_mode: 1
+        swap_rollover3days: 3
+        swap_rollover_hour: "17:00"
+        swap_rollover_tz: America/New_York
+        point: 0.00001
+        swap_source: 'MT5 EURUSD, 2026-11-23, login 1515349730'
+        swap_measured_at: '2026-11-23T22:57:47+00:00'
+      GBPUSD:
+        swap_long: -4.47
+        swap_short: -5.88
+        swap_mode: 1
+        swap_rollover3days: 3
+        swap_rollover_hour: "17:00"
+        swap_rollover_tz: America/New_York
+        point: 0.00001
+        swap_source: 'MT5 GBPUSD, 2026-11-23, login 1515349730'
+        swap_measured_at: '2026-11-23T22:57:47+00:00'
+      USDJPY:
+        swap_long: 1.78
+        swap_short: -17.83
+        swap_mode: 1
+        swap_rollover3days: 3
+        swap_rollover_hour: "17:00"
+        swap_rollover_tz: America/New_York
+        point: 0.001
+        swap_source: 'MT5 USDJPY, 2026-11-23, login 1515349730'
+        swap_measured_at: '2026-11-23T22:57:47+00:00'
+  CFD-006:
+    symbols:
+      US100:
+        swap_long: -7.33
+        swap_short: -1.33
+        swap_mode: 5
+        swap_rollover3days: 5
+        swap_rollover_hour: "17:00"
+        swap_rollover_tz: America/New_York
+        point: 0.01
+        swap_source: 'MT5 NDX100, 2026-11-23, login 40000459328'
+        swap_measured_at: '2026-11-23T22:57:47+00:00'
+      US500:
+        swap_long: -7.33
+        swap_short: -1.33
+        swap_mode: 5
+        swap_rollover3days: 5
+        swap_rollover_hour: "17:00"
+        swap_rollover_tz: America/New_York
+        point: 0.01
+        swap_source: 'MT5 SPX500, 2026-11-23, login 40000459328'
+        swap_measured_at: '2026-11-23T22:57:47+00:00'
+      US30:
+        swap_long: -7.33
+        swap_short: -1.33
+        swap_mode: 5
+        swap_rollover3days: 5
+        swap_rollover_hour: "17:00"
+        swap_rollover_tz: America/New_York
+        point: 0.01
+        swap_source: 'MT5 DJI30, 2026-11-23, login 40000459328'
+        swap_measured_at: '2026-11-23T22:57:47+00:00'
+      XAUUSD:
+        swap_long: -67.986
+        swap_short: 25.026
+        swap_mode: 1
+        swap_rollover3days: 3
+        swap_rollover_hour: "17:00"
+        swap_rollover_tz: America/New_York
+        point: 0.01
+        swap_source: 'MT5 XAUUSD, 2026-11-23, login 40000459328'
+        swap_measured_at: '2026-11-23T22:57:47+00:00'
+      EURUSD:
+        swap_long: -8.191
+        swap_short: 3.857
+        swap_mode: 1
+        swap_rollover3days: 3
+        swap_rollover_hour: "17:00"
+        swap_rollover_tz: America/New_York
+        point: 0.00001
+        swap_source: 'MT5 EURUSD, 2026-11-23, login 40000459328'
+        swap_measured_at: '2026-11-23T22:57:47+00:00'
+      GBPUSD:
+        swap_long: -2.872
+        swap_short: -1.38
+        swap_mode: 1
+        swap_rollover3days: 3
+        swap_rollover_hour: "17:00"
+        swap_rollover_tz: America/New_York
+        point: 0.00001
+        swap_source: 'MT5 GBPUSD, 2026-11-23, login 40000459328'
+        swap_measured_at: '2026-11-23T22:57:47+00:00'
+      USDJPY:
+        swap_long: 4.542
+        swap_short: -18.868
+        swap_mode: 1
+        swap_rollover3days: 3
+        swap_rollover_hour: "17:00"
+        swap_rollover_tz: America/New_York
+        point: 0.001
+        swap_source: 'MT5 USDJPY, 2026-11-23, login 40000459328'
+        swap_measured_at: '2026-11-23T22:57:47+00:00'

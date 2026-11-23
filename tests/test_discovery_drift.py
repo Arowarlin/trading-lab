@@ -14,7 +14,6 @@ from tradinglab.discovery.engine import (
     _rank1_candidates,
     synthetic_frame,
 )
-from tradinglab.propfund.costs import load_profile
 
 SEGMENTS = {
     "is": ["2023-01-02", "2023-04-30"],
@@ -48,7 +47,10 @@ def _setup(frame: pd.DataFrame) -> jobs.QueueSetup:
 
 
 def _prepared(frame: pd.DataFrame):
-    cost = fastbt.cost_from_profile(load_profile("CFD-001", "US100", firm="ftmo"))
+    # Coste sintético sin swap: este test aísla el percentil de deriva.
+    cost = fastbt.cfd_costs_from_bps(
+        commission_bps=0.0, slippage_bps=0.0, spread_bps=0.0
+    )
     limits = fastbt.RunLimits(
         session_tz="America/New_York",
         session_start="00:00",

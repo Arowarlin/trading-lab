@@ -21,7 +21,7 @@ import numpy as np
 import pandas as pd
 
 from ..config import ROOT
-from ..propfund.costs import CostProfile, broker_symbol, load_profile
+from ..propfund.costs import CostProfile, SwapSpec, broker_symbol, load_profile
 from ..propfund.instruments import resolve
 from ..propfund.models import ConnectionState, Market
 from ..propfund.registry import load_registry
@@ -62,6 +62,10 @@ class AccountCost:
 
     def panel(self, bars: pd.DataFrame) -> fastbt.CostPanel:
         return self.cost.panel(bars)
+
+    @property
+    def swap(self) -> SwapSpec | None:
+        return SwapSpec.from_profile(self.profile)
 
 
 @dataclass(frozen=True)
@@ -315,6 +319,7 @@ class CostBook:
     """Libro de costes por cuenta; ``worst`` aplica el máximo por operación."""
 
     market = "cfd"
+    swap_managed = True
 
     def __init__(
         self,
@@ -339,6 +344,12 @@ class CostBook:
     @property
     def account_ids(self) -> list[str]:
         return [item.account for item in self.accounts]
+
+    @property
+    def swap(self):
+        """Swap representativo de la primera cuenta para el control de deriva."""
+
+        return self.accounts[0].swap
 
     def label(self) -> str:
         return f"{self.mode}:{'+'.join(self.account_ids)}:{self.accounts[0].instrument}"
@@ -379,7 +390,7 @@ class CostBook:
         worst_flags: list[str | None] = []
         selected_flags: list[str | None] = []
         for trade in trades:
-            per_account: dict[str, tuple[float, float, float]] = {}
+            per_account: dict[str, tuple[float, float, float, float]] = {}
             for item, panel in zip(self.accounts, self._panels):
                 entry_bps = float(panel.entry_bps[trade.entry_index])
                 exit_bps = (
@@ -391,7 +402,18 @@ class CostBook:
                 if risk is None or not np.isfinite(float(risk)) or float(risk) <= 0:
                     continue
                 rc = (entry_bps + exit_bps) / 10_000.0 * trade.entry_price / float(risk)
-                per_account[item.account] = (rc, entry_bps, exit_bps)
+                swap_r = 0.0
+                swap = getattr(item, "swap", None)
+                if swap is not None:
+                    swap_r = swap.r(
+                        side=trade.side,
+                        entry_price=trade.entry_price,
+                        risk_price=float(risk),
+                        entry_time=trade.entry_time,
+                        exit_time=trade.exit_time,
+                    )
+                rc -= swap_r
+                per_account[item.account] = (rc, entry_bps, exit_bps, swap_r)
                 cost_values[item.account].append(rc)
             if not per_account:
                 adjusted.append(trade)
@@ -407,7 +429,7 @@ class CostBook:
                 selected_name = worst_name
             else:
                 selected_name = self.accounts[0].account
-            rc, entry_bps, exit_bps = per_account[selected_name]
+            rc, entry_bps, exit_bps, swap_r = per_account[selected_name]
             r_net = trade.r_gross - rc if trade.r_gross is not None else None
             adjusted.append(
                 replace(
@@ -416,6 +438,7 @@ class CostBook:
                     exit_cost_bps=exit_bps,
                     r_cost=rc,
                     r_net=r_net,
+                    swap_r=swap_r,
                 )
             )
             best_flags.append(best_name)
