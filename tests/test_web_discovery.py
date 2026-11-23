@@ -206,6 +206,8 @@ def _discovery_db(path: Path) -> None:
 
 
 def _lab_db(path: Path) -> None:
+    from datetime import date, datetime, timedelta, timezone
+
     con = sqlite3.connect(path)
     con.executescript(
         """
@@ -215,9 +217,12 @@ def _lab_db(path: Path) -> None:
         );
         """
     )
+    iso = datetime.now(timezone.utc).isocalendar()
+    week_start = date.fromisocalendar(int(iso.year), int(iso.week), 1)
+    stamp = (week_start + timedelta(days=1)).isoformat() + "T10:00:00"
     con.execute(
         "INSERT INTO strategy_trials (symbol, ts, run_id, counted) VALUES (?,?,?,?)",
-        ("US100.CASH", "2026-11-18T10:00:00", 1, 1),
+        ("US100.CASH", stamp, 1, 1),
     )
     con.commit()
     con.close()

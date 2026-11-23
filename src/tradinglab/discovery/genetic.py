@@ -70,7 +70,7 @@ def template_timeframes(name: str) -> tuple[str, ...]:
     if not path.exists():
         raise FileNotFoundError(f"Sin datos: no existe la plantilla {name}")
     data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    raw = data.get("timeframes")
+    raw = data.get("valid_timeframes") or data.get("timeframes")
     if not isinstance(raw, list) or not raw:
         raise ValueError(f"la plantilla {name} no declara timeframes")
     result: list[str] = []

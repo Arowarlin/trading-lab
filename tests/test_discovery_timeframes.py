@@ -59,7 +59,21 @@ def test_timeframes_canonicas_y_conversion() -> None:
 def test_plantillas_declaran_timeframes_compatibles() -> None:
     assert genetic.template_timeframes("ny_open_vol_filter") == ("M1", "M5", "M15")
     assert genetic.template_timeframes("session_breakout_htf") == ("M5", "M15", "M30")
-    assert genetic.template_timeframes("asia_range_reversion")[-2:] == ("H4", "D1")
+    assert genetic.template_timeframes("asia_range_reversion") == (
+        "M5",
+        "M15",
+        "M30",
+        "H1",
+    )
+    for name in (
+        "asia_range_reversion",
+        "intraday_momentum_close",
+        "intraday_momentum_close_v2",
+        "ny_open_vol_filter",
+        "session_breakout_htf",
+    ):
+        valid = genetic.template_timeframes(name)
+        assert "H4" not in valid and "D1" not in valid
 
 
 def test_minutos_a_velas_en_specs() -> None:
@@ -154,7 +168,7 @@ def test_timeframe_entra_en_config_hash(tmp_path, monkeypatch) -> None:
     assert one["config_hash"] != two["config_hash"]
 
 
-def test_h4_d1_exigen_dukascopy(tmp_path, monkeypatch) -> None:
+def test_h4_d1_no_compatibles(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(campaigns, "_quality", _benign_quality)
     frame = _campaign_frame()
     segments = {
@@ -162,28 +176,18 @@ def test_h4_d1_exigen_dukascopy(tmp_path, monkeypatch) -> None:
         "oos1": ["2023-01-21", "2023-01-25"],
         "oos2": ["2023-01-26", None],
     }
-    with pytest.raises(campaigns.CampaignError, match="Dukascopy"):
-        campaigns.register(
-            "US100",
-            "H4",
-            "asia_range_reversion",
-            frame=frame,
-            segments=segments,
-            data_source="broker",
-            dry_run=True,
-            db_path=tmp_path / "discovery.db",
-        )
-    preview = campaigns.register(
-        "US100",
-        "H4",
-        "asia_range_reversion",
-        frame=frame,
-        segments=segments,
-        data_source="dukascopy",
-        dry_run=True,
-        db_path=tmp_path / "discovery.db",
-    )
-    assert preview["config"]["data_source"] == "dukascopy"
+    for timeframe in ("H4", "D1"):
+        with pytest.raises(campaigns.CampaignError, match=f"no declara {timeframe}"):
+            campaigns.register(
+                "US100",
+                timeframe,
+                "asia_range_reversion",
+                frame=frame,
+                segments=segments,
+                data_source="dukascopy",
+                dry_run=True,
+                db_path=tmp_path / "discovery.db",
+            )
 
 
 def test_plantilla_no_compatible_se_rechaza(tmp_path) -> None:

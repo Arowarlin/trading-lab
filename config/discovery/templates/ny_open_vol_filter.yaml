@@ -1,6 +1,7 @@
 name: ny_open_vol_filter
 symmetric: true
 timeframes: [M1, M5, M15]
+valid_timeframes: [M1, M5, M15]
 description: "Apertura NY: ruptura del rango de apertura con volatilidad alta."
 strategy:
   dsl_version: "1"

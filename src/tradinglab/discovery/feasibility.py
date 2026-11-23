@@ -9,6 +9,7 @@ suma al DSR y no abre OOS-1/OOS-2.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -132,10 +133,66 @@ def _context(campaign_id: str, db_path):
     return campaign, setup, bars, cost, prepared, book
 
 
+def _context_from(campaign, setup, bars):
+    book = None
+    if setup.legacy_cost:
+        from ..propfund.costs import load_profile
+
+        try:
+            profile = load_profile(setup.account, setup.instrument, firm=setup.firm)
+            cost = fastbt.cost_from_profile(profile, use_p75=setup.use_p75)
+        except Exception as exc:  # noqa: BLE001 - coste ausente se informa como Sin datos
+            raise campaigns.CampaignError(f"Sin datos: coste {exc}") from exc
+    else:
+        from .costs import build_cost_book_for_setup
+
+        try:
+            book = build_cost_book_for_setup(setup)
+            cost = book
+        except Exception as exc:  # noqa: BLE001
+            raise campaigns.CampaignError(f"Sin datos: coste {exc}") from exc
+    limits = fastbt.RunLimits(
+        session_tz=setup.session_tz,
+        session_start=setup.session_start,
+        session_end=setup.session_end,
+        flat_at=setup.flat_at,
+        weekdays=setup.weekdays,
+    )
+    prepared = fastbt.prepare(
+        bars,
+        cost,
+        atr_windows=(setup.stop_n, setup.trail_n),
+        sessions=(limits,),
+    )
+    return campaign, setup, bars, cost, prepared, book
+
+
+def _context(campaign_id: str, db_path):
+    campaign = databank.get_campaign(campaign_id, db_path=db_path)
+    if campaign is None:
+        raise campaigns.CampaignError(f"campaña no registrada: {campaign_id}")
+    setup = jobs.QueueSetup.from_campaign(campaign)
+    bars = campaigns.load_segment(campaign_id, "is", db_path=db_path)
+    return _context_from(campaign, setup, bars)
+
+
 def check(campaign_id: str, *, db_path=None) -> dict[str, Any]:
     """Devuelve la viabilidad de cada combinación/individuo inicial."""
 
-    campaign, setup, bars, cost, prepared, book = _context(campaign_id, db_path)
+    context = _context(campaign_id, db_path)
+    return _check_context(*context, campaign_id=campaign_id)
+
+
+def _check_context(
+    campaign,
+    setup,
+    bars,
+    cost,
+    prepared,
+    book,
+    *,
+    campaign_id: str,
+) -> dict[str, Any]:
     strategies, population, mode, template, seed = candidate_strategies(campaign)
     config = load_engine_config()
     validation = config.validation.for_timeframe(setup.timeframe)
@@ -299,6 +356,30 @@ def check(campaign_id: str, *, db_path=None) -> dict[str, Any]:
         "passes": feasible_pct >= MIN_FEASIBLE_PCT,
         "rows": [asdict(row) for row in rows],
     }
+
+
+def check_spec(
+    spec_path: str | Path,
+    *,
+    bars: pd.DataFrame | None = None,
+) -> dict[str, Any]:
+    """Feasibility sobre una especificación, sin registrar campaña."""
+    from .spec import load_spec
+
+    campaign = load_spec(spec_path)
+    setup = jobs.QueueSetup.from_campaign(campaign)
+    if bars is None:
+        frame = campaigns._source_frame(
+            setup.instrument, setup.timeframe, setup.data_source
+        )
+        frame = snapshots.closed_bars(frame, setup.timeframe)
+        start = pd.Timestamp(campaign["is_start"], tz="UTC")
+        end = pd.Timestamp(campaign["is_end"], tz="UTC")
+        bars = frame[(frame.index >= start) & (frame.index <= end)]
+    context = _context_from(campaign, setup, bars)
+    return _check_context(
+        *context, campaign_id=str(campaign["campaign_id"])
+    )
 
 
 def _scan_strategies(

@@ -10,6 +10,7 @@ from __future__ import annotations
 import random
 import time
 from dataclasses import dataclass, field, replace
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -175,6 +176,22 @@ def preflight(campaign_id: str, *, db_path=None) -> dict[str, Any]:
     campaign = databank.get_campaign(campaign_id, db_path=db_path)
     if campaign is None:
         raise campaigns.CampaignError(f"campaña no registrada: {campaign_id}")
+    return _preflight_campaign(campaign, campaign_id)
+
+
+def preflight_spec(spec_path: str | Path) -> dict[str, Any]:
+    """Preflight sobre una especificación, sin registrar campaña."""
+    from .spec import load_spec
+
+    campaign = load_spec(spec_path)
+    return _preflight_campaign(
+        campaign, str(campaign["campaign_id"])
+    )
+
+
+def _preflight_campaign(
+    campaign: dict[str, Any], campaign_id: str
+) -> dict[str, Any]:
     strategies, population, mode, template, seed = candidate_strategies(campaign)
     setup = jobs.QueueSetup.from_campaign(campaign)
     reasons: dict[str, int] = {}

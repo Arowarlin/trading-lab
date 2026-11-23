@@ -1,6 +1,7 @@
 name: session_breakout_htf
 symmetric: false
 timeframes: [M5, M15, M30]
+valid_timeframes: [M5, M15, M30]
 description: "Ruptura del rango de apertura con confirmación de la última vela H1 cerrada."
 strategy:
   dsl_version: "1"

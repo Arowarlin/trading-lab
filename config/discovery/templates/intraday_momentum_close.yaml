@@ -1,6 +1,7 @@
 name: intraday_momentum_close
 symmetric: true
 timeframes: [M5, M15, M30, H1]
+valid_timeframes: [M5, M15, M30]
 description: >
   Momentum intradía de cierre en US100: el rendimiento del inicio de la sesión
   NY (09:30 → 10:00/10:30/11:00) predice el del tramo final. Entrada en la

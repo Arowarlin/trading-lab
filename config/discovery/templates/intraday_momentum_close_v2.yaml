@@ -1,6 +1,7 @@
 name: intraday_momentum_close_v2
 symmetric: true
 timeframes: [M5, M15, M30, H1]
+valid_timeframes: [M5, M15, M30]
 description: >
   Momentum intradía de cierre en US100, rejilla fijada antes de mirar
   resultados: retorno de la mañana (09:30 -> 10:00/10:30) y entrada en la

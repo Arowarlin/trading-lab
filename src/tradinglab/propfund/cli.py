@@ -209,6 +209,7 @@ def onboarding_mtf(
         "TF",
         "Desde",
         "R",
+        "ATR %",
         "Coste",
         "cost_R",
         "Viable",
@@ -222,6 +223,9 @@ def onboarding_mtf(
             row["timeframe"],
             row.get("usable_from") or "—",
             f"{row['r']:.6g}" if row.get("r") is not None else "Sin datos",
+            f"{row['atr_pct']:.3f}"
+            if row.get("atr_pct") is not None
+            else "Sin datos",
             f"{row['cost']['total']:.6g}"
             if row.get("cost", {}).get("total") is not None
             else "Sin datos",

@@ -10233,19 +10233,30 @@ def discovery_register_cmd(
 
 @discovery_app.command("preflight")
 def discovery_preflight_cmd(
-    campaign_id: str = typer.Argument(..., help="ID de la campaña"),
+    campaign_id: str = typer.Argument(None, help="ID de la campaña"),
+    spec: str = typer.Option(
+        None, "--spec", help="Especificación YAML; no registra campaña"
+    ),
     db: str = typer.Option(None, "--db", help="discovery.db alternativo"),
 ) -> None:
     """Solo inicialización: sin backtests ni OOS. Falla si faltan válidos."""
 
     from .discovery import engine
 
+    if bool(campaign_id) == bool(spec):
+        console.print("[red]Indica campaign_id o --spec (uno solo).[/red]")
+        raise typer.Exit(2)
     try:
-        report = engine.preflight(campaign_id, db_path=db)
+        if spec:
+            report = engine.preflight_spec(spec)
+            label = f"spec {spec}"
+        else:
+            report = engine.preflight(campaign_id, db_path=db)
+            label = str(campaign_id)
     except Exception as exc:  # noqa: BLE001
         console.print(f"[red]Preflight imposible:[/red] {exc}")
         raise typer.Exit(1) from exc
-    table = Table(title=f"Discovery · preflight {campaign_id}")
+    table = Table(title=f"Discovery · preflight {label}")
     table.add_column("Campo", style="bold")
     table.add_column("Valor")
     table.add_row("Estado", str(report["status"]))
@@ -10278,19 +10289,30 @@ def discovery_preflight_cmd(
 
 @discovery_app.command("feasibility")
 def discovery_feasibility_cmd(
-    campaign_id: str = typer.Argument(..., help="ID del borrador de campaña"),
+    campaign_id: str = typer.Argument(None, help="ID del borrador de campaña"),
+    spec: str = typer.Option(
+        None, "--spec", help="Especificación YAML; no registra campaña"
+    ),
     db: str = typer.Option(None, "--db", help="discovery.db alternativo"),
 ) -> None:
     """Viabilidad sin PnL: operaciones, pliegues, coste_R y tiempo. No suma al DSR."""
 
     from .discovery import feasibility
 
+    if bool(campaign_id) == bool(spec):
+        console.print("[red]Indica campaign_id o --spec (uno solo).[/red]")
+        raise typer.Exit(2)
     try:
-        report = feasibility.check(campaign_id, db_path=db)
+        if spec:
+            report = feasibility.check_spec(spec)
+            label = f"spec {spec}"
+        else:
+            report = feasibility.check(campaign_id, db_path=db)
+            label = str(campaign_id)
     except Exception as exc:  # noqa: BLE001
         console.print(f"[red]Feasibility imposible:[/red] {exc}")
         raise typer.Exit(1) from exc
-    table = Table(title=f"Discovery · feasibility {campaign_id}")
+    table = Table(title=f"Discovery · feasibility {label}")
     table.add_column("#", justify="right")
     table.add_column("Combinación")
     table.add_column("Ops IS", justify="right")
@@ -10621,7 +10643,8 @@ def discovery_suggest_cmd(
         "Cuentas",
         "Ops IS",
         "Ops/pliegue",
-        "Cost_R",
+        "Cost_R cribado",
+        "Cost_R ops",
         "Etiqueta",
     ):
         table.add_column(column)
@@ -10635,6 +10658,9 @@ def discovery_suggest_cmd(
             ", ".join(row["accounts"]),
             str(row["trades_is"]),
             "/".join(str(value) for value in row["fold_trades"]),
+            "Sin datos"
+            if row.get("cost_r_screening") is None
+            else f"{float(row['cost_r_screening']):.4f}",
             "Sin datos" if row["cost_r"] is None else f"{float(row['cost_r']):.4f}",
             str(row["label"]),
         )

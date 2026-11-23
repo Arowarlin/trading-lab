@@ -103,3 +103,32 @@ def test_atr_tipico_sintetico() -> None:
     assert value is not None
     assert 9.9 <= value <= 10.1
     assert median_atr_from_frame(frame, "2025-01-01") is None
+
+
+def test_cost_r_compartido_onboarding_y_edge_map() -> None:
+    from tradinglab.discovery import edge_map
+    from tradinglab.propfund.onboarding_mtf import cost_r_for
+
+    r_values = {"US100:H1": {"r": 40.0, "price": 20_000.0}}
+    onboarding = cost_r_for("CFD-001", "US100", "H1", r_values=r_values)
+    screening = edge_map.template_cost_r(
+        "CFD-001", "US100", "H1", r_values=r_values
+    )
+    assert onboarding["cost_r"] == pytest.approx(screening["cost_r"])
+    assert onboarding["viable"] == screening["viable"]
+
+
+def test_base_viability_usa_r_cost_de_operaciones() -> None:
+    from types import SimpleNamespace
+
+    from tradinglab.discovery import edge_map
+
+    trades = [
+        SimpleNamespace(r_cost=0.02),
+        SimpleNamespace(r_cost=0.04),
+        SimpleNamespace(r_cost=None),
+    ]
+    assert edge_map._trade_cost_r(trades) == pytest.approx(0.03)
+    assert edge_map._trade_cost_r([SimpleNamespace(r_cost=None)]) is None
+
+

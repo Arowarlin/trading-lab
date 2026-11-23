@@ -1099,6 +1099,27 @@ def _slice_default_is(frame: pd.DataFrame, config) -> pd.DataFrame:
     return frame[(frame.index >= begin) & (frame.index <= finish)]
 
 
+def _trade_cost_r(trades) -> float | None:
+    values = [
+        float(trade.r_cost)
+        for trade in trades
+        if trade.r_cost is not None and np.isfinite(float(trade.r_cost))
+    ]
+    return float(np.median(values)) if values else None
+
+
+def template_cost_r(
+    account_id: str,
+    symbol: str,
+    timeframe: str,
+    **kwargs,
+) -> dict[str, Any]:
+    """Cost_R compartido con onboarding-mtf (una sola definición)."""
+    from ..propfund.onboarding_mtf import cost_r_for
+
+    return cost_r_for(account_id, symbol, timeframe, **kwargs)
+
+
 def _base_viability(
     template: str,
     symbol: str,
@@ -1167,8 +1188,14 @@ def _base_viability(
         collect_metrics=False,
     )
     applied = book.apply(result.trades, session_tz=limits.session_tz, point=0.01)
-    cost_values = [float(trade.r_cost) for trade in applied.trades if trade.r_cost is not None]
-    cost_r = float(np.median(cost_values)) if cost_values else None
+    cost_r = _trade_cost_r(applied.trades)
+    screening = template_cost_r(
+        account.id,
+        symbol,
+        timeframe,
+        config=config,
+        max_cost_r=float(config.fitness.cost_r_max),
+    )
     validation = config.validation.for_timeframe(timeframe)
     fold_trades = []
     for start, end in fitness.fold_bounds(len(frame), int(validation.folds)):
@@ -1192,6 +1219,7 @@ def _base_viability(
         "trades_is": len(applied.trades),
         "fold_trades": fold_trades,
         "cost_r": cost_r,
+        "cost_r_screening": screening["cost_r"],
         "reasons": [] if feasible else ["no cumple mínimos de viabilidad"],
     }
 
@@ -1299,6 +1327,7 @@ def suggest(
                                 "trades_is": None,
                                 "fold_trades": [],
                                 "cost_r": None,
+                                "cost_r_screening": None,
                                 "feasible": False,
                                 "reasons": [f"{type(exc).__name__}: {exc}"],
                             }
@@ -1321,6 +1350,7 @@ def suggest(
                             "trades_is": int(result["trades_is"]),
                             "fold_trades": list(result["fold_trades"]),
                             "cost_r": result["cost_r"],
+                            "cost_r_screening": result.get("cost_r_screening"),
                             "feasible": True,
                             "reasons": [],
                         }
@@ -1365,5 +1395,6 @@ __all__ = [
     "group_by",
     "render_markdown",
     "suggest",
+    "template_cost_r",
     "template_version",
 ]

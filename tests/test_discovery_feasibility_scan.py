@@ -36,19 +36,17 @@ def test_scan_no_escribe_dsr_ni_calcula_pnl(monkeypatch) -> None:
     assert report["source"] == "dukascopy"
 
 
-def test_scan_h4_d1_bloqueadas_con_broker() -> None:
+def test_scan_h4_d1_quedan_fuera_por_incompatibles() -> None:
     report = feasibility.scan(
         "asia_range_reversion",
         "US100",
         source="broker",
         frames=_frames(["H4", "D1"]),
     )
-    rows = {row["timeframe"]: row for row in report["timeframes"]}
-    assert rows["H4"]["status"] == "blocked"
-    assert rows["D1"]["status"] == "blocked"
-    assert "Dukascopy" in rows["H4"]["reasons"][0]
-    assert not rows["H4"]["passes"]
-    assert not rows["D1"]["passes"]
+    timeframes = [row["timeframe"] for row in report["timeframes"]]
+    assert "H4" not in timeframes
+    assert "D1" not in timeframes
+    assert timeframes == ["M5", "M15", "M30", "H1"]
 
 
 def test_scan_cli_muestra_tabla(monkeypatch) -> None:

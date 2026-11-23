@@ -1,6 +1,7 @@
 name: asia_range_reversion
 symmetric: true
 timeframes: [M5, M15, M30, H1, H4, D1]
+valid_timeframes: [M5, M15, M30, H1]
 description: "Reversión al rango de la sesión asiática (18:00-03:00 NY) en régimen lateral."
 strategy:
   dsl_version: "1"
