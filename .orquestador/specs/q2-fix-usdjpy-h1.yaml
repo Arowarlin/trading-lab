@@ -1,0 +1,40 @@
+# Q2 — reversión alrededor del fix de Tokio en USDJPY H1 (Dukascopy).
+# Hipótesis literal (escrita antes de calcular nada):
+# "El dólar se aprecia antes de los fix WM/Reuters y revierte después, porque
+#  el flujo de órdenes que mueve el precio antes de la fijación es temporal. Si
+#  es real, entrar contra el dólar al cierre de la barra del fix y salir tras
+#  1-3 horas supera el coste de un ida y vuelta intradía."
+# Referencia: Krohn, Mueller & Whelan (2024), Journal of Finance, DOI
+# 10.1111/jofi.13306. Fix de Tokio 09:55 JST = 00:55 UTC (Japón sin DST).
+# USDJPY: contra el dólar = corto. Entrada al cierre de la barra 09:00-10:00
+# JST (señal 09:00, entrada 10:00 JST).
+campaign_id: q2-fix-usdjpy-h1
+instrument: USDJPY
+timeframe: H1
+template: fix_reversal
+profile: small
+mode: grid
+seed: 81
+data_source: dukascopy
+account: CFD-001
+firm: ftmo
+cost_mode: best
+cost_accounts: [CFD-001, CFD-006]
+side: short
+fix_start: "09:00"
+fix_end: "09:59"
+segments:
+  is: ["2010-01-01", "2024-06-30"]
+  oos1: ["2024-07-01", "2025-06-30"]
+  oos2: ["2025-07-01", null]
+# 3 hold_hours × 2 stop_mult = 6 combinaciones.
+grid:
+  dimensions:
+    - name: hold_hours
+      kind: path
+      path: exit.time_exit_minutes
+      values: [60, 120, 180]
+    - name: stop_mult
+      kind: path
+      path: exit.stop.mult
+      values: [2.5, 3.0]

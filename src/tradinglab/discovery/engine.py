@@ -7,6 +7,7 @@ evalúa una sola vez la frontera de rango 1 en OOS-1 para elegir finalistas.
 
 from __future__ import annotations
 
+import copy
 import random
 import time
 from dataclasses import dataclass, field, replace
@@ -164,6 +165,25 @@ def candidate_strategies(
             rng=random.Random(seed),
         )
         population = int(profile.population)
+    side = str(campaign_config.get("side") or "").strip().lower()
+    fix_start = str(campaign_config.get("fix_start") or "").strip()
+    fix_end = str(campaign_config.get("fix_end") or "").strip()
+    if side in {"long", "short"}:
+        for strategy in strategies:
+            if side == "long":
+                entry = strategy.get("long_entry") or strategy.get("short_entry")
+                strategy["long_entry"] = copy.deepcopy(entry)
+                strategy["short_entry"] = None
+            else:
+                entry = strategy.get("short_entry") or strategy.get("long_entry")
+                strategy["short_entry"] = copy.deepcopy(entry)
+                strategy["long_entry"] = None
+            entry = strategy.get("long_entry") or strategy.get("short_entry")
+            if isinstance(entry, dict):
+                if fix_start:
+                    entry["start"] = fix_start
+                if fix_end:
+                    entry["end"] = fix_end
     return strategies, population, mode, template, seed
 
 

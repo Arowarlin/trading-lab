@@ -1,0 +1,65 @@
+name: fix_reversal
+# Dirección fija por hipótesis: USDJPY corto (contra el dólar) y EURUSD/GBPUSD
+# largo (contra el dólar). El campo `side` de la spec elige el lado y
+# `fix_start`/`fix_end` fijan la barra del fix; no se fabrica el espejo opuesto.
+symmetric: false
+timeframes: [H1]
+valid_timeframes: [H1]
+description: >-
+  Reversión alrededor de los fix de divisas. Entrada al cierre de la barra del
+  fix y salida por tiempo (1-3 horas), sin target. Tokio 09:55 JST para USDJPY;
+  Londres 16:00 para EURUSD y GBPUSD.
+hypothesis: >-
+  "El dólar se aprecia antes de los fix WM/Reuters y revierte después, porque
+  el flujo de órdenes que mueve el precio antes de la fijación es temporal. Si
+  es real, entrar contra el dólar al cierre de la barra del fix y salir tras
+  1-3 horas supera el coste de un ida y vuelta intradía." Referencia: Krohn,
+  Mueller & Whelan (2024), "Foreign Exchange Fixings and Returns around the
+  Clock", Journal of Finance, DOI 10.1111/jofi.13306. Fix de Tokio 09:55 JST
+  (=00:55 UTC, Japón sin DST) para USDJPY; fix de Londres 16:00 hora de Londres
+  (DST propio, distinto del de NY) para EURUSD y GBPUSD.
+invalidation: >-
+  Se invalida si la reversión no supera el coste intradía de forma estable en
+  IS y el control de deriva, o si el efecto desaparece al separar los años
+  posteriores a 2015. No se lee OOS-2.
+parameter_space:
+  hold_hours: [1, 2, 3]
+  stop_mult: [2.5, 3.0]
+grid:
+  dimensions:
+    - name: hold_hours
+      kind: path
+      path: exit.time_exit_minutes
+      values: [60, 120, 180]
+    - name: stop_mult
+      kind: path
+      path: exit.stop.mult
+      values: [2.5, 3.0]
+strategy:
+  dsl_version: "1"
+  instrument: USDJPY
+  market: cfd
+  timeframe: H1
+  warmup_minutes: 120
+  session:
+    start: "00:00"
+    end: "23:59"
+    flat_at: "23:59"
+    or_minutes: 15
+  # Barra de Londres por defecto; la spec de USDJPY la sustituye por
+  # 09:00-09:59 Tokio y convierte la señal en corto.
+  long_entry:
+    kind: time_between
+    start: "15:00"
+    end: "15:59"
+  short_entry: null
+  exit:
+    stop: {type: atr, mult: 3.0, n: 14}
+    target: null
+    time_exit_minutes: 60
+    opposite_signal: false
+  sizing:
+    risk_per_trade_r: 1.0
+  limits:
+    max_trades_per_day: 1
+    cooldown_minutes: 0

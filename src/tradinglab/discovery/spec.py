@@ -16,6 +16,7 @@ from ..propfund.registry import load_registry
 from . import campaigns, genetic, grid
 from .config import load_engine_config
 from .data_sources import DataSourceError, normalize_source
+from .dsl import HHMM
 from .timeframes import normalize_timeframe
 
 
@@ -72,6 +73,14 @@ def load_spec(path: str | Path) -> dict[str, Any]:
     mode = str(data.get("mode") or "ga").strip().lower()
     if mode not in {"ga", "grid"}:
         raise SpecError(f"modo desconocido: {mode}")
+    side = str(data.get("side") or "").strip().lower()
+    if side not in {"", "long", "short"}:
+        raise SpecError(f"lado desconocido: {side}")
+    fix_start = str(data.get("fix_start") or "").strip() or None
+    fix_end = str(data.get("fix_end") or "").strip() or None
+    for name, value in (("fix_start", fix_start), ("fix_end", fix_end)):
+        if value is not None and not HHMM.match(value):
+            raise SpecError(f"{name} inválido: {value}")
     grid_spec = data.get("grid")
     if mode == "grid":
         try:
@@ -157,6 +166,12 @@ def load_spec(path: str | Path) -> dict[str, Any]:
         },
         "confirmation_only": confirmation_only,
     }
+    if side:
+        config_payload["side"] = side
+    if fix_start:
+        config_payload["fix_start"] = fix_start
+    if fix_end:
+        config_payload["fix_end"] = fix_end
     if grid_spec is not None:
         config_payload["grid"] = grid_spec
     campaign_id = str(

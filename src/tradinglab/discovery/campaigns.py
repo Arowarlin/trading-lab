@@ -254,6 +254,9 @@ def register(
     cost_mode: str = "best",
     mode: str = "ga",
     grid_spec: dict[str, Any] | None = None,
+    side: str | None = None,
+    fix_start: str | None = None,
+    fix_end: str | None = None,
     data_source: str = "broker",
     frame: pd.DataFrame | None = None,
     dry_run: bool = False,
@@ -274,6 +277,9 @@ def register(
     mode = str(mode or "ga").strip().lower()
     if mode not in {"ga", "grid"}:
         raise CampaignError(f"modo desconocido: {mode}")
+    side = str(side or "").strip().lower()
+    if side not in {"", "long", "short"}:
+        raise CampaignError(f"lado desconocido: {side}")
     try:
         allowed = genetic.template_timeframes(template)
     except (ValueError, FileNotFoundError) as exc:
@@ -385,6 +391,12 @@ def register(
         },
         "engine_version": __version__,
     }
+    if side:
+        config_payload["side"] = side
+    if fix_start:
+        config_payload["fix_start"] = str(fix_start)
+    if fix_end:
+        config_payload["fix_end"] = str(fix_end)
     if controls:
         config_payload["controls"] = {
             "test_vs_random_direction": {
@@ -505,6 +517,9 @@ def register_from_spec(
         campaign_id=campaign["campaign_id"],
         mode=payload["mode"],
         grid_spec=payload.get("grid"),
+        side=payload.get("side"),
+        fix_start=payload.get("fix_start"),
+        fix_end=payload.get("fix_end"),
         data_source=payload["data_source"],
         use_p75=bool(cost.get("use_p75", True)),
         cost_accounts=cost.get("accounts"),
