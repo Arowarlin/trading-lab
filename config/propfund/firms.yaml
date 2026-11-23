@@ -160,7 +160,25 @@ firms:
       sources:
         - {url: "https://help.fundingpips.com/hc/en-us/articles/34505029138449-Trading-Conduct-and-Security-Standards", consulted_at: 2026-11-21, kind: official}
     programs:
-      - {id: fundingpips_2step, name: 2-Step, phases: [evaluation, verification, funded], platforms: [mt5]}
+      - id: fundingpips_2step
+        name: 2-Step Standard
+        phases: [evaluation, verification, funded]
+        platforms: [mt5]
+        sizes: [5000, 10000, 25000, 50000, 100000, 200000]
+        rules:
+          - {key: profit_target_pct, value: 0.08, unit: fraction, phase: evaluation, status: needs_verification, notes: "Fase 1: 8 % (dato del operador 2026-11-22; confirmar en el panel)."}
+          - {key: profit_target_pct, value: 0.05, unit: fraction, phase: verification, status: needs_verification, notes: "Fase 2: 5 % (dato del operador 2026-11-22; confirmar en el panel)."}
+          - {key: max_daily_loss_pct, value: 0.05, unit: fraction, status: needs_verification, notes: "5 % desde el MAYOR de balance o equidad al inicio del día; incluye flotante y cerrado; reinicio a medianoche del servidor."}
+          - {key: max_loss_pct, value: 0.10, unit: fraction, status: needs_verification, notes: "10 % ESTÁTICO desde el balance inicial."}
+          - {key: drawdown_mode, value: static, status: needs_verification}
+          - {key: daily_loss_base, value: higher_of_balance_or_equity, status: needs_verification}
+          - {key: reset_time, value: "00:00 server", status: needs_verification}
+          - {key: min_trading_days, value: 3, unit: days_per_phase, phase: evaluation, status: needs_verification, notes: "Mínimo 3 días de trading por fase."}
+          - {key: min_trading_days, value: 3, unit: days_per_phase, phase: verification, status: needs_verification}
+          - {key: commission_per_lot_usd, value: 5.0, unit: usd_per_lot_round_trip, instrument: forex_metals, status: needs_verification, notes: "5 USD por lote ida y vuelta en forex y metales."}
+          - {key: commission_per_lot_usd, value: 0.0, unit: usd_per_lot_round_trip, instrument: indices_energy, status: needs_verification, notes: "Índices y energía sin comisión."}
+          - {key: max_risk_per_trade_pct, value: 0.03, unit: fraction, phase: funded, status: needs_verification, notes: "Cuenta fondeada: máximo 3 % por idea de trade si el tamaño es < 50K."}
+          - {key: max_risk_per_trade_pct, value: 0.02, unit: fraction, phase: funded, status: needs_verification, notes: "Cuenta fondeada: máximo 2 % por idea de trade si el tamaño es >= 50K."}
       - id: fundingpips_trial
         name: Free Trial (2 Step Standard / 2 Step Pro)
         phases: [evaluation]
@@ -201,6 +219,9 @@ firms:
           - {key: ea_policy, value: "Terceros solo gestor de trades/riesgo; automatización completa solo con EA propio y prueba de propiedad", phase: evaluation, status: verified_official, source: {url: "https://help.fundingpips.com/hc/en-us/articles/34505029138449-Trading-Conduct-and-Security-Standards", consulted_at: 2026-11-21, kind: official}}
           - {key: rewards, value: false, phase: evaluation, status: verified_official, source: {url: "https://help.fundingpips.com/hc/en-us/articles/45363484760209-Free-Trial", consulted_at: 2026-11-21, kind: official}, notes: "El Trial no paga recompensas ni convierte a Master"}
           - {key: concurrent_accounts, value: 1, unit: trial, phase: evaluation, status: verified_official, source: {url: "https://help.fundingpips.com/hc/en-us/articles/45363484760209-Free-Trial", consulted_at: 2026-11-21, kind: official}}
+          - {key: daily_loss_base, value: higher_of_balance_or_equity, phase: evaluation, status: needs_verification, notes: "Dato del operador 2026-11-22: 5 % desde el mayor de balance o equidad al inicio del día, flotante incluido, reinicio a medianoche del servidor."}
+          - {key: reset_time, value: "00:00 server", phase: evaluation, status: needs_verification}
+          - {key: commission_per_lot_usd, value: 5.0, unit: usd_per_lot_round_trip, phase: evaluation, instrument: forex_metals, status: needs_verification, notes: "5 USD por lote ida y vuelta en forex y metales; índices y energía 0."}
 
   - id: fxify
     name: FXIFY

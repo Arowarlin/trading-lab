@@ -67,7 +67,7 @@ accounts:
         slippage_price: null
         commission_type: zero
         commission_value: 0.0
-        commission_side: per_side
+        commission_side: round_turn
         commission_source: 'FundingPips 2 Step Standard/Pro · https://help.fundingpips.com/hc/en-us/articles/34501809112081-2-Step-Standard · 2026-11-20 · índices sin comisión'
         measured_at: '2026-11-20T16:51:20+00:00'
       US500:
@@ -77,7 +77,7 @@ accounts:
         source: 'spread: broker_spreads[broker:CFD-006] · SPX500 · p50 de medianas horarias y p75 de p75 horarios (23 h) · slippage: Sin datos'
         commission_type: zero
         commission_value: 0.0
-        commission_side: per_side
+        commission_side: round_turn
         commission_source: 'FundingPips 2 Step Standard/Pro · https://help.fundingpips.com/hc/en-us/articles/34501809112081-2-Step-Standard · 2026-11-20 · índices sin comisión'
         measured_at: '2026-11-20T16:51:21+00:00'
       US30:
@@ -88,7 +88,7 @@ accounts:
         slippage_price: null
         commission_type: zero
         commission_value: 0.0
-        commission_side: per_side
+        commission_side: round_turn
         commission_source: 'FundingPips 2 Step Standard/Pro · https://help.fundingpips.com/hc/en-us/articles/34501809112081-2-Step-Standard · 2026-11-20 · índices sin comisión'
       XAUUSD:
         spread_price: 0.239329
@@ -99,8 +99,8 @@ accounts:
         slippage_price: null
         commission_type: per_lot_usd
         commission_value: 5.0
-        commission_side: per_side
-        commission_source: 'FundingPips 2 Step Standard/Pro · https://help.fundingpips.com/hc/en-us/articles/34501809112081-2-Step-Standard · 2026-11-20 · 5 USD por lote; el texto no aclara lado, se asume por lado'
+        commission_side: round_turn
+        commission_source: 'FundingPips 2 Step Standard/Pro · https://help.fundingpips.com/hc/en-us/articles/34501809112081-2-Step-Standard · 2026-11-20 · 5 USD por lote ida y vuelta (dato del operador 2026-11-22)'
       EURUSD:
         spread_price: 0.00001
         spread_p75_price: 0.00002
@@ -110,8 +110,8 @@ accounts:
         slippage_price: null
         commission_type: per_lot_usd
         commission_value: 5.0
-        commission_side: per_side
-        commission_source: 'FundingPips 2 Step Standard/Pro · https://help.fundingpips.com/hc/en-us/articles/34501809112081-2-Step-Standard · 2026-11-20 · 5 USD por lote; el texto no aclara lado, se asume por lado'
+        commission_side: round_turn
+        commission_source: 'FundingPips 2 Step Standard/Pro · https://help.fundingpips.com/hc/en-us/articles/34501809112081-2-Step-Standard · 2026-11-20 · 5 USD por lote ida y vuelta (dato del operador 2026-11-22)'
       GBPUSD:
         spread_price: 0.00001
         spread_p75_price: 0.00005
@@ -121,8 +121,8 @@ accounts:
         slippage_price: null
         commission_type: per_lot_usd
         commission_value: 5.0
-        commission_side: per_side
-        commission_source: 'FundingPips 2 Step Standard/Pro · https://help.fundingpips.com/hc/en-us/articles/34501809112081-2-Step-Standard · 2026-11-20 · 5 USD por lote; el texto no aclara lado, se asume por lado'
+        commission_side: round_turn
+        commission_source: 'FundingPips 2 Step Standard/Pro · https://help.fundingpips.com/hc/en-us/articles/34501809112081-2-Step-Standard · 2026-11-20 · 5 USD por lote ida y vuelta (dato del operador 2026-11-22)'
       USDJPY:
         spread_price: 0.000999
         spread_p75_price: 0.004983
@@ -132,8 +132,8 @@ accounts:
         slippage_price: null
         commission_type: per_lot_usd
         commission_value: 5.0
-        commission_side: per_side
-        commission_source: 'FundingPips 2 Step Standard/Pro · https://help.fundingpips.com/hc/en-us/articles/34501809112081-2-Step-Standard · 2026-11-20 · 5 USD por lote; el texto no aclara lado, se asume por lado'
+        commission_side: round_turn
+        commission_source: 'FundingPips 2 Step Standard/Pro · https://help.fundingpips.com/hc/en-us/articles/34501809112081-2-Step-Standard · 2026-11-20 · 5 USD por lote ida y vuelta (dato del operador 2026-11-22)'
   FUT-001:
     symbols:
       MNQ: {commission_value: null, exchange_fee_per_side: null, clearing_fee_per_side: null, nfa_fee_per_side: null, slippage_ticks: 1, source: "Comisiones Topstep Sin datos: verificar en el contrato"}

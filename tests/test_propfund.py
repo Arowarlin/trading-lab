@@ -178,11 +178,89 @@ def test_coste_fundingpips_trial_comisiones_oficiales():
     fx = load_profile("CFD-006", "EURUSD")
     assert fx.commission_type == "per_lot_usd"
     assert fx.commission_value == 5.0
-    assert fx.commission_side == "per_side"
+    assert fx.commission_side == "round_turn"
+    assert "ida y vuelta" in (fx.commission_source or "")
     assert "fundingpips.com" in (fx.commission_source or "")
     metal = load_profile("CFD-006", "XAUUSD")
     assert metal.commission_type == "per_lot_usd"
     assert metal.commission_value == 5.0
+    assert metal.commission_side == "round_turn"
+    assert "fundingpips.com" in (metal.commission_source or "")
+
+
+def test_fundingpips_cfd006_es_2step_standard():
+    from tradinglab.propfund.registry import load_registry
+
+    reg = load_registry()
+    account = reg.accounts["CFD-006"]
+    assert account.limits.daily_loss == 5_000
+    assert account.limits.max_loss == 10_000
+    assert account.limits.profit_target == 8_000
+    assert account.limits.min_trading_days == 3
+    assert account.limits.drawdown_mode == "static"
+    assert account.limits.daily_loss_base == "higher_of_balance_or_equity"
+    assert account.limits.max_lots == 20
+    # El riesgo interno (0,5 %/trade) queda por debajo del 2 % de una cuenta
+    # fondeada de 100K; no se cambia el presupuesto del operador.
+    assert account.risk.per_trade_risk_pct <= 0.02
+
+    program = reg.firms["fundingpips"].program("fundingpips_2step")
+    assert program is not None
+    rules = {(rule.key, rule.phase, rule.instrument): rule for rule in program.rules}
+    assert rules[("profit_target_pct", "evaluation", "all")].value == 0.08
+    assert rules[("profit_target_pct", "verification", "all")].value == 0.05
+    assert rules[("max_daily_loss_pct", "all", "all")].value == 0.05
+    assert rules[("max_loss_pct", "all", "all")].value == 0.10
+    assert rules[("drawdown_mode", "all", "all")].value == "static"
+    assert rules[("min_trading_days", "evaluation", "all")].value == 3
+    assert (
+        rules[("daily_loss_base", "all", "all")].value
+        == "higher_of_balance_or_equity"
+    )
+    assert (
+        rules[("commission_per_lot_usd", "all", "forex_metals")].value == 5.0
+    )
+    assert (
+        rules[("commission_per_lot_usd", "all", "indices_energy")].value == 0.0
+    )
+    assert rules[("max_risk_per_trade_pct", "funded", "all")].value == 0.02
+
+
+def test_cfd006_rules_para_mc_declaran_equity_y_avisan_del_mayor():
+    from tradinglab.propfund.registry import load_registry
+    from tradinglab.propfund.snapshots import _rules_from_account
+
+    account = load_registry().accounts["CFD-006"]
+    rules = _rules_from_account(account, {"server_utc_offset_hours": 2})
+    assert rules.max_daily_loss_pct == pytest.approx(0.05)
+    assert rules.max_loss_pct == pytest.approx(0.10)
+    assert rules.profit_target_pct == pytest.approx(0.08)
+    assert rules.max_loss_mode == "static"
+    assert rules.daily_loss_mode == "equity"
+    assert rules.min_trading_days == 3
+    assert rules.reset_time == "00:00"
+    assert rules.reset_tz == "Etc/GMT-2"
+    assert "MAYOR de balance o equidad" in rules.notes
+
+
+def test_fundingpips_comision_ida_y_vuelta_no_se_duplica():
+    from tradinglab.propfund.costs import estimate_cfd
+
+    fx = load_profile("CFD-006", "EURUSD")
+    estimate = estimate_cfd(
+        fx, lots=1, price=1.10, contract_size=100_000, use_p75=True
+    )
+    assert estimate.components["commission"] == 5.0
+    metal = load_profile("CFD-006", "XAUUSD")
+    metal_estimate = estimate_cfd(
+        metal, lots=1, price=2_000.0, contract_size=100, use_p75=True
+    )
+    assert metal_estimate.components["commission"] == 5.0
+    index = load_profile("CFD-006", "US100")
+    index_estimate = estimate_cfd(
+        index, lots=1, price=20_000.0, contract_size=1, use_p75=True
+    )
+    assert index_estimate.components["commission"] == 0.0
 
 
 def test_coste_futuros_no_usa_spreads_mt5():

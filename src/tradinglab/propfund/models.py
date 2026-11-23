@@ -188,6 +188,12 @@ class AccountLimits(_Strict):
     daily_loss: float | None = None
     max_loss: float | None = None
     drawdown_mode: Literal["static", "trailing_eod", "trailing_intraday", "unknown"] = "unknown"
+    # Base del límite diario publicada por la firma. Los motores protegidos
+    # (prop.overlay / prop.simulator) solo modelan equity; se declara aquí para
+    # que la diferencia quede visible y no se confunda con una regla cumplida.
+    daily_loss_base: Literal[
+        "balance", "equity", "higher_of_balance_or_equity"
+    ] = "equity"
     profit_target: float | None = None
     min_trading_days: int | None = None
     max_contracts: int | None = None

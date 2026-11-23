@@ -470,6 +470,21 @@ def _rules_from_account(account: PropAccount, health: dict):
     drawdown = account.limits.drawdown_mode
     if drawdown not in {"static", "trailing_eod", "trailing_intraday"}:
         drawdown = "static"
+    # ``PropRules`` solo distingue balance o equidad. Si la firma mide desde el
+    # mayor de ambos, se conserva equidad (el caso conservador habitual) y se
+    # deja constancia de la diferencia; el motor protegido no cambia.
+    daily_base = account.limits.daily_loss_base
+    daily_loss_mode = "balance" if daily_base == "balance" else "equity"
+    notes = (
+        "Reglas del programa Prop Fund; reset 00:00 del servidor como "
+        "supuesto técnico, no verificado en el contrato."
+    )
+    if daily_base == "higher_of_balance_or_equity":
+        notes += (
+            " La firma mide la pérdida diaria desde el MAYOR de balance o "
+            "equidad al inicio del día; PropRules/overlay/MC solo modelan "
+            "equidad, así que el límite queda algo más laxo en la simulación."
+        )
     return PropRules(
         firm=account.firm,
         program=account.program,
@@ -479,6 +494,7 @@ def _rules_from_account(account: PropAccount, health: dict):
         max_daily_loss_pct=pct(account.limits.daily_loss),
         max_loss_pct=pct(account.limits.max_loss),
         max_loss_mode=drawdown,
+        daily_loss_mode=daily_loss_mode,
         min_trading_days=int(account.limits.min_trading_days or 0),
         max_lots=account.limits.max_lots,
         max_positions=account.risk.max_open_positions,
@@ -487,10 +503,7 @@ def _rules_from_account(account: PropAccount, health: dict):
         reset_time="00:00",
         automation_allowed=account.automation_acknowledged,
         automation_note=account.notes[:500],
-        notes=(
-            "Reglas del programa Prop Fund; reset 00:00 del servidor como "
-            "supuesto técnico, no verificado en el contrato."
-        ),
+        notes=notes,
     )
 
 
