@@ -71,6 +71,7 @@ def _register(db: Path, frame: pd.DataFrame, campaign_id: str) -> dict:
 def test_count_tests_includes_only_approved_and_holdout(tmp_path: Path) -> None:
     lab = tmp_path / "lab.db"
     db = tmp_path / "discovery.db"
+    databank.init_databank(db)
     frame = _frame()
     base = count_tests(lab, discovery_db=db)
     assert base == 0
@@ -178,11 +179,22 @@ def test_verify_false_solo_tests_o_supersede() -> None:
     assert offenders == []
 
 
-def test_missing_discovery_db_adds_zero(tmp_path: Path) -> None:
+def test_missing_discovery_db_falla(tmp_path: Path) -> None:
     lab = tmp_path / "lab.db"
     missing = tmp_path / "no-existe.db"
-    assert count_tests(lab, discovery_db=missing) == 0
+    with pytest.raises(FileNotFoundError, match="discovery.db"):
+        count_tests(lab, discovery_db=missing)
     assert not missing.exists()
+
+
+def test_default_discovery_db_falla_si_no_existe(tmp_path: Path, monkeypatch) -> None:
+    from tradinglab import learning
+
+    monkeypatch.setattr(
+        learning, "CANONICAL_DISCOVERY_DB", tmp_path / "no-existe.db"
+    )
+    with pytest.raises(FileNotFoundError, match="discovery.db"):
+        count_tests(tmp_path / "lab.db")
 
 
 def test_cli_approve_requires_flag_and_cancel_keeps_count(

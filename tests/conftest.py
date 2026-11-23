@@ -12,8 +12,10 @@ import pytest
 
 @pytest.fixture(autouse=True)
 def _isolate_discovery_db(tmp_path, monkeypatch):
+    from tradinglab import learning
     from tradinglab.discovery import databank
 
-    monkeypatch.setattr(
-        databank, "DEFAULT_DISCOVERY_DB", tmp_path / "discovery-ausente.db"
-    )
+    empty = tmp_path / "discovery-empty.db"
+    databank.init_databank(empty)
+    monkeypatch.setattr(databank, "DEFAULT_DISCOVERY_DB", empty)
+    monkeypatch.setattr(learning, "CANONICAL_DISCOVERY_DB", empty)
