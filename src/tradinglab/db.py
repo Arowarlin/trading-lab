@@ -464,6 +464,16 @@ CREATE TABLE IF NOT EXISTS optimization_trials (
 );
 CREATE INDEX IF NOT EXISTS idx_optimization_trials_study
     ON optimization_trials(study);
+CREATE TABLE IF NOT EXISTS informal_trials (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts TEXT NOT NULL,
+    n INTEGER NOT NULL CHECK (n > 0),
+    reason TEXT NOT NULL,
+    approved_by TEXT NOT NULL,
+    source TEXT NOT NULL DEFAULT 'operador'
+);
+CREATE INDEX IF NOT EXISTS idx_informal_trials_ts
+    ON informal_trials(ts);
 CREATE TABLE IF NOT EXISTS holdout_evaluations (
     config_hash TEXT PRIMARY KEY,
     symbol TEXT NOT NULL,

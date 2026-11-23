@@ -604,6 +604,13 @@ def run_campaign(
             raise campaigns.CampaignError(
                 "la campaña no está aprobada con --approved-by-operator"
             )
+    from .guard import require_approved_campaign
+
+    require_approved_campaign(
+        campaign,
+        action="run_campaign",
+        allow_synthetic=synthetic,
+    )
     config = load_engine_config()
     profile = config.profile(str(campaign["config"].get("profile") or "small"))
     total_budget = int(campaign.get("n_total") or 0)

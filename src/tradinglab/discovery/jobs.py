@@ -82,6 +82,7 @@ class QueueSetup:
     campaign_id: str = ""
     drift_simulations: int = 0
     drift_percentile_min: float = 0.0
+    approved: bool = False
     bars: pd.DataFrame | None = None  # solo tests/benchmark sintéticos
 
     def as_dict(self, *, include_bars: bool = False) -> dict[str, Any]:
@@ -149,6 +150,8 @@ class QueueSetup:
             drift_percentile_min=float(
                 random_control.get("percentile_min") or 0.0
             ),
+            approved=bool(campaign.get("approved_at"))
+            or str(campaign.get("status") or "").lower() == "synthetic",
             bars=bars,
         ).validated()
 
@@ -438,6 +441,7 @@ def _evaluate_job(task: tuple[int, str, str]) -> dict[str, Any]:
                 campaign_id=setup.campaign_id,
                 drift_simulations=setup.drift_simulations,
                 drift_percentile_min=setup.drift_percentile_min,
+                approved=setup.approved,
             )
             series = fit["daily_returns"]
             return {
@@ -703,6 +707,13 @@ def run_queue(
         raise QueueError(
             f"campaña reemplazada por {campaign_row.get('superseded_by')}"
         )
+    from .guard import require_approved_campaign
+
+    require_approved_campaign(
+        campaign_row,
+        action="run_queue",
+        allow_synthetic=status == "synthetic",
+    )
     setup = QueueSetup.from_campaign(campaign_row, bars=bars)
     source = campaigns.campaign_bars(campaign_row, frame=bars, db_path=target)
     setup = replace(setup, bars=source)

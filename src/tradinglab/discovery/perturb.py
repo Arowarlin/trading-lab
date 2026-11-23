@@ -197,6 +197,11 @@ def noise_test(
 ) -> dict[str, Any]:
     """500 copias con OHLC perturbado; mediana y p10 de expectativa."""
 
+    from .guard import require_approved_strategy
+
+    require_approved_strategy(
+        strategy_id, db_path=db_path, action="perturb.noise"
+    )
     model = strategy if isinstance(strategy, dsl.Strategy) else dsl.Strategy.model_validate(strategy)
     skip_validation = _archived_strategy(strategy_id, db_path)
     base_result = _run(
@@ -304,6 +309,11 @@ def delay_test(
 ) -> dict[str, Any]:
     """Entradas/salidas desplazadas +1/+2 barras; salidas iguales o extendidas."""
 
+    from .guard import require_approved_strategy
+
+    require_approved_strategy(
+        strategy_id, db_path=db_path, action="perturb.delay"
+    )
     model = strategy if isinstance(strategy, dsl.Strategy) else dsl.Strategy.model_validate(strategy)
     skip_validation = _archived_strategy(strategy_id, db_path)
     prepared, limits = _prepared(model, frame, cost, setup)
@@ -370,6 +380,11 @@ def execution_mc(
 ) -> dict[str, Any]:
     """MC de ejecución: salta operaciones, spread horario y slippage aleatorio."""
 
+    from .guard import require_approved_strategy
+
+    require_approved_strategy(
+        strategy_id, db_path=db_path, action="perturb.execution_mc"
+    )
     model = strategy if isinstance(strategy, dsl.Strategy) else dsl.Strategy.model_validate(strategy)
     skip_validation = _archived_strategy(strategy_id, db_path)
     base_result = _run(

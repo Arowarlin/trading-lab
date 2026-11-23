@@ -498,6 +498,9 @@ def run(
     campaign = databank.get_campaign(campaign_id, db_path=db_path)
     if campaign is None:
         raise ValueError(f"campaña no registrada: {campaign_id}")
+    from .guard import require_approved_campaign
+
+    require_approved_campaign(campaign, action="robustness")
     model = dsl.Strategy.model_validate(strategy["dsl"])
     setup = jobs.QueueSetup.from_campaign(campaign, bars=None)
     from ..propfund.costs import load_profile

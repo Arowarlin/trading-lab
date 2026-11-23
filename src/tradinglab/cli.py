@@ -98,6 +98,10 @@ data_app = typer.Typer(
     no_args_is_help=True, help="Datos: control cruzado y fuentes públicas."
 )
 lessons_app = typer.Typer(no_args_is_help=True, help="Aprendizaje controlado: lecciones y holdout.")
+learning_app = typer.Typer(
+    no_args_is_help=True,
+    help="Contador DSR: miradas informales y deuda de pre-registro.",
+)
 reports_app = typer.Typer(no_args_is_help=True, help="Reportes CSV/HTML con validación y vista previa.")
 markets_app = typer.Typer(no_args_is_help=True, help="Agentes por mercado y coordinador determinista.")
 models_app = typer.Typer(no_args_is_help=True, help="Modelos walk-forward, registry y campeón/retador.")
@@ -172,6 +176,7 @@ app.add_typer(intraday_app, name="intraday")
 ea_app = typer.Typer(no_args_is_help=True, help="EAs externos MT5: registro, estado y filtros.")
 app.add_typer(ea_app, name="ea")
 app.add_typer(lessons_app, name="lessons")
+app.add_typer(learning_app, name="learning")
 app.add_typer(reports_app, name="reports")
 app.add_typer(markets_app, name="markets")
 app.add_typer(models_app, name="models")
@@ -3872,6 +3877,46 @@ def fund_pause_resume_cmd(
     console.print(
         f"[green]Pausa reanudada[/green] · {result['account_id']} · {result['reset_at']}"
     )
+
+
+@learning_app.command("record-informal")
+def learning_record_informal_cmd(
+    n: int = typer.Option(..., "--n", help="Número de miradas informales"),
+    reason: str = typer.Option(..., "--reason", help="Motivo y alcance"),
+    approved_by_operator: bool = typer.Option(
+        False,
+        "--approved-by-operator",
+        help="Obligatorio: el operador autoriza anotar la deuda",
+    ),
+    db: str = typer.Option(None, "--db", help="lab.db alternativo"),
+) -> None:
+    """Anota miradas ya calculadas; sin el flag no hace nada."""
+    from .config import DEFAULT_DB
+    from .learning import LearningError, record_informal
+
+    if not approved_by_operator:
+        console.print(
+            "[yellow]Sin --approved-by-operator no se anota nada.[/yellow]"
+        )
+        return
+    try:
+        row = record_informal(
+            db or DEFAULT_DB,
+            n=n,
+            reason=reason,
+            approved_by_operator=True,
+        )
+    except (LearningError, PermissionError, ValueError) as exc:
+        console.print(f"[red]No se pudo anotar:[/red] {exc}")
+        raise typer.Exit(2) from exc
+    table = Table(title="Contador DSR · miradas informales")
+    table.add_column("Campo", style="bold")
+    table.add_column("Valor")
+    table.add_row("Anotadas", str(row["n"]))
+    table.add_row("Motivo", str(row["reason"]))
+    table.add_row("Aprobado por", str(row["approved_by"]))
+    table.add_row("count_tests", str(row["count_tests"]))
+    console.print(table)
 
 
 @lessons_app.command("list")

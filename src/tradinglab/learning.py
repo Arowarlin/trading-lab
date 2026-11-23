@@ -182,9 +182,10 @@ def count_tests(
 
     Suman las lecciones, los trials de Optuna, las lecturas del holdout, cada
     intento registrado en `strategy_trials` (también los fallidos), los bots
-    incubados, las campañas registradas en `campaign_registry` y —desde la
-    Fase 5— las campañas de discovery aprobadas (`n_total`) y sus lecturas de
-    holdout. Las de discovery se leen en solo lectura de la DB canónica de E:
+    incubados, las campañas registradas en `campaign_registry`, las miradas
+    informales anotadas en `informal_trials` y -desde la Fase 5- las campañas
+    de discovery aprobadas (`n_total`) y sus lecturas de holdout. Las de
+    discovery se leen en solo lectura de la DB canónica de E:
     (`CANONICAL_DISCOVERY_DB`) o de `discovery_db`; si falta, falla en vez de
     devolver 0. Un borrador no cuenta.
 
@@ -204,6 +205,9 @@ def count_tests(
         ).fetchone()["n"]
         strategies = con.execute(
             "SELECT COUNT(*) AS n FROM strategy_trials WHERE counted = 1"
+        ).fetchone()["n"]
+        informal = con.execute(
+            "SELECT COALESCE(SUM(n), 0) AS n FROM informal_trials"
         ).fetchone()["n"]
         has_campaigns = con.execute(
             "SELECT 1 FROM sqlite_master "
@@ -232,6 +236,7 @@ def count_tests(
         + int(trials)
         + int(holdout)
         + int(strategies)
+        + int(informal)
         + int(campaigns)
         + count_incubated(db_path)
         + int(extra)
@@ -375,6 +380,46 @@ def evaluate_holdout_once(
         "first_read_at": now,
         "last_read_at": now,
     }
+
+
+def record_informal(
+    db_path: str | Path,
+    *,
+    n: int,
+    reason: str,
+    approved_by_operator: bool = False,
+    approved_by: str = "operador",
+    settings: Settings | None = None,
+) -> dict:
+    """Anota miradas informales ya calculadas para que cuenten en el DSR.
+
+    No calcula nada: solo registra la deuda de pre-registro con el número de
+    miradas y el motivo. Sin ``approved_by_operator`` no escribe.
+    """
+
+    if not approved_by_operator:
+        raise PermissionError(
+            "record-informal requiere --approved-by-operator; no se anotó nada"
+        )
+    count = int(n)
+    if count <= 0:
+        raise LearningError("n debe ser > 0")
+    text = str(reason or "").strip()
+    if not text:
+        raise LearningError("reason es obligatorio")
+    init_learning(db_path, settings)
+    with connect(db_path) as con:
+        cursor = con.execute(
+            "INSERT INTO informal_trials(ts, n, reason, approved_by, source) "
+            "VALUES(?,?,?,?,?)",
+            (utcnow(), count, text, str(approved_by or "operador"), "operador"),
+        )
+        row = con.execute(
+            "SELECT * FROM informal_trials WHERE id = ?", (cursor.lastrowid,)
+        ).fetchone()
+    result = dict(row)
+    result["count_tests"] = count_tests(db_path, settings)
+    return result
 
 
 def record_optimization_trial(
@@ -783,6 +828,7 @@ __all__ = [
     "holdout_usage",
     "init_learning",
     "list_lessons",
+    "record_informal",
     "record_optimization_trial",
     "record_test",
     "reject",

@@ -124,8 +124,13 @@ def evaluate(
     campaign_id: str = "",
     drift_simulations: int = 0,
     drift_percentile_min: float = 90.0,
+    approved: bool = False,
 ) -> dict[str, Any]:
     """Evalúa una estrategia congelada en IS y devuelve el vector de fitness."""
+
+    from .guard import require_approved
+
+    require_approved(campaign_id, approved=approved, action="fitness")
 
     model = (
         strategy
@@ -314,6 +319,7 @@ def evaluate(
                 campaign_id=campaign_id,
                 simulations=int(drift_simulations),
                 percentile_min=float(drift_percentile_min),
+                approved=approved,
             )
         except Exception as exc:  # noqa: BLE001 - el control no tumba el job
             drift_info = {

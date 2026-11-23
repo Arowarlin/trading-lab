@@ -19,3 +19,13 @@ def _isolate_discovery_db(tmp_path, monkeypatch):
     databank.init_databank(empty)
     monkeypatch.setattr(databank, "DEFAULT_DISCOVERY_DB", empty)
     monkeypatch.setattr(learning, "CANONICAL_DISCOVERY_DB", empty)
+
+
+@pytest.fixture(autouse=True)
+def _allow_unapproved_performance(monkeypatch):
+    """Los tests calculan rendimiento con datos sintéticos por diseño."""
+
+    from tradinglab.discovery import guard
+
+    monkeypatch.setenv("TRADINGLAB_ALLOW_UNAPPROVED", "1")
+    monkeypatch.setattr(guard, "ALLOW_UNAPPROVED", True)

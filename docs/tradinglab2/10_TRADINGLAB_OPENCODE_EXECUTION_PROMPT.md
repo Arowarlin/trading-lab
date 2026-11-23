@@ -33,6 +33,9 @@ REGLAS DURAS (si una tarea las contradice, PARA y pregunta):
 6. No uses datos futuros: toda señal se calcula con barras cerradas y se ejecuta en el open siguiente.
 7. No añadas dependencias salvo las que la fase autorice.
 8. Antes de escribir código, muestra un PLAN corto (archivos y funciones) y ESPERA mi "OK PLAN".
+9. Nunca calcules rendimiento (expectativa, PF, percentil de deriva, Monte Carlo,
+   perturbaciones) antes de register+approve. Si ocurre, se anota en el contador
+   con `lab learning record-informal --n N --reason "..." --approved-by-operator`.
 
 AL TERMINAR CADA FASE (en este orden):
   .\.venv\Scripts\Activate.ps1

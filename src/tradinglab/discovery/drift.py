@@ -238,8 +238,13 @@ def percentile(
     eligible: np.ndarray,
     simulations: int = DEFAULT_SIMULATIONS,
     seed: int = 0,
+    approved: bool = False,
 ) -> dict[str, Any]:
     """Percentil de la expectativa de la estrategia frente a entradas al azar."""
+
+    from .guard import require_approved
+
+    require_approved("", approved=approved, action="drift_percentile")
 
     simulations = max(1, int(simulations))
     count = max(0, int(trades))
@@ -323,6 +328,7 @@ def evaluate(
     campaign_id: str = "",
     simulations: int = DEFAULT_SIMULATIONS,
     percentile_min: float = DEFAULT_PERCENTILE_MIN,
+    approved: bool = False,
 ) -> dict[str, Any]:
     """Calcula el percentil contra deriva de una estrategia ya evaluada.
 
@@ -331,6 +337,10 @@ def evaluate(
     horizonte, para que el tiempo en mercado no se acorte por objetivos que la
     estrategia sí tiene.
     """
+
+    from .guard import require_approved
+
+    require_approved(campaign_id, approved=approved, action="drift")
 
     trades = list(full.trades)
     count = len(trades)
@@ -377,6 +387,7 @@ def evaluate(
         eligible=eligible,
         simulations=simulations,
         seed=campaign_seed(campaign_id),
+        approved=approved,
     )
     result["mean_bars_realized"] = round(realized, 3)
     result["horizon_bars"] = int(max(1, horizon))
