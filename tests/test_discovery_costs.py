@@ -345,6 +345,7 @@ def test_campana_antigua_conserva_hash(tmp_path: Path) -> None:
 def test_draft_con_costes_no_cuenta_hasta_aprobar(tmp_path: Path) -> None:
     db = tmp_path / "discovery.db"
     lab = tmp_path / "lab.db"
+    databank.init_databank(db)
     frame = __import__("tradinglab.discovery.engine", fromlist=["x"]).synthetic_frame(
         years=0.5, seed=13
     )

@@ -8,7 +8,7 @@ import pandas as pd
 import yaml
 
 from tradinglab.broker_costs import init_db, persist_spreads
-from tradinglab.discovery import engine
+from tradinglab.discovery import databank, engine
 from tradinglab.learning import count_tests
 from tradinglab.propfund import onboarding as onboarding_module
 from tradinglab.propfund import snapshots
@@ -220,6 +220,7 @@ def test_onboarding_simulado_sin_mt5_real_y_sin_dsr(tmp_path, monkeypatch) -> No
     costs_db = tmp_path / "lab.db"
     _seed_spreads(costs_db)
     discovery_db = tmp_path / "discovery.db"
+    databank.init_databank(discovery_db)
     learning_db = tmp_path / "learning.db"
     fake = FakeBroker()
 
@@ -252,7 +253,8 @@ def test_onboarding_simulado_sin_mt5_real_y_sin_dsr(tmp_path, monkeypatch) -> No
     after = count_tests(learning_db, discovery_db=discovery_db)
 
     assert after == before
-    assert not discovery_db.exists()
+    assert discovery_db.exists()
+    assert databank.count_strategies("SIM-001", db_path=discovery_db) == 0
     assert fake.login_calls == 0
     assert fake.shutdown_calls == 0
     assert fake.connect_calls == 1

@@ -15,7 +15,7 @@ import numpy as np
 import pytest
 
 from tradinglab.config import ROOT
-from tradinglab.discovery import campaigns, dsl, engine
+from tradinglab.discovery import campaigns, databank, dsl, engine
 from tradinglab.discovery.engine import synthetic_frame
 from tradinglab.learning import count_tests
 
@@ -31,6 +31,7 @@ SEEDS = (1, 2, 3, 4, 5)
 def test_noise_five_campaigns(tmp_path) -> None:
     db = tmp_path / "discovery.db"
     lab = tmp_path / "lab.db"
+    databank.init_databank(db)
     before = count_tests(lab, discovery_db=db)
     rows = []
     for seed in SEEDS:

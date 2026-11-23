@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from dataclasses import asdict
 from datetime import date
 from pathlib import Path
@@ -20,6 +21,15 @@ from .trials import count_incubated
 
 AUTHORS = {"qwen", "humano"}
 STATUSES = {"proposed", "approved", "rejected"}
+
+# El worktree no tiene `data/discovery.db`; el contador global debe leer la DB
+# canónica de E:. Se puede sobrescribir con TRADINGLAB_DISCOVERY_DB.
+CANONICAL_DISCOVERY_DB = Path(
+    os.getenv(
+        "TRADINGLAB_DISCOVERY_DB",
+        r"E:\trading-lab\data\discovery.db",
+    )
+)
 
 
 class LearningError(ValueError):
@@ -174,8 +184,9 @@ def count_tests(
     intento registrado en `strategy_trials` (también los fallidos), los bots
     incubados, las campañas registradas en `campaign_registry` y —desde la
     Fase 5— las campañas de discovery aprobadas (`n_total`) y sus lecturas de
-    holdout. Las de discovery se leen de `data/discovery.db` en solo lectura y
-    un borrador no cuenta.
+    holdout. Las de discovery se leen en solo lectura de la DB canónica de E:
+    (`CANONICAL_DISCOVERY_DB`) o de `discovery_db`; si falta, falla en vez de
+    devolver 0. Un borrador no cuenta.
 
     Las campañas registradas suman su `N_total` **completo** desde el momento
     del registro, antes de correr nada: el denominador del DSR no puede crecer
@@ -205,7 +216,17 @@ def count_tests(
             ).fetchone()["n"]
     from .discovery.campaigns import discovery_tests
 
-    extra = discovery_tests(discovery_db)["total"]
+    target = (
+        Path(discovery_db)
+        if discovery_db is not None
+        else CANONICAL_DISCOVERY_DB
+    )
+    if not target.exists():
+        raise FileNotFoundError(
+            "Sin datos: no existe discovery.db "
+            f"({target}); el DSR no puede contarse como 0"
+        )
+    extra = discovery_tests(target)["total"]
     return (
         int(lessons)
         + int(trials)

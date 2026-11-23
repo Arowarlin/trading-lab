@@ -2298,16 +2298,133 @@ def journal_cmd(
     console.print(t2)
 
 
+def _print_lane_drift(payload: dict) -> None:
+    """Resumen compacto de deriva demo vs backtest por carril."""
+    mt5 = payload.get("mt5") or {}
+    console.print(
+        f"[dim]DB {payload['db']} · solo lectura · MT5={mt5.get('used')} · "
+        f"login {mt5.get('login_before')}→{mt5.get('login_after')} · "
+        f"{payload['generated_at']}[/dim]"
+    )
+
+    def _fmt(value, digits: int = 2) -> str:
+        if value is None:
+            return "sin datos"
+        return f"{float(value):.{digits}f}"
+
+    def _pct(value) -> str:
+        return f"{float(value):.0%}" if value is not None else "sin datos"
+
+    for row in payload["lanes"]:
+        match = row["match"]
+        slip = row["slippage_bps"]
+        spread = row["spread_bps"]
+        ops = row.get("operations") or []
+        assumed_slip = [op["assumed_slip_bps"] for op in ops if op.get("assumed_slip_bps")]
+        assumed_spread = [
+            op["assumed_spread_bps"] for op in ops if op.get("assumed_spread_bps")
+        ]
+        console.print(
+            f"[bold]{row['label']}[/bold] · demo {row['demo']['n']} · "
+            f"BT {row['backtest_signals'] if row['backtest_signals'] is not None else '—'} · "
+            f"match {match['matched'] if match['matched'] is not None else '—'}"
+            f"/{match['union_days'] if match['union_days'] is not None else '—'} "
+            f"({_pct(match['match_pct'])}) · "
+            f"timely {match['timely'] if match['timely'] is not None else '—'}"
+            f" ({_pct(match['timely_pct'])}) · "
+            f"missed {match['missed'] if match['missed'] is not None else '—'} · "
+            f"extra {match['extra'] if match['extra'] is not None else '—'} · "
+            f"slip {_fmt(slip['p50'], 2)}/{_fmt(slip['p95'], 2)} bps "
+            f"(asumido {_fmt(max(assumed_slip) if assumed_slip else None, 2)}) · "
+            f"spread {_fmt(spread['p50'], 3)}/{_fmt(spread['p95'], 3)} bps "
+            f"(perfil {_fmt(max(assumed_spread) if assumed_spread else None, 3)}) · "
+            f"R demo {_fmt(row['r']['demo_total'])} vs BT "
+            f"{_fmt(row['r']['backtest_total'])} "
+            f"(drift {_fmt(row['r']['drift_total'])}) · {row['status']}"
+        )
+        for reason in row.get("reasons") or []:
+            console.print(f"  [yellow]{reason}[/yellow]")
+        for style in row.get("styles") or []:
+            console.print(
+                f"  {style['style']}/{style['status']}: N={style['n']} "
+                f"R={style['total_r']:+.2f} · {style['first']} → {style['last']}"
+            )
+        for op in ops:
+            demo_text = (
+                f"{op['demo_side']} {op['demo_entry']:.5f}→{op['demo_exit']:.5f} "
+                f"R={_fmt(op['demo_r'])}"
+                if op["demo_side"] and op["demo_exit"] is not None
+                else (
+                    f"{op['demo_side']} {op['demo_entry']:.5f} (abierta)"
+                    if op["demo_side"]
+                    else "demo —"
+                )
+            )
+            bt_text = (
+                f"{op['bt_side']} {op['bt_entry']:.5f}→{op['bt_exit']:.5f} "
+                f"R={_fmt(op['bt_r'])}"
+                if op["bt_side"] and op["bt_exit"] is not None
+                else (f"{op['bt_side']} {op['bt_entry']:.5f}" if op["bt_side"] else "BT —")
+            )
+            console.print(
+                f"  {op['day']} · {demo_text} · {bt_text} · "
+                f"delay {_fmt(op.get('delay_minutes'), 0)} min · "
+                f"slip {_fmt(op['slip_bps'], 2)}/{_fmt(op.get('slip_vs_bt_bps'), 2)} bps · "
+                f"spread {_fmt(op['spread_bps'], 3)} bps · {op['note']}"
+            )
+    summary = payload["summary"]
+    console.print(
+        f"[dim]carriles={summary['lanes']} · medidos={summary['measured']} · "
+        f"registro={summary['registro']} · sin datos={summary['sin_datos']} · "
+        f"demo={summary['demo_trades']} · coinciden={summary['matched']} · "
+        f"perdidas={summary['missed']} · extra={summary['extra']}[/dim]"
+    )
+
+
 @app.command("drift")
 def drift_cmd(
+    mode: str | None = typer.Argument(
+        None, help="Usa `report` para la deriva demo vs backtest por carril"
+    ),
     min_trades: int = typer.Option(
         20, "--min-trades", help="Operaciones live mínimas antes de opinar"
     ),
+    lane: str | None = typer.Option(
+        None, "--lane", help="Filtra por id de carril (report)"
+    ),
+    db: str | None = typer.Option(
+        None, "--db", help="Base SQLite de solo lectura (report)"
+    ),
+    json_out: bool = typer.Option(
+        False, "--json", help="Imprime el informe por carril en JSON"
+    ),
 ) -> None:
-    """Deriva live/paper vs backtest por bot (solo informativo)."""
+    """Deriva live/paper vs backtest por bot o por carril (solo informativo)."""
+    if mode == "report":
+        from .drift import build_lane_drift
+
+        try:
+            payload = build_lane_drift(
+                db or DEFAULT_DB, lane=lane, settings=get_settings()
+            )
+        except Exception as exc:
+            console.print(f"[red]{exc}[/red]")
+            raise typer.Exit(2) from exc
+        if json_out:
+            typer.echo(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
+            return
+        _print_lane_drift(payload)
+        return
+    if mode:
+        console.print(
+            f"[red]modo desconocido: {mode}. Usa `lab drift report`.[/red]"
+        )
+        raise typer.Exit(2)
+
     from .drift import build_drift
 
     settings = get_settings()
+
     payload = build_drift(DEFAULT_DB, settings, min_trades=min_trades)
     summary = payload["summary"]
     console.print(
