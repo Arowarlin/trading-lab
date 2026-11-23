@@ -10898,6 +10898,7 @@ def discovery_run_cmd(
     if campaign is None:
         console.print(f"[red]Campaña no registrada:[/red] {campaign_id}")
         raise typer.Exit(1)
+    campaign = campaigns.reopen_empty_running(campaign_id, db_path=db)
     if campaign["status"] != "registered":
         console.print(
             f"[red]La campaña debe estar registered (está {campaign['status']}).[/red]"

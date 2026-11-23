@@ -568,6 +568,10 @@ def run_campaign(
     campaign = databank.get_campaign(campaign_id, db_path=db_path)
     if campaign is None:
         raise campaigns.CampaignError(f"campaña no registrada: {campaign_id}")
+    if not synthetic:
+        campaign = campaigns.reopen_empty_running(
+            campaign_id, db_path=db_path
+        )
     status = str(campaign["status"])
     if synthetic:
         if status not in {"synthetic", "running", "done"}:
@@ -593,6 +597,24 @@ def run_campaign(
     mode = str(campaign["config"].get("mode") or "ga").strip().lower()
     if mode not in {"ga", "grid"}:
         raise campaigns.CampaignError(f"modo de campaña desconocido: {mode}")
+    grid_spec = campaign["config"].get("grid") if mode == "grid" else None
+    if mode == "grid":
+        if not isinstance(grid_spec, dict) or not grid_spec.get("dimensions"):
+            raise campaigns.CampaignError(
+                "preflight: campaña grid sin grid resoluble en config.grid"
+            )
+        try:
+            grid.validate_grid(grid_spec, template)
+            size = grid.grid_size(template, grid_spec=grid_spec)
+        except Exception as exc:  # noqa: BLE001
+            raise campaigns.CampaignError(
+                f"preflight: grid del spec inválido: {exc}"
+            ) from exc
+        if size != total_budget:
+            raise campaigns.CampaignError(
+                f"preflight: grid del spec tiene {size} combinaciones; "
+                f"n_total congelado es {total_budget}"
+            )
     rng = random.Random(campaign_seed)
     setup = jobs.QueueSetup.from_campaign(campaign, bars=bars)
     is_frame = campaigns.load_segment(campaign_id, "is", frame=bars, db_path=db_path)
@@ -618,6 +640,7 @@ def run_campaign(
             instrument=campaign.get("instrument"),
             timeframe=campaign.get("timeframe"),
             session=campaign["config"].get("session"),
+            grid_spec=grid_spec,
         )
         init_stats = {
             "attempts": len(initial_candidates),

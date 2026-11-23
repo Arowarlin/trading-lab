@@ -452,6 +452,26 @@ def register(
     return campaign
 
 
+def reopen_empty_running(
+    campaign_id: str, *, db_path: str | Path | None = None
+) -> dict[str, Any]:
+    """Reabre una campaña 'running' que falló antes de evaluar nada."""
+    campaign = databank.get_campaign(campaign_id, db_path=db_path)
+    if campaign is None:
+        raise CampaignError(f"campaña no registrada: {campaign_id}")
+    if campaign["status"] != "running":
+        return campaign
+    if int(campaign.get("n_evaluated") or 0) > 0:
+        return campaign
+    if databank.count_strategies(campaign_id, db_path=db_path) > 0:
+        return campaign
+    databank.set_campaign_status(campaign_id, "registered", db_path=db_path)
+    result = databank.get_campaign(campaign_id, db_path=db_path)
+    if result is None:  # pragma: no cover
+        raise CampaignError("no se pudo reabrir la campaña")
+    return result
+
+
 def register_from_spec(
     spec_path: str | Path,
     *,
