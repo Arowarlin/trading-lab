@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from datetime import date
-
 import pytest
 
 from tradinglab.agent_compare import (
@@ -14,6 +12,7 @@ from tradinglab.agent_compare import (
 from tradinglab.config import Settings
 from tradinglab.db import connect, init_db
 from tradinglab.decisions import deep_prompt_hash, report_by_source
+from tradinglab.time_utils import market_today
 
 
 def _lite() -> dict:
@@ -39,7 +38,7 @@ def _deep(rating: str = "Buy") -> dict:
 def test_comparacion_guarda_ambas_fuentes_y_acuerdo(tmp_path):
     db = tmp_path / "lab.db"
     init_db(db)
-    today = date.today().isoformat()
+    today = market_today().isoformat()
     row = run_comparison(
         db,
         "spy",
@@ -115,7 +114,7 @@ def test_fallback_de_analistas(tmp_path):
     row = run_comparison(
         db,
         "XAUUSD",
-        day=date.today().isoformat(),
+        day=market_today().isoformat(),
         analysts=["market", "news", "social"],
         lite_runner=lambda *args: _lite(),
         deep_runner=deep_runner,
@@ -133,7 +132,7 @@ def test_errores_se_sanean_y_no_inventan_deep(tmp_path):
     row = run_comparison(
         db,
         "EURUSD",
-        day=date.today().isoformat(),
+        day=market_today().isoformat(),
         analysts=["market"],
         lite_runner=lambda *args: _lite(),
         deep_runner=lambda *args: (_ for _ in ()).throw(

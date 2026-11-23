@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from datetime import date
-
 import pytest
 
 from tradinglab.config import Settings
@@ -12,6 +10,7 @@ from tradinglab.model_compare import (
     report,
     run_comparison,
 )
+from tradinglab.time_utils import market_today
 
 
 def test_comparacion_dos_modelos_y_reporte(tmp_path):
@@ -98,4 +97,4 @@ def test_error_de_modelo_se_sanea(tmp_path):
             "SELECT COUNT(*) AS n FROM lite_model_comparisons"
         ).fetchone()["n"]
     assert count == 1
-    assert date.today().isoformat() == row["decision_date"]
+    assert market_today().isoformat() == row["decision_date"]
