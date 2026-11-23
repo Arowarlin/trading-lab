@@ -10970,7 +10970,12 @@ def discovery_results_cmd(
         cost = row.get("cost_by_account") or {}
         table.add_row(
             str(row["id"]),
-            "thr={threshold} stop={stop} rr={target_rr}".format(**params)
+            " ".join(
+                f"{name}={value:g}"
+                if isinstance(value, (int, float))
+                else f"{name}={value}"
+                for name, value in params.items()
+            )
             if params
             else "Sin datos",
             str(row.get("trades") or 0),
