@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import sqlite3
 from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -36,6 +36,7 @@ class SlippageCell:
     n: int
     median_price: float | None
     p75_price: float | None
+    origin: str = "tca"
 
     @property
     def status(self) -> str:
@@ -95,6 +96,176 @@ def _account_lookup(con: sqlite3.Connection) -> dict[int, str]:
         "SELECT order_id, account_id FROM order_accounts"
     ).fetchall()
     return {int(row["order_id"]): str(row["account_id"]) for row in rows}
+
+
+MT5_ACCOUNTS = (
+    {
+        "account": "CFD-001",
+        "path": r"C:\Program Files\FTMO Global Markets MT5 Terminal\terminal64.exe",
+        "login": 1515349730,
+        "server": "FTMO-Demo",
+    },
+    {
+        "account": "CFD-006",
+        "path": r"C:\Program Files\Darwinex MetaTrader 5\terminal64.exe",
+        "login": 40000459328,
+        "server": "FundingPips-Trial",
+    },
+)
+ORDER_TYPE_NAMES = {
+    0: "market",
+    1: "market",
+    2: "limit",
+    3: "limit",
+    4: "stop",
+    5: "stop",
+    6: "stop_limit",
+    7: "stop_limit",
+}
+_BUY_ORDER_TYPES = {0, 2, 4, 6}
+
+
+def read_mt5_history(
+    path: str,
+    login: int,
+    *,
+    days: int = 90,
+    server: str | None = None,
+) -> dict[str, Any] | None:
+    """Adjunta al terminal y lee historial. Solo lectura; ``None`` si no cuadra."""
+
+    try:
+        import MetaTrader5 as mt5  # type: ignore
+    except ImportError:
+        return None
+    if not mt5.initialize(path=path, timeout=60_000):
+        return None
+    try:
+        account = mt5.account_info()
+        if account is None or int(account.login) != int(login):
+            return None
+        if server and str(account.server).strip().lower() != str(server).strip().lower():
+            return None
+        end = datetime.now(timezone.utc)
+        start = end - timedelta(days=int(days))
+        orders = mt5.history_orders_get(start, end + timedelta(days=1)) or []
+        deals = mt5.history_deals_get(start, end + timedelta(days=1)) or []
+        after = mt5.account_info()
+        if after is None or int(after.login) != int(login):
+            return None
+        return {
+            "account": str(login),
+            "server": str(account.server),
+            "orders": [order._asdict() for order in orders],
+            "deals": [deal._asdict() for deal in deals],
+        }
+    finally:
+        mt5.shutdown()
+
+
+def _cells_from_history(
+    history: dict[str, Any], account: str
+) -> list[SlippageCell]:
+    """Celdas con slippage firmado (positivo = peor) a partir de órdenes/deals."""
+
+    deals_by_order = {
+        int(deal.get("order") or 0): deal
+        for deal in history.get("deals") or []
+        if int(deal.get("order") or 0) > 0
+    }
+    grouped: dict[tuple[str, str, str, str, str], list[float]] = {}
+    for order in history.get("orders") or []:
+        raw_type = order.get("type")
+        if raw_type is None:
+            continue
+        order_type = ORDER_TYPE_NAMES.get(int(raw_type))
+        if order_type is None:
+            continue
+        reference = float(order.get("price_open") or 0.0)
+        if order_type in {"stop", "stop_limit"}:
+            stop_limit = float(order.get("price_stoplimit") or 0.0)
+            reference = stop_limit if stop_limit > 0.0 else reference
+        deal = deals_by_order.get(int(order.get("ticket") or 0))
+        if deal is None or reference <= 0.0:
+            continue
+        fill = float(deal.get("price") or 0.0)
+        if fill <= 0.0:
+            continue
+        if int(raw_type) in _BUY_ORDER_TYPES:
+            slippage = fill - reference
+        else:
+            slippage = reference - fill
+        when = datetime.fromtimestamp(int(deal.get("time") or 0), tz=timezone.utc)
+        band = _band(when.hour)
+        magic = int(order.get("magic") or 0)
+        comment = str(order.get("comment") or "").lower()
+        if magic:
+            origin = f"ea:{magic}"
+        elif "ai" in comment:
+            origin = "ai_trader"
+        else:
+            origin = "manual"
+        symbol = str(order.get("symbol") or "Sin datos").upper()
+        grouped.setdefault(
+            (symbol, account, order_type, band, origin), []
+        ).append(slippage)
+    cells: list[SlippageCell] = []
+    for (symbol, account_id, order_type, band, origin), values in sorted(grouped.items()):
+        array = np.asarray(values, dtype=float)
+        cells.append(
+            SlippageCell(
+                symbol=symbol,
+                account=account_id,
+                order_type=order_type,
+                band=band,
+                n=len(array),
+                median_price=float(np.median(array)),
+                p75_price=float(np.percentile(array, 75)),
+                origin=origin,
+            )
+        )
+    return cells
+
+
+def measure_mt5_slippage(
+    accounts: tuple[dict[str, Any], ...] = MT5_ACCOUNTS,
+    *,
+    days: int = 90,
+) -> tuple[list[SlippageCell], list[dict[str, Any]]]:
+    """Lee los terminales abiertos. Sin terminal/login: Sin datos, sin reintentos."""
+
+    cells: list[SlippageCell] = []
+    statuses: list[dict[str, Any]] = []
+    for spec in accounts:
+        history = read_mt5_history(
+            str(spec["path"]),
+            int(spec["login"]),
+            days=days,
+            server=spec.get("server"),
+        )
+        if history is None:
+            statuses.append(
+                {
+                    "account": spec["account"],
+                    "login": spec["login"],
+                    "status": "Sin datos",
+                    "reason": "terminal no abierto o login distinto",
+                }
+            )
+            continue
+        account_cells = _cells_from_history(history, str(spec["account"]))
+        cells.extend(account_cells)
+        statuses.append(
+            {
+                "account": spec["account"],
+                "login": spec["login"],
+                "status": "OK",
+                "orders": len(history.get("orders") or []),
+                "deals": len(history.get("deals") or []),
+                "cells": len(account_cells),
+            }
+        )
+    return cells, statuses
 
 
 def measure_slippage(
@@ -295,6 +466,8 @@ __all__ = [
     "SlippageCell",
     "build_proposal",
     "fills_inventory",
+    "measure_mt5_slippage",
     "measure_slippage",
+    "read_mt5_history",
     "write_proposal",
 ]

@@ -129,9 +129,17 @@ def summarize(trades: Iterable[Any], daily_r: pd.Series | None, point: float = 0
     losses = values[values < 0]
     gross_wins = gross[gross > 0]
     gross_losses = gross[gross < 0]
+    risks = [
+        float(trade.risk_price)
+        for trade in trades
+        if getattr(trade, "risk_price", None) is not None
+        and math.isfinite(float(trade.risk_price))
+        and float(trade.risk_price) > 0.0
+    ]
     return {
         "trades": len(trades),
         "expectancy_r": expectancy_r(trades),
+        "mean_risk_price": float(np.mean(risks)) if risks else None,
         "profit_factor": profit_factor(trades),
         "win_rate": win_rate(trades),
         "max_dd_r": max_drawdown_r(daily_r),

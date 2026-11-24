@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from pathlib import Path
 
@@ -147,6 +148,40 @@ def test_campaign_results_lee_solo_is(tmp_path: Path) -> None:
         assert con.execute("SELECT COUNT(*) FROM disc_holdout_reads").fetchone()[0] == 0
     finally:
         con.close()
+
+
+def test_slip_eq_solo_en_campana_aprobada(tmp_path: Path) -> None:
+    db = tmp_path / "discovery.db"
+    strategy_id = _campaign(db)
+    report = results.campaign_results("camp", db_path=db)
+    assert report["rows"][0]["slip_eq"] is None
+
+    con = sqlite3.connect(db)
+    try:
+        con.execute(
+            "UPDATE disc_campaigns SET approved_at = ? WHERE id = 'camp'",
+            ("2026-11-24T00:00:00+00:00",),
+        )
+        row = con.execute(
+            "SELECT metrics_json FROM disc_evaluations"
+            " WHERE strategy_id = ? AND segment = 'fitness_is'",
+            (strategy_id,),
+        ).fetchone()
+        payload = json.loads(row[0])
+        payload["is"]["mean_risk_price"] = 0.5
+        con.execute(
+            "UPDATE disc_evaluations SET metrics_json = ?"
+            " WHERE strategy_id = ? AND segment = 'fitness_is'",
+            (json.dumps(payload), strategy_id),
+        )
+        con.commit()
+    finally:
+        con.close()
+
+    report = results.campaign_results("camp", db_path=db)
+    row = report["rows"][0]
+    assert row["slip_eq"] == -0.0755 * 0.5 / 2.0
+    assert row["slip_eq_status"] == "ok"
 
 
 def test_discovery_results_cli(tmp_path: Path) -> None:

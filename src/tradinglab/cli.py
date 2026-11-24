@@ -9860,19 +9860,39 @@ def costs_slippage_measure_cmd(
     output: str = typer.Option(
         None, "--output", help="Ruta de la propuesta (nunca costs.yaml)"
     ),
+    source: str = typer.Option(
+        "mt5", "--source", help="mt5 (historial attach-only) | tca"
+    ),
 ) -> None:
     """Mide |fill − solicitado| y escribe una propuesta; costs.yaml no se toca."""
 
     from .discovery import slippage_measured
 
     database = db or DEFAULT_DB
-    cells = slippage_measured.measure_slippage(database)
+    cells = []
+    statuses = []
+    if source.strip().lower() == "mt5":
+        cells, statuses = slippage_measured.measure_mt5_slippage()
+    else:
+        cells = slippage_measured.measure_slippage(database)
     inventory = slippage_measured.fills_inventory(database)
     proposal = slippage_measured.build_proposal(cells)
     path = slippage_measured.write_proposal(
         proposal, path=output or slippage_measured.PROPOSAL_PATH
     )
 
+    if statuses:
+        for status in statuses:
+            console.print(
+                f"[dim]{status['account']} · login {status['login']} · "
+                f"{status['status']}"
+                + (
+                    f" · órdenes {status.get('orders')} · deals {status.get('deals')}"
+                    if status["status"] == "OK"
+                    else f" · {status.get('reason', '')}"
+                )
+                + "[/dim]"
+            )
     if inventory.get("error"):
         console.print(f"[yellow]{inventory['error']}[/yellow]")
     else:
@@ -9884,7 +9904,10 @@ def costs_slippage_measure_cmd(
         console.print(summary)
 
     table = Table(title="Slippage medido · |fill − solicitado|")
-    for column in ("Símbolo", "Cuenta", "Tipo", "Franja UTC", "n", "Mediana", "p75", "Estado"):
+    for column in (
+        "Símbolo", "Cuenta", "Tipo", "Franja", "Origen", "n",
+        "Mediana", "p75", "Estado",
+    ):
         table.add_column(column)
     for cell in cells:
         table.add_row(
@@ -9892,13 +9915,16 @@ def costs_slippage_measure_cmd(
             cell.account,
             cell.order_type,
             cell.band,
+            cell.origin,
             str(cell.n),
             "Sin datos" if cell.median_price is None else f"{cell.median_price:.6f}",
             "Sin datos" if cell.p75_price is None else f"{cell.p75_price:.6f}",
             "medido" if cell.status == "measured" else "Sin datos (n < 30)",
         )
     if not cells:
-        table.add_row("Sin datos", "—", "—", "—", "0", "—", "—", "Sin datos")
+        table.add_row(
+            "Sin datos", "—", "—", "—", "—", "0", "—", "—", "Sin datos"
+        )
     console.print(table)
     console.print(f"[green]Propuesta escrita:[/green] {path}")
     console.print("[dim]costs.yaml no se ha modificado.[/dim]")
@@ -11483,6 +11509,7 @@ def discovery_results_cmd(
         "Neto R",
         "cost_R CF1",
         "cost_R CF6",
+        "slip_eq",
         "PF",
         "Pliegues+",
         "Pctl deriva",
@@ -11517,6 +11544,9 @@ def discovery_results_cmd(
             else "Sin datos",
             f"{float(cost['CFD-006']):.4f}"
             if cost.get("CFD-006") is not None
+            else "Sin datos",
+            f"{float(row['slip_eq']):.6f}"
+            if row.get("slip_eq") is not None
             else "Sin datos",
             f"{float(row['profit_factor']):.4f}"
             if row.get("profit_factor") is not None

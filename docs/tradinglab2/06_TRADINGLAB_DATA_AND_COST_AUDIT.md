@@ -141,3 +141,9 @@ mantiene el supuesto actual. **No modifica `costs.yaml`**: escribe
 Estado 2026-11-24: 58 filas TCA, 116 fills, 65 órdenes, todas `market`. Todas
 las celdas tienen `n < 30` y `order_px == fill_px` (slippage 0), así que la
 propuesta queda íntegramente en `assumption`. No se inventa una medición.
+
+Desde C4 la fuente preferente es el historial MT5 (attach-only). En las
+órdenes de entrada a mercado MT5 no conserva `price_open`; solo las de cierre
+permiten medir `deal.price − price_open`. Las celdas reales tienen `n < 30`.
+A futuro, `tca` guarda `bid`, `ask`, `requested_price`, `order_type` y
+`origin` en el envío para poder medir la entrada.

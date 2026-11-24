@@ -781,6 +781,11 @@ class MT5Broker:
                         slippage_bps=tca_slip(price, fill_px, side),
                         expected_cost_bps=float(getattr(self, "slippage_bps", 0.0) or 0.0),
                         realized_cost_bps=abs(fill_px - price) / price * 10_000.0,
+                        bid=float(tick["bid"]),
+                        ask=float(tick["ask"]),
+                        requested_price=float(price),
+                        order_type="market",
+                        origin=str(bot),
                     )
                 except Exception:
                     pass

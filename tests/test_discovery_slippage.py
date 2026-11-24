@@ -130,3 +130,71 @@ def test_inventario_cuenta_tablas(tmp_path):
     assert inventory["tables"]["tca"] == 50
     assert inventory["tables"]["orders"] == 1
     assert inventory["fills"][0]["symbol"] == "XAUUSD"
+
+
+def test_celdas_mt5_firmadas_y_origen():
+    history = {
+        "orders": [
+            {
+                "ticket": 1, "type": 0, "price_open": 100.0,
+                "price_stoplimit": 0.0, "magic": 42, "comment": "",
+                "symbol": "XAUUSD",
+            },
+            {
+                "ticket": 2, "type": 1, "price_open": 100.0,
+                "price_stoplimit": 0.0, "magic": 0, "comment": "ai scalping",
+                "symbol": "EURUSD",
+            },
+            {
+                "ticket": 3, "type": 4, "price_open": 0.0,
+                "price_stoplimit": 101.0, "magic": 7, "comment": "",
+                "symbol": "US100",
+            },
+        ],
+        "deals": [
+            {"order": 1, "entry": 0, "price": 100.01, "time": 1_790_000_000},
+            {"order": 2, "entry": 0, "price": 99.99, "time": 1_790_000_000},
+            {"order": 3, "entry": 0, "price": 101.02, "time": 1_790_000_000},
+        ],
+    }
+    cells = slippage_measured._cells_from_history(history, "CFD-001")
+    gold = next(cell for cell in cells if cell.symbol == "XAUUSD")
+    assert gold.median_price == pytest.approx(0.01)
+    assert gold.origin == "ea:42"
+    euro = next(cell for cell in cells if cell.symbol == "EURUSD")
+    assert euro.median_price == pytest.approx(0.01)
+    assert euro.origin == "ai_trader"
+    index = next(cell for cell in cells if cell.symbol == "US100")
+    assert index.order_type == "stop"
+    assert index.median_price == pytest.approx(0.02)
+
+
+def test_record_fill_guarda_bid_ask_y_solicitado(tmp_path):
+    from tradinglab.db import init_db
+    from tradinglab.tca import record_fill
+
+    db = tmp_path / "lab.db"
+    init_db(db)
+    record_fill(
+        db,
+        bot="bot",
+        account="CFD-001",
+        symbol="XAUUSD",
+        side="buy",
+        bid=100.0,
+        ask=100.02,
+        requested_price=100.02,
+        order_type="market",
+        origin="bot",
+    )
+    con = sqlite3.connect(db)
+    try:
+        con.row_factory = sqlite3.Row
+        row = con.execute("SELECT * FROM tca").fetchone()
+    finally:
+        con.close()
+    assert row["bid"] == pytest.approx(100.0)
+    assert row["ask"] == pytest.approx(100.02)
+    assert row["requested_price"] == pytest.approx(100.02)
+    assert row["order_type"] == "market"
+    assert row["origin"] == "bot"

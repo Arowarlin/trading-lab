@@ -46,6 +46,11 @@ def record_fill(
     latency_ms: float | None = None,
     expected_cost_bps: float | None = None,
     realized_cost_bps: float | None = None,
+    bid: float | None = None,
+    ask: float | None = None,
+    requested_price: float | None = None,
+    order_type: str | None = None,
+    origin: str | None = None,
 ) -> int | None:
     """Registra un fill. Nunca rompe la orden si falla el registro."""
     try:
@@ -54,8 +59,9 @@ def record_fill(
             cursor = con.execute(
                 "INSERT INTO tca"
                 "(fill_id, bot, account, symbol, side, signal_px, order_px, fill_px, "
-                "slippage_bps, latency_ms, expected_cost_bps, realized_cost_bps, ts_utc) "
-                "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "slippage_bps, latency_ms, expected_cost_bps, realized_cost_bps, "
+                "bid, ask, requested_price, order_type, origin, ts_utc) "
+                "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     None if fill_id is None else int(fill_id),
                     None if bot is None else str(bot),
@@ -69,6 +75,11 @@ def record_fill(
                     None if latency_ms is None else float(latency_ms),
                     None if expected_cost_bps is None else float(expected_cost_bps),
                     None if realized_cost_bps is None else float(realized_cost_bps),
+                    None if bid is None else float(bid),
+                    None if ask is None else float(ask),
+                    None if requested_price is None else float(requested_price),
+                    None if order_type is None else str(order_type),
+                    None if origin is None else str(origin),
                     datetime.now(timezone.utc).isoformat(timespec="seconds"),
                 ),
             )

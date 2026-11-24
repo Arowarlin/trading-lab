@@ -343,6 +343,11 @@ CREATE TABLE IF NOT EXISTS tca (
     latency_ms REAL,
     expected_cost_bps REAL,
     realized_cost_bps REAL,
+    bid REAL,
+    ask REAL,
+    requested_price REAL,
+    order_type TEXT,
+    origin TEXT,
     ts_utc TEXT NOT NULL
 );
 
@@ -722,6 +727,24 @@ def init_db(path: str | Path) -> None:
         _migrate_forward_state(con)
         _migrate_chain_orders(con)
         _migrate_ai_trades(con)
+        _migrate_tca(con)
+
+
+def _migrate_tca(con: sqlite3.Connection) -> None:
+    """Añade bid/ask/solicitado/tipo a tca; solo columnas, sin tocar filas."""
+
+    columns = [row["name"] for row in con.execute("PRAGMA table_info(tca)").fetchall()]
+    if not columns:
+        return
+    for column, kind in (
+        ("bid", "REAL"),
+        ("ask", "REAL"),
+        ("requested_price", "REAL"),
+        ("order_type", "TEXT"),
+        ("origin", "TEXT"),
+    ):
+        if column not in columns:
+            con.execute(f"ALTER TABLE tca ADD COLUMN {column} {kind}")
 
 
 def _migrate_strategy_trials(con: sqlite3.Connection) -> None:

@@ -101,6 +101,21 @@ comprueba. El baseline de hashes vive en
 - **Verificación:** `tests/test_discovery_cost_versions.py`.
 - **Rollback:** `default_cost_model_version: 1` o `tl2-c2-pre`.
 
+## 2026-11-24 · C4 · Slippage desde MT5 y slippage de equilibrio
+
+- **Qué cambia:** `lab costs slippage-measure --source mt5` lee el historial
+  (attach-only) de FTMO y FundingPips; `tca` gana `bid`, `ask`,
+  `requested_price`, `order_type` y `origin` (migración aditiva), y
+  `execution/mt5.py` los guarda antes/después del envío sin cambiar la orden.
+  `lab discovery results` añade `slip_eq` solo en campañas aprobadas.
+- **Datos:** FTMO 34 órdenes/35 deals; FundingPips 0/1. Las entradas a mercado
+  no guardan `price_open`; solo las cierres permiten medir y todas quedan
+  `n < 30`. Propuesta en `costs.measured.yaml`, `costs.yaml` intacto.
+- **Verificación:** tests de celdas MT5, `record_fill`, `submit_market` simulado
+  y `slip_eq`; baseline de producción actualizado.
+- **Rollback:** `tl2-c4-pre`.
+
+
 
 
 

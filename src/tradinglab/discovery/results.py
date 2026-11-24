@@ -8,6 +8,8 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
+from .guard import is_approved
+
 
 def _resolve_path(payload: Any, path: str) -> Any:
     """Resuelve ``a.b[0].c`` sobre el DSL guardado."""
@@ -81,6 +83,7 @@ def campaign_results(
             campaign_data.pop("config_json") or "{}"
         )
         rows = []
+        approved = is_approved(campaign_data)
         for row in con.execute(
             "SELECT s.id, s.dsl_json, s.level, s.status, s.verdict,"
             " s.selection_reason, l.rank, e.metrics_json"
@@ -119,6 +122,14 @@ def campaign_results(
                 reason = f"rank {rank} > 0 (dominada, fuera del frente)"
             gross = isd.get("gross_expectancy_r")
             costs = isd.get("cost_by_account") or {}
+            mean_risk = isd.get("mean_risk_price")
+            slip_eq = (
+                float(isd["expectancy_r"]) * float(mean_risk) / 2.0
+                if approved
+                and isd.get("expectancy_r") is not None
+                and mean_risk is not None
+                else None
+            )
             drift = metrics.get("drift") or {}
             verdict, verdict_source = _selection_verdict(
                 row["verdict"], row["status"], rank
@@ -131,6 +142,11 @@ def campaign_results(
                     "gross_r": gross,
                     "net_r": isd.get("expectancy_r"),
                     "cost_by_account": costs,
+                    "slip_eq": slip_eq,
+                    "slip_eq_status": (
+                        "ok" if slip_eq is not None
+                        else "Sin datos: campaña no aprobada o sin riesgo medio"
+                    ),
                     "profit_factor": isd.get("profit_factor"),
                     "positive_folds": positive,
                     "folds": len(folds),

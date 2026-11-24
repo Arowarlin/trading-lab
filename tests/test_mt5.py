@@ -152,3 +152,71 @@ def test_identity_rejects_real_account_by_default():
 def test_identity_allows_real_only_when_explicitly_disabled():
     broker = MT5Broker(login=3000112071, server="Darwinex-Live", require_demo=False)
     assert broker._identity_problems(_Account(server="Darwinex-Live", trade_mode=2)) == []
+
+def test_submit_market_guarda_bid_ask_y_solicitado(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+
+    import tradinglab.tca as tca
+
+    captured = {}
+
+    def fake_record(db_path, **kwargs):
+        captured.update(kwargs)
+        return 1
+
+    monkeypatch.setattr(tca, "record_fill", fake_record)
+
+    class FakeMT5:
+        TRADE_ACTION_DEAL = 1
+        ORDER_TYPE_BUY = 0
+        ORDER_TYPE_SELL = 1
+        ORDER_TIME_GTC = 0
+        TRADE_RETCODE_DONE = 10009
+        TRADE_RETCODE_INVALID_FILL = 10030
+        ORDER_FILLING_IOC = 1
+        ORDER_FILLING_FOK = 2
+        ORDER_FILLING_RETURN = 3
+
+        def order_send(self, request):
+            return SimpleNamespace(
+                retcode=self.TRADE_RETCODE_DONE,
+                price=100.02,
+                order=123,
+                deal=456,
+                comment="ok",
+            )
+
+    broker = MT5Broker(
+        path="fake", login=1, server="Fake", dry_run=False,
+        db_path=tmp_path / "lab.db",
+    )
+    fake = FakeMT5()
+    monkeypatch.setattr(broker, "_require", lambda: fake)
+    monkeypatch.setattr(broker, "_assert_can_trade", lambda mt5: None)
+    monkeypatch.setattr(broker, "_require_identity", lambda: None)
+    monkeypatch.setattr(
+        broker,
+        "symbol_spec",
+        lambda symbol: {
+            "symbol": "XAUUSD",
+            "digits": 2,
+            "point": 0.01,
+            "volume_min": 0.01,
+            "volume_max": 100.0,
+            "volume_step": 0.01,
+            "filling_mode": 1,
+            "stops_level": 0,
+        },
+    )
+    monkeypatch.setattr(
+        broker, "tick", lambda symbol: {"bid": 100.0, "ask": 100.02}
+    )
+    monkeypatch.setattr(broker, "_record", lambda **kwargs: {"ok": True})
+
+    result = broker.submit_market("XAUUSD", 0.01, bot="bot", dry_run=False)
+    assert result["ok"] is True
+    assert captured["bid"] == pytest.approx(100.0)
+    assert captured["ask"] == pytest.approx(100.02)
+    assert captured["requested_price"] == pytest.approx(100.02)
+    assert captured["order_type"] == "market"
+    assert captured["origin"] == "bot"
