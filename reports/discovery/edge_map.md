@@ -2,6 +2,27 @@
 
 Solo lectura del databank. Sin OOS-2, sin campañas y sin DSR nuevo.
 
+## Hipótesis probadas (2026-11-24)
+
+Estas tres hipótesis ya se probaron. `suggest` no vuelve a proponer las
+combinaciones plantilla × mercado × TF de la tabla; las propuestas de la misma
+plantilla en **otros** mercados siguen siendo "por probar", no una
+re-optimización de lo ya visto.
+
+| # | Hipótesis | Plantilla | Mercados · TF | Campañas | Estado |
+|---|---|---|---|---|---|
+| 1 | Cambio de mes | `turn_of_month` | US500, US100 · D1 | `r9b-tom-us500-d1`, `r9b-tom-us100-d1`; `r9-tom-*` archivadas por anclaje | Probada; 0 finalistas. US500: OOS-1 negativo; US100: deriva < 90 |
+| 2 | Reversión en los fix | `fix_reversal` | USDJPY, EURUSD, GBPUSD · H1 | `q2-fix-usdjpy-h1`, `q2-fix-eurusd-h1`, `q2-fix-gbpusd-h1` | Probada; edge bruto que el coste elimina |
+| 4 | Rebote tras ventas fuertes | `d1_extension_reversion` | US500, US100 · D1 | `q1-rebote-us500-d1`, `q1-rebote-us100-d1` | Probada; US500 sin edge bruto; US100 muestra insuficiente (OOS-1 con 0 ops) |
+
+La hipótesis 3 (momentum de serie temporal en cesta) **no** se marca como
+probada: la infraestructura de ejecución está lista, pero la campaña
+`q3-tsmom-cesta-d1` está pausada por la enmienda de auditoría del 2026-11-24 y
+no se ha registrado ni ejecutado.
+
+La tabla de abajo es la exportación anterior (2026-11-22); se conserva como
+histórico. Los informes de cada campaña están en `reports/discovery/`.
+
 ## Resumen
 
 - sin probar: 0
