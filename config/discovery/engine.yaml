@@ -18,6 +18,9 @@ discovery:
   # En v2, si el símbolo tiene ASK, se usa historical_scaled; si no,
   # hourly_median. El p75 queda solo para los escenarios de estrés.
   spread_model: p75_static
+  # Versión de coste de evaluaciones nuevas sin campaña guardada (edge map,
+  # optimizador, onboarding). Las campañas guardadas conservan la suya.
+  default_cost_model_version: 2
 
 swap:
   # static = swap medido de swap.yaml (v1). historical = tipo de referencia

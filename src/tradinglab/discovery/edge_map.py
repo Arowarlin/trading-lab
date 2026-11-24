@@ -19,7 +19,7 @@ import json
 import math
 import sqlite3
 import statistics
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -300,6 +300,10 @@ def _raw_strategy(
         _skip_validation_for_archived=bool(validation_errors),
     )
     setup = jobs.QueueSetup.from_campaign(campaign, bars=bars)
+    if not (campaign.get("config") or {}).get("cost_model_version"):
+        setup = replace(
+            setup, cost_model_version=costs.default_cost_model_version()
+        )
     limits = specs.run_limits_from_strategy(model, setup, close_at_end=True)
     zero = fastbt.cfd_costs_from_bps(
         commission_bps=0.0, slippage_bps=0.0, spread_bps=0.0
@@ -638,8 +642,19 @@ def _firm_rows(
                     session_tz=str(model.session.tz or "America/New_York"),
                     db_path=costs_db,
                     config=config,
+                    cost_model_version=int(
+                        (campaign.get("config") or {}).get(
+                            "cost_model_version"
+                        )
+                        or costs.default_cost_model_version()
+                    ),
                 )
                 setup = jobs.QueueSetup.from_campaign(campaign, bars=bars)
+                if not (campaign.get("config") or {}).get("cost_model_version"):
+                    setup = replace(
+                        setup,
+                        cost_model_version=costs.default_cost_model_version(),
+                    )
                 limits = specs.run_limits_from_strategy(model, setup, close_at_end=True)
                 trailing = model.exit.trailing or {}
                 prepared = fastbt.prepare(
@@ -1120,6 +1135,12 @@ def template_cost_r(
     return cost_r_for(account_id, symbol, timeframe, **kwargs)
 
 
+def _cost_version(version: int | None) -> int:
+    """Versión explícita o la de evaluaciones nuevas."""
+
+    return int(version or costs.default_cost_model_version())
+
+
 def _base_viability(
     template: str,
     symbol: str,
@@ -1132,6 +1153,7 @@ def _base_viability(
     frame: pd.DataFrame,
     costs_db: str | Path,
     config,
+    cost_model_version: int | None = None,
 ) -> dict[str, Any]:
     model_dict = genetic.configured_template(
         template,
@@ -1153,6 +1175,7 @@ def _base_viability(
         session_tz=str(model.session.tz or "America/New_York"),
         db_path=costs_db,
         config=config,
+        cost_model_version=_cost_version(cost_model_version),
     )
     setup = jobs.QueueSetup(
         instrument=symbol,
@@ -1163,6 +1186,7 @@ def _base_viability(
         cost_accounts=(account.id,),
         cost_mode="target",
         legacy_cost=False,
+        cost_model_version=_cost_version(cost_model_version),
         session_tz=str(model.session.tz or "America/New_York"),
         session_start=model.session.start,
         session_end=model.session.end,
@@ -1234,6 +1258,7 @@ def suggest(
     bars_loader=None,
     limit: int | None = None,
     registry=None,
+    cost_model_version: int | None = None,
 ) -> dict[str, Any]:
     """Combinaciones no probadas y viables. Etiqueta siempre ``por probar``."""
 
@@ -1317,6 +1342,7 @@ def suggest(
                             frame=frame,
                             costs_db=costs_db,
                             config=config,
+                            cost_model_version=cost_model_version,
                         )
                     except Exception as exc:  # noqa: BLE001
                         if existing is None:

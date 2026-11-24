@@ -120,6 +120,10 @@ class DiscoveryConfig(BaseModel):
     spread_model: Literal["p75_static", "hourly_median", "historical_scaled"] = (
         "p75_static"
     )
+    # Versión de coste para evaluaciones nuevas de módulos sin campaña
+    # guardada (edge map, optimizador, onboarding). Las campañas guardadas
+    # conservan su propia versión.
+    default_cost_model_version: Literal[1, 2] = 2
 
 
 class SwapConfig(BaseModel):

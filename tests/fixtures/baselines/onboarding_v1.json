@@ -1,0 +1,548 @@
+{
+  "note": "Baseline de onboarding con cost_model_version=1 (2026-11-24). Solo lectura; generado con scan=True, matrix=False.",
+  "version": 1,
+  "accounts": {
+    "CFD-001": {
+      "rows": [
+        {
+          "template": "asia_range_reversion",
+          "instrument": "EURUSD",
+          "timeframe": "H1",
+          "source": "broker",
+          "status": "ok",
+          "trades_is": 356,
+          "cost_r": 0.0795155260648267,
+          "cost_r_screening": 0.157563720622309,
+          "feasible": true
+        },
+        {
+          "template": "asia_range_reversion",
+          "instrument": "GBPUSD",
+          "timeframe": "H1",
+          "source": "broker",
+          "status": "ok",
+          "trades_is": 374,
+          "cost_r": 0.09147159765303772,
+          "cost_r_screening": 0.15555555555555522,
+          "feasible": true
+        },
+        {
+          "template": "asia_range_reversion",
+          "instrument": "US100",
+          "timeframe": "H1",
+          "source": "broker",
+          "status": "ok",
+          "trades_is": 282,
+          "cost_r": 0.04000392337707058,
+          "cost_r_screening": 0.043276949245232225,
+          "feasible": true
+        },
+        {
+          "template": "asia_range_reversion",
+          "instrument": "US100",
+          "timeframe": "M30",
+          "source": "broker",
+          "status": "ok",
+          "trades_is": 439,
+          "cost_r": 0.0727011861122945,
+          "cost_r_screening": 0.06298042175715003,
+          "feasible": true
+        },
+        {
+          "template": "asia_range_reversion",
+          "instrument": "USDJPY",
+          "timeframe": "M15",
+          "source": "broker",
+          "status": "ok",
+          "trades_is": 415,
+          "cost_r": 0.08420551170643609,
+          "cost_r_screening": 0.2124070175438754,
+          "feasible": true
+        },
+        {
+          "template": "asia_range_reversion",
+          "instrument": "USDJPY",
+          "timeframe": "M30",
+          "source": "broker",
+          "status": "ok",
+          "trades_is": 320,
+          "cost_r": 0.06275390990147768,
+          "cost_r_screening": 0.1434502369668208,
+          "feasible": true
+        },
+        {
+          "template": "asia_range_reversion",
+          "instrument": "XAUUSD",
+          "timeframe": "H1",
+          "source": "broker",
+          "status": "ok",
+          "trades_is": 296,
+          "cost_r": 0.09080771349209157,
+          "cost_r_screening": 0.043090930807056685,
+          "feasible": true
+        },
+        {
+          "template": "donchian_vol_h4",
+          "instrument": "EURUSD",
+          "timeframe": "H4",
+          "source": "dukascopy",
+          "status": "ok",
+          "trades_is": 60,
+          "cost_r": 0.03348858339490495,
+          "cost_r_screening": 0.07514998421218852,
+          "feasible": true
+        },
+        {
+          "template": "donchian_vol_h4",
+          "instrument": "GBPUSD",
+          "timeframe": "H4",
+          "source": "dukascopy",
+          "status": "ok",
+          "trades_is": 55,
+          "cost_r": 0.04500045052333258,
+          "cost_r_screening": 0.07486631016042708,
+          "feasible": true
+        },
+        {
+          "template": "donchian_vol_h4",
+          "instrument": "US100",
+          "timeframe": "H4",
+          "source": "dukascopy",
+          "status": "ok",
+          "trades_is": 54,
+          "cost_r": 0.03737662087147897,
+          "cost_r_screening": 0.021241439459779562,
+          "feasible": true
+        },
+        {
+          "template": "fix_reversal",
+          "instrument": "US100",
+          "timeframe": "H1",
+          "source": "broker",
+          "status": "ok",
+          "trades_is": 683,
+          "cost_r": 0.023060168156675758,
+          "cost_r_screening": 0.043276949245232225,
+          "feasible": true
+        },
+        {
+          "template": "fix_reversal",
+          "instrument": "XAUUSD",
+          "timeframe": "H1",
+          "source": "broker",
+          "status": "ok",
+          "trades_is": 684,
+          "cost_r": 0.0897893367204507,
+          "cost_r_screening": 0.043090930807056685,
+          "feasible": true
+        },
+        {
+          "template": "intraday_momentum_close",
+          "instrument": "US100",
+          "timeframe": "M15",
+          "source": "broker",
+          "status": "ok",
+          "trades_is": 175,
+          "cost_r": 0.041191847686361964,
+          "cost_r_screening": 0.0924899517429134,
+          "feasible": true
+        },
+        {
+          "template": "intraday_momentum_close",
+          "instrument": "US100",
+          "timeframe": "M30",
+          "source": "broker",
+          "status": "ok",
+          "trades_is": 373,
+          "cost_r": 0.09248175559830808,
+          "cost_r_screening": 0.06298042175715003,
+          "feasible": true
+        },
+        {
+          "template": "ny_open_vol_filter",
+          "instrument": "EURUSD",
+          "timeframe": "M15",
+          "source": "broker",
+          "status": "ok",
+          "trades_is": 319,
+          "cost_r": 0.09838458564440736,
+          "cost_r_screening": 0.3380681818181636,
+          "feasible": true
+        },
+        {
+          "template": "ny_open_vol_filter",
+          "instrument": "US100",
+          "timeframe": "M15",
+          "source": "broker",
+          "status": "ok",
+          "trades_is": 614,
+          "cost_r": 0.05483982787879812,
+          "cost_r_screening": 0.0924899517429134,
+          "feasible": true
+        },
+        {
+          "template": "session_breakout_htf",
+          "instrument": "US100",
+          "timeframe": "M15",
+          "source": "broker",
+          "status": "ok",
+          "trades_is": 335,
+          "cost_r": 0.0630773590144573,
+          "cost_r_screening": 0.0924899517429134,
+          "feasible": true
+        },
+        {
+          "template": "session_breakout_htf",
+          "instrument": "US100",
+          "timeframe": "M5",
+          "source": "broker",
+          "status": "ok",
+          "trades_is": 452,
+          "cost_r": 0.07484412123597803,
+          "cost_r_screening": 0.17040726835212425,
+          "feasible": true
+        },
+        {
+          "template": "turn_of_month",
+          "instrument": "EURUSD",
+          "timeframe": "D1",
+          "source": "dukascopy",
+          "status": "ok",
+          "trades_is": 28,
+          "cost_r": 0.05534255208055067,
+          "cost_r_screening": 0.02813405047579645,
+          "feasible": true
+        },
+        {
+          "template": "turn_of_month",
+          "instrument": "GBPUSD",
+          "timeframe": "D1",
+          "source": "dukascopy",
+          "status": "ok",
+          "trades_is": 28,
+          "cost_r": 0.0707345708642812,
+          "cost_r_screening": 0.028284126911244843,
+          "feasible": true
+        },
+        {
+          "template": "turn_of_month",
+          "instrument": "USDJPY",
+          "timeframe": "D1",
+          "source": "dukascopy",
+          "status": "ok",
+          "trades_is": 32,
+          "cost_r": 0.011521137661844857,
+          "cost_r_screening": 0.016951520879274783,
+          "feasible": true
+        },
+        {
+          "template": "turn_of_month",
+          "instrument": "XAUUSD",
+          "timeframe": "D1",
+          "source": "dukascopy",
+          "status": "ok",
+          "trades_is": 28,
+          "cost_r": 0.03138929156074627,
+          "cost_r_screening": 0.007778625947345923,
+          "feasible": true
+        }
+      ],
+      "warnings": [
+        "Sin datos: el bróker no expone US100"
+      ]
+    },
+    "CFD-006": {
+      "rows": [
+        {
+          "template": "asia_range_reversion",
+          "instrument": "EURUSD",
+          "timeframe": "H1",
+          "source": "broker",
+          "status": "ok",
+          "trades_is": 356,
+          "cost_r": 0.07961233698092826,
+          "cost_r_screening": 0.157563720622309,
+          "feasible": true
+        },
+        {
+          "template": "asia_range_reversion",
+          "instrument": "GBPUSD",
+          "timeframe": "H1",
+          "source": "broker",
+          "status": "ok",
+          "trades_is": 374,
+          "cost_r": 0.07535466998687171,
+          "cost_r_screening": 0.14141414141414113,
+          "feasible": true
+        },
+        {
+          "template": "asia_range_reversion",
+          "instrument": "US100",
+          "timeframe": "H1",
+          "source": "broker",
+          "status": "ok",
+          "trades_is": 282,
+          "cost_r": 0.038461530697106366,
+          "cost_r_screening": 0.044944769981345195,
+          "feasible": true
+        },
+        {
+          "template": "asia_range_reversion",
+          "instrument": "US100",
+          "timeframe": "M30",
+          "source": "broker",
+          "status": "ok",
+          "trades_is": 439,
+          "cost_r": 0.07561662351706074,
+          "cost_r_screening": 0.06540758113893773,
+          "feasible": true
+        },
+        {
+          "template": "asia_range_reversion",
+          "instrument": "USDJPY",
+          "timeframe": "M15",
+          "source": "broker",
+          "status": "ok",
+          "trades_is": 415,
+          "cost_r": 0.06647258944483402,
+          "cost_r_screening": 0.18461578947369792,
+          "feasible": true
+        },
+        {
+          "template": "asia_range_reversion",
+          "instrument": "USDJPY",
+          "timeframe": "M30",
+          "source": "broker",
+          "status": "ok",
+          "trades_is": 320,
+          "cost_r": 0.049826718388224354,
+          "cost_r_screening": 0.12468127962084975,
+          "feasible": true
+        },
+        {
+          "template": "asia_range_reversion",
+          "instrument": "XAUUSD",
+          "timeframe": "H1",
+          "source": "broker",
+          "status": "ok",
+          "trades_is": 296,
+          "cost_r": 0.0838821199215232,
+          "cost_r_screening": 0.03478112594871308,
+          "feasible": true
+        },
+        {
+          "template": "donchian_vol_h4",
+          "instrument": "EURUSD",
+          "timeframe": "H4",
+          "source": "dukascopy",
+          "status": "ok",
+          "trades_is": 60,
+          "cost_r": 0.03327069692588489,
+          "cost_r_screening": 0.07514998421218852,
+          "feasible": true
+        },
+        {
+          "template": "donchian_vol_h4",
+          "instrument": "GBPUSD",
+          "timeframe": "H4",
+          "source": "dukascopy",
+          "status": "ok",
+          "trades_is": 55,
+          "cost_r": 0.030180271474031628,
+          "cost_r_screening": 0.06806028196402462,
+          "feasible": true
+        },
+        {
+          "template": "donchian_vol_h4",
+          "instrument": "US100",
+          "timeframe": "H4",
+          "source": "dukascopy",
+          "status": "ok",
+          "trades_is": 54,
+          "cost_r": 0.02371679502934311,
+          "cost_r_screening": 0.022060048761353923,
+          "feasible": true
+        },
+        {
+          "template": "donchian_vol_h4",
+          "instrument": "US500",
+          "timeframe": "H4",
+          "source": "dukascopy",
+          "status": "ok",
+          "trades_is": 55,
+          "cost_r": 0.059327973085010255,
+          "cost_r_screening": 0.07237043595619616,
+          "feasible": true
+        },
+        {
+          "template": "fix_reversal",
+          "instrument": "US100",
+          "timeframe": "H1",
+          "source": "broker",
+          "status": "ok",
+          "trades_is": 683,
+          "cost_r": 0.04066306169648724,
+          "cost_r_screening": 0.044944769981345195,
+          "feasible": true
+        },
+        {
+          "template": "intraday_momentum_close",
+          "instrument": "US100",
+          "timeframe": "M15",
+          "source": "broker",
+          "status": "ok",
+          "trades_is": 175,
+          "cost_r": 0.03642516419801428,
+          "cost_r_screening": 0.09605435870988355,
+          "feasible": true
+        },
+        {
+          "template": "intraday_momentum_close",
+          "instrument": "US100",
+          "timeframe": "M30",
+          "source": "broker",
+          "status": "ok",
+          "trades_is": 373,
+          "cost_r": 0.03792967355430718,
+          "cost_r_screening": 0.06540758113893773,
+          "feasible": true
+        },
+        {
+          "template": "intraday_momentum_close",
+          "instrument": "XAUUSD",
+          "timeframe": "M30",
+          "source": "broker",
+          "status": "ok",
+          "trades_is": 172,
+          "cost_r": 0.08376511925577595,
+          "cost_r_screening": 0.05081743374382733,
+          "feasible": true
+        },
+        {
+          "template": "ny_open_vol_filter",
+          "instrument": "EURUSD",
+          "timeframe": "M15",
+          "source": "broker",
+          "status": "ok",
+          "trades_is": 319,
+          "cost_r": 0.09839281991208627,
+          "cost_r_screening": 0.3380681818181636,
+          "feasible": true
+        },
+        {
+          "template": "ny_open_vol_filter",
+          "instrument": "GBPUSD",
+          "timeframe": "M15",
+          "source": "broker",
+          "status": "ok",
+          "trades_is": 336,
+          "cost_r": 0.07798176069436746,
+          "cost_r_screening": 0.30237580993520735,
+          "feasible": true
+        },
+        {
+          "template": "ny_open_vol_filter",
+          "instrument": "US100",
+          "timeframe": "M15",
+          "source": "broker",
+          "status": "ok",
+          "trades_is": 615,
+          "cost_r": 0.04792965009879796,
+          "cost_r_screening": 0.09605435870988355,
+          "feasible": true
+        },
+        {
+          "template": "ny_open_vol_filter",
+          "instrument": "USDJPY",
+          "timeframe": "M15",
+          "source": "broker",
+          "status": "ok",
+          "trades_is": 162,
+          "cost_r": 0.08474893011581444,
+          "cost_r_screening": 0.18461578947369792,
+          "feasible": true
+        },
+        {
+          "template": "session_breakout_htf",
+          "instrument": "GBPUSD",
+          "timeframe": "M15",
+          "source": "broker",
+          "status": "ok",
+          "trades_is": 260,
+          "cost_r": 0.09740322880692284,
+          "cost_r_screening": 0.30237580993520735,
+          "feasible": true
+        },
+        {
+          "template": "session_breakout_htf",
+          "instrument": "US100",
+          "timeframe": "M15",
+          "source": "broker",
+          "status": "ok",
+          "trades_is": 335,
+          "cost_r": 0.05554296806441487,
+          "cost_r_screening": 0.09605435870988355,
+          "feasible": true
+        },
+        {
+          "template": "session_breakout_htf",
+          "instrument": "US100",
+          "timeframe": "M5",
+          "source": "broker",
+          "status": "ok",
+          "trades_is": 452,
+          "cost_r": 0.06547296538821532,
+          "cost_r_screening": 0.17697447747149975,
+          "feasible": true
+        },
+        {
+          "template": "turn_of_month",
+          "instrument": "EURUSD",
+          "timeframe": "D1",
+          "source": "dukascopy",
+          "status": "ok",
+          "trades_is": 28,
+          "cost_r": 0.05058871257542179,
+          "cost_r_screening": 0.02813405047579645,
+          "feasible": true
+        },
+        {
+          "template": "turn_of_month",
+          "instrument": "GBPUSD",
+          "timeframe": "D1",
+          "source": "dukascopy",
+          "status": "ok",
+          "trades_is": 28,
+          "cost_r": 0.09188745532793116,
+          "cost_r_screening": 0.025712842646586225,
+          "feasible": true
+        },
+        {
+          "template": "turn_of_month",
+          "instrument": "USDJPY",
+          "timeframe": "D1",
+          "source": "dukascopy",
+          "status": "ok",
+          "trades_is": 32,
+          "cost_r": 0.010796778772274472,
+          "cost_r_screening": 0.014733592355350243,
+          "feasible": true
+        },
+        {
+          "template": "turn_of_month",
+          "instrument": "XAUUSD",
+          "timeframe": "D1",
+          "source": "dukascopy",
+          "status": "ok",
+          "trades_is": 28,
+          "cost_r": 0.03862603872040547,
+          "cost_r_screening": 0.006279958888877589,
+          "feasible": true
+        }
+      ],
+      "warnings": [
+        "US30: hora NY Sin datos (Sin datos: broker_spreads[broker:CFD-006] sin filas para DJI30)"
+      ]
+    }
+  }
+}

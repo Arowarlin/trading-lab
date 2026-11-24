@@ -89,6 +89,19 @@ comprueba. El baseline de hashes vive en
 - **Verificación:** 23 tests de swap; `reports/discovery/swap-historico.md`.
 - **Rollback:** `swap.mode: static` o `tl2-c1-pre`.
 
+## 2026-11-24 · C2 · Versión de coste en edge map, optimizador y onboarding
+
+- **Qué cambia:** `discovery.default_cost_model_version: 2`. Las evaluaciones
+  nuevas de `edge_map.suggest`, `optimizer.plateau` y `onboarding.onboard`
+  usan v2; las campañas guardadas conservan su versión. Onboarding gana el
+  parámetro `cost_model_version` y `_run_with_cost` respeta la versión de los
+  límites.
+- **Baseline:** `tests/fixtures/baselines/onboarding_v1.json` (CFD-001/006).
+  v2 reduce el coste medio 0,015 R y hace viables 9/10 combinaciones nuevas.
+- **Verificación:** `tests/test_discovery_cost_versions.py`.
+- **Rollback:** `default_cost_model_version: 1` o `tl2-c2-pre`.
+
+
 
 
 

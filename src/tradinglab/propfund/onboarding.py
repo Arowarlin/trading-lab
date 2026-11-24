@@ -783,6 +783,9 @@ def scan_templates(
                 )
                 continue
             try:
+                from ..discovery.costs import default_cost_model_version
+
+                version = default_cost_model_version()
                 book = build_cost_book(
                     canonical,
                     accounts=[account.id],
@@ -790,6 +793,7 @@ def scan_templates(
                     session_tz=str(session.get("tz") or "America/New_York"),
                     db_path=costs_db,
                     config=config,
+                    cost_model_version=version,
                 )
             except Exception as exc:  # noqa: BLE001
                 rows.append(
@@ -817,6 +821,7 @@ def scan_templates(
                     max_trades_per_day=model.limits.max_trades_per_day,
                     cooldown_bars=specs.cooldown_bars(model),
                     allow_next_day_entry=model.timeframe == "D1",
+                    cost_model_version=version,
                 )
                 trailing = model.exit.trailing or {}
                 prepared = fastbt.prepare(
@@ -1034,6 +1039,7 @@ def recompute_level3(
     n_paths: int | None = None,
     now: datetime | None = None,
     min_level: int = 3,
+    cost_model_version: int | None = None,
 ) -> dict[str, Any]:
     """Recalcula estrategias nivel >= ``min_level`` con coste/reglas de cuenta.
 
@@ -1116,6 +1122,13 @@ def recompute_level3(
             )
             if bars.empty:
                 raise ValueError("Sin datos en IS")
+            from ..discovery.costs import default_cost_model_version
+
+            version = int(
+                cost_model_version
+                or (campaign.get("config") or {}).get("cost_model_version")
+                or default_cost_model_version()
+            )
             book = build_cost_book(
                 canonical,
                 accounts=[account.id],
@@ -1123,6 +1136,7 @@ def recompute_level3(
                 session_tz=str(model.session.tz or "America/New_York"),
                 db_path=costs_db,
                 config=config,
+                cost_model_version=version,
             )
             limits = fastbt.RunLimits(
                 session_tz=str(model.session.tz or "America/New_York"),
@@ -1133,6 +1147,7 @@ def recompute_level3(
                 max_trades_per_day=model.limits.max_trades_per_day,
                 cooldown_bars=specs.cooldown_bars(model),
                 allow_next_day_entry=model.timeframe == "D1",
+                cost_model_version=version,
             )
             trailing = model.exit.trailing or {}
             prepared = fastbt.prepare(
@@ -1233,6 +1248,15 @@ def recompute_level3(
 # --------------------------------------------------------------------------- resumen
 
 
+def _run_cost_version(run: Mapping[str, Any]) -> int:
+    from ..discovery.costs import default_cost_model_version
+
+    return int(
+        getattr(run["limits"], "cost_model_version", 0)
+        or default_cost_model_version()
+    )
+
+
 def _run_with_cost(
     run: Mapping[str, Any],
     account_id: str,
@@ -1244,6 +1268,7 @@ def _run_with_cost(
     from ..discovery.costs import build_cost_book
 
     config = load_engine_config()
+    version = _run_cost_version(run)
     book = build_cost_book(
         str(run["instrument"]),
         accounts=[account_id],
@@ -1251,6 +1276,7 @@ def _run_with_cost(
         session_tz=str(run["limits"].session_tz),
         db_path=costs_db,
         config=config,
+        cost_model_version=version,
     )
     trailing = run["model"].exit.trailing or {}
     prepared = fastbt.prepare(
@@ -1804,6 +1830,7 @@ def onboard(
     out: str | Path | None = None,
     now: datetime | None = None,
     n_paths: int | None = None,
+    cost_model_version: int | None = None,
 ) -> dict[str, Any]:
     """Ejecuta el onboarding de una cuenta y escribe el informe markdown."""
 
@@ -1852,6 +1879,7 @@ def onboard(
             costs_db=costs_db,
             bars_loader=bars_loader,
             registry=reg,
+            cost_model_version=cost_model_version,
         )
         scan_payload.update(
             {
@@ -1878,6 +1906,7 @@ def onboard(
             bars_loader=bars_loader,
             n_paths=n_paths,
             now=moment,
+            cost_model_version=cost_model_version,
         )
     comparisons = (
         compare_costs(account, reg, scan_payload, costs_db=costs_db)

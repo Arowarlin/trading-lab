@@ -231,6 +231,14 @@ def plateau(
 ) -> dict[str, Any]:
     """Matriz de estabilidad ±1 paso; no modifica la estrategia ni la guarda."""
 
+    from dataclasses import replace
+
+    from .costs import default_cost_model_version
+
+    if not getattr(setup, "campaign_id", ""):
+        setup = replace(
+            setup, cost_model_version=default_cost_model_version()
+        )
     base = (
         strategy.model_dump(mode="json", exclude_none=True)
         if isinstance(strategy, dsl.Strategy)

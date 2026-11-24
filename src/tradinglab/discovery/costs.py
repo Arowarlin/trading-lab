@@ -715,6 +715,12 @@ def build_cost_book_for_setup(setup: Any) -> CostBook:
     )
 
 
+def default_cost_model_version() -> int:
+    """Versión para evaluaciones nuevas sin campaña guardada."""
+
+    return int(load_engine_config().discovery.default_cost_model_version)
+
+
 def apply_result(
     book: CostBook,
     result: fastbt.FastResult,

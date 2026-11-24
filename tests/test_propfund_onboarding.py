@@ -249,6 +249,7 @@ def test_onboarding_simulado_sin_mt5_real_y_sin_dsr(tmp_path, monkeypatch) -> No
         out=tmp_path / "SIM-001_onboarding.md",
         now=NOW,
         n_paths=200,
+        cost_model_version=1,
     )
     after = count_tests(learning_db, discovery_db=discovery_db)
 
