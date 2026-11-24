@@ -11659,6 +11659,41 @@ def discovery_power_cmd(
     )
 
 
+@discovery_app.command("family-test")
+def discovery_family_test_cmd(
+    family: str = typer.Argument(..., help="Familia de hipótesis"),
+    db: str = typer.Option(None, "--db", help="discovery.db alternativo"),
+    reps: int = typer.Option(1000, "--reps"),
+    seed: int = typer.Option(7, "--seed"),
+) -> None:
+    """SPA de Hansen sobre las primarias v2 de una familia (solo lectura)."""
+
+    from .discovery import family as family_mod
+
+    result = family_mod.family_test(
+        family, db_path=db, reps=reps, seed=seed
+    )
+    if result.get("status") != "ok":
+        console.print(
+            f"[yellow]Sin datos:[/yellow] {result.get('reason', result.get('status'))}"
+        )
+        raise typer.Exit(1)
+    table = Table(title=f"Familia · {family} · SPA de Hansen")
+    for column in ("Campo", "Valor"):
+        table.add_column(column)
+    table.add_row("Campañas", ", ".join(result.get("campaigns") or []))
+    table.add_row("Series", str(result.get("n_series")))
+    table.add_row("Observaciones", str(result.get("observations")))
+    table.add_row("Bloque (días)", str(result.get("block_size")))
+    table.add_row("Estadístico", f"{result.get('statistic'):.4f}")
+    table.add_row("p-valor", f"{result.get('p_value'):.4f}")
+    table.add_row(
+        "Veredicto",
+        "familia con ventaja" if result["p_value"] < 0.05 else "sin evidencia",
+    )
+    console.print(table)
+
+
 @discovery_app.command("show")
 def discovery_show_cmd(
     strategy_id: int = typer.Argument(..., help="ID de la estrategia"),

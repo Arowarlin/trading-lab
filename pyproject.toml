@@ -19,6 +19,7 @@ dependencies = [
     "keyring==25.7.0",
     "optuna==5.0.0",
     "quantstats==0.0.86",
+    "arch==9.0.0",
 ]
 
 [project.optional-dependencies]
