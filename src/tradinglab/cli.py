@@ -11132,6 +11132,7 @@ def discovery_harness_cmd(
     edge: str = typer.Option("0,0.05,0.1,0.2", "--edge", help="Ventajas en R"),
     sims: int = typer.Option(2000, "--sims", help="Simulaciones (o operaciones en bars)"),
     seed: int = typer.Option(7, "--seed"),
+    protocol: str = typer.Option("v1", "--protocol", help="v1 | v2"),
     output: str = typer.Option(None, "--output", help="Ruta del informe Markdown"),
 ) -> None:
     """Arnés T01: P(aprobar) del pipeline y recuperación de δ en barras."""
@@ -11146,6 +11147,7 @@ def discovery_harness_cmd(
             simulations=sims,
             seed=seed,
             output=output,
+            protocol=protocol,
         )
     except (ValueError, FileNotFoundError) as exc:
         console.print(f"[red]{exc}[/red]")

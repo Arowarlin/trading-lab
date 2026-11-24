@@ -18,7 +18,7 @@ from ..propfund.instruments import resolve
 from ..propfund.models import Market
 from ..propfund.registry import load_registry
 from ..stats import dsr_from_returns, period_sharpe
-from . import campaigns, compiler, costs, databank, decisions, dsl, fastbt, jobs, robustness
+from . import campaigns, compiler, costs, databank, decisions, dsl, fastbt, jobs, protocol_v2, robustness
 from .config import load_engine_config
 from .metrics import expectancy_r
 from .specs import exit_spec_from_strategy, run_limits_from_strategy
@@ -566,6 +566,26 @@ def confirm(
         **dict(result.metrics),
         "return_dates": [stamp.isoformat() for stamp in result.daily_r.index],
     }
+    protocol_v2_payload = None
+    if int((campaign.get("config") or {}).get("protocol_version") or 1) >= 2:
+        dev = tests.get("protocol_v2_dev") or {}
+        lcb_value = dev.get("lcb") if isinstance(dev, dict) else None
+        returns = [
+            float(trade.r_net)
+            for trade in result.trades
+            if trade.r_net is not None
+        ]
+        if lcb_value is not None:
+            protocol_v2_payload = protocol_v2.holdout_decision(
+                returns, float(lcb_value)
+            )
+            databank.add_validation(
+                strategy_id,
+                "protocol_v2_holdout",
+                protocol_v2_payload,
+                bool(protocol_v2_payload["approved"]),
+                db_path=db_path,
+            )
     databank.add_evaluation(
         strategy_id,
         segment="oos2",
@@ -823,6 +843,7 @@ def confirm(
     updated["dsr_confirm"] = dsr
     updated["test_vs_random_oos2"] = random_oos2
     updated["firm_confirm"] = firm_payloads
+    updated["protocol_v2"] = protocol_v2_payload
     from . import backup
 
     backup.backup_after_action(db_path)

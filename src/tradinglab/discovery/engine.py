@@ -17,7 +17,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from . import campaigns, databank, decisions, dsl, fitness, genetic, grid, jobs, nsga2, plateau
+from . import campaigns, databank, decisions, dsl, fitness, genetic, grid, jobs, nsga2, plateau, protocol_v2
 from .config import load_engine_config
 
 
@@ -990,6 +990,7 @@ def run_campaign(
     oos1: dict[int, dict[str, Any]] = {}
     selected: list[Individual] = []
     fold_discarded = list(discarded)
+    v2_development: dict[str, Any] | None = None
     if candidates:
         oos1_frame = campaigns.load_segment(
             campaign_id, "oos1", frame=bars, db_path=db_path
@@ -1020,6 +1021,49 @@ def run_campaign(
                     returns=result.get("returns") or (),
                     db_path=db_path,
                 )
+        if protocol_version >= 2 and primary_hash:
+            primary_item = next(
+                (
+                    item
+                    for item in candidates
+                    if item.strategy_hash == primary_hash
+                ),
+                None,
+            )
+            if primary_item is not None:
+                result = oos1.get(id(primary_item)) or {}
+                oos_series = _series(
+                    result.get("returns") or [],
+                    result.get("return_dates") or [],
+                )
+                combined = pd.concat(
+                    [primary_item.daily_returns, oos_series], axis=0
+                ).sort_index()
+                v2_development = protocol_v2.lcb_dev(
+                    combined.to_numpy(dtype=float)
+                )
+                if primary_item.strategy_id is not None:
+                    databank.add_validation(
+                        primary_item.strategy_id,
+                        "protocol_v2_dev",
+                        v2_development,
+                        bool(
+                            v2_development.get("lcb") is not None
+                            and float(v2_development["lcb"]) > 0.0
+                        ),
+                        db_path=db_path,
+                    )
+                if (
+                    v2_development.get("lcb") is None
+                    or float(v2_development["lcb"]) <= 0.0
+                ):
+                    discarded.append(
+                        (
+                            primary_item,
+                            "v2: LCB desarrollo <= 0",
+                        )
+                    )
+                    candidates = []
         selected, rejected = _select_finalists(
             candidates,
             oos1,
@@ -1118,6 +1162,7 @@ def run_campaign(
         "primary_hash": primary_hash,
         "primary_found": bool(primary_hash is not None),
         **plateau_payload,
+        "protocol_v2_dev": v2_development,
         "n_evaluated": len(known),
         "n_effective": int(n_effective),
         "n_finalists": len(selected),

@@ -22,6 +22,7 @@ from typing import Any, Iterable
 import numpy as np
 import pandas as pd
 from scipy.stats import norm
+from scipy.stats import t as t_dist
 
 from ..config import ROOT
 from . import decisions
@@ -120,6 +121,60 @@ def _profit_factor(values: np.ndarray) -> np.ndarray:
     return ratio
 
 
+def _simulate_v2(
+    rng: np.random.Generator,
+    *,
+    frequency: float,
+    edge: float,
+    sims: int,
+    n_development: int,
+    n_holdout: int,
+    distribution: str,
+) -> GateRow:
+    """Protocolo v2: LCB en desarrollo y holdout único con consistencia."""
+
+    development = _draw(
+        rng, (sims, max(1, n_development)), float(edge), distribution
+    )
+    mean_dev = development.mean(axis=1)
+    sd_dev = development.std(axis=1, ddof=1)
+    n_dev = max(1, n_development)
+    critical = float(t_dist.ppf(0.95, max(1, n_dev - 1)))
+    with np.errstate(divide="ignore", invalid="ignore"):
+        lcb_dev = mean_dev - critical * sd_dev / math.sqrt(n_dev)
+    drift = 100.0 * norm.cdf(mean_dev * math.sqrt(n_dev))
+    level3 = (lcb_dev > 0.0) & (drift >= decisions.DEFAULT_DRIFT_PERCENTILE)
+    if n_holdout > 0:
+        holdout = _draw(
+            rng, (sims, int(n_holdout)), float(edge), distribution
+        )
+        mean_h = holdout.mean(axis=1)
+        sd_h = holdout.std(axis=1, ddof=1)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            t_h = np.where(
+                sd_h > 0.0, mean_h / sd_h * math.sqrt(n_holdout), 0.0
+            )
+            consistency = mean_h >= lcb_dev - 2.0 * sd_h / math.sqrt(n_holdout)
+        level4 = level3 & (t_h >= 1.6448536269514722) & consistency
+    else:
+        level4 = np.zeros(sims, dtype=bool)
+    approved = int(level4.sum())
+    level3_count = int(level3.sum())
+    low, high = wilson_interval(approved, sims)
+    return GateRow(
+        frequency=float(frequency),
+        edge=float(edge),
+        distribution=distribution,
+        simulations=sims,
+        approved=approved,
+        level3=level3_count,
+        p_approve=approved / sims,
+        ci_low=low,
+        ci_high=high,
+        p_level3=level3_count / sims,
+    )
+
+
 def simulate_gates(
     *,
     frequency: float,
@@ -129,6 +184,7 @@ def simulate_gates(
     years: dict[str, float],
     folds: int = 4,
     distribution: str = "normal",
+    protocol: str = "v1",
 ) -> GateRow:
     """Una celda frecuencia × ventaja × distribución."""
 
@@ -137,6 +193,17 @@ def simulate_gates(
     n_is = max(1, int(round(float(frequency) * years["is"])))
     n_oos1 = max(1, int(round(float(frequency) * years["oos1"])))
     n_oos2 = max(0, int(round(float(frequency) * years["oos2"])))
+
+    if str(protocol).lower() == "v2":
+        return _simulate_v2(
+            rng,
+            frequency=frequency,
+            edge=edge,
+            sims=sims,
+            n_development=n_is + n_oos1,
+            n_holdout=n_oos2,
+            distribution=distribution,
+        )
 
     is_values = _draw(rng, (sims, n_is), float(edge), distribution)
     is_mean = is_values.mean(axis=1)
@@ -325,6 +392,7 @@ def render_report(payload: dict[str, Any]) -> str:
         "databank ni el contador de pruebas.",
         "",
         f"- Semilla: `{payload['seed']}` · simulaciones: `{payload['simulations']}`",
+        f"- Protocolo: `{payload.get('protocol', 'v1')}`",
         f"- Tramos (años): `{payload['years']}`",
         "",
     ]
@@ -376,12 +444,16 @@ def run(
     seed: int = DEFAULT_SEED,
     output: str | Path | None = None,
     today: date | None = None,
+    protocol: str = "v1",
 ) -> dict[str, Any]:
     """Ejecuta el arnés y escribe el informe Markdown."""
 
     mode = str(mode).strip().lower()
     if mode not in {"gates", "bars"}:
         raise ValueError("mode debe ser gates o bars")
+    protocol = str(protocol).strip().lower()
+    if protocol not in {"v1", "v2"}:
+        raise ValueError("protocol debe ser v1 o v2")
     frequencies = _parse_values(frequencies)
     edges = _parse_values(edges)
     config = load_engine_config()
@@ -399,6 +471,7 @@ def run(
                             seed=seed,
                             years=years,
                             distribution=distribution,
+                            protocol=protocol,
                         )
                     )
     else:
@@ -410,6 +483,7 @@ def run(
         ]
     payload = {
         "mode": mode,
+        "protocol": protocol,
         "seed": int(seed),
         "simulations": int(simulations),
         "years": {key: round(value, 3) for key, value in years.items()},

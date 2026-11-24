@@ -270,6 +270,7 @@ def register(
     primary: dict[str, Any] | None = None,
     plateau_grid: dict[str, Any] | None = None,
     protocol_version: int | None = None,
+    holdout_start: str | None = None,
 ) -> dict[str, Any]:
     """Registra un borrador (o previsualiza con ``dry_run``)."""
 
@@ -384,7 +385,8 @@ def register(
             None if plausible_edge_r is None else float(plausible_edge_r)
         ),
         "sigma_r": 1.0 if sigma_r is None else float(sigma_r),
-        "protocol_version": int(protocol_version or 1),
+        "protocol_version": int(protocol_version or 2),
+        "holdout_start": str(holdout_start or "2025-07-01"),
         "primary": dict(primary or {}) or None,
         "plateau_grid": dict(plateau_grid or {}) or None,
         "plateau_n": (
@@ -570,6 +572,7 @@ def register_from_spec(
         primary=payload.get("primary"),
         plateau_grid=payload.get("plateau_grid"),
         protocol_version=payload.get("protocol_version"),
+        holdout_start=payload.get("holdout_start"),
     )
 
 
