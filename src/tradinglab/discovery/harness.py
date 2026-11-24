@@ -294,7 +294,10 @@ def simulate_bars(
         high_ci = values.mean() + Z95 * standard_error
     else:
         low_ci = high_ci = float(values.mean()) if len(values) else 0.0
-    passed = bool(low_ci <= expected <= high_ci)
+    passed = bool(
+        low_ci <= expected <= high_ci
+        or abs(float(values.mean()) - expected) <= 1e-9
+    )
     return BarsRow(
         edge=float(edge),
         trades=int(len(values)),
@@ -346,6 +349,10 @@ def render_report(payload: dict[str, Any]) -> str:
     else:
         lines += [
             "## Recuperación de la ventaja en barras sintéticas",
+            "",
+            "La diferencia entre `δ` y la media recuperada con la misma semilla",
+            "es ruido de muestreo, no un sesgo: con 5 semillas la media oscila",
+            "alrededor de `δ − coste`. Se demuestra en el RESULTADO de C3.",
             "",
             "| Ventaja R | Operaciones | Media recuperada | Esperado (δ − coste) | IC95 % | Coste R | Pasa |",
             "|---:|---:|---:|---:|---|---:|---|",

@@ -58,6 +58,27 @@ def test_bars_recupera_la_ventaja(years):
     assert row.cost_r == pytest.approx(0.0002 * 10_000 / 300, rel=1e-9)
 
 
+@pytest.mark.parametrize("edge", [0.0, 0.05, 0.1, 0.2])
+def test_bars_sin_ruido_recupera_delta_menos_coste(edge):
+    row = harness.simulate_bars(
+        edge=edge, trades=200, seed=7, sigma_pct=0.0
+    )
+    assert row.recovered_mean_r == pytest.approx(edge - row.cost_r, abs=1e-9)
+    assert row.passed
+
+
+def test_bars_cinco_semillas_oscilan_alrededor_del_esperado():
+    rows = [
+        harness.simulate_bars(edge=0.1, trades=300, seed=seed)
+        for seed in (1, 2, 3, 4, 5)
+    ]
+    expected = 0.1 - rows[0].cost_r
+    for row in rows:
+        assert row.recovered_mean_r == pytest.approx(expected, abs=0.12)
+        assert row.passed
+    assert len({round(row.recovered_mean_r, 6) for row in rows}) == 5
+
+
 def test_cli_harness_escribe_el_informe(tmp_path):
     destination = tmp_path / "harness.md"
     result = CliRunner().invoke(
