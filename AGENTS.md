@@ -13,6 +13,14 @@
   `config/schedule.yaml` o cualquier script ejecutado por una tarea con
   `RunLevel Highest` requiere aprobación explícita del operador en esa misma
   sesión: la tarea corre como administrador y puede cambiar el Programador.
+- **Cambios en componentes de producción** (EA `us100-ftmo1`, carril forward FTMO,
+  riesgo FTMO, `ai_trader`, Prop Fund y `ea_lab`). Cada cambio necesita:
+  (a) baseline antes del cambio (`lab propfund baseline --reason "..."`);
+  (b) un test de regresión que compare el comportamiento anterior y el nuevo;
+  (c) una entrada en `docs/CHANGELOG-produccion.md`;
+  (d) un tag `tl2-<id>-pre` antes del primer commit, para el rollback.
+  El baseline no bloquea: informa. Sigue prohibido operar en real y activar bots
+  o F13 sin aprobación humana explícita.
 - Cada bloque termina con: tests sintéticos, `ruff`, `pytest`, `lab doctor`,
   README/PLAN actualizados y un commit pequeño.
 - Si hay datos ausentes, escribir **Sin datos**; no inventar precios, offsets ni

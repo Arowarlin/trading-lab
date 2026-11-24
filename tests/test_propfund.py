@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -33,10 +34,11 @@ ROOT = Path(__file__).resolve().parents[1]
 
 # ---------------------------------------------------------------- protección
 def test_componentes_protegidos_intactos():
-    """Si falla: se tocó el EA, ai_trader, el forward FTMO, su riesgo o el hash F13."""
+    """Si falla: se tocó el EA, ai_trader, el forward FTMO o su riesgo sin baseline."""
     report = protected.verify(ROOT)
     assert report["status"] != "SIN_MANIFIESTO", "falta config/propfund/protected_manifest.json"
     assert report["ok"], report["issues"]
+    assert report["clean"], report["changed"]
 
 
 def test_el_manifiesto_cubre_los_identificadores_protegidos():
@@ -60,10 +62,41 @@ def test_verify_detecta_un_cambio(tmp_path):
         assert protected.verify(tmp_path)["ok"]
         target.write_bytes(b"mode: live\n")
         report = protected.verify(tmp_path)
-        assert not report["ok"] and report["issues"][0]["kind"] == "changed"
+        # El baseline informa del cambio, no bloquea.
+        assert report["ok"] and not report["clean"]
+        assert report["status"] == "CAMBIOS"
+        assert report["changed"] == ["config/lab.yaml"]
+        assert report["issues"][0]["kind"] == "changed"
         # CRLF no cuenta como cambio
         target.write_bytes(b"mode: paper\r\n")
-        assert protected.verify(tmp_path)["ok"]
+        assert protected.verify(tmp_path)["clean"]
+    finally:
+        protected.PROTECTED_GROUPS = original
+
+
+def test_baseline_anade_autorizacion(tmp_path):
+    (tmp_path / "config" / "propfund").mkdir(parents=True)
+    target = tmp_path / "config" / "lab.yaml"
+    target.write_bytes(b"mode: paper\n")
+    original = protected.PROTECTED_GROUPS
+    protected.PROTECTED_GROUPS = {"x": {"description": "t", "paths": ["config/lab.yaml"]}}
+    try:
+        protected.write_manifest(tmp_path)
+        target.write_bytes(b"mode: live\n")
+        protected.write_baseline("prueba de cambio", tmp_path)
+        manifest = json.loads((tmp_path / protected.MANIFEST_PATH).read_text(encoding="utf-8"))
+        entry = manifest["authorizations"][-1]
+        assert entry["reason"] == "prueba de cambio"
+        assert entry["date"]
+        assert any("config/lab.yaml" in change for change in entry["changes"])
+        assert protected.verify(tmp_path)["clean"]
+        # Un segundo baseline conserva la autorización anterior.
+        protected.write_baseline("segundo cambio", tmp_path)
+        manifest = json.loads((tmp_path / protected.MANIFEST_PATH).read_text(encoding="utf-8"))
+        assert [item["reason"] for item in manifest["authorizations"]] == [
+            "prueba de cambio",
+            "segundo cambio",
+        ]
     finally:
         protected.PROTECTED_GROUPS = original
 
@@ -125,13 +158,40 @@ def test_registro_rechaza_acciones_y_mezcla_de_motores(tmp_path):
         load_registry(_write_cfg(tmp_path, assignments=cfd_on_futures))
 
 
-def test_no_se_asignan_estrategias_protegidas(tmp_path):
-    def protected_asg(items):
+def test_no_se_asignan_estrategias_de_motor_externo(tmp_path):
+    def external_asg(items):
         items.append({"id": "A-P", "strategy": "ai_trader", "account": "CFD-001",
                       "instruments": ["XAUUSD"]})
         return items
-    with pytest.raises(RegistryError, match="protegida"):
-        load_registry(_write_cfg(tmp_path, assignments=protected_asg))
+    with pytest.raises(RegistryError, match="motor externo"):
+        load_registry(_write_cfg(tmp_path, assignments=external_asg))
+
+
+def test_motor_externo_acepta_el_yaml_antiguo_y_el_nuevo():
+    from tradinglab.propfund.models import Strategy
+
+    base = {
+        "id": "x", "name": "X", "lane": "research", "market": "cfd",
+        "instruments": ["EURUSD"], "timeframe": "H1",
+    }
+    viejo = Strategy.model_validate({**base, "protected": True})
+    nuevo = Strategy.model_validate({**base, "external_engine": True})
+    assert viejo.external_engine and viejo.protected
+    assert nuevo.external_engine and nuevo.protected
+    assert not Strategy.model_validate(base).external_engine
+
+
+def test_el_router_rechaza_el_motor_externo():
+    from tradinglab.propfund.models import StrategyAssignment
+
+    reg = load_registry()
+    reg.assignments["A-TEST-EXT"] = StrategyAssignment(
+        id="A-TEST-EXT", strategy="ai_trader", account="CFD-001", instruments=["XAUUSD"]
+    )
+    decisions = route(Signal("ai_trader", "XAUUSD", "long", 2000.0, 1990.0), reg, snapshots={})
+    assert decisions
+    eligibility = next(step for step in decisions[0].steps if step["step"] == "eligibility")
+    assert any("motor externo" in reason for reason in eligibility["reasons"])
 
 
 # ---------------------------------------------------------------- universo

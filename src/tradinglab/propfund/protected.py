@@ -1,10 +1,14 @@
-"""Componentes protegidos del carril FTMO: inventario y hashes SHA-256.
+"""Componentes del carril FTMO: baseline de hashes SHA-256 y control de cambios.
 
 La expansión multiempresa (``tradinglab.propfund``) se construye **alrededor**
-de lo que ya funciona. Este módulo congela el contenido de los archivos que no
-se pueden tocar y permite comprobar en cualquier momento que siguen idénticos.
+de lo que ya funciona. Este módulo guarda un *baseline* del contenido de los
+archivos de producción y permite comprobar en cualquier momento qué cambió.
 
-Grupos protegidos (identificados en la auditoría de la Fase 0, ver
+El baseline **no bloquea**: informa. Cualquier cambio debe llevar su prueba de
+regresión, su entrada en ``docs/CHANGELOG-produccion.md`` y su tag de rollback
+(regla común 4 de ``.orquestador/tl2-audit/TL2_OPENCODE_TASKS.md``).
+
+Grupos del baseline (identificados en la auditoría de la Fase 0, ver
 ``docs/propfund/01_auditoria.md``):
 
 * ``ea_us100_ftmo1``  – EA externo ``us100-ftmo1`` (MQL5, setfile, plantilla) y
@@ -24,11 +28,16 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 
 from ..config import ROOT
 
-MANIFEST_PATH = Path("config") / "propfund" / "protected_manifest.json"
+# El archivo conserva su nombre histórico para no romper consumidores ni el
+# test de aislamiento; el concepto es "baseline".
+BASELINE_PATH = Path("config") / "propfund" / "protected_manifest.json"
+MANIFEST_PATH = BASELINE_PATH
+AUTHORIZATIONS_KEY = "authorizations"
 
 PROTECTED_GROUPS: dict[str, dict] = {
     "ea_us100_ftmo1": {
@@ -160,54 +169,142 @@ def load_manifest(root: Path = ROOT) -> dict | None:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def _diff(frozen: dict | None, current: dict) -> list[str]:
+    """Lista legible de diferencias entre el baseline y el estado actual."""
+    changes: list[str] = []
+    if frozen is None:
+        return changes
+    for group, spec in frozen.get("groups", {}).items():
+        expected = spec.get("files", {})
+        actual = current["groups"].get(group, {}).get("files", {})
+        for rel, digest in expected.items():
+            now = actual.get(rel)
+            if now is None:
+                changes.append(f"{group}: {rel} (missing)")
+            elif now != digest:
+                changes.append(f"{group}: {rel} (changed)")
+        for rel in actual:
+            if rel not in expected:
+                changes.append(f"{group}: {rel} (new)")
+    return sorted(changes)
+
+
 def write_manifest(root: Path = ROOT) -> Path:
-    """Congela el estado actual. Solo con aprobación explícita del operador."""
+    """Escribe el baseline sin tocar las autorizaciones.
+
+    Se conserva por compatibilidad; el camino normal es :func:`write_baseline`,
+    que además deja la autorización con fecha y motivo.
+    """
+    path = root / MANIFEST_PATH
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = compute_manifest(root)
+    frozen = load_manifest(root)
+    if frozen and frozen.get(AUTHORIZATIONS_KEY):
+        payload[AUTHORIZATIONS_KEY] = frozen[AUTHORIZATIONS_KEY]
+    path.write_text(
+        json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    return path
+
+
+def write_baseline(reason: str, root: Path = ROOT) -> Path:
+    """Reescribe el baseline y registra la autorización con fecha y motivo.
+
+    ``changes`` guarda la diferencia con el baseline anterior, para que el
+    registro diga qué se autorizó exactamente.
+    """
+    if not str(reason or "").strip():
+        raise ValueError("el baseline exige un motivo")
+    frozen = load_manifest(root)
+    current = compute_manifest(root)
+    changes = _diff(frozen, current)
+    authorizations = list((frozen or {}).get(AUTHORIZATIONS_KEY) or [])
+    authorizations.append(
+        {
+            "date": datetime.now(timezone.utc).date().isoformat(),
+            "reason": str(reason).strip(),
+            "changes": changes,
+        }
+    )
+    current[AUTHORIZATIONS_KEY] = authorizations
     path = root / MANIFEST_PATH
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
-        json.dumps(compute_manifest(root), indent=2, ensure_ascii=False, sort_keys=True) + "\n",
+        json.dumps(current, indent=2, ensure_ascii=False, sort_keys=True) + "\n",
         encoding="utf-8",
     )
     return path
 
 
 def verify(root: Path = ROOT) -> dict:
-    """Compara el árbol de trabajo contra el manifiesto congelado."""
+    """Compara el árbol de trabajo contra el baseline.
+
+    Contrato: ``ok`` solo es ``False`` si falta el baseline. Los cambios se
+    devuelven en ``changed``/``unchanged`` y en el detalle por grupo, pero no
+    bloquean: el control de cambios se apoya en la autorización y la regresión.
+    """
     frozen = load_manifest(root)
     if frozen is None:
-        return {"ok": False, "status": "SIN_MANIFIESTO", "issues": [], "groups": {}}
+        return {
+            "ok": False,
+            "status": "SIN_MANIFIESTO",
+            "clean": False,
+            "changed": [],
+            "unchanged": [],
+            "issues": [],
+            "groups": {},
+        }
     current = compute_manifest(root)
     issues: list[IntegrityIssue] = []
+    changed: list[str] = []
+    unchanged: list[str] = []
     groups: dict[str, dict] = {}
     for group, spec in frozen.get("groups", {}).items():
         expected = spec.get("files", {})
         actual = current["groups"].get(group, {}).get("files", {})
         group_issues: list[IntegrityIssue] = []
+        group_changed: list[str] = []
+        group_unchanged: list[str] = []
         for rel, digest in expected.items():
             now = actual.get(rel)
             if now is None and (root / rel).exists() is False:
                 group_issues.append(IntegrityIssue(rel, "missing", digest, None))
             elif now != digest:
                 group_issues.append(IntegrityIssue(rel, "changed", digest, now))
+            else:
+                group_unchanged.append(rel)
         for rel, digest in actual.items():
             if rel not in expected:
                 group_issues.append(IntegrityIssue(rel, "new", None, digest))
+        for issue in group_issues:
+            (group_changed if issue.kind in {"changed", "missing", "new"} else group_unchanged).append(
+                issue.path
+            )
         issues.extend(group_issues)
+        changed.extend(group_changed)
+        unchanged.extend(group_unchanged)
         groups[group] = {
             "description": spec.get("description", ""),
             "files": len(expected),
             "ok": not group_issues,
+            "changed": sorted(group_changed),
+            "unchanged": sorted(group_unchanged),
             "issues": [issue.__dict__ for issue in group_issues],
         }
     return {
-        "ok": not issues,
-        "status": "OK" if not issues else "ALTERADO",
+        "ok": True,
+        "status": "SIN CAMBIOS" if not changed else "CAMBIOS",
+        "clean": not changed,
+        "changed": sorted(set(changed)),
+        "unchanged": sorted(set(unchanged)),
         "issues": [issue.__dict__ for issue in issues],
         "groups": groups,
     }
 
 
 __all__ = [
+    "BASELINE_PATH",
     "MANIFEST_PATH",
     "PROTECTED_GROUPS",
     "IntegrityIssue",
@@ -216,5 +313,6 @@ __all__ = [
     "load_manifest",
     "protected_files",
     "verify",
+    "write_baseline",
     "write_manifest",
 ]

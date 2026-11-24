@@ -1,4 +1,4 @@
-"""``lab propfund``: estado, matriz de firmas, protección y router en dry-run."""
+"""``lab propfund``: estado, matriz de firmas, baseline y router en dry-run."""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ from .router import Signal, log_decisions, route
 
 app = typer.Typer(
     no_args_is_help=True,
-    help="Prop Fund multiempresa (CFD + Futures): firmas, cuentas, protección y router (dry-run).",
+    help="Prop Fund multiempresa (CFD + Futures): firmas, cuentas, baseline y router (dry-run).",
 )
 console = Console()
 
@@ -243,29 +243,59 @@ def onboarding_mtf(
 
 @app.command("verify")
 def verify() -> None:
-    """Comprueba los hashes SHA-256 de los componentes protegidos."""
+    """Compara el árbol con el baseline e informa de los cambios (no bloquea)."""
     report = protected.verify()
-    for group, info in report["groups"].items():
-        mark = "[green]OK[/green]" if info["ok"] else "[red]ALTERADO[/red]"
-        console.print(f"{mark} {group} · {info['files']} archivos · {info['description']}")
-        for issue in info["issues"]:
-            console.print(f"    {issue['kind']}: {issue['path']}")
-    if not report["ok"]:
+    if report["status"] == "SIN_MANIFIESTO":
+        console.print(
+            "[red]Sin baseline: falta config/propfund/protected_manifest.json. "
+            "Créalo con `lab propfund baseline --reason \"...\"`.[/red]"
+        )
         raise typer.Exit(1)
+    for group, info in report["groups"].items():
+        if info["ok"]:
+            console.print(
+                f"[green]OK[/green] {group} · {info['files']} archivos · sin cambios · "
+                f"{info['description']}"
+            )
+        else:
+            console.print(
+                f"[yellow]CAMBIOS[/yellow] {group} · {info['files']} archivos · "
+                f"{len(info['changed'])} cambiados · {info['description']}"
+            )
+            for issue in info["issues"]:
+                console.print(f"    [yellow]{issue['kind']}: {issue['path']}[/yellow]")
+    if report["changed"]:
+        console.print(
+            "[yellow]El baseline no bloquea. Todo cambio en producción exige prueba de "
+            "regresión, entrada en docs/CHANGELOG-produccion.md y tag de rollback.[/yellow]"
+        )
 
 
-@app.command("freeze")
+@app.command("baseline")
+def baseline(
+    reason: str = typer.Option(..., "--reason", help="Motivo del nuevo baseline (obligatorio)."),
+) -> None:
+    """Reescribe el baseline y registra la autorización con fecha y motivo."""
+    if not reason.strip():
+        console.print("[red]El baseline exige un motivo no vacío.[/red]")
+        raise typer.Exit(2)
+    path = protected.write_baseline(reason)
+    console.print(f"[green]Baseline escrito:[/green] {path} · motivo: {reason.strip()}")
+    console.print("[dim]La autorización queda en authorizations.[/dim]")
+
+
+@app.command("freeze", hidden=True)
 def freeze(
     approved_by_operator: bool = typer.Option(
         False, "--approved-by-operator", help="Obligatorio: el operador aprueba re-congelar."
     ),
 ) -> None:
-    """Re-congela el manifiesto de protegidos (solo tras aprobación humana)."""
+    """Alias heredado de ``baseline`` (solo tras aprobación humana)."""
     if not approved_by_operator:
         console.print("[red]Re-congelar exige --approved-by-operator.[/red]")
         raise typer.Exit(2)
-    path = protected.write_manifest()
-    console.print(f"Manifiesto escrito en {path}")
+    path = protected.write_baseline("freeze --approved-by-operator")
+    console.print(f"Baseline escrito en {path}")
 
 
 @app.command("affected")

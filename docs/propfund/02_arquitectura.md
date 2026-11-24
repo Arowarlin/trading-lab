@@ -2,7 +2,7 @@
 
 ```
                  ┌─────────────────────────── TradingLab Console (web) ───────────────────────────┐
-                 │  Prop Fund: Resumen · Empresas · Cuentas · CFD · Futures · Estrategias · Protección │
+                 │  Prop Fund: Resumen · Empresas · Cuentas · CFD · Futures · Estrategias · Baseline │
                  └──────────────────────────────────────▲──────────────────────────────────────────┘
                                                         │ GET /api/propfund (solo lectura)
 ┌─────────────── config/propfund ───────────────┐   ┌──┴───────────────── src/tradinglab/propfund ─────────────────┐
@@ -12,12 +12,12 @@
 │ assignments.yaml  estrategia → cuenta          │   │ instruments.py universo CFD/Futures, alias, subyacentes        │
 │ costs.yaml        perfiles por cuenta/símbolo  │   │ costs.py      motor CFD  |  motor Futures (independientes)     │
 │ risk.yaml         límites globales             │   │ risk.py       riesgo de cuenta + global por subyacente         │
-│ protected_manifest.json  SHA-256 protegidos    │   │ router.py     Señal→Elegib.→Compliance→Riesgo→Coste→Solicitud │
-└────────────────────────────────────────────────┘   │ protected.py  manifiesto e integridad                          │
-                                                     │ cli.py        lab propfund status|firms|accounts|verify|route  │
+│ protected_manifest.json  baseline SHA-256      │   │ router.py     Señal→Elegib.→Compliance→Riesgo→Coste→Solicitud │
+└────────────────────────────────────────────────┘   │ protected.py  baseline e integridad                           │
+                                                     │ cli.py        lab propfund status|firms|accounts|verify|baseline|route │
                                                      └──────────────┬─────────────────────────────────────────────────┘
                      solo lectura ▲                                 │ ExecutionRequest (dry-run)
-┌──────────── carril FTMO protegido ────────────┐                    ▼
+┌──────────── carril FTMO (motor externo) ──────┐                    ▼
 │ EA us100-ftmo1 · ai_trader · forward FX        │      Fase 4: adaptadores de ejecución aislados
 │ prop/ · guardian · account_daily · mt5.py      │      MT5 worker por cuenta · ProjectX · Tradovate · Rithmic
 └────────────────────────────────────────────────┘
@@ -25,9 +25,11 @@
 
 ## Principios
 
-1. **Construir alrededor, no encima.** Nada del carril FTMO se edita; el Prop
+1. **Construir alrededor, no encima.** El carril FTMO conserva su motor; el Prop
    Fund lo lee (cuentas `CFD-001/002` son espejos de `ftmo_demo` y
-   `ftmo_trial_ea`) y suma sus posiciones al riesgo global.
+   `ftmo_trial_ea`) y suma sus posiciones al riesgo global. Los cambios en
+   producción van por la regla de control de cambios: baseline, regresión,
+   CHANGELOG y tag de rollback.
 2. **La estrategia no conoce la firma.** Emite una señal (entrada, stop). La
    asignación + cuenta + firma deciden si se opera, cuánto y con qué coste.
 3. **Una decisión por cuenta.** Nunca un copiador ciego.
@@ -39,11 +41,27 @@
 6. **PAPER/DEMO por defecto.** El router produce como máximo
    `READY_DRY_RUN`. `LIVE_*` no se puede declarar en archivo.
 
+## Baseline y control de cambios
+
+`lab propfund verify` compara los cuatro grupos (`ea_us100_ftmo1`,
+`ai_trader`, `ftmo_forward`, `ftmo_risk`) con
+`config/propfund/protected_manifest.json`. Si algo cambió, lo lista en
+amarillo y **sale con 0**: el baseline informa, no bloquea. Solo falta el
+baseline es un error.
+
+`lab propfund baseline --reason "..."` recalcula los hashes y añade una entrada
+a `authorizations` con la fecha UTC, el motivo y la lista de cambios. Cada
+cambio en un componente de producción exige además prueba de regresión,
+entrada en `docs/CHANGELOG-produccion.md` y tag `tl2-<id>-pre` antes del primer
+commit. Una estrategia con `external_engine: true` (o el alias antiguo
+`protected: true`) la ejecuta su propio motor y el router nunca le envía
+órdenes.
+
 ## Flujo de ejecución (router)
 
 | Paso | Rechazo | Comprueba |
 |---|---|---|
-| 1 Elegibilidad | `REJECTED_ELIGIBILITY` | asignación activa, cuenta no plantilla, conexión PAPER/DEMO, instrumento permitido, mismo motor, estrategia no protegida |
+| 1 Elegibilidad | `REJECTED_ELIGIBILITY` | asignación activa, cuenta no plantilla, conexión PAPER/DEMO, instrumento permitido, mismo motor, estrategia de motor externo |
 | 2 Compliance | `ALERT_ONLY` / `REJECTED_COMPLIANCE` | permiso de automatización, verificación oficial, confirmación del operador, fase, bot exclusivo (Tradeify), replicación |
 | 3 Tamaño | `REJECTED_SIZING` | riesgo por operación → lotes (CFD, con tamaño de contrato del bróker) o contratos (Futures, tick value) |
 | 4 Riesgo | `REJECTED_RISK` | cuenta: tope por operación, operaciones/día, posiciones, riesgo diario propio, límite diario y máximo de la firma con colchón. Global: hedging entre cuentas, nocional por subyacente, cuentas por subyacente, riesgo por firma/estrategia/total |

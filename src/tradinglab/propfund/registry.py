@@ -126,8 +126,8 @@ def validate(reg: Registry) -> None:
                 errors.append(f"estrategia {st.id}: {sym} fuera del universo")
             elif resolve(sym).market is not st.market:
                 errors.append(f"estrategia {st.id}: {sym} no es {st.market}")
-        if st.lane is StrategyLane.PROTECTED_FTMO and not st.protected:
-            errors.append(f"estrategia {st.id}: carril protegido sin protected: true")
+        if st.lane is StrategyLane.PROTECTED_FTMO and not st.external_engine:
+            errors.append(f"estrategia {st.id}: carril de motor externo sin external_engine: true")
 
     for asg in reg.assignments.values():
         st = reg.strategies.get(asg.strategy)
@@ -135,8 +135,8 @@ def validate(reg: Registry) -> None:
         if st is None or acc is None:
             errors.append(f"{asg.id}: estrategia o cuenta inexistente")
             continue
-        if st.protected:
-            errors.append(f"{asg.id}: {st.id} es protegida; no se asigna desde el Prop Fund")
+        if st.external_engine:
+            errors.append(f"{asg.id}: {st.id} es de motor externo; no se asigna desde el Prop Fund")
         if st.market is not acc.market:
             errors.append(f"{asg.id}: {st.id} ({st.market}) en cuenta {acc.market}: motores no se mezclan")
         for sym in asg.instruments:

@@ -151,8 +151,8 @@ def route(
         if strategy is None or acc is None or firm is None:
             reasons.append("estrategia, cuenta o firma inexistente")
         else:
-            if strategy.protected:
-                reasons.append("estrategia protegida: la ejecuta su propio motor")
+            if strategy.external_engine:
+                reasons.append("estrategia de motor externo: la ejecuta su propio motor")
             if not asg.enabled and not include_disabled:
                 reasons.append("asignación deshabilitada")
             if acc.template:

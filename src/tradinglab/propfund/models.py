@@ -16,7 +16,7 @@ from datetime import date
 from enum import StrEnum
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
 
 
 class Market(StrEnum):
@@ -241,11 +241,22 @@ class Strategy(_Strict):
     timeframe: str
     version: str = "1"
     status: Literal["research", "paper", "demo", "forward", "evaluation", "funded", "retired"] = "research"
-    protected: bool = False
+    # Motor externo: la ejecuta su propio motor (EA en MT5, ai_trader, forward).
+    # El Prop Fund solo la observa y el router no le envía órdenes. El campo
+    # YAML antiguo ``protected`` se acepta como alias de lectura.
+    external_engine: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("external_engine", "protected"),
+    )
     engine: str = "tradinglab"         # tradinglab | mt5_ea | ai_trader
     owner: str = "operator"
     params_ref: str = ""               # dónde viven los parámetros (no se duplican)
     notes: str = ""
+
+    @property
+    def protected(self) -> bool:
+        """Alias de lectura heredado; el nombre correcto es ``external_engine``."""
+        return self.external_engine
 
 
 class StrategyAssignment(_Strict):

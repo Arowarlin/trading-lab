@@ -101,7 +101,8 @@ def payload(
     strategies = [{
         "id": s.id, "name": s.name, "lane": s.lane.value, "market": s.market.value,
         "instruments": s.instruments, "timeframe": s.timeframe, "status": s.status,
-        "protected": s.protected, "engine": s.engine, "params_ref": s.params_ref,
+        "protected": s.protected, "external_engine": s.external_engine,
+        "engine": s.engine, "params_ref": s.params_ref,
         "assignments": [a.id for a in reg.assignments_of(s.id)],
     } for s in reg.strategies.values()]
 
