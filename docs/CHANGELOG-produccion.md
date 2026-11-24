@@ -53,4 +53,19 @@ comprueba. El baseline de hashes vive en
   `reports/discovery/spread-historico.md`. No se ha descargado nada.
 - **Rollback:** `spread_model: p75_static`.
 
+## 2026-11-24 · Swap histórico en Discovery (T13)
+
+- **Qué cambia:** `swap.mode: historical` y `SwapSpec` modo 6. El swap se
+  calcula con tipos diarios de FRED (DFF, €STR/EONIA, SONIA, call money JP) y
+  un markup calibrado para reproducir `swap.yaml` a fecha 2026-11-23.
+  `swap_t = (tipo_ref_t + markup) · nocional · noches / 360`; triple rollover
+  intacto. El crédito sigue en 0 en Discovery.
+- **Datos:** FRED disponible por keyring y caché. FX usa el diferencial
+  base−cotizada; índices y oro usan USD. Solo campañas v2; v1 conserva el swap
+  medido.
+- **Verificación:** `tests/test_discovery_swap_history.py` y
+  `reports/discovery/swap-historico.md`.
+- **Rollback:** `swap.mode: static`.
+
+
 

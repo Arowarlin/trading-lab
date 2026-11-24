@@ -538,7 +538,11 @@ def confirm(
     from ..propfund.costs import load_profile
 
     profile = load_profile(setup.account, setup.instrument, firm=setup.firm)
-    cost = fastbt.cost_from_profile(profile, use_p75=bool(setup.use_p75))
+    cost = fastbt.cost_from_profile(
+        profile,
+        use_p75=bool(setup.use_p75),
+        cost_model_version=setup.cost_model_version,
+    )
     limits = run_limits_from_strategy(model, setup, close_at_end=True)
     trailing = model.exit.trailing or {}
     prepared = fastbt.prepare(

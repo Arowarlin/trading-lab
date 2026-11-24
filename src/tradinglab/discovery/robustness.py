@@ -506,7 +506,11 @@ def run(
     from ..propfund.costs import load_profile
 
     profile = load_profile(setup.account, setup.instrument, firm=setup.firm)
-    cost = fastbt.cost_from_profile(profile, use_p75=bool(setup.use_p75))
+    cost = fastbt.cost_from_profile(
+        profile,
+        use_p75=bool(setup.use_p75),
+        cost_model_version=setup.cost_model_version,
+    )
     is_frame = campaigns.load_segment(campaign_id, "is", frame=frame, db_path=db_path)
     oos1_frame = campaigns.load_segment(
         campaign_id, "oos1", frame=frame, db_path=db_path

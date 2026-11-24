@@ -286,6 +286,7 @@ class CfdProfileCosts:
         contract_size: float | None = None,
         spread_bps_by_hour: Mapping[int, float] | pd.Series | None = None,
         use_p75: bool = True,
+        swap_override: SwapSpec | None = None,
     ) -> None:
         if profile.market is not Market.CFD:
             raise MissingCostData("Sin datos: el perfil no es CFD")
@@ -293,7 +294,11 @@ class CfdProfileCosts:
         self.contract_size = contract_size or _resolve_contract_size(profile.symbol)
         self.spread_bps_by_hour = spread_bps_by_hour
         self.use_p75 = use_p75
-        self.swap = SwapSpec.from_profile(profile)
+        self.swap = (
+            swap_override
+            if swap_override is not None
+            else SwapSpec.from_profile(profile)
+        )
         self.swap_allow_credit = bool(
             load_engine_config().discovery.swap_credit
         )
@@ -406,6 +411,7 @@ class CfdHourlyCosts(CfdProfileCosts):
         session_tz: str,
         use_p75: bool = True,
         missing_hours: tuple[int, ...] = (),
+        swap_override: SwapSpec | None = None,
     ) -> None:
         mapping = {
             int(hour): float(value)
@@ -420,6 +426,7 @@ class CfdHourlyCosts(CfdProfileCosts):
             profile,
             spread_bps_by_hour={0: 0.0},
             use_p75=use_p75,
+            swap_override=swap_override,
         )
         self.spread_bps_by_local_hour = mapping
         self.session_tz = str(session_tz)
@@ -464,12 +471,14 @@ class CfdHourlyMedianCosts(CfdHourlyCosts):
         session_tz: str,
         provider=None,
         missing_hours: tuple[int, ...] = (),
+        swap_override: SwapSpec | None = None,
     ) -> None:
         super().__init__(
             profile,
             spread_bps_by_local_hour=spread_bps_by_local_hour,
             session_tz=session_tz,
             missing_hours=missing_hours,
+            swap_override=swap_override,
         )
         self.p75_bps_by_local_hour = {
             int(hour): float(value)
@@ -581,6 +590,8 @@ def cost_from_profile(
     contract_size: float | None = None,
     spread_bps_by_hour: Mapping[int, float] | pd.Series | None = None,
     use_p75: bool = True,
+    cost_model_version: int = 1,
+    swap_override: SwapSpec | None = None,
 ) -> CfdProfileCosts | FuturesCosts:
     """Convierte un ``CostProfile`` en un modelo del motor rápido.
 
@@ -604,11 +615,21 @@ def cost_from_profile(
             raise MissingCostData(
                 "Sin datos: coste CFD incompleto: " + ", ".join(missing)
             )
+        if swap_override is None and int(cost_model_version) >= 2:
+            try:
+                from .config import load_engine_config
+                from .swap_history import historical_swap_spec
+
+                if load_engine_config().swap.mode == "historical":
+                    swap_override, _reason = historical_swap_spec(profile)
+            except Exception:  # noqa: BLE001 - sin datos se queda el swap estático
+                swap_override = None
         return CfdProfileCosts(
             profile,
             contract_size=size,
             spread_bps_by_hour=spread_bps_by_hour,
             use_p75=use_p75,
+            swap_override=swap_override,
         )
     if profile.market is Market.FUTURES:
         estimate = estimate_futures(profile, contracts=1)

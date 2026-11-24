@@ -122,6 +122,14 @@ class DiscoveryConfig(BaseModel):
     )
 
 
+class SwapConfig(BaseModel):
+    """Swap del motor: estático medido o histórico calibrado (T13)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    mode: Literal["static", "historical"] = "static"
+
+
 class AssumedSlippageConfig(BaseModel):
     """Slippage por lado en unidades de precio; ``None`` = Sin datos."""
 
@@ -406,6 +414,7 @@ class EngineConfig(BaseModel):
     validation: ValidationConfig
     fitness: FitnessConfig = Field(default_factory=FitnessConfig)
     discovery: DiscoveryConfig = Field(default_factory=DiscoveryConfig)
+    swap: SwapConfig = Field(default_factory=SwapConfig)
     assumed_slippage: AssumedSlippageConfig = Field(
         default_factory=AssumedSlippageConfig
     )
@@ -450,6 +459,7 @@ def load_engine_config(path: str | Path | None = None) -> EngineConfig:
         "validation": raw.get("validation") or {},
         "fitness": raw.get("fitness") or {},
         "discovery": raw.get("discovery") or {},
+        "swap": raw.get("swap") or {},
         "assumed_slippage": raw.get("assumed_slippage") or {},
         "robustness": raw.get("robustness") or {},
         "perturb": raw.get("perturb") or {},

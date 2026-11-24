@@ -108,3 +108,21 @@ M1, 2021-09 a 2024-03); el bróker tiene 2026-11-13 a 2026-11-19. **No hay
 ventana común**, así que `historical_scaled` es Sin datos y v2 usa
 `hourly_median` en todos los símbolos. Detalle en
 `reports/discovery/spread-historico.md`.
+
+### Swap histórico (T13)
+
+`swap.mode: historical` usa tipos de referencia diarios de FRED (DFF para EE.
+UU., €STR/EONIA para la zona euro, SONIA para Reino Unido y call money de
+Japón) y calibra un markup por símbolo y lado para que el valor de hoy
+reproduzca `config/propfund/swap.yaml`. Fórmula:
+`swap_t = (tipo_ref_t + markup_lado) · nocional · noches / 360`, con el triple
+rollover del bróker. El crédito sigue contando 0 en Discovery.
+
+- FX: el tipo de referencia es el diferencial base − cotizada (EUR−USD,
+  GBP−USD, USD−JPY).
+- Índices y oro: tipo USD.
+- Sin caché ni clave de FRED: Sin datos y se mantiene el swap estático.
+- Solo se aplica a campañas v2; las v1 conservan el swap medido.
+
+Tabla de swap medio anual por cuenta, símbolo y lado en
+`reports/discovery/swap-historico.md`.

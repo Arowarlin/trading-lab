@@ -19,6 +19,11 @@ discovery:
   # hourly_median. El p75 queda solo para los escenarios de estrés.
   spread_model: p75_static
 
+swap:
+  # static = swap medido de swap.yaml (v1). historical = tipo de referencia
+  # diario de FRED + markup calibrado para reproducir swap.yaml (v2).
+  mode: historical
+
 profiles:
   small:
     population: 40

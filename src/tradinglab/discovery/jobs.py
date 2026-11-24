@@ -375,7 +375,11 @@ def _init_worker(payload: dict[str, Any]) -> None:
         raise QueueError("Sin datos: menos de 100 barras en el tramo IS")
     if setup.legacy_cost:
         profile = load_profile(setup.account, setup.instrument, firm=setup.firm)
-        cost = fastbt.cost_from_profile(profile, use_p75=setup.use_p75)
+        cost = fastbt.cost_from_profile(
+            profile,
+            use_p75=setup.use_p75,
+            cost_model_version=setup.cost_model_version,
+        )
         book = None
     else:
         from .costs import build_cost_book_for_setup

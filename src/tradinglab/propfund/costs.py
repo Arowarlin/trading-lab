@@ -18,7 +18,7 @@ Reglas:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 import pandas as pd
@@ -99,6 +99,37 @@ class CostEstimate:
         }
 
 
+def rollover_nights(
+    entry_time,
+    exit_time,
+    *,
+    tz: str = "America/New_York",
+    hour: int = 17,
+    triple_day: int | None = None,
+) -> list[pd.Timestamp]:
+    """Lista de cierres de swap, con el día triple repetido tres veces."""
+
+    start = pd.Timestamp(entry_time)
+    end = pd.Timestamp(exit_time)
+    if start.tzinfo is None or end.tzinfo is None:
+        raise ValueError("entry_time/exit_time deben tener zona horaria")
+    if end <= start:
+        return []
+    local_start = start.tz_convert(tz)
+    local_end = end.tz_convert(tz)
+    nights: list[pd.Timestamp] = []
+    day = local_start.normalize()
+    last = local_end.normalize()
+    while day <= last:
+        boundary = day + pd.Timedelta(hours=int(hour))
+        if start < boundary <= end and boundary.weekday() < 5:
+            server_day = (boundary.weekday() + 2) % 7
+            units = 3 if triple_day is not None and server_day == int(triple_day) else 1
+            nights.extend([boundary] * units)
+        day += pd.Timedelta(days=1)
+    return nights
+
+
 def rollover_units(
     entry_time,
     exit_time,
@@ -116,26 +147,11 @@ def rollover_units(
     cubierto por el triple, como en el rollover estándar.
     """
 
-    start = pd.Timestamp(entry_time)
-    end = pd.Timestamp(exit_time)
-    if start.tzinfo is None or end.tzinfo is None:
-        raise ValueError("entry_time/exit_time deben tener zona horaria")
-    if end <= start:
-        return 0
-    local_start = start.tz_convert(tz)
-    local_end = end.tz_convert(tz)
-    units = 0
-    day = local_start.normalize()
-    last = local_end.normalize()
-    while day <= last:
-        boundary = day + pd.Timedelta(hours=int(hour))
-        if start < boundary <= end and boundary.weekday() < 5:
-            # 17:00 NY + 7 h = 00:00 del servidor del día siguiente. MT5
-            # enumera 0=domingo; Python 0=lunes: (weekday + 2) % 7.
-            server_day = (boundary.weekday() + 2) % 7
-            units += 3 if triple_day is not None and server_day == int(triple_day) else 1
-        day += pd.Timedelta(days=1)
-    return int(units)
+    return len(
+        rollover_nights(
+            entry_time, exit_time, tz=tz, hour=hour, triple_day=triple_day
+        )
+    )
 
 
 @dataclass(frozen=True)
@@ -149,6 +165,11 @@ class SwapSpec:
     point: float | None = None
     rollover_hour: int = 17
     rollover_tz: str = "America/New_York"
+    # Modo 6 = historical: tipo de referencia diario + markup calibrado.
+    historical_rates: pd.Series | None = None
+    markup_long: float = 0.0
+    markup_short: float = 0.0
+    historical_reference_rate: float | None = None
 
     @classmethod
     def from_profile(cls, profile: CostProfile) -> "SwapSpec | None":
@@ -186,6 +207,70 @@ class SwapSpec:
             hour=self.rollover_hour,
             triple_day=self.triple_day,
         )
+
+    def with_historical(
+        self,
+        rates: pd.Series,
+        *,
+        reference_price: float,
+        reference_rate: float,
+    ) -> "SwapSpec":
+        """Calibra el markup para reproducir el swap medido hoy.
+
+        ``reference_price`` es el precio de hoy del símbolo; ``reference_rate``
+        el tipo de referencia de hoy (en %). El markup queda en puntos
+        porcentuales anuales.
+        """
+
+        if self.mode == 5:
+            long_rate = float(self.long)
+            short_rate = float(self.short)
+        elif self.mode == 1:
+            if self.point is None:
+                raise ValueError("swap mode points sin point")
+            if not (float(reference_price) > 0.0):
+                raise ValueError("reference_price debe ser > 0")
+            long_rate = float(self.long) * self.point / float(reference_price) * 360.0 * 100.0
+            short_rate = float(self.short) * self.point / float(reference_price) * 360.0 * 100.0
+        else:
+            raise ValueError(f"swap mode {self.mode} no soportado para historical")
+        return replace(
+            self,
+            mode=6,
+            historical_rates=rates,
+            markup_long=long_rate - float(reference_rate),
+            markup_short=short_rate - float(reference_rate),
+            historical_reference_rate=float(reference_rate),
+        )
+
+    def _historical_rate(self, when) -> float | None:
+        if self.historical_rates is None or self.historical_rates.empty:
+            return None
+        moment = pd.Timestamp(when)
+        if self.historical_rates.index.tz is None and moment.tzinfo is not None:
+            moment = moment.tz_localize(None)
+        value = self.historical_rates.asof(moment)
+        if value is None or not pd.notna(value):
+            return None
+        return float(value)
+
+    def _historical_night_r(
+        self,
+        *,
+        side: str,
+        entry_price: float,
+        risk_price: float,
+        when,
+        allow_credit: bool,
+    ) -> float:
+        base = self._historical_rate(when)
+        if base is None:
+            return 0.0
+        markup = self.markup_long if str(side).lower() == "long" else self.markup_short
+        value = float(entry_price * ((base + markup) / 100.0 / 360.0) / risk_price)
+        if not allow_credit and value > 0.0:
+            return 0.0
+        return value
 
     def total_usd(
         self,
@@ -253,6 +338,26 @@ class SwapSpec:
         units = self.units(entry_time, exit_time)
         if units == 0:
             return 0.0
+        if self.mode == 6:
+            nights = rollover_nights(
+                entry_time,
+                exit_time,
+                tz=self.rollover_tz,
+                hour=self.rollover_hour,
+                triple_day=self.triple_day,
+            )
+            return float(
+                sum(
+                    self._historical_night_r(
+                        side=side,
+                        entry_price=entry_price,
+                        risk_price=risk_price,
+                        when=night,
+                        allow_credit=allow_credit,
+                    )
+                    for night in nights
+                )
+            )
         return float(
             self.per_night_r(
                 side=side,

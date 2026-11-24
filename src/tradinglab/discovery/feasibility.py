@@ -106,7 +106,11 @@ def _context(campaign_id: str, db_path):
 
         try:
             profile = load_profile(setup.account, setup.instrument, firm=setup.firm)
-            cost = fastbt.cost_from_profile(profile, use_p75=setup.use_p75)
+            cost = fastbt.cost_from_profile(
+                profile,
+                use_p75=setup.use_p75,
+                cost_model_version=setup.cost_model_version,
+            )
         except Exception as exc:  # noqa: BLE001 - coste ausente se informa como Sin datos
             raise campaigns.CampaignError(f"Sin datos: coste {exc}") from exc
     else:
@@ -141,7 +145,11 @@ def _context_from(campaign, setup, bars):
 
         try:
             profile = load_profile(setup.account, setup.instrument, firm=setup.firm)
-            cost = fastbt.cost_from_profile(profile, use_p75=setup.use_p75)
+            cost = fastbt.cost_from_profile(
+                profile,
+                use_p75=setup.use_p75,
+                cost_model_version=setup.cost_model_version,
+            )
         except Exception as exc:  # noqa: BLE001 - coste ausente se informa como Sin datos
             raise campaigns.CampaignError(f"Sin datos: coste {exc}") from exc
     else:

@@ -325,12 +325,18 @@ def build_account_cost(
         configured=spread_model or config.discovery.spread_model,
         has_ask=has_ask,
     )
+    swap_override = None
+    if int(cost_model_version) >= 2 and config.swap.mode == "historical":
+        from .swap_history import historical_swap_spec
+
+        swap_override, _reason = historical_swap_spec(profile)
     if model == "hourly_median":
         cost = fastbt.CfdHourlyCosts(
             profile,
             spread_bps_by_local_hour=spread.median_bps,
             session_tz=session_tz,
             missing_hours=spread.missing_hours,
+            swap_override=swap_override,
         )
     elif model == "historical_scaled":
         starts = [value for value in spread.from_ts_by_hour.values() if value]
@@ -349,6 +355,7 @@ def build_account_cost(
             session_tz=session_tz,
             provider=provider,
             missing_hours=spread.missing_hours,
+            swap_override=swap_override,
         )
     else:
         cost = fastbt.CfdHourlyCosts(
@@ -356,6 +363,7 @@ def build_account_cost(
             spread_bps_by_local_hour=spread.p75_bps,
             session_tz=session_tz,
             missing_hours=spread.missing_hours,
+            swap_override=swap_override,
         )
     return AccountCost(
         account=str(account_id).upper(),

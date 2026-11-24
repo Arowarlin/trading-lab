@@ -51,7 +51,11 @@ def load_campaign_inputs(
     combined = pd.concat([is_frame, oos1_frame], axis=0, sort=False)
     setup = jobs.QueueSetup.from_campaign(campaign, bars=combined)
     profile = load_profile(setup.account, setup.instrument, firm=setup.firm)
-    cost = fastbt.cost_from_profile(profile, use_p75=bool(setup.use_p75))
+    cost = fastbt.cost_from_profile(
+        profile,
+        use_p75=bool(setup.use_p75),
+        cost_model_version=setup.cost_model_version,
+    )
     return combined, campaign, setup, cost
 
 
