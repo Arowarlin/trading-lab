@@ -251,6 +251,9 @@ class CfdBpsCosts:
     def label(self) -> str:
         return f"CFD bps · {self.source}"
 
+    def p75_panel(self, bars: pd.DataFrame) -> CostPanel:
+        return self.panel(bars)
+
     def panel(self, bars: pd.DataFrame) -> CostPanel:
         if self.spread_bps_by_hour is not None:
             spread = _hour_values(bars, self.spread_bps_by_hour)
@@ -344,20 +347,39 @@ class CfdProfileCosts:
         per_lot = float(profile.commission_value or 0.0) * side_factor
         return per_lot / (prices * float(self.contract_size)) * 10_000.0
 
-    def panel(self, bars: pd.DataFrame) -> CostPanel:
+    def _panel_with_spread(
+        self, bars: pd.DataFrame, spread: np.ndarray
+    ) -> CostPanel:
         prices = pd.to_numeric(bars["close"], errors="coerce").to_numpy(dtype=float)
         if np.isnan(prices).any() or (prices <= 0).any():
             raise MissingCostData("Sin datos: precios inválidos para convertir costes")
+        commission = self._commission_bps(prices)
+        if self.profile.slippage_price is None:  # pragma: no cover - validado
+            raise MissingCostData("Sin datos: slippage CFD")
+        slippage = float(self.profile.slippage_price) / prices * 10_000.0
+        return CostPanel(
+            spread_bps=np.asarray(spread, dtype=float),
+            slip_bps=slippage,
+            comm_bps=commission,
+        )
+
+    def panel(self, bars: pd.DataFrame) -> CostPanel:
+        prices = pd.to_numeric(bars["close"], errors="coerce").to_numpy(dtype=float)
         if self.spread_bps_by_hour is not None:
             spread = _hour_values(bars, self.spread_bps_by_hour)
         else:
             spread = float(self.spread_price) / prices * 10_000.0
-        commission = self._commission_bps(prices)
-        slippage = float(self.profile.slippage_price) / prices * 10_000.0
-        return CostPanel(
-            spread_bps=spread,
-            slip_bps=slippage,
-            comm_bps=commission,
+        return self._panel_with_spread(bars, spread)
+
+    def p75_panel(self, bars: pd.DataFrame) -> CostPanel:
+        """Panel de estrés con el spread p75 del perfil."""
+
+        p75 = self.profile.spread_p75_price
+        if p75 is None:
+            return self.panel(bars)
+        prices = pd.to_numeric(bars["close"], errors="coerce").to_numpy(dtype=float)
+        return self._panel_with_spread(
+            bars, np.full(len(bars), float(p75) / prices * 10_000.0)
         )
 
     def ledger_bps(self, bars: pd.DataFrame) -> pd.Series:
@@ -406,28 +428,71 @@ class CfdHourlyCosts(CfdProfileCosts):
     def label(self) -> str:
         return f"CFD horario · {self.profile.account} · {self.profile.symbol}"
 
-    def panel(self, bars: pd.DataFrame) -> CostPanel:
-        prices = pd.to_numeric(bars["close"], errors="coerce").to_numpy(dtype=float)
-        if np.isnan(prices).any() or (prices <= 0).any():
-            raise MissingCostData("Sin datos: precios inválidos para costes")
+    def _local_spread(self, bars: pd.DataFrame) -> np.ndarray:
         local_hours = bars.index.tz_convert(self.session_tz).hour.to_numpy()
         fallback = max(self.spread_bps_by_local_hour.values())
-        spread = np.array(
+        return np.array(
             [
                 self.spread_bps_by_local_hour.get(int(hour), fallback)
                 for hour in local_hours
             ],
             dtype=float,
         )
-        commission = self._commission_bps(prices)
-        if self.profile.slippage_price is None:  # pragma: no cover - validado
-            raise MissingCostData("Sin datos: slippage CFD")
-        slippage = float(self.profile.slippage_price) / prices * 10_000.0
-        return CostPanel(
-            spread_bps=spread,
-            slip_bps=slippage,
-            comm_bps=commission,
+
+    def panel(self, bars: pd.DataFrame) -> CostPanel:
+        return self._panel_with_spread(bars, self._local_spread(bars))
+
+    def p75_panel(self, bars: pd.DataFrame) -> CostPanel:
+        # En esta clase el mapping ya es p75.
+        return self.panel(bars)
+
+
+class CfdHourlyMedianCosts(CfdHourlyCosts):
+    """Spread por barra con ASK histórico escalado y mediana horaria de reserva.
+
+    ``provider(bars)`` devuelve un array de bps por barra o ``None`` (Sin
+    datos); en ese caso se usa la mediana horaria del bróker. ``p75`` se
+    conserva solo para el escenario de estrés.
+    """
+
+    def __init__(
+        self,
+        profile: CostProfile,
+        *,
+        spread_bps_by_local_hour: Mapping[int, float],
+        p75_bps_by_local_hour: Mapping[int, float],
+        session_tz: str,
+        provider=None,
+        missing_hours: tuple[int, ...] = (),
+    ) -> None:
+        super().__init__(
+            profile,
+            spread_bps_by_local_hour=spread_bps_by_local_hour,
+            session_tz=session_tz,
+            missing_hours=missing_hours,
         )
+        self.p75_bps_by_local_hour = {
+            int(hour): float(value)
+            for hour, value in dict(p75_bps_by_local_hour).items()
+            if np.isfinite(float(value)) and float(value) >= 0.0
+        }
+        self.provider = provider
+
+    def panel(self, bars: pd.DataFrame) -> CostPanel:
+        if self.provider is not None:
+            spread = self.provider(bars)
+            if spread is not None and len(spread) == len(bars):
+                return self._panel_with_spread(bars, np.asarray(spread, dtype=float))
+        return super().panel(bars)
+
+    def p75_panel(self, bars: pd.DataFrame) -> CostPanel:
+        mapping = self.p75_bps_by_local_hour or self.spread_bps_by_local_hour
+        local_hours = bars.index.tz_convert(self.session_tz).hour.to_numpy()
+        fallback = max(mapping.values())
+        spread = np.array(
+            [mapping.get(int(hour), fallback) for hour in local_hours], dtype=float
+        )
+        return self._panel_with_spread(bars, spread)
 
 
 class FuturesCosts:
@@ -1985,6 +2050,8 @@ def _series_ledger(
 
 __all__ = [
     "CfdBpsCosts",
+    "CfdHourlyCosts",
+    "CfdHourlyMedianCosts",
     "CfdProfileCosts",
     "CostPanel",
     "ExitSpec",

@@ -212,6 +212,11 @@ def _setup(spec: dict[str, Any], symbol: str, strategy: dict[str, Any]) -> jobs.
         cost_accounts=tuple(cost["cost_accounts"]),
         cost_mode=cost["cost_mode"],
         cost_model_version=int(spec.get("cost_model_version", 1) or 1),
+        spread_model=str(
+            spec.get("spread_model")
+            or (cost.get("spread_model") if isinstance(cost, dict) else None)
+            or "p75_static"
+        ),
         session_tz=config.data_quality.tz_for(symbol),
         session_start=model.session.start,
         session_end=model.session.end,

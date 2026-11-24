@@ -62,6 +62,7 @@ def test_retest_scenarios_are_monotone_and_base_matches() -> None:
     )
     for name in ("base", "cost_x1_5", "cost_x2", "slippage_plus_1", "slippage_plus_2"):
         assert result[name]["trades"] >= 1
+    assert result["spread_p75"]["trades"] >= 1
     assert result["base"]["expectancy_r"] == pytest.approx(
         direct.metrics["expectancy_r"]
     )

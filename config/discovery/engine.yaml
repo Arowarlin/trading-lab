@@ -14,6 +14,10 @@ discovery:
   # record-informal. Retención: 30 últimas + primera de cada mes; lo retirado
   # se mueve a data/backups/_old/ (nunca se borra).
   backup: true
+  # Spread del motor. En v1 manda p75_static (el comportamiento histórico).
+  # En v2, si el símbolo tiene ASK, se usa historical_scaled; si no,
+  # hourly_median. El p75 queda solo para los escenarios de estrés.
+  spread_model: p75_static
 
 profiles:
   small:

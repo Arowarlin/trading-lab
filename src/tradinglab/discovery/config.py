@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from datetime import date
 from pathlib import Path
+from typing import Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import yaml
@@ -114,6 +115,11 @@ class DiscoveryConfig(BaseModel):
     # Copia automática de discovery.db tras register/approve/run/confirm/
     # record-informal. La retención mueve a backups/_old, nunca borra.
     backup: bool = True
+    # Spread usado por el motor: p75_static (v1), hourly_median o
+    # historical_scaled (v2 con ASK; si no, hourly_median).
+    spread_model: Literal["p75_static", "hourly_median", "historical_scaled"] = (
+        "p75_static"
+    )
 
 
 class AssumedSlippageConfig(BaseModel):

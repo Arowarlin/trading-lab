@@ -139,6 +139,18 @@ def retest(
             scenario_panel,
             cache=cache,
         )
+    try:
+        results["spread_p75"] = _run(
+            model,
+            bars,
+            cost,
+            setup,
+            base_prepared,
+            cost.p75_panel(bars),
+            cache=cache,
+        )
+    except Exception:  # noqa: BLE001 - el escenario es informativo
+        results["spread_p75"] = {"status": "Sin datos"}
     base_expectancy = results["base"].get("expectancy_r")
     stress = results["cost_x1_5"].get("expectancy_r")
     slip2 = results["slippage_plus_2"].get("expectancy_r")

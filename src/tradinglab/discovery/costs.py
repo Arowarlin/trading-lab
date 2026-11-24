@@ -39,6 +39,7 @@ class LocalSpread:
     broker_symbol: str
     source: str
     p75_bps: dict[int, float]
+    median_bps: dict[int, float]
     days_by_hour: dict[int, float]
     from_ts_by_hour: dict[int, str]
     to_ts_by_hour: dict[int, str]
@@ -56,12 +57,15 @@ class AccountCost:
     instrument: str
     profile: CostProfile
     spread: LocalSpread
-    cost: fastbt.CfdHourlyCosts
+    cost: fastbt.CfdProfileCosts
     assumed_slippage: float
     slippage_source: str
 
     def panel(self, bars: pd.DataFrame) -> fastbt.CostPanel:
         return self.cost.panel(bars)
+
+    def p75_panel(self, bars: pd.DataFrame) -> fastbt.CostPanel:
+        return self.cost.p75_panel(bars)
 
     @property
     def swap(self) -> SwapSpec | None:
@@ -213,6 +217,7 @@ def load_local_hour_spreads(
             f"Sin datos: broker_spreads[{source}] sin filas para {broker_name}"
         )
     p75: dict[int, float] = {}
+    median: dict[int, float] = {}
     days: dict[int, float] = {}
     from_ts: dict[int, str] = {}
     to_ts: dict[int, str] = {}
@@ -250,6 +255,11 @@ def load_local_hour_spreads(
             )
         else:
             p75[hour] = value
+        median_value = row["median_bps"]
+        if median_value is not None and np.isfinite(float(median_value)):
+            median[hour] = max(
+                median.get(int(hour), 0.0), float(median_value)
+            )
         if start is not None and end is not None:
             span = max(0.0, (end - start).total_seconds() / 86400.0)
             days[hour] = max(days.get(hour, 0.0), float(max(1, math.ceil(span))))
@@ -259,6 +269,8 @@ def load_local_hour_spreads(
         raise ValueError(
             f"Sin datos: broker_spreads[{source}] sin p75 para {broker_name}"
         )
+    for hour, value in p75.items():
+        median.setdefault(int(hour), float(value))
     missing = tuple(hour for hour in range(24) if hour not in p75)
     return LocalSpread(
         account=str(account_id).upper(),
@@ -266,6 +278,7 @@ def load_local_hour_spreads(
         broker_symbol=broker_name,
         source=source,
         p75_bps=p75,
+        median_bps=median,
         days_by_hour=days,
         from_ts_by_hour=from_ts,
         to_ts_by_hour=to_ts,
@@ -281,6 +294,8 @@ def build_account_cost(
     session_tz: str = "America/New_York",
     db_path: str | Path | None = None,
     config: EngineConfig | None = None,
+    spread_model: str | None = None,
+    cost_model_version: int = 1,
 ) -> AccountCost:
     config = config or load_engine_config()
     registry = load_registry()
@@ -298,12 +313,50 @@ def build_account_cost(
         db_path=db_path,
         session_tz=session_tz,
     )
-    cost = fastbt.CfdHourlyCosts(
-        profile,
-        spread_bps_by_local_hour=spread.p75_bps,
-        session_tz=session_tz,
-        missing_hours=spread.missing_hours,
+    from .spread_history import (
+        choose_spread_model,
+        has_historical_ask,
+        historical_spread_provider,
     )
+
+    has_ask = has_historical_ask(canonical)
+    model = choose_spread_model(
+        cost_model_version=cost_model_version,
+        configured=spread_model or config.discovery.spread_model,
+        has_ask=has_ask,
+    )
+    if model == "hourly_median":
+        cost = fastbt.CfdHourlyCosts(
+            profile,
+            spread_bps_by_local_hour=spread.median_bps,
+            session_tz=session_tz,
+            missing_hours=spread.missing_hours,
+        )
+    elif model == "historical_scaled":
+        starts = [value for value in spread.from_ts_by_hour.values() if value]
+        ends = [value for value in spread.to_ts_by_hour.values() if value]
+        provider = historical_spread_provider(
+            canonical,
+            session_tz=session_tz,
+            broker_median_by_hour=spread.median_bps,
+            start=min(starts) if starts else None,
+            end=max(ends) if ends else None,
+        )
+        cost = fastbt.CfdHourlyMedianCosts(
+            profile,
+            spread_bps_by_local_hour=spread.median_bps,
+            p75_bps_by_local_hour=spread.p75_bps,
+            session_tz=session_tz,
+            provider=provider,
+            missing_hours=spread.missing_hours,
+        )
+    else:
+        cost = fastbt.CfdHourlyCosts(
+            profile,
+            spread_bps_by_local_hour=spread.p75_bps,
+            session_tz=session_tz,
+            missing_hours=spread.missing_hours,
+        )
     return AccountCost(
         account=str(account_id).upper(),
         instrument=canonical,
@@ -394,6 +447,34 @@ class CostBook:
             **legacy,
         )
         return self._worst_panel
+
+    def p75_panel(self, bars: pd.DataFrame) -> fastbt.CostPanel:
+        """Panel de estrés con el p75 de cada cuenta (escenario ``spread_p75``)."""
+
+        panels = [item.p75_panel(bars) for item in self.accounts]
+        reducer = np.min if self.mode == "best" else np.max
+        spread = reducer(np.vstack([item.spread_bps for item in panels]), axis=0)
+        slip = reducer(np.vstack([item.slip_bps for item in panels]), axis=0)
+        comm = reducer(np.vstack([item.comm_bps for item in panels]), axis=0)
+        legacy: dict[str, np.ndarray] = {}
+        if self.cost_model_version == 1:
+            legacy = {
+                "legacy_entry_bps": reducer(
+                    np.vstack([item.entry_bps for item in panels]), axis=0
+                ),
+                "legacy_stop_bps": reducer(
+                    np.vstack([item.stop_bps for item in panels]), axis=0
+                ),
+                "legacy_target_bps": reducer(
+                    np.vstack([item.target_bps for item in panels]), axis=0
+                ),
+            }
+        return fastbt.CostPanel(
+            spread_bps=spread,
+            slip_bps=slip,
+            comm_bps=comm,
+            **legacy,
+        )
 
     def apply(
         self,
@@ -576,6 +657,7 @@ def build_cost_book(
     db_path: str | Path | None = None,
     config: EngineConfig | None = None,
     cost_model_version: int = 1,
+    spread_model: str | None = None,
 ) -> CostBook:
     selected, selected_mode = resolve_cost_accounts(instrument, accounts, mode)
     items = [
@@ -585,6 +667,8 @@ def build_cost_book(
             session_tz=session_tz,
             db_path=db_path,
             config=config,
+            cost_model_version=cost_model_version,
+            spread_model=spread_model,
         )
         for account in selected
     ]
@@ -606,6 +690,7 @@ def build_cost_book_for_setup(setup: Any) -> CostBook:
         session_tz=setup.session_tz,
         db_path=LAB_DB,
         cost_model_version=int(getattr(setup, "cost_model_version", 1)),
+        spread_model=getattr(setup, "spread_model", None),
     )
 
 

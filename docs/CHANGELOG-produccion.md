@@ -39,3 +39,18 @@ comprueba. El baseline de hashes vive en
   `docs/tradinglab2/06_TRADINGLAB_DATA_AND_COST_AUDIT.md`.
 - **Rollback:** tag `tl2-t10-pre` o `cost_model_version: 1` en la campaña.
 
+## 2026-11-24 · Spread histórico por barra en Discovery (T11)
+
+- **Qué cambia:** `discovery.spread_model` (`p75_static`, `hourly_median`,
+  `historical_scaled`). Las campañas v2 intentan el spread por barra desde el
+  ASK de Dukascopy, escalado al bróker por hora local; sin ASK o sin ventana
+  común usan la mediana horaria. El p75 queda en los escenarios de estrés
+  `cost_x1_5` y `spread_p75`.
+- **Datos:** solo EURUSD tiene ASK (10,9 % de M1, 2021-09 a 2024-03); el bróker
+  mide 2026-11-13 a 2026-11-19. No hay ventana común: `historical_scaled` es
+  **Sin datos** y v2 usa `hourly_median`.
+- **Verificación:** `tests/test_discovery_spread_history.py` y
+  `reports/discovery/spread-historico.md`. No se ha descargado nada.
+- **Rollback:** `spread_model: p75_static`.
+
+

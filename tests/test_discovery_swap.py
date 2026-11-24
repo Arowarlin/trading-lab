@@ -180,6 +180,7 @@ def _account(name: str, swap_long: float) -> AccountCost:
         broker_symbol="XAUUSD",
         source="test",
         p75_bps={},
+        median_bps={},
         days_by_hour={},
         from_ts_by_hour={},
         to_ts_by_hour={},

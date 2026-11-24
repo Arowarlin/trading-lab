@@ -264,6 +264,7 @@ def register(
     now: Any | None = None,
     db_path: str | Path | None = None,
     cost_model_version: int | None = None,
+    spread_model: str | None = None,
 ) -> dict[str, Any]:
     """Registra un borrador (o previsualiza con ``dry_run``)."""
 
@@ -281,6 +282,12 @@ def register(
     version = 2 if cost_model_version is None else int(cost_model_version)
     if version not in {1, 2}:
         raise CampaignError(f"cost_model_version inválida: {version}")
+    spread_model = str(
+        spread_model
+        or ("historical_scaled" if version >= 2 else "p75_static")
+    ).strip().lower()
+    if spread_model not in {"p75_static", "hourly_median", "historical_scaled"}:
+        raise CampaignError(f"spread_model inválido: {spread_model!r}")
     side = str(side or "").strip().lower()
     if side not in {"", "long", "short"}:
         raise CampaignError(f"lado desconocido: {side}")
@@ -374,6 +381,7 @@ def register(
             "use_p75": bool(use_p75),
             "accounts": list(selected_costs),
             "mode": selected_cost_mode,
+            "spread_model": spread_model,
             "assumed_slippage": {
                 "value": float(assumed_slippage),
                 "source": slippage_source,
@@ -536,6 +544,7 @@ def register_from_spec(
         dry_run=dry_run,
         db_path=db_path,
         cost_model_version=payload.get("cost_model_version"),
+        spread_model=(payload.get("cost") or {}).get("spread_model"),
     )
 
 

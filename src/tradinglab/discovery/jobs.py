@@ -68,6 +68,7 @@ class QueueSetup:
     cost_mode: str = "target"
     legacy_cost: bool = True
     cost_model_version: int = 1
+    spread_model: str = "p75_static"
     session_tz: str = "America/New_York"
     session_start: str = "09:35"
     session_end: str = "11:30"
@@ -135,6 +136,7 @@ class QueueSetup:
             cost_mode=configured_mode,
             legacy_cost=legacy_cost,
             cost_model_version=int(config.get("cost_model_version", 1) or 1),
+            spread_model=str(cost.get("spread_model") or "p75_static"),
             session_tz=str(session.get("tz") or "America/New_York"),
             session_start=str(session.get("start") or "09:35"),
             session_end=str(session.get("end") or "11:30"),
@@ -178,6 +180,12 @@ class QueueSetup:
             raise QueueError(
                 f"cost_model_version inválida: {self.cost_model_version}"
             )
+        if self.spread_model not in {
+            "p75_static",
+            "hourly_median",
+            "historical_scaled",
+        }:
+            raise QueueError(f"spread_model inválido: {self.spread_model!r}")
         if int(self.drift_simulations) < 0:
             raise QueueError("drift_simulations no puede ser negativo")
         if int(self.drift_simulations) > 0 and not (

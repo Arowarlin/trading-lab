@@ -93,3 +93,18 @@ operación** y dispara el stop del corto con el ASK.
 La caída es la esperada al eliminar un spread completo por operación. No se
 calcula expectativa, PF ni percentil: solo coste. La tabla no cambia ningún
 veredicto histórico; T40 reevaluará con campañas nuevas.
+
+### Spread por barra (T11)
+
+`discovery.spread_model` admite `p75_static` (v1), `hourly_median` y
+`historical_scaled`. En v2 se intenta `historical_scaled`: spread por barra
+desde el ASK de Dukascopy, escalado por hora local con la razón de medianas
+del bróker en la ventana común de 90 días. Si no hay ASK o no hay ventana
+común, se usa `hourly_median`. El p75 queda solo en los escenarios de estrés
+(`cost_x1_5` y `spread_p75`).
+
+Estado de los datos (2026-11-24): solo EURUSD tiene ASK (10,9 % de las barras
+M1, 2021-09 a 2024-03); el bróker tiene 2026-11-13 a 2026-11-19. **No hay
+ventana común**, así que `historical_scaled` es Sin datos y v2 usa
+`hourly_median` en todos los símbolos. Detalle en
+`reports/discovery/spread-historico.md`.
