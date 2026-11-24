@@ -119,8 +119,11 @@ reproduzca `config/propfund/swap.yaml`. Fórmula:
 rollover del bróker. El crédito sigue contando 0 en Discovery.
 
 - FX: el tipo de referencia es el diferencial base − cotizada (EUR−USD,
-  GBP−USD, USD−JPY).
-- Índices y oro: tipo USD.
+  GBP−USD, USD−JPY); el largo cobra el diferencial (`s=+1`) y el corto lo paga
+  (`s=-1`).
+- Índices y oro: tipo USD; el largo paga (`s=-1`) y el corto cobra (`s=+1`).
+- Si una noche es anterior a la serie FRED, se usa el swap estático medido y el
+  trade queda marcado `swap_source = "static_fallback"`.
 - Sin caché ni clave de FRED: Sin datos y se mantiene el swap estático.
 - Solo se aplica a campañas v2; las v1 conservan el swap medido.
 

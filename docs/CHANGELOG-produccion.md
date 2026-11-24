@@ -78,6 +78,18 @@ comprueba. El baseline de hashes vive en
 - **Verificación:** `tests/test_discovery_slippage.py`.
 - **Rollback:** borrar la propuesta; no hay cambio aplicado.
 
+## 2026-11-24 · C1 · Signo y fallback del swap histórico
+
+- **Qué cambia:** `tasa_lado = s_lado · ref + markup_lado`, con
+  `s_largo=-1/s_corto=+1` en índices, oro y CFD sobre USD y
+  `s_largo=+1/s_corto=-1` en FX. Si una noche es anterior a la serie FRED se
+  usa el swap estático y el trade queda `swap_source=static_fallback`.
+  `DFF` se descarga desde 2003. La tabla USD convierte la divisa cotizada
+  (USDJPY ya no trata yenes como dólares).
+- **Verificación:** 23 tests de swap; `reports/discovery/swap-historico.md`.
+- **Rollback:** `swap.mode: static` o `tl2-c1-pre`.
+
+
 
 
 

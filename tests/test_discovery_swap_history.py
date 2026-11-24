@@ -65,7 +65,7 @@ def test_tipo_historico_igual_al_de_hoy_reproduce_el_swap_medido():
     )
     expected = 20_000.0 * (-7.33 / 100.0 / 360.0) / 100.0
     assert value == pytest.approx(expected)
-    assert historical.markup_long == pytest.approx(-7.33 - 4.0)
+    assert historical.markup_long == pytest.approx(-7.33 + 4.0)
 
 
 def test_tipo_cero_deja_solo_el_markup():
@@ -94,6 +94,141 @@ def test_tipo_cero_deja_solo_el_markup():
         exit_time=exit_,
     )
     assert cost == pytest.approx(20_000.0 * (-1.0 / 100.0 / 360.0) / 100.0)
+
+
+def test_indice_largo_2021_cuesta_menos_que_2024():
+    rates = pd.Series(
+        [0.1, 4.0], index=pd.DatetimeIndex(["2021-01-04", "2024-01-02"])
+    )
+    base = SwapSpec.from_profile(
+        _profile(swap_long=-7.9, swap_short=-1.9, mode=5)
+    )
+    assert base is not None
+    historical = base.with_historical(
+        rates,
+        reference_price=20_000.0,
+        reference_rate=4.0,
+        long_sign=-1,
+        short_sign=1,
+    )
+    entry21, exit21 = _times("2021-01-05 16:00", "2021-01-05 18:00")
+    entry24, exit24 = _times("2024-01-03 16:00", "2024-01-03 18:00")
+    long_21 = historical.r(
+        side="long", entry_price=20_000.0, risk_price=100.0,
+        entry_time=entry21, exit_time=exit21,
+    )
+    long_24 = historical.r(
+        side="long", entry_price=20_000.0, risk_price=100.0,
+        entry_time=entry24, exit_time=exit24,
+    )
+    assert long_21 > long_24  # menos coste en 2021
+    assert long_21 == pytest.approx(
+        20_000.0 * (-4.0 / 100.0 / 360.0) / 100.0
+    )
+
+
+def test_indice_corto_2024_paga_menos_que_2021():
+    rates = pd.Series(
+        [0.1, 4.0], index=pd.DatetimeIndex(["2021-01-04", "2024-01-02"])
+    )
+    base = SwapSpec.from_profile(
+        _profile(swap_long=-7.9, swap_short=-1.9, mode=5)
+    )
+    assert base is not None
+    historical = base.with_historical(
+        rates,
+        reference_price=20_000.0,
+        reference_rate=4.0,
+        long_sign=-1,
+        short_sign=1,
+    )
+    entry21, exit21 = _times("2021-01-05 16:00", "2021-01-05 18:00")
+    entry24, exit24 = _times("2024-01-03 16:00", "2024-01-03 18:00")
+    short_21 = historical.r(
+        side="short", entry_price=20_000.0, risk_price=100.0,
+        entry_time=entry21, exit_time=exit21,
+    )
+    short_24 = historical.r(
+        side="short", entry_price=20_000.0, risk_price=100.0,
+        entry_time=entry24, exit_time=exit24,
+    )
+    assert short_24 > short_21  # en 2024 paga menos (más cerca de 0)
+
+
+def test_eurusd_corto_tiene_signo_opuesto_al_largo():
+    rates = pd.Series(
+        [0.1, 3.9], index=pd.DatetimeIndex(["2021-01-04", "2026-11-23"])
+    )
+    base = SwapSpec.from_profile(
+        _profile(
+            account="CFD-006", symbol="EURUSD", swap_long=-8.191,
+            swap_short=3.857, mode=5, triple=3,
+        )
+    )
+    assert base is not None
+    historical = base.with_historical(
+        rates,
+        reference_price=1.10,
+        reference_rate=3.9,
+        long_sign=1,
+        short_sign=-1,
+    )
+    entry21, exit21 = _times("2021-01-04 16:00", "2021-01-04 18:00")
+    entry26, exit26 = _times("2026-11-23 16:00", "2026-11-23 18:00")
+    long_delta = historical.r(
+        side="long", entry_price=1.10, risk_price=0.01,
+        entry_time=entry21, exit_time=exit21,
+    ) - historical.r(
+        side="long", entry_price=1.10, risk_price=0.01,
+        entry_time=entry26, exit_time=exit26,
+    )
+    short_delta = historical.r(
+        side="short", entry_price=1.10, risk_price=0.01,
+        entry_time=entry21, exit_time=exit21,
+    ) - historical.r(
+        side="short", entry_price=1.10, risk_price=0.01,
+        entry_time=entry26, exit_time=exit26,
+    )
+    assert long_delta == pytest.approx(-short_delta)
+
+
+def test_hoy_reproduce_el_swap_en_los_dos_lados():
+    base = SwapSpec.from_profile(
+        _profile(swap_long=-7.9, swap_short=-1.9, mode=5)
+    )
+    assert base is not None
+    rates = pd.Series([3.9], index=pd.DatetimeIndex(["2026-11-23"]))
+    historical = base.with_historical(
+        rates, reference_price=20_000.0, reference_rate=3.9,
+        long_sign=-1, short_sign=1,
+    )
+    entry, exit_ = _times("2026-11-23 16:00", "2026-11-23 18:00")
+    for side, raw in (("long", -7.9), ("short", -1.9)):
+        expected = 20_000.0 * (raw / 100.0 / 360.0) / 100.0
+        value = historical.r(
+            side=side, entry_price=20_000.0, risk_price=100.0,
+            entry_time=entry, exit_time=exit_,
+        )
+        assert value == pytest.approx(expected)
+
+
+def test_fecha_anterior_a_la_serie_usa_fallback_estatico():
+    base = SwapSpec.from_profile(
+        _profile(swap_long=-7.9, swap_short=-1.9, mode=5)
+    )
+    assert base is not None
+    rates = pd.Series([4.0], index=pd.DatetimeIndex(["2024-01-02"]))
+    historical = base.with_historical(
+        rates, reference_price=20_000.0, reference_rate=4.0,
+        long_sign=-1, short_sign=1,
+    )
+    entry, exit_ = _times("2021-01-05 16:00", "2021-01-05 18:00")
+    value, source = historical.r_with_source(
+        side="long", entry_price=20_000.0, risk_price=100.0,
+        entry_time=entry, exit_time=exit_,
+    )
+    assert source == "static_fallback"
+    assert value == pytest.approx(20_000.0 * (-7.9 / 100.0 / 360.0) / 100.0)
 
 
 def test_triple_rollover_se_mantiene():
@@ -135,8 +270,10 @@ def test_modo_points_se_calibra_con_el_precio_de_hoy():
         pd.Series([4.0], index=pd.DatetimeIndex(["2026-11-23"])),
         reference_price=20_000.0,
         reference_rate=4.0,
+        long_sign=-1,
+        short_sign=1,
     )
-    assert historical.markup_long == pytest.approx(rate - 4.0)
+    assert historical.markup_long == pytest.approx(rate + 4.0)
     entry, exit_ = _times("2026-11-23 16:00", "2026-11-23 18:00")
     value = historical.r(
         side="long",

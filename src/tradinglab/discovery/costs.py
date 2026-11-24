@@ -500,7 +500,7 @@ class CostBook:
         worst_flags: list[str | None] = []
         selected_flags: list[str | None] = []
         for trade in trades:
-            per_account: dict[str, tuple[float, float, float, float, float, float, float]] = {}
+            per_account: dict[str, tuple[float, float, float, float, float, float, float, str | None]] = {}
             for item, panel in zip(self.accounts, self._panels):
                 risk = trade.risk_price
                 if risk is None or not np.isfinite(float(risk)) or float(risk) <= 0:
@@ -560,19 +560,31 @@ class CostBook:
                     )
                 rc = (entry_bps + exit_bps) / 10_000.0 * trade.entry_price / float(risk)
                 swap_r = 0.0
+                swap_source = None
                 swap = getattr(item, "swap", None)
                 if swap is not None:
-                    swap_r = swap.r(
-                        side=trade.side,
-                        entry_price=trade.entry_price,
-                        risk_price=float(risk),
-                        entry_time=trade.entry_time,
-                        exit_time=trade.exit_time,
-                        allow_credit=self.swap_allow_credit,
-                    )
+                    if hasattr(swap, "r_with_source"):
+                        swap_r, swap_source = swap.r_with_source(
+                            side=trade.side,
+                            entry_price=trade.entry_price,
+                            risk_price=float(risk),
+                            entry_time=trade.entry_time,
+                            exit_time=trade.exit_time,
+                            allow_credit=self.swap_allow_credit,
+                        )
+                    else:
+                        swap_r = swap.r(
+                            side=trade.side,
+                            entry_price=trade.entry_price,
+                            risk_price=float(risk),
+                            entry_time=trade.entry_time,
+                            exit_time=trade.exit_time,
+                            allow_credit=self.swap_allow_credit,
+                        )
                 rc -= swap_r
                 per_account[item.account] = (
-                    rc, entry_bps, exit_bps, swap_r, spread_r, slip_r, comm_r
+                    rc, entry_bps, exit_bps, swap_r, spread_r, slip_r, comm_r,
+                    swap_source,
                 )
                 cost_values[item.account].append(rc)
             if not per_account:
@@ -589,7 +601,7 @@ class CostBook:
                 selected_name = worst_name
             else:
                 selected_name = self.accounts[0].account
-            rc, entry_bps, exit_bps, swap_r, spread_r, slip_r, comm_r = per_account[selected_name]
+            rc, entry_bps, exit_bps, swap_r, spread_r, slip_r, comm_r, swap_source = per_account[selected_name]
             r_net = trade.r_gross - rc if trade.r_gross is not None else None
             adjusted.append(
                 replace(
@@ -599,6 +611,7 @@ class CostBook:
                     r_cost=rc,
                     r_net=r_net,
                     swap_r=swap_r,
+                    swap_source=swap_source,
                     spread_r=spread_r,
                     slip_r=slip_r,
                     comm_r=comm_r,

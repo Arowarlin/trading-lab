@@ -170,6 +170,16 @@ class SwapSpec:
     markup_long: float = 0.0
     markup_short: float = 0.0
     historical_reference_rate: float | None = None
+    # Signo del tipo de referencia por lado. Índices/oro: largo paga (-1),
+    # corto cobra (+1). FX BASECOT: largo cobra el diferencial (+1), corto lo
+    # paga (-1). El markup se calibra con el mismo signo.
+    long_sign: int = -1
+    short_sign: int = 1
+    # Valores estáticos para el fallback si una fecha es anterior a la serie.
+    fallback_mode: int | None = None
+    fallback_long: float | None = None
+    fallback_short: float | None = None
+    fallback_point: float | None = None
 
     @classmethod
     def from_profile(cls, profile: CostProfile) -> "SwapSpec | None":
@@ -214,14 +224,21 @@ class SwapSpec:
         *,
         reference_price: float,
         reference_rate: float,
+        long_sign: int | None = None,
+        short_sign: int | None = None,
     ) -> "SwapSpec":
         """Calibra el markup para reproducir el swap medido hoy.
 
         ``reference_price`` es el precio de hoy del símbolo; ``reference_rate``
         el tipo de referencia de hoy (en %). El markup queda en puntos
-        porcentuales anuales.
+        porcentuales anuales y se aplica con el signo del lado:
+        ``tasa_lado = s_lado · ref + markup_lado``.
         """
 
+        long_sign = int(self.long_sign if long_sign is None else long_sign)
+        short_sign = int(self.short_sign if short_sign is None else short_sign)
+        if long_sign not in {-1, 1} or short_sign not in {-1, 1}:
+            raise ValueError("los signos del swap deben ser +1 o -1")
         if self.mode == 5:
             long_rate = float(self.long)
             short_rate = float(self.short)
@@ -238,9 +255,15 @@ class SwapSpec:
             self,
             mode=6,
             historical_rates=rates,
-            markup_long=long_rate - float(reference_rate),
-            markup_short=short_rate - float(reference_rate),
+            markup_long=long_rate - long_sign * float(reference_rate),
+            markup_short=short_rate - short_sign * float(reference_rate),
             historical_reference_rate=float(reference_rate),
+            long_sign=long_sign,
+            short_sign=short_sign,
+            fallback_mode=int(self.mode),
+            fallback_long=float(self.long),
+            fallback_short=float(self.short),
+            fallback_point=None if self.point is None else float(self.point),
         )
 
     def _historical_rate(self, when) -> float | None:
@@ -260,17 +283,120 @@ class SwapSpec:
         side: str,
         entry_price: float,
         risk_price: float,
-        when,
+        base_rate: float,
         allow_credit: bool,
     ) -> float:
-        base = self._historical_rate(when)
-        if base is None:
-            return 0.0
-        markup = self.markup_long if str(side).lower() == "long" else self.markup_short
-        value = float(entry_price * ((base + markup) / 100.0 / 360.0) / risk_price)
+        is_long = str(side).lower() == "long"
+        sign = self.long_sign if is_long else self.short_sign
+        markup = self.markup_long if is_long else self.markup_short
+        value = float(
+            entry_price * ((sign * float(base_rate) + markup) / 100.0 / 360.0) / risk_price
+        )
         if not allow_credit and value > 0.0:
             return 0.0
         return value
+
+    def _static_night_r(
+        self,
+        *,
+        side: str,
+        entry_price: float,
+        risk_price: float,
+        allow_credit: bool,
+    ) -> float:
+        mode = self.fallback_mode
+        raw = self.fallback_long if str(side).lower() == "long" else self.fallback_short
+        if mode is None or raw is None:
+            return 0.0
+        if mode == 0:
+            value = 0.0
+        elif mode == 1:
+            if self.fallback_point is None:
+                return 0.0
+            value = float(raw * self.fallback_point / risk_price)
+        elif mode == 5:
+            value = float(entry_price * (raw / 100.0 / 360.0) / risk_price)
+        else:
+            return 0.0
+        if not allow_credit and value > 0.0:
+            return 0.0
+        return value
+
+    def r_with_source(
+        self,
+        *,
+        side: str,
+        entry_price: float,
+        risk_price: float,
+        entry_time,
+        exit_time,
+        allow_credit: bool = True,
+    ) -> tuple[float, str]:
+        """Swap en R y origen: ``historical`` o ``static_fallback``."""
+
+        units = self.units(entry_time, exit_time)
+        if units == 0:
+            return 0.0, "historical" if self.mode == 6 else "static"
+        if self.mode != 6:
+            value = float(
+                self.per_night_r(
+                    side=side,
+                    entry_price=entry_price,
+                    risk_price=risk_price,
+                    allow_credit=allow_credit,
+                )
+                * units
+            )
+            return value, "static"
+        nights = rollover_nights(
+            entry_time,
+            exit_time,
+            tz=self.rollover_tz,
+            hour=self.rollover_hour,
+            triple_day=self.triple_day,
+        )
+        total = 0.0
+        fallback = False
+        for night in nights:
+            base = self._historical_rate(night)
+            if base is None:
+                total += self._static_night_r(
+                    side=side,
+                    entry_price=entry_price,
+                    risk_price=risk_price,
+                    allow_credit=allow_credit,
+                )
+                fallback = True
+            else:
+                total += self._historical_night_r(
+                    side=side,
+                    entry_price=entry_price,
+                    risk_price=risk_price,
+                    base_rate=base,
+                    allow_credit=allow_credit,
+                )
+        return float(total), "static_fallback" if fallback else "historical"
+
+    def r(
+        self,
+        *,
+        side: str,
+        entry_price: float,
+        risk_price: float,
+        entry_time,
+        exit_time,
+        allow_credit: bool = True,
+    ) -> float:
+        """Swap en R (positivo = crédito, negativo = coste), nocturno."""
+
+        return self.r_with_source(
+            side=side,
+            entry_price=entry_price,
+            risk_price=risk_price,
+            entry_time=entry_time,
+            exit_time=exit_time,
+            allow_credit=allow_credit,
+        )[0]
 
     def total_usd(
         self,
@@ -322,51 +448,6 @@ class SwapSpec:
         if not allow_credit and value > 0.0:
             return 0.0
         return value
-
-    def r(
-        self,
-        *,
-        side: str,
-        entry_price: float,
-        risk_price: float,
-        entry_time,
-        exit_time,
-        allow_credit: bool = True,
-    ) -> float:
-        """Swap en R (positivo = crédito, negativo = coste), nocturno."""
-
-        units = self.units(entry_time, exit_time)
-        if units == 0:
-            return 0.0
-        if self.mode == 6:
-            nights = rollover_nights(
-                entry_time,
-                exit_time,
-                tz=self.rollover_tz,
-                hour=self.rollover_hour,
-                triple_day=self.triple_day,
-            )
-            return float(
-                sum(
-                    self._historical_night_r(
-                        side=side,
-                        entry_price=entry_price,
-                        risk_price=risk_price,
-                        when=night,
-                        allow_credit=allow_credit,
-                    )
-                    for night in nights
-                )
-            )
-        return float(
-            self.per_night_r(
-                side=side,
-                entry_price=entry_price,
-                risk_price=risk_price,
-                allow_credit=allow_credit,
-            )
-            * units
-        )
 
 
 def _yaml(path: Path) -> dict:

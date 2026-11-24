@@ -32,7 +32,7 @@ SERIES = {
     "GBP": "IUDSOIA",
     "JPY": "IRSTCI01JPM156N",
 }
-START = "2010-01-01"
+START = "2003-01-01"
 _SERIES_CACHE: dict[str, pd.Series | None] = {}
 _PRICE_CACHE: dict[str, float | None] = {}
 
@@ -89,7 +89,12 @@ def load_rate(
     if series_id in _SERIES_CACHE:
         return _SERIES_CACHE[series_id]
     cached = _cached(series_id, cache_dir)
-    if cached is not None:
+    needs_full_history = (
+        series_id == "DFF"
+        and cached is not None
+        and cached.index.min() > pd.Timestamp(START) + pd.Timedelta(days=30)
+    )
+    if cached is not None and not needs_full_history:
         _SERIES_CACHE[series_id] = cached
         return cached
     if not allow_fetch:
@@ -120,7 +125,7 @@ def load_rate(
         _SERIES_CACHE[series_id] = None
         return None
     cache_dir.mkdir(parents=True, exist_ok=True)
-    (cache_dir / f"{series_id}_t13.json").write_text(
+    (cache_dir / f"{series_id}_t13_full.json").write_text(
         json.dumps(payload, ensure_ascii=False, sort_keys=True), encoding="utf-8"
     )
     _SERIES_CACHE[series_id] = series
@@ -228,11 +233,16 @@ def historical_swap_spec(
     if rate is None or not np.isfinite(float(rate)):
         return None, "Sin datos: tipo de referencia en la fecha"
     try:
+        canonical = resolve(profile.symbol).id
+        long_sign = 1 if canonical in {"EURUSD", "GBPUSD", "USDJPY"} else -1
+        short_sign = -1 if long_sign == 1 else 1
         return (
             spec.with_historical(
                 series,
                 reference_price=price,
                 reference_rate=float(rate),
+                long_sign=long_sign,
+                short_sign=short_sign,
             ),
             "OK",
         )
@@ -273,7 +283,15 @@ def annual_swap_table(*, root: Path = ROOT) -> list[dict[str, Any]]:
                 continue
             series = spec.historical_rates
             assert series is not None
-            for year in range(2010, datetime.now(timezone.utc).year + 1):
+            # La columna USD convierte la divisa cotizada: USDJPY cotiza en JPY
+            # y su nocional en USD es el tamaño de contrato (100.000 USD), no
+            # precio × contrato (que daría yenes).
+            notional_usd = (
+                float(contract)
+                if symbol == "USDJPY"
+                else float(price) * float(contract)
+            )
+            for year in range(2003, datetime.now(timezone.utc).year + 1):
                 window = series.loc[f"{year}-01-01" : f"{year}-12-31"]
                 if window.empty:
                     continue
@@ -281,8 +299,9 @@ def annual_swap_table(*, root: Path = ROOT) -> list[dict[str, Any]]:
                     ("long", spec.markup_long),
                     ("short", spec.markup_short),
                 ):
-                    rate = float(window.mean()) + float(markup)
-                    swap_usd = rate / 100.0 * price * contract
+                    sign = spec.long_sign if side == "long" else spec.short_sign
+                    rate = sign * float(window.mean()) + float(markup)
+                    swap_usd = rate / 100.0 * notional_usd
                     rows.append(
                         {
                             "account": account_id,
@@ -305,6 +324,13 @@ def historical_swap_report(*, root: Path = ROOT) -> str:
         "`swap_t = (tipo_ref_t + markup_lado) · nocional · noches / 360`; el",
         "markup se calibra para reproducir el swap medido el 2026-11-23.",
         "El crédito sigue contando 0 en Discovery (`swap_credit: false`).",
+        "",
+        "- Índices/oro: largo `s=-1` (paga financiación), corto `s=+1`.",
+        "- FX: largo `s=+1` sobre el diferencial base−cotizada, corto `s=-1`.",
+        "- Si una fecha es anterior a la serie FRED, el trade usa el swap",
+        "  estático medido y queda marcado `swap_source=static_fallback`.",
+        "- CFD-006 US100/US500/US30 comparten `-7,33/-1,33` en `swap.yaml`;",
+        "  por eso su tasa histórica es idéntica. No es un error de cálculo.",
         "",
         "| Cuenta | Símbolo | Lado | Año | Tipo % | Swap USD/lote/año |",
         "|---|---|---|---:|---:|---:|",

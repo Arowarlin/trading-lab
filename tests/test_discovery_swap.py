@@ -262,6 +262,42 @@ def test_config_swap_credit_false_por_defecto() -> None:
     assert load_engine_config().discovery.swap_credit is False
 
 
+def test_fallback_estatico_marca_el_trade() -> None:
+    profile = _profile(-54.46, 25.0, mode=1)
+    base = SwapSpec.from_profile(profile)
+    assert base is not None
+    rates = pd.Series(
+        [3.9], index=pd.DatetimeIndex(["2026-11-23"]), dtype=float
+    )
+    historical = base.with_historical(
+        rates,
+        reference_price=2000.0,
+        reference_rate=3.9,
+        long_sign=-1,
+        short_sign=1,
+    )
+    cost = fastbt.CfdProfileCosts(
+        profile, contract_size=100.0, swap_override=historical
+    )
+    bars = _bars()
+    result = fastbt.run(
+        _signals(bars),
+        bars,
+        fastbt.ExitSpec(stop="atr", stop_mult=10.0, target=None, time_exit_bars=2),
+        cost,
+        _limits(),
+    )
+    assert len(result.trades) == 1
+    trade = result.trades[0]
+    assert trade.swap_source == "static_fallback"
+    assert result.metrics.get("swap_fallback_trades") == 1
+    units = historical.units(trade.entry_time, trade.exit_time)
+    assert units > 0
+    assert trade.swap_r == pytest.approx(
+        -54.46 * 0.01 / float(trade.risk_price) * units
+    )
+
+
 def test_largo_us100_ftmo_no_cuenta_credito() -> None:
     trade = _us100_result("long")
     assert trade.swap_r == 0.0

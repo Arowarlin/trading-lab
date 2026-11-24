@@ -677,6 +677,7 @@ class Trade:
     r_cost: float | None
     r_net: float | None
     swap_r: float | None = None
+    swap_source: str | None = None
     spread_r: float | None = None
     slip_r: float | None = None
     comm_r: float | None = None
@@ -1988,6 +1989,7 @@ def run(
 
     daily: dict[date, float] = {}
     swap_model = getattr(cost, "swap", None)
+    fallback_trades = 0
     if swap_model is not None and not getattr(cost, "swap_managed", False):
         adjusted: list[Trade] = []
         for trade in trades:
@@ -1999,16 +2001,31 @@ def run(
             ):
                 adjusted.append(trade)
                 continue
-            swap_r = swap_model.r(
-                side=trade.side,
-                entry_price=trade.entry_price,
-                risk_price=float(trade.risk_price),
-                entry_time=trade.entry_time,
-                exit_time=trade.exit_time,
-                allow_credit=bool(
-                    getattr(cost, "swap_allow_credit", False)
-                ),
-            )
+            source = None
+            if hasattr(swap_model, "r_with_source"):
+                swap_r, source = swap_model.r_with_source(
+                    side=trade.side,
+                    entry_price=trade.entry_price,
+                    risk_price=float(trade.risk_price),
+                    entry_time=trade.entry_time,
+                    exit_time=trade.exit_time,
+                    allow_credit=bool(
+                        getattr(cost, "swap_allow_credit", False)
+                    ),
+                )
+            else:
+                swap_r = swap_model.r(
+                    side=trade.side,
+                    entry_price=trade.entry_price,
+                    risk_price=float(trade.risk_price),
+                    entry_time=trade.entry_time,
+                    exit_time=trade.exit_time,
+                    allow_credit=bool(
+                        getattr(cost, "swap_allow_credit", False)
+                    ),
+                )
+            if source == "static_fallback":
+                fallback_trades += 1
             if swap_r:
                 adjusted.append(
                     replace(
@@ -2016,10 +2033,13 @@ def run(
                         r_cost=float(trade.r_cost or 0.0) - swap_r,
                         r_net=float(trade.r_net) + swap_r,
                         swap_r=swap_r,
+                        swap_source=source,
                     )
                 )
             else:
-                adjusted.append(replace(trade, swap_r=0.0))
+                adjusted.append(
+                    replace(trade, swap_r=0.0, swap_source=source)
+                )
         trades = adjusted
     for trade in trades:
         if trade.r_net is None:
@@ -2037,10 +2057,13 @@ def run(
             raise FastBtError("series_ledger solo existe en close_signal")
         ledger = _series_ledger(trades, bars, cost)
 
+    metrics = summarize(trades, daily_r) if collect_metrics else {}
+    if fallback_trades:
+        metrics["swap_fallback_trades"] = fallback_trades
     return FastResult(
         trades=trades,
         daily_r=daily_r,
-        metrics=summarize(trades, daily_r) if collect_metrics else {},
+        metrics=metrics,
         bar_returns=ledger,
         rejected=int(rejected),
         backend=backend(),
