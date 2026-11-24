@@ -126,6 +126,10 @@ intraday_app = typer.Typer(
     no_args_is_help=True,
     help="Forward intradía: dos candidatos fijos, dry-run por defecto.",
 )
+forward_app = typer.Typer(
+    no_args_is_help=True,
+    help="Forward demo: confirmación SPRT y estado (solo lectura).",
+)
 llm_app = typer.Typer(
     no_args_is_help=True,
     help="LLM local: validación de esquema y comparación de modelos lite.",
@@ -164,6 +168,7 @@ app.add_typer(risk_budget_app, name="risk-budget")
 app.add_typer(stats_app, name="stats")
 app.add_typer(costs_app, name="costs")
 app.add_typer(lifecycle_app, name="lifecycle")
+app.add_typer(forward_app, name="forward")
 ai_trader_app = typer.Typer(
     no_args_is_help=True,
     help="Carril IA discrecional (solo demo): snapshot, propose, skip, execute, status, manage, scoreboard, learn, distill, replay, review.",
@@ -12232,6 +12237,42 @@ def discovery_export_mql5_cmd(
     table.add_row("Magic", str(result.magic))
     table.add_row("Cuenta", f"{result.account} ({result.firm})")
     table.add_row("Bloques", ", ".join(result.blocks) or "ninguno")
+    console.print(table)
+
+
+@forward_app.command("sprt")
+def forward_sprt_cmd(
+    strategy: str = typer.Argument(..., help="EA o bot forward"),
+    delta: float = typer.Option(..., "--delta", help="Ventaja H1 en R"),
+    alpha: float = typer.Option(0.05, "--alpha"),
+    beta: float = typer.Option(0.2, "--beta"),
+    sigma: float = typer.Option(None, "--sigma", help="Desviación de desarrollo"),
+    db: str = typer.Option(None, "--db", help="lab.db (solo lectura)"),
+) -> None:
+    """SPRT de confirmación forward: continuar, aceptar ventaja o rechazar."""
+
+    from .discovery import sprt
+
+    returns, reason = sprt.load_forward_returns(strategy, db_path=db or DEFAULT_DB)
+    if not returns:
+        console.print(f"[yellow]{reason}[/yellow]")
+        raise typer.Exit(1)
+    result = sprt.sprt(
+        returns, delta=delta, alpha=alpha, beta=beta, sigma=sigma
+    )
+    table = Table(title=f"Forward SPRT · {strategy}")
+    for column in ("Campo", "Valor"):
+        table.add_column(column)
+    table.add_row("Operaciones", str(result["n"]))
+    table.add_row("Parada en", str(result.get("n_stopped") or "—"))
+    table.add_row("Λ", f"{result['llr']:.4f}")
+    table.add_row("A", f"{result['A']:.4f}")
+    table.add_row("B", f"{result['B']:.4f}")
+    table.add_row(
+        "σ", "Sin datos" if result["sigma"] is None else f"{result['sigma']:.4f}"
+    )
+    table.add_row("Decisión", result["decision"])
+    table.add_row("Motivo", result["reason"])
     console.print(table)
 
 
