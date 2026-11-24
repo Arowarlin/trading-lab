@@ -17,7 +17,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from . import campaigns, databank, dsl, fitness, genetic, grid, jobs, nsga2
+from . import campaigns, databank, decisions, dsl, fitness, genetic, grid, jobs, nsga2
 from .config import load_engine_config
 
 
@@ -422,35 +422,23 @@ def _rank1_candidates(
     discarded: list[tuple[Individual, str]] = []
     for item in feasible_rank1:
         drift = (item.metrics or {}).get("drift") or {}
-        drift_percentile = drift.get("percentile")
-        if drift:
-            minimum = float(drift.get("percentile_min") or 90.0)
-            if drift_percentile is None or float(drift_percentile) < minimum:
-                detail = (
-                    "sin datos"
-                    if drift_percentile is None
-                    else f"{float(drift_percentile):.1f}"
+        drift_ok, drift_detail = decisions.drift_check(drift)
+        if not drift_ok:
+            discarded.append(
+                (
+                    item,
+                    f"descartado: percentil deriva {drift_detail}",
                 )
-                discarded.append(
-                    (
-                        item,
-                        f"descartado: percentil deriva {detail} < {minimum:g}",
-                    )
-                )
-                continue
+            )
+            continue
         full_is = (item.metrics.get("is") or {}).get("expectancy_r")
-        if full_is is None or float(full_is) <= 0:
+        if not decisions.is_positive(full_is):
             discarded.append(
                 (item, f"descartado: IS completa {full_is} <= 0")
             )
             continue
-        positive = sum(
-            1
-            for row in item.folds
-            if row.get("expectancy_r") is not None
-            and float(row["expectancy_r"]) > 0
-        )
-        if positive >= max(1, folds - 1):
+        positive = decisions.positive_folds(item.folds)
+        if decisions.folds_ok(positive, folds):
             candidates.append(item)
         else:
             discarded.append((item, f"descartado: pliegues positivos {positive}/{folds}"))
@@ -502,15 +490,9 @@ def _select_finalists(
         metrics = result.get("metrics") or {}
         expectancy = metrics.get("expectancy_r")
         pf = metrics.get("profit_factor")
-        if expectancy is None or float(expectancy) <= 0:
-            discarded.append(
-                (item, f"descartado: OOS-1 expectativa {expectancy}")
-            )
-            continue
-        if pf is None:
-            pf = float("inf")
-        if float(pf) <= 1.1:
-            discarded.append((item, f"descartado: OOS-1 PF {pf} <= 1,1"))
+        passes, detail = decisions.oos1_check(expectancy, pf)
+        if not passes:
+            discarded.append((item, f"descartado: {detail}"))
             continue
         series = _series(result.get("returns") or [], result.get("return_dates") or [])
         score = float(expectancy) - 0.001 * float(item.complexity)

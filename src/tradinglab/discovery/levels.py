@@ -18,7 +18,7 @@ from ..propfund.instruments import resolve
 from ..propfund.models import Market
 from ..propfund.registry import load_registry
 from ..stats import dsr_from_returns, period_sharpe
-from . import campaigns, compiler, costs, databank, dsl, fastbt, jobs, robustness
+from . import campaigns, compiler, costs, databank, decisions, dsl, fastbt, jobs, robustness
 from .config import load_engine_config
 from .metrics import expectancy_r
 from .specs import exit_spec_from_strategy, run_limits_from_strategy
@@ -149,34 +149,27 @@ def evaluate(
         and str(strategy["status"]) not in {"rejected", "archived"}
     ):
         level = 2
-    level3 = (
-        is_finalist
-        and is_expectancy is not None
-        and float(is_expectancy) > 0.0
-        and cost15 is not None
-        and float(cost15) > 0.0
-        and noise_ok
-        and delay_ok
-        and execution_ok
+    level3 = decisions.level3_ok(
+        is_finalist=is_finalist,
+        is_expectancy=is_expectancy,
+        cost_x1_5=cost15,
+        perturb_noise_ok=noise_ok,
+        perturb_delay_ok=delay_ok,
+        perturb_execution_ok=execution_ok,
     )
     if level3:
         level = 3
-    level4 = (
-        level3
-        and enough_oos2
-        and oos2 is not None
-        and float(oos2) > 0.0
-        and dsr_confirm is not None
-        and float(dsr_confirm) >= 0.90
-        and pbo_value is not None
-        and float(pbo_value) <= 0.30
-        and wf_ok is True
-        and regime_ok is True
-        and slip2 is not None
-        and float(slip2) > 0.0
-        and challenge_ok is True
-        and random_oos2 is not None
-        and float(random_oos2) >= 95.0
+    level4 = decisions.level4_ok(
+        level3=level3,
+        enough_oos2=enough_oos2,
+        oos2=oos2,
+        dsr_confirm=dsr_confirm,
+        pbo=pbo_value,
+        wf_ok=wf_ok,
+        regime_ok=regime_ok,
+        slip2=slip2,
+        challenge_ok=challenge_ok,
+        random_oos2=random_oos2,
     )
     if level4:
         level = 4

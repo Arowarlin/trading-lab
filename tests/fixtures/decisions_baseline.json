@@ -1,0 +1,266 @@
+{
+  "note": "Baseline de decisiones capturado antes del refactor T01 (2026-11-24).",
+  "population": [
+    {
+      "id": "h1",
+      "rank": 0,
+      "feasible": true,
+      "drift": {
+        "percentile": 95.0,
+        "percentile_min": 90.0
+      },
+      "is": 0.2,
+      "folds": [
+        0.1,
+        0.1,
+        0.1,
+        0.1
+      ]
+    },
+    {
+      "id": "h2",
+      "rank": 0,
+      "feasible": true,
+      "drift": {
+        "percentile": 89.0,
+        "percentile_min": 90.0
+      },
+      "is": 0.2,
+      "folds": [
+        0.1,
+        0.1,
+        0.1,
+        0.1
+      ]
+    },
+    {
+      "id": "h3",
+      "rank": 0,
+      "feasible": true,
+      "drift": {
+        "percentile": null,
+        "percentile_min": 90.0
+      },
+      "is": 0.2,
+      "folds": [
+        0.1,
+        0.1,
+        0.1,
+        0.1
+      ]
+    },
+    {
+      "id": "h4",
+      "rank": 0,
+      "feasible": true,
+      "drift": {
+        "percentile": 95.0,
+        "percentile_min": 90.0
+      },
+      "is": -0.1,
+      "folds": [
+        0.1,
+        0.1,
+        0.1,
+        0.1
+      ]
+    },
+    {
+      "id": "h5",
+      "rank": 0,
+      "feasible": true,
+      "drift": {
+        "percentile": 95.0,
+        "percentile_min": 90.0
+      },
+      "is": 0.2,
+      "folds": [
+        0.1,
+        0.1,
+        -0.1,
+        -0.2
+      ]
+    },
+    {
+      "id": "h6",
+      "rank": 1,
+      "feasible": true,
+      "drift": {
+        "percentile": 95.0,
+        "percentile_min": 90.0
+      },
+      "is": 0.2,
+      "folds": [
+        0.1,
+        0.1,
+        0.1,
+        0.1
+      ]
+    },
+    {
+      "id": "h7",
+      "rank": 0,
+      "feasible": false,
+      "drift": {
+        "percentile": 95.0,
+        "percentile_min": 90.0
+      },
+      "is": 0.2,
+      "folds": [
+        0.1,
+        0.1,
+        0.1,
+        0.1
+      ]
+    }
+  ],
+  "folds": 4,
+  "oos1": {
+    "h1": {
+      "metrics": {
+        "expectancy_r": 0.2,
+        "profit_factor": 1.5
+      },
+      "returns": [
+        0.1,
+        0.2,
+        -0.1,
+        0.05
+      ],
+      "return_dates": [
+        "2024-01-01",
+        "2024-01-02",
+        "2024-01-03",
+        "2024-01-04"
+      ]
+    },
+    "h8": {
+      "metrics": {
+        "expectancy_r": 0.3,
+        "profit_factor": 1.4
+      },
+      "returns": [
+        0.1,
+        0.2,
+        -0.1,
+        0.05
+      ],
+      "return_dates": [
+        "2024-01-01",
+        "2024-01-02",
+        "2024-01-03",
+        "2024-01-04"
+      ]
+    },
+    "h9": {
+      "metrics": {
+        "expectancy_r": 0.1,
+        "profit_factor": 1.05
+      },
+      "returns": [
+        -0.05,
+        0.04,
+        0.03,
+        0.02
+      ],
+      "return_dates": [
+        "2024-01-01",
+        "2024-01-02",
+        "2024-01-03",
+        "2024-01-04"
+      ]
+    },
+    "h10": {
+      "metrics": {
+        "expectancy_r": -0.1,
+        "profit_factor": 1.5
+      },
+      "returns": [
+        -0.05,
+        0.04,
+        0.03,
+        0.02
+      ],
+      "return_dates": [
+        "2024-01-01",
+        "2024-01-02",
+        "2024-01-03",
+        "2024-01-04"
+      ]
+    },
+    "h11": {},
+    "h12": {
+      "metrics": {
+        "expectancy_r": 0.25,
+        "profit_factor": 1.3
+      },
+      "returns": [
+        -0.05,
+        0.04,
+        0.03,
+        0.02
+      ],
+      "return_dates": [
+        "2024-01-01",
+        "2024-01-02",
+        "2024-01-03",
+        "2024-01-04"
+      ]
+    }
+  },
+  "select_candidates": [
+    "h1",
+    "h8",
+    "h9",
+    "h10",
+    "h11",
+    "h12"
+  ],
+  "finalists_max": 2,
+  "corr_cluster": 0.7,
+  "baseline": {
+    "candidates": [
+      "h1"
+    ],
+    "discarded": [
+      [
+        "h2",
+        "descartado: percentil deriva 89.0 < 90"
+      ],
+      [
+        "h3",
+        "descartado: percentil deriva sin datos < 90"
+      ],
+      [
+        "h4",
+        "descartado: IS completa -0.1 <= 0"
+      ],
+      [
+        "h5",
+        "descartado: pliegues positivos 2/4"
+      ]
+    ],
+    "selected": [
+      "h8",
+      "h12"
+    ],
+    "select_discarded": [
+      [
+        "h9",
+        "descartado: OOS-1 PF 1.05 <= 1,1"
+      ],
+      [
+        "h10",
+        "descartado: OOS-1 expectativa -0.1"
+      ],
+      [
+        "h11",
+        "descartado: OOS-1 expectativa None"
+      ],
+      [
+        "h1",
+        "descartado: fuera de K"
+      ]
+    ]
+  }
+}

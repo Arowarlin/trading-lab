@@ -11032,6 +11032,61 @@ def discovery_edge_map_cmd(
     )
 
 
+@discovery_app.command("harness")
+def discovery_harness_cmd(
+    mode: str = typer.Option("gates", "--mode", help="gates | bars"),
+    freq: str = typer.Option("12,50,250,1000", "--freq", help="Operaciones por año"),
+    edge: str = typer.Option("0,0.05,0.1,0.2", "--edge", help="Ventajas en R"),
+    sims: int = typer.Option(2000, "--sims", help="Simulaciones (o operaciones en bars)"),
+    seed: int = typer.Option(7, "--seed"),
+    output: str = typer.Option(None, "--output", help="Ruta del informe Markdown"),
+) -> None:
+    """Arnés T01: P(aprobar) del pipeline y recuperación de δ en barras."""
+
+    from .discovery import harness
+
+    try:
+        report = harness.run(
+            mode=mode,
+            frequencies=freq,
+            edges=edge,
+            simulations=sims,
+            seed=seed,
+            output=output,
+        )
+    except (ValueError, FileNotFoundError) as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2) from exc
+    if mode == "gates":
+        table = Table(title=f"Arnés · gates · {sims} simulaciones · semilla {seed}")
+        for column in ("Ops/año", "Ventaja", "Dist.", "P(aprobar)", "IC95 %", "P(nivel 3)"):
+            table.add_column(column)
+        for row in report["rows"]:
+            table.add_row(
+                f"{row.frequency:g}",
+                f"{row.edge:g}",
+                row.distribution,
+                f"{row.p_approve:.3f}",
+                f"[{row.ci_low:.3f}, {row.ci_high:.3f}]",
+                f"{row.p_level3:.3f}",
+            )
+    else:
+        table = Table(title=f"Arnés · bars · {sims} operaciones · semilla {seed}")
+        for column in ("Ventaja", "Ops", "Recuperado", "Esperado", "IC95 %", "Pasa"):
+            table.add_column(column)
+        for row in report["rows"]:
+            table.add_row(
+                f"{row.edge:g}",
+                str(row.trades),
+                f"{row.recovered_mean_r:.4f}",
+                f"{row.expected_r:.4f}",
+                f"[{row.ci_low:.4f}, {row.ci_high:.4f}]",
+                "sí" if row.passed else "no",
+            )
+    console.print(table)
+    console.print(f"[green]Informe escrito:[/green] {report['path']}")
+
+
 @discovery_app.command("suggest")
 def discovery_suggest_cmd(
     account: str = typer.Option(None, "--account", help="Cuenta objetivo"),
