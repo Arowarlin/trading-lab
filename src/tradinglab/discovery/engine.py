@@ -187,20 +187,36 @@ def candidate_strategies(
     return strategies, population, mode, template, seed
 
 
-def preflight(campaign_id: str, *, db_path=None) -> dict[str, Any]:
+def preflight(
+    campaign_id: str,
+    *,
+    db_path=None,
+    counts: dict[str, int] | None = None,
+    compute_counts: bool = True,
+) -> dict[str, Any]:
     """Solo inicialización: generados, válidos y rechazos del worker.
 
     No carga barras, no ejecuta backtests y no lee OOS. Trabaja igual sobre un
-    borrador, para poder ejecutarlo antes de aprobar la campaña.
+    borrador, para poder ejecutarlo antes de aprobar la campaña. Para la puerta
+    de potencia puede recibir ``counts`` o calcularlos con ``feasibility``
+    (solo conteos, sin rendimiento).
     """
 
     campaign = databank.get_campaign(campaign_id, db_path=db_path)
     if campaign is None:
         raise campaigns.CampaignError(f"campaña no registrada: {campaign_id}")
-    return _preflight_campaign(campaign, campaign_id)
+    return _preflight_campaign(
+        campaign,
+        campaign_id,
+        counts=counts,
+        compute_counts=compute_counts,
+        db_path=db_path,
+    )
 
 
-def preflight_spec(spec_path: str | Path) -> dict[str, Any]:
+def preflight_spec(
+    spec_path: str | Path, *, compute_counts: bool = False
+) -> dict[str, Any]:
     """Preflight sobre una especificación, sin registrar campaña."""
     from . import basket
     from .spec import load_spec
@@ -209,12 +225,52 @@ def preflight_spec(spec_path: str | Path) -> dict[str, Any]:
         return basket.preflight(spec_path)
     campaign = load_spec(spec_path)
     return _preflight_campaign(
-        campaign, str(campaign["campaign_id"])
+        campaign, str(campaign["campaign_id"]), compute_counts=compute_counts
     )
 
 
+def _power_payload(
+    campaign: dict[str, Any],
+    campaign_id: str,
+    *,
+    counts: dict[str, int] | None = None,
+    compute_counts: bool = False,
+    db_path=None,
+) -> dict[str, Any]:
+    from . import power
+
+    config = campaign.get("config") or {}
+    delta = config.get("plausible_edge_r")
+    sigma = float(config.get("sigma_r") or power.DEFAULT_SIGMA_R)
+    segments = config.get("segments") or {}
+    resolved = dict(counts or {})
+    if compute_counts and not resolved.get("trades_holdout"):
+        try:
+            from . import feasibility
+
+            report = feasibility.check(campaign_id, db_path=db_path)
+            resolved.update(
+                power.counts_from_is(report.get("trades_is") or 0, segments)
+            )
+        except Exception:  # noqa: BLE001 - sin datos no bloquea
+            pass
+    payload = power.power_check(
+        resolved.get("trades_holdout", 0), delta, sigma_r=sigma
+    )
+    payload["expected_trades_is"] = int(resolved.get("trades_is") or 0)
+    payload["expected_trades_holdout"] = int(
+        resolved.get("trades_holdout") or 0
+    )
+    return payload
+
+
 def _preflight_campaign(
-    campaign: dict[str, Any], campaign_id: str
+    campaign: dict[str, Any],
+    campaign_id: str,
+    *,
+    counts: dict[str, int] | None = None,
+    compute_counts: bool = False,
+    db_path=None,
 ) -> dict[str, Any]:
     strategies, population, mode, template, seed = candidate_strategies(campaign)
     setup = jobs.QueueSetup.from_campaign(campaign)
@@ -228,6 +284,13 @@ def _preflight_campaign(
             reasons[reason] = reasons.get(reason, 0) + 1
     duplicates = len(strategies) - len(
         {dsl.strategy_hash(strategy) for strategy in strategies}
+    )
+    power_payload = _power_payload(
+        campaign,
+        campaign_id,
+        counts=counts,
+        compute_counts=compute_counts,
+        db_path=db_path,
     )
     return {
         "campaign_id": campaign_id,
@@ -244,6 +307,7 @@ def _preflight_campaign(
         "duplicates": duplicates,
         "reasons": reasons,
         "last_error": campaign.get("last_error"),
+        **power_payload,
     }
 
 

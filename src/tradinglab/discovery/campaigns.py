@@ -265,6 +265,8 @@ def register(
     db_path: str | Path | None = None,
     cost_model_version: int | None = None,
     spread_model: str | None = None,
+    plausible_edge_r: float | None = None,
+    sigma_r: float | None = None,
 ) -> dict[str, Any]:
     """Registra un borrador (o previsualiza con ``dry_run``)."""
 
@@ -375,6 +377,10 @@ def register(
         "segments": normalized,
         "dataset_hash": digest,
         "n_total": n_total,        "cost_model_version": version,
+        "plausible_edge_r": (
+            None if plausible_edge_r is None else float(plausible_edge_r)
+        ),
+        "sigma_r": 1.0 if sigma_r is None else float(sigma_r),
         "cost": {
             "account": selected_costs[0],
             "firm": selected_firm,
@@ -545,6 +551,8 @@ def register_from_spec(
         db_path=db_path,
         cost_model_version=payload.get("cost_model_version"),
         spread_model=(payload.get("cost") or {}).get("spread_model"),
+        plausible_edge_r=payload.get("plausible_edge_r"),
+        sigma_r=payload.get("sigma_r"),
     )
 
 
@@ -610,9 +618,11 @@ def approve(
     if campaign is None:
         raise CampaignError(f"campaña no registrada: {campaign_id}")
     if verify and campaign["status"] == "draft":
-        from . import engine, feasibility
+        from . import engine, feasibility, power
 
-        preflight = engine.preflight(campaign_id, db_path=db_path)
+        preflight = engine.preflight(
+            campaign_id, db_path=db_path, compute_counts=False
+        )
         if int(preflight["valid"]) < int(preflight["population"]):
             raise CampaignError(
                 "preflight: "
@@ -625,6 +635,23 @@ def approve(
                 f"{report['n_feasible']}/{report['n_checked']} factibles "
                 f"({report['feasible_pct']:.1f} %) < 50 %"
             )
+        config = campaign.get("config") or {}
+        delta = config.get("plausible_edge_r")
+        if delta is not None:
+            counts = power.counts_from_is(
+                report.get("trades_is") or 0, config.get("segments") or {}
+            )
+            verdict = power.power_check(
+                counts["trades_holdout"],
+                delta,
+                sigma_r=float(config.get("sigma_r") or 1.0),
+            )
+            if not verdict["potencia_ok"]:
+                raise CampaignError(
+                    f"preflight sin potencia: {verdict['potencia_status']} "
+                    f"(n_holdout={counts['trades_holdout']}, "
+                    f"MDE={verdict['mde_holdout']})"
+                )
     result = databank.approve_campaign(
         campaign_id, approved_by=approved_by, db_path=db_path
     )

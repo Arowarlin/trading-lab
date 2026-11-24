@@ -10776,6 +10776,23 @@ def discovery_preflight_cmd(
     table.add_row("Válidos", str(report["valid"]))
     table.add_row("Rechazados", str(report["rejected"]))
     table.add_row("Duplicadas", str(report.get("duplicates", 0)))
+    table.add_row(
+        "δ plausible",
+        "Sin datos"
+        if report.get("plausible_edge_r") is None
+        else f"{report['plausible_edge_r']:g} R",
+    )
+    table.add_row("Ops IS", str(report.get("expected_trades_is", 0)))
+    table.add_row(
+        "Ops holdout", str(report.get("expected_trades_holdout", 0))
+    )
+    table.add_row(
+        "MDE holdout",
+        "Sin datos"
+        if report.get("mde_holdout") is None
+        else f"{report['mde_holdout']:.4f} R",
+    )
+    table.add_row("Potencia", str(report.get("potencia_status")))
     if report.get("last_error"):
         table.add_row("Último error", str(report["last_error"]))
     console.print(table)
@@ -11567,6 +11584,71 @@ def discovery_results_cmd(
         f"[dim]{campaign['status']} · n_total {campaign['n_total']} · "
         f"evaluados {campaign['n_evaluated']} · finalistas {campaign['n_finalists']} · "
         "solo IS; OOS-2 no se lee.[/dim]"
+    )
+
+
+@discovery_app.command("power")
+def discovery_power_cmd(
+    campaign_id: str = typer.Argument(..., help="ID de la campaña"),
+    db: str = typer.Option(None, "--db", help="discovery.db alternativo"),
+) -> None:
+    """Potencia de la regla: MDE por tramo, solo conteos (sin rendimiento)."""
+
+    import sqlite3
+
+    from .discovery import databank, power
+
+    target = db or databank.DEFAULT_DISCOVERY_DB
+    campaign = databank.get_campaign(campaign_id, db_path=target)
+    if campaign is None:
+        console.print(f"[red]Campaña no registrada:[/red] {campaign_id}")
+        raise typer.Exit(1)
+    config = campaign.get("config") or {}
+    delta = config.get("plausible_edge_r")
+    sigma = float(config.get("sigma_r") or 1.0)
+    con = sqlite3.connect(f"file:{Path(target).as_posix()}?mode=ro", uri=True)
+    con.row_factory = sqlite3.Row
+    try:
+        rows = con.execute(
+            "SELECT s.id, e.segment, e.trades_count FROM disc_strategies s"
+            " LEFT JOIN disc_evaluations e ON e.strategy_id = s.id"
+            " WHERE s.campaign_id = ? ORDER BY s.id, e.segment",
+            (campaign_id,),
+        ).fetchall()
+    finally:
+        con.close()
+    counts: dict[int, dict[str, int]] = {}
+    for row in rows:
+        counts.setdefault(int(row["id"]), {})[str(row["segment"])] = int(
+            row["trades_count"] or 0
+        )
+    table = Table(title=f"Discovery · potencia de la regla · {campaign_id}")
+    for column in (
+        "Estrategia", "Ops IS", "Ops OOS-1", "MDE OOS-1",
+        "Ops OOS-2", "MDE OOS-2", "δ", "Veredicto",
+    ):
+        table.add_column(column)
+    for strategy_id, segments in sorted(counts.items()):
+        n1 = segments.get("oos1", 0)
+        n2 = segments.get("oos2", 0)
+        mde1 = power.mde(n1, sigma_r=sigma)
+        mde2 = power.mde(n2, sigma_r=sigma)
+        verdict = power.power_check(n2, delta, sigma_r=sigma)
+        table.add_row(
+            str(strategy_id),
+            str(segments.get("fitness_is", 0)),
+            str(n1),
+            "Sin datos" if mde1 is None else f"{mde1:.4f}",
+            str(n2),
+            "Sin datos" if mde2 is None else f"{mde2:.4f}",
+            "Sin datos" if delta is None else f"{float(delta):g}",
+            "aviso: sin δ"
+            if delta is None
+            else ("potencia_ok" if verdict["potencia_ok"] else "sin potencia"),
+        )
+    console.print(table)
+    console.print(
+        "[dim]Solo conteos; no se lee expectativa, PF ni OOS-2 nuevo.[/dim]"
     )
 
 
