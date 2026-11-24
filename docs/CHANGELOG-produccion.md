@@ -67,5 +67,17 @@ comprueba. El baseline de hashes vive en
   `reports/discovery/swap-historico.md`.
 - **Rollback:** `swap.mode: static`.
 
+## 2026-11-24 · Propuesta de slippage medido (T12, no aplicada)
+
+- **Qué cambia:** nuevo `lab costs slippage-measure` y
+  `config/propfund/costs.measured.yaml`. Mide `|fill − solicitado|` por
+  símbolo, cuenta, tipo y franja de 4 h; con `n ≥ 30` propone `measured`, con
+  menos conserva el supuesto. **`costs.yaml` no se modifica.**
+- **Datos:** 58 filas TCA / 116 fills / 65 órdenes. Todas las celdas `n < 30`
+  y `order_px == fill_px`; la propuesta queda en `assumption`.
+- **Verificación:** `tests/test_discovery_slippage.py`.
+- **Rollback:** borrar la propuesta; no hay cambio aplicado.
+
+
 
 

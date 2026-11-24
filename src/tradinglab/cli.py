@@ -9854,6 +9854,56 @@ def main() -> None:
     app()
 
 
+@costs_app.command("slippage-measure")
+def costs_slippage_measure_cmd(
+    db: str = typer.Option(None, "--db", help="lab.db (solo lectura)"),
+    output: str = typer.Option(
+        None, "--output", help="Ruta de la propuesta (nunca costs.yaml)"
+    ),
+) -> None:
+    """Mide |fill − solicitado| y escribe una propuesta; costs.yaml no se toca."""
+
+    from .discovery import slippage_measured
+
+    database = db or DEFAULT_DB
+    cells = slippage_measured.measure_slippage(database)
+    inventory = slippage_measured.fills_inventory(database)
+    proposal = slippage_measured.build_proposal(cells)
+    path = slippage_measured.write_proposal(
+        proposal, path=output or slippage_measured.PROPOSAL_PATH
+    )
+
+    if inventory.get("error"):
+        console.print(f"[yellow]{inventory['error']}[/yellow]")
+    else:
+        summary = Table(title="Inventario de fills (solo lectura)")
+        for column in ("Tabla", "Filas"):
+            summary.add_column(column)
+        for table, count in inventory["tables"].items():
+            summary.add_row(table, str(count))
+        console.print(summary)
+
+    table = Table(title="Slippage medido · |fill − solicitado|")
+    for column in ("Símbolo", "Cuenta", "Tipo", "Franja UTC", "n", "Mediana", "p75", "Estado"):
+        table.add_column(column)
+    for cell in cells:
+        table.add_row(
+            cell.symbol,
+            cell.account,
+            cell.order_type,
+            cell.band,
+            str(cell.n),
+            "Sin datos" if cell.median_price is None else f"{cell.median_price:.6f}",
+            "Sin datos" if cell.p75_price is None else f"{cell.p75_price:.6f}",
+            "medido" if cell.status == "measured" else "Sin datos (n < 30)",
+        )
+    if not cells:
+        table.add_row("Sin datos", "—", "—", "—", "0", "—", "—", "Sin datos")
+    console.print(table)
+    console.print(f"[green]Propuesta escrita:[/green] {path}")
+    console.print("[dim]costs.yaml no se ha modificado.[/dim]")
+
+
 @costs_app.command("swap-sync")
 def costs_swap_sync_cmd(
     write: bool = typer.Option(

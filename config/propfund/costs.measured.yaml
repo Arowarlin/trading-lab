@@ -1,0 +1,204 @@
+version: 1
+generated_at: '2026-11-24T19:29:29+00:00'
+note: 'Propuesta de slippage medido. No se aplica sola: el operador decide. Las celdas
+  con n < 30 conservan el supuesto actual.'
+accounts:
+  CFD-001:
+    symbols:
+      US100:
+        slippage_price: 1.0
+        source: assumption
+        measured_at: null
+        n: 0
+        median_price: null
+        p75_price: null
+      US500:
+        slippage_price: null
+        source: assumption
+        measured_at: null
+        n: 0
+        median_price: null
+        p75_price: null
+      US30:
+        slippage_price: null
+        source: assumption
+        measured_at: null
+        n: 0
+        median_price: null
+        p75_price: null
+      XAUUSD:
+        slippage_price: 0.15
+        source: assumption
+        measured_at: null
+        n: 21
+        median_price: null
+        p75_price: null
+      EURUSD:
+        slippage_price: 5.0e-05
+        source: assumption
+        measured_at: null
+        n: 7
+        median_price: null
+        p75_price: null
+      GBPUSD:
+        slippage_price: 5.0e-05
+        source: assumption
+        measured_at: null
+        n: 1
+        median_price: null
+        p75_price: null
+      USDJPY:
+        slippage_price: 0.005
+        source: assumption
+        measured_at: null
+        n: 2
+        median_price: null
+        p75_price: null
+  CFD-006:
+    symbols:
+      US100:
+        slippage_price: null
+        source: assumption
+        measured_at: null
+        n: 0
+        median_price: null
+        p75_price: null
+      US500:
+        slippage_price: null
+        source: assumption
+        measured_at: null
+        n: 0
+        median_price: null
+        p75_price: null
+      US30:
+        slippage_price: null
+        source: assumption
+        measured_at: null
+        n: 0
+        median_price: null
+        p75_price: null
+      XAUUSD:
+        slippage_price: null
+        source: assumption
+        measured_at: null
+        n: 21
+        median_price: null
+        p75_price: null
+      EURUSD:
+        slippage_price: null
+        source: assumption
+        measured_at: null
+        n: 7
+        median_price: null
+        p75_price: null
+      GBPUSD:
+        slippage_price: null
+        source: assumption
+        measured_at: null
+        n: 1
+        median_price: null
+        p75_price: null
+      USDJPY:
+        slippage_price: null
+        source: assumption
+        measured_at: null
+        n: 2
+        median_price: null
+        p75_price: null
+  FUT-001:
+    symbols:
+      MNQ:
+        slippage_price: null
+        source: assumption
+        measured_at: null
+        n: 0
+        median_price: null
+        p75_price: null
+      NQ:
+        slippage_price: null
+        source: assumption
+        measured_at: null
+        n: 0
+        median_price: null
+        p75_price: null
+cells:
+- symbol: EURUSD
+  account: Sin datos
+  order_type: market
+  band: 04-08
+  n: 1
+  median_price: 0.0
+  p75_price: 0.0
+  status: Sin datos
+- symbol: EURUSD
+  account: Sin datos
+  order_type: market
+  band: 08-12
+  n: 2
+  median_price: 0.0
+  p75_price: 0.0
+  status: Sin datos
+- symbol: EURUSD
+  account: Sin datos
+  order_type: market
+  band: 12-16
+  n: 3
+  median_price: 0.0
+  p75_price: 0.0
+  status: Sin datos
+- symbol: EURUSD
+  account: Sin datos
+  order_type: market
+  band: 16-20
+  n: 1
+  median_price: 0.0
+  p75_price: 0.0
+  status: Sin datos
+- symbol: GBPUSD
+  account: Sin datos
+  order_type: market
+  band: 08-12
+  n: 1
+  median_price: 0.0
+  p75_price: 0.0
+  status: Sin datos
+- symbol: US100.CASH
+  account: Sin datos
+  order_type: market
+  band: 12-16
+  n: 20
+  median_price: 0.0
+  p75_price: 0.0
+  status: Sin datos
+- symbol: US100.CASH
+  account: Sin datos
+  order_type: market
+  band: 16-20
+  n: 5
+  median_price: 0.0
+  p75_price: 0.0
+  status: Sin datos
+- symbol: USDJPY
+  account: Sin datos
+  order_type: market
+  band: 00-04
+  n: 2
+  median_price: 0.0
+  p75_price: 0.0
+  status: Sin datos
+- symbol: XAUUSD
+  account: Sin datos
+  order_type: market
+  band: 12-16
+  n: 17
+  median_price: 0.0
+  p75_price: 0.0
+  status: Sin datos
+- symbol: XAUUSD
+  account: Sin datos
+  order_type: market
+  band: 16-20
+  n: 4
+  median_price: 0.0
+  p75_price: 0.0
+  status: Sin datos

@@ -126,3 +126,15 @@ rollover del bróker. El crédito sigue contando 0 en Discovery.
 
 Tabla de swap medio anual por cuenta, símbolo y lado en
 `reports/discovery/swap-historico.md`.
+
+### Slippage medido (T12)
+
+`lab costs slippage-measure` lee `tca` (y el inventario de `fills`/`orders`) y
+calcula mediana y p75 de `|fill − solicitado|` por símbolo, cuenta, tipo y
+franja de 4 h. Con `n ≥ 30` propone `source: measured` y fecha; con menos,
+mantiene el supuesto actual. **No modifica `costs.yaml`**: escribe
+`config/propfund/costs.measured.yaml` para que el operador decida.
+
+Estado 2026-11-24: 58 filas TCA, 116 fills, 65 órdenes, todas `market`. Todas
+las celdas tienen `n < 30` y `order_px == fill_px` (slippage 0), así que la
+propuesta queda íntegramente en `assumption`. No se inventa una medición.
