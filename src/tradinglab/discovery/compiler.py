@@ -10,6 +10,7 @@ cerradas; la entrada se ejecuta en el open siguiente (Fase 3), salvo
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import timedelta
 
 import numpy as np
 import pandas as pd
@@ -380,13 +381,37 @@ def _warmup(expr: Expr | None, bars: pd.DataFrame, tz: str, strategy: Strategy) 
     return 0
 
 
+def _session_dates(bars: pd.DataFrame) -> list:
+    """Fecha de sesión NYSE que cubre cada vela (rejilla 17:00 NY).
+
+    La etiqueta D1 es la **apertura** de la sesión: 17:00 de Nueva York del día
+    anterior. Por eso la sesión del viernes se etiqueta como jueves y la del
+    lunes como domingo. ``month_turn`` debe mapear por esta sesión, no por la
+    fecha de la etiqueta; si no, la entrada y la salida se desplazan un día y
+    los meses que terminan en viernes o víspera de festivo se pierden.
+    """
+
+    local = pd.DatetimeIndex(bars.index).tz_convert("America/New_York")
+    out = []
+    for stamp in local:
+        day = stamp.date()
+        if stamp.hour >= 17:
+            day = day + timedelta(days=1)
+        out.append(day)
+    return out
+
+
 def _month_turn_signals(
     bars: pd.DataFrame, tz: str, n: int, m: int
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Señal de entrada al cierre y vela de salida del efecto cambio de mes."""
+    """Señal de entrada al cierre y vela de salida del efecto cambio de mes.
 
-    local = bars.index.tz_convert(tz)
-    dates = [stamp.date() for stamp in local]
+    ``tz`` se mantiene en la firma por compatibilidad: la rejilla D1 del
+    proyecto siempre está anclada a las 17:00 de Nueva York, y el calendario de
+    ``month_turn`` es el NYSE.
+    """
+
+    dates = _session_dates(bars)
     last_pos: dict = {}
     for position, day in enumerate(dates):
         last_pos[day] = position

@@ -1,0 +1,36 @@
+# R9 — turn_of_month en US500 D1 (Dukascopy).
+# Hipótesis (literal, escrita antes de calcular nada):
+# "Los índices de EE. UU. concentran una parte desproporcionada de su
+#  rentabilidad entre el último día hábil del mes y los primeros días hábiles
+#  del siguiente, por flujos de nóminas, fondos y rebalanceos. Si es real,
+#  comprar en esa ventana supera a comprar en días aleatorios del mismo número
+#  y duración."
+# Entrada al cierre del día hábil N antes de fin de mes; salida al cierre del
+# día hábil M del mes siguiente. Stop de catástrofe 3×ATR(14), no optimizado.
+campaign_id: r9b-tom-us500-d1
+instrument: US500
+timeframe: D1
+template: turn_of_month
+profile: small
+mode: grid
+seed: 51
+data_source: dukascopy
+account: CFD-006
+firm: fundingpips
+cost_mode: target
+cost_accounts: [CFD-006]
+segments:
+  is: ["2018-01-01", "2024-06-30"]
+  oos1: ["2024-07-01", "2025-06-30"]
+  oos2: ["2025-07-01", null]
+# 3 N × 3 M = 9 combinaciones.
+grid:
+  dimensions:
+    - name: n
+      kind: path
+      path: long_entry.n
+      values: [1, 2, 3]
+    - name: m
+      kind: path
+      path: long_entry.m
+      values: [2, 3, 4]

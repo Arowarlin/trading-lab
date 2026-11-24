@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 
 import numpy as np
 import pandas as pd
@@ -25,6 +25,46 @@ def _strategy(n: int = 1, m: int = 2) -> dict:
     strategy["long_entry"]["n"] = n
     strategy["long_entry"]["m"] = m
     return strategy
+
+
+def _session_date(stamp) -> date:
+    """Sesión NYSE que cubre una etiqueta D1 (apertura 17:00 NY)."""
+
+    local = stamp.tz_convert("America/New_York")
+    day = local.date()
+    if local.hour >= 17:
+        day += timedelta(days=1)
+    return day
+
+
+def _trading_days_only_frame(start: str, end: str) -> pd.DataFrame:
+    """D1 con una barra por sesión NYSE, etiquetada el día anterior a 17:00.
+
+    Reproduce los datos reales: la sesión del viernes lleva etiqueta de jueves
+    y la del lunes, de domingo. No hay etiqueta en la propia fecha de sesión.
+    """
+
+    days = [
+        stamp.date()
+        for stamp in pd.date_range(start, end, freq="D")
+        if stamp.weekday() < 5
+        and not calendars.is_holiday(calendars.NYSE, stamp.date())
+    ]
+    labels = [
+        pd.Timestamp(day) - pd.Timedelta(days=1) + pd.Timedelta(hours=17)
+        for day in days
+    ]
+    index = pd.DatetimeIndex(labels).tz_localize("America/New_York")
+    close = np.arange(len(index), dtype=float) + 100.0
+    return pd.DataFrame(
+        {
+            "open": close,
+            "high": close + 1.0,
+            "low": close - 1.0,
+            "close": close,
+        },
+        index=index,
+    )
 
 
 def test_pares_calendario_fin_de_semana_y_festivos() -> None:
@@ -90,17 +130,66 @@ def test_senales_y_salida_coinciden_con_el_calendario() -> None:
     assert len(positions) >= 20
     local = frame.index.tz_convert("America/New_York")
     pairs = calendars.month_turn_pairs(
-        local[0].date(), local[-1].date(), 1, 2
+        _session_date(local[0]), _session_date(local[-1]), 1, 2
     )
     expected_entries = {entry for entry, _exit in pairs}
-    got_entries = {local[position].date() for position in positions}
+    got_entries = {_session_date(local[position]) for position in positions}
     assert got_entries == expected_entries
     for position in positions:
         exit_pos = int(signals.exit_index[position])
         assert exit_pos > position
-        entry_day = local[position].date()
-        exit_day = local[exit_pos].date()
+        entry_day = _session_date(local[position])
+        exit_day = _session_date(local[exit_pos])
         assert (entry_day, exit_day) in pairs
+
+
+def test_mapea_por_sesion_y_no_por_etiqueta() -> None:
+    # Datos como los reales: sin barra etiquetada en la fecha de sesión.
+    frame = _trading_days_only_frame("2024-06-01", "2024-12-31")
+    strategy = _strategy(1, 2)
+    signals = compiler.compile(strategy, frame)
+    local = frame.index.tz_convert("America/New_York")
+    positions = {
+        _session_date(local[position]): int(position)
+        for position in np.flatnonzero(signals.long_entry)
+    }
+    pairs = dict(
+        calendars.month_turn_pairs(date(2024, 6, 1), date(2024, 12, 31), 1, 2)
+    )
+    # Junio 2024 termina en viernes 28: entrada al cierre de esa sesión.
+    assert date(2024, 6, 28) in positions
+    entry = positions[date(2024, 6, 28)]
+    assert local[entry].date() == date(2024, 6, 27)
+    assert local[entry].hour == 17
+    exit_pos = int(signals.exit_index[entry])
+    assert _session_date(local[exit_pos]) == pairs[date(2024, 6, 28)]
+    # Noviembre 2024 termina el viernes 29 tras Acción de Gracias: la etiqueta
+    # es el festivo 28, pero la sesión es la del 29.
+    assert date(2024, 11, 29) in positions
+    entry = positions[date(2024, 11, 29)]
+    assert local[entry].date() == date(2024, 11, 28)
+    exit_pos = int(signals.exit_index[entry])
+    assert _session_date(local[exit_pos]) == pairs[date(2024, 11, 29)]
+
+
+def test_n2_m4_mapea_por_sesion_en_datos_reales() -> None:
+    frame = _trading_days_only_frame("2024-06-01", "2024-12-31")
+    signals = compiler.compile(_strategy(2, 4), frame)
+    local = frame.index.tz_convert("America/New_York")
+    positions = {
+        _session_date(local[position]): int(position)
+        for position in np.flatnonzero(signals.long_entry)
+    }
+    pairs = dict(
+        calendars.month_turn_pairs(date(2024, 6, 1), date(2024, 12, 31), 2, 4)
+    )
+    # N=2: 27-jun; M=4: 5-jul (el 4 es festivo) -> etiqueta 4-jul 17:00.
+    assert date(2024, 6, 27) in positions
+    entry = positions[date(2024, 6, 27)]
+    exit_pos = int(signals.exit_index[entry])
+    assert _session_date(local[exit_pos]) == date(2024, 7, 5)
+    assert local[exit_pos].date() == date(2024, 7, 4)
+    assert pairs[date(2024, 6, 27)] == date(2024, 7, 5)
 
 
 def test_sin_anticipacion_cambiar_el_futuro_no_cambia_las_entradas() -> None:
@@ -146,10 +235,10 @@ def test_ejecuta_al_cierre_y_sale_el_dia_m() -> None:
         assert trade.entry_price == float(frame["close"].iloc[trade.entry_index])
         calendar_pos = int(signals.exit_index[trade.entry_index])
         assert trade.exit_index <= calendar_pos
-        entry_day = local[trade.entry_index].date()
-        exit_day = local[calendar_pos].date()
+        entry_day = _session_date(local[trade.entry_index])
+        exit_day = _session_date(local[calendar_pos])
         assert (entry_day, exit_day) in calendars.month_turn_pairs(
-            local[0].date(), local[-1].date(), 1, 2
+            _session_date(local[0]), _session_date(local[-1]), 1, 2
         )
         if trade.reason == "calendar_exit":
             calendar_exits += 1
