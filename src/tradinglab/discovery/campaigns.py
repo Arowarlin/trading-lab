@@ -267,6 +267,9 @@ def register(
     spread_model: str | None = None,
     plausible_edge_r: float | None = None,
     sigma_r: float | None = None,
+    primary: dict[str, Any] | None = None,
+    plateau_grid: dict[str, Any] | None = None,
+    protocol_version: int | None = None,
 ) -> dict[str, Any]:
     """Registra un borrador (o previsualiza con ``dry_run``)."""
 
@@ -381,6 +384,17 @@ def register(
             None if plausible_edge_r is None else float(plausible_edge_r)
         ),
         "sigma_r": 1.0 if sigma_r is None else float(sigma_r),
+        "protocol_version": int(protocol_version or 1),
+        "primary": dict(primary or {}) or None,
+        "plateau_grid": dict(plateau_grid or {}) or None,
+        "plateau_n": (
+            int(n_total)
+            if int(protocol_version or 1) >= 2 and primary
+            else 0
+        ),
+        "decision_n_total": (
+            1 if int(protocol_version or 1) >= 2 and primary else None
+        ),
         "cost": {
             "account": selected_costs[0],
             "firm": selected_firm,
@@ -553,6 +567,9 @@ def register_from_spec(
         spread_model=(payload.get("cost") or {}).get("spread_model"),
         plausible_edge_r=payload.get("plausible_edge_r"),
         sigma_r=payload.get("sigma_r"),
+        primary=payload.get("primary"),
+        plateau_grid=payload.get("plateau_grid"),
+        protocol_version=payload.get("protocol_version"),
     )
 
 
@@ -1014,12 +1031,25 @@ def discovery_tests(
     con = sqlite3.connect(uri, uri=True, timeout=5)
     try:
         try:
-            row = con.execute(
-                "SELECT COALESCE(SUM(n_total), 0) AS n FROM disc_campaigns"
+            rows = con.execute(
+                "SELECT n_total, config_json FROM disc_campaigns"
                 " WHERE approved_at IS NOT NULL"
                 " AND COALESCE(status, '') != 'superseded'"
-            ).fetchone()
-            campaigns = int(row[0] or 0)
+            ).fetchall()
+            campaigns = 0
+            for row in rows:
+                n_total = int(row[0] or 0)
+                try:
+                    config = json.loads(row[1] or "{}")
+                except (TypeError, ValueError):
+                    config = {}
+                if (
+                    int(config.get("protocol_version") or 1) >= 2
+                    and config.get("primary")
+                ):
+                    campaigns += 1 + int(config.get("plateau_n") or 0)
+                else:
+                    campaigns += n_total
         except sqlite3.OperationalError:
             campaigns = 0
         try:

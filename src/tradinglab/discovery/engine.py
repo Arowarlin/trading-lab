@@ -17,7 +17,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from . import campaigns, databank, decisions, dsl, fitness, genetic, grid, jobs, nsga2
+from . import campaigns, databank, decisions, dsl, fitness, genetic, grid, jobs, nsga2, plateau
 from .config import load_engine_config
 
 
@@ -477,10 +477,17 @@ def _evaluate(
 
 
 def _rank1_candidates(
-    population: list[Individual], folds: int
+    population: list[Individual],
+    folds: int,
+    *,
+    primary_hash: str | None = None,
 ) -> tuple[list[Individual], list[tuple[Individual, str]]]:
     feasible_rank1 = [
-        item for item in population if item.rank == 0 and item.feasible
+        item
+        for item in population
+        if item.rank == 0
+        and item.feasible
+        and (primary_hash is None or item.strategy_hash == primary_hash)
     ]
     candidates: list[Individual] = []
     discarded: list[tuple[Individual, str]] = []
@@ -543,7 +550,12 @@ def _select_finalists(
     *,
     finalists_max: int,
     corr_cluster: float,
+    primary_hash: str | None = None,
 ) -> tuple[list[Individual], list[tuple[Individual, str]]]:
+    if primary_hash is not None:
+        candidates = [
+            item for item in candidates if item.strategy_hash == primary_hash
+        ]
     passing: list[tuple[float, Individual, pd.Series]] = []
     discarded: list[tuple[Individual, str]] = []
     for item in candidates:
@@ -940,7 +952,40 @@ def run_campaign(
             )
     feasible_count = sum(1 for item in known.values() if item.feasible)
     folds = int(config.validation.for_timeframe(setup.timeframe).folds)
-    candidates, discarded = _rank1_candidates(current, folds)
+    campaign_config = campaign.get("config") or {}
+    protocol_version = int(campaign_config.get("protocol_version") or 1)
+    primary = campaign_config.get("primary")
+    primary_hash = (
+        plateau.primary_hash(campaign, known.values())
+        if protocol_version >= 2 and primary
+        else None
+    )
+    plateau_payload = plateau.summary(
+        [
+            ((item.metrics or {}).get("is") or {}).get("expectancy_r")
+            for item in known.values()
+        ]
+    )
+    candidates, discarded = _rank1_candidates(
+        current,
+        folds,
+        primary_hash=primary_hash if protocol_version >= 2 else None,
+    )
+    if protocol_version >= 2 and primary:
+        if primary_hash is None:
+            candidates = []
+            if current:
+                discarded.append((current[0], "primaria no encontrada en la rejilla"))
+        elif not plateau_payload["plateau_ok"]:
+            candidates = []
+            if current:
+                discarded.append(
+                    (
+                        current[0],
+                        f"meseta {plateau_payload['plateau_pct']:.3f} < "
+                        f"{plateau_payload['plateau_min']:.2f}",
+                    )
+                )
     campaigns.mark_done(campaign_id, db_path=db_path)
     oos1: dict[int, dict[str, Any]] = {}
     selected: list[Individual] = []
@@ -980,6 +1025,7 @@ def run_campaign(
             oos1,
             finalists_max=int(config.validation.finalists_max),
             corr_cluster=float(config.validation.corr_cluster),
+            primary_hash=primary_hash if protocol_version >= 2 else None,
         )
         discarded.extend(rejected)
 
@@ -1065,6 +1111,13 @@ def run_campaign(
         "campaign_id": campaign_id,
         "synthetic": bool(synthetic),
         "n_total": total_budget,
+        "decision_n_total": (
+            1 if protocol_version >= 2 and primary else total_budget
+        ),
+        "protocol_version": protocol_version,
+        "primary_hash": primary_hash,
+        "primary_found": bool(primary_hash is not None),
+        **plateau_payload,
         "n_evaluated": len(known),
         "n_effective": int(n_effective),
         "n_finalists": len(selected),
