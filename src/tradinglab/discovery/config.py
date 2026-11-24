@@ -103,6 +103,16 @@ class FitnessConfig(BaseModel):
     cost_r_max: float = Field(default=0.10, gt=0.0, le=1.0)
 
 
+class DiscoveryConfig(BaseModel):
+    """Reglas de interpretación del coste en discovery."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    # Un swap positivo (crédito) NO se cuenta en discovery: solo el coste
+    # negativo. El crédito real se puede mostrar aparte en la capa de empresa.
+    swap_credit: bool = False
+
+
 class AssumedSlippageConfig(BaseModel):
     """Slippage por lado en unidades de precio; ``None`` = Sin datos."""
 
@@ -386,6 +396,7 @@ class EngineConfig(BaseModel):
     limits: LimitsConfig
     validation: ValidationConfig
     fitness: FitnessConfig = Field(default_factory=FitnessConfig)
+    discovery: DiscoveryConfig = Field(default_factory=DiscoveryConfig)
     assumed_slippage: AssumedSlippageConfig = Field(
         default_factory=AssumedSlippageConfig
     )
@@ -429,6 +440,7 @@ def load_engine_config(path: str | Path | None = None) -> EngineConfig:
         "limits": raw.get("limits") or {},
         "validation": raw.get("validation") or {},
         "fitness": raw.get("fitness") or {},
+        "discovery": raw.get("discovery") or {},
         "assumed_slippage": raw.get("assumed_slippage") or {},
         "robustness": raw.get("robustness") or {},
         "perturb": raw.get("perturb") or {},
@@ -440,6 +452,7 @@ def load_engine_config(path: str | Path | None = None) -> EngineConfig:
 __all__ = [
     "AssumedSlippageConfig",
     "DataQualityConfig",
+    "DiscoveryConfig",
     "ENGINE_PATH",
     "EngineConfig",
     "FitnessConfig",

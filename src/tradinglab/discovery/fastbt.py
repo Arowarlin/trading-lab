@@ -37,6 +37,7 @@ from ..propfund.costs import CostProfile, SwapSpec, estimate_cfd, estimate_futur
 from ..propfund.instruments import resolve
 from ..propfund.models import Market
 from .compiler import Signals
+from .config import load_engine_config
 from .metrics import summarize
 
 try:  # pragma: no cover - la rama depende del entorno
@@ -260,6 +261,9 @@ class CfdProfileCosts:
         self.spread_bps_by_hour = spread_bps_by_hour
         self.use_p75 = use_p75
         self.swap = SwapSpec.from_profile(profile)
+        self.swap_allow_credit = bool(
+            load_engine_config().discovery.swap_credit
+        )
         spread = (
             profile.spread_p75_price
             if use_p75 and profile.spread_p75_price is not None
@@ -1724,6 +1728,9 @@ def run(
                 risk_price=float(trade.risk_price),
                 entry_time=trade.entry_time,
                 exit_time=trade.exit_time,
+                allow_credit=bool(
+                    getattr(cost, "swap_allow_credit", False)
+                ),
             )
             if swap_r:
                 adjusted.append(
@@ -1735,7 +1742,7 @@ def run(
                     )
                 )
             else:
-                adjusted.append(trade)
+                adjusted.append(replace(trade, swap_r=0.0))
         trades = adjusted
     for trade in trades:
         if trade.r_net is None:

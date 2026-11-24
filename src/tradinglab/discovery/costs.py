@@ -337,6 +337,9 @@ class CostBook:
         if self.mode == "target" and len(self.accounts) != 1:
             raise ValueError("target exige exactamente una cuenta")
         self.session_tz = str(session_tz)
+        self.swap_allow_credit = bool(
+            load_engine_config().discovery.swap_credit
+        )
         self._panels: list[fastbt.CostPanel] | None = None
         self._bars_id: int | None = None
         self._worst_panel: fastbt.CostPanel | None = None
@@ -411,6 +414,7 @@ class CostBook:
                         risk_price=float(risk),
                         entry_time=trade.entry_time,
                         exit_time=trade.exit_time,
+                        allow_credit=self.swap_allow_credit,
                     )
                 rc -= swap_r
                 per_account[item.account] = (rc, entry_bps, exit_bps, swap_r)

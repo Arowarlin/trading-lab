@@ -24,7 +24,7 @@ from ..discovery.config import load_engine_config
 from ..discovery.data_sources import load_source
 from ..discovery.resample import resample_session
 from ..indicators import atr
-from .costs import CostProfile, load_profile
+from .costs import CostProfile, SwapSpec, load_profile
 from .instruments import resolve
 from .registry import load_registry
 
@@ -273,6 +273,25 @@ def cost_r_for(
         slippage, _source = assumed_slippage_for(canonical, config)
     except Exception:
         slippage = None
+    spec = SwapSpec.from_profile(profile)
+    if (
+        spec is not None
+        and r_item.get("r") is not None
+        and r_item.get("price") is not None
+    ):
+        credits: dict[str, float] = {}
+        for side in ("long", "short"):
+            try:
+                per_night = spec.per_night_r(
+                    side=side,
+                    entry_price=float(r_item["price"]),
+                    risk_price=float(r_item["r"]),
+                    allow_credit=True,
+                )
+            except ValueError:
+                per_night = 0.0
+            credits[side] = round(max(0.0, per_night), 6)
+        row["swap_credit_r_night"] = credits
     cost = operation_cost(
         profile,
         price=float(r_item.get("price") or 0.0),
@@ -357,6 +376,18 @@ def render_markdown(rows: list[dict[str, Any]]) -> str:
             f"{_fmt(row.get('cost_r'), 4)} | "
             f"{'SÍ' if row.get('viable') else 'no'} | {row.get('reason') or ''} |"
         )
+    lines.append("")
+    for row in rows:
+        credit = row.get("swap_credit_r_night") or {}
+        long_credit = float(credit.get("long") or 0.0)
+        short_credit = float(credit.get("short") or 0.0)
+        if long_credit or short_credit:
+            lines.append(
+                "Crédito de swap no contado en discovery: "
+                f"{row['account']} {row['symbol']} {row['timeframe']} — "
+                f"largo {_fmt(long_credit, 6)} R/noche, "
+                f"corto {_fmt(short_credit, 6)} R/noche."
+            )
     lines.append("")
     return "\n".join(lines)
 

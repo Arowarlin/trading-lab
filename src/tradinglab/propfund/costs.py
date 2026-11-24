@@ -218,6 +218,7 @@ class SwapSpec:
         side: str,
         entry_price: float,
         risk_price: float,
+        allow_credit: bool = True,
     ) -> float:
         risk = float(risk_price)
         if not (risk > 0.0):
@@ -228,10 +229,14 @@ class SwapSpec:
         if self.mode == 1:
             if self.point is None:
                 raise ValueError("swap mode points sin point")
-            return float(raw * self.point / risk)
-        if self.mode == 5:
-            return float(entry_price * (raw / 100.0 / 360.0) / risk)
-        raise ValueError(f"swap mode {self.mode} no soportado")
+            value = float(raw * self.point / risk)
+        elif self.mode == 5:
+            value = float(entry_price * (raw / 100.0 / 360.0) / risk)
+        else:
+            raise ValueError(f"swap mode {self.mode} no soportado")
+        if not allow_credit and value > 0.0:
+            return 0.0
+        return value
 
     def r(
         self,
@@ -241,6 +246,7 @@ class SwapSpec:
         risk_price: float,
         entry_time,
         exit_time,
+        allow_credit: bool = True,
     ) -> float:
         """Swap en R (positivo = crédito, negativo = coste), nocturno."""
 
@@ -252,6 +258,7 @@ class SwapSpec:
                 side=side,
                 entry_price=entry_price,
                 risk_price=risk_price,
+                allow_credit=allow_credit,
             )
             * units
         )

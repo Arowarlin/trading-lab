@@ -7,8 +7,9 @@ import pandas as pd
 import pytest
 
 from tradinglab.discovery import fastbt
+from tradinglab.discovery.config import load_engine_config
 from tradinglab.discovery.costs import AccountCost, CostBook, LocalSpread
-from tradinglab.propfund.costs import CostProfile, SwapSpec, estimate_cfd, rollover_units
+from tradinglab.propfund.costs import CostProfile, SwapSpec, estimate_cfd, load_profile, rollover_units
 from tradinglab.propfund.models import Market
 
 NY = "America/New_York"
@@ -222,3 +223,96 @@ def test_cost_book_best_worst_incluye_swap() -> None:
     best.panel(bars)
     chosen = best.apply(base.trades, session_tz=NY)
     assert chosen.selected_account == "B"
+
+def _us100_bars() -> pd.DataFrame:
+    index = pd.date_range("2026-11-02 17:00", periods=20, freq="D", tz=NY)
+    close = 20000.0 + np.arange(20) * 5.0
+    return pd.DataFrame(
+        {"open": close, "high": close + 4, "low": close - 4, "close": close},
+        index=index,
+    )
+
+
+def _us100_result(side: str):
+    bars = _us100_bars()
+    profile = load_profile("CFD-001", "US100", firm="ftmo")
+    cost = fastbt.cost_from_profile(profile)
+    limits = _limits()
+    prepared = fastbt.prepare(bars, cost, atr_windows=(14,), sessions=(limits,))
+    long = np.zeros(len(bars), dtype=bool)
+    short = np.zeros(len(bars), dtype=bool)
+    if side == "long":
+        long[15] = True
+    else:
+        short[15] = True
+    result = fastbt.run(
+        fastbt.Signals(long, short, 0),
+        bars,
+        fastbt.ExitSpec(stop="atr", stop_mult=10.0, target=None, time_exit_bars=2),
+        cost,
+        limits,
+        prepared=prepared,
+    )
+    assert len(result.trades) == 1
+    return result.trades[0]
+
+
+def test_config_swap_credit_false_por_defecto() -> None:
+    assert load_engine_config().discovery.swap_credit is False
+
+
+def test_largo_us100_ftmo_no_cuenta_credito() -> None:
+    trade = _us100_result("long")
+    assert trade.swap_r == 0.0
+    expected = (
+        (trade.entry_cost_bps + trade.exit_cost_bps)
+        / 10_000.0
+        * trade.entry_price
+        / float(trade.risk_price)
+    )
+    assert trade.r_cost == pytest.approx(expected)
+
+
+def test_corto_us100_ftmo_cobra_coste() -> None:
+    trade = _us100_result("short")
+    assert trade.swap_r is not None and trade.swap_r < 0.0
+
+
+def test_largo_us100_cfd006_cobra_coste() -> None:
+    from dataclasses import replace as dataclass_replace
+
+    profile = load_profile("CFD-006", "US100", firm="fundingpips")
+    profile = dataclass_replace(profile, slippage_price=0.01)
+    bars = _us100_bars()
+    cost = fastbt.cost_from_profile(profile)
+    limits = _limits()
+    prepared = fastbt.prepare(bars, cost, atr_windows=(14,), sessions=(limits,))
+    long = np.zeros(len(bars), dtype=bool)
+    long[15] = True
+    result = fastbt.run(
+        fastbt.Signals(long, np.zeros(len(bars), dtype=bool), 0),
+        bars,
+        fastbt.ExitSpec(stop="atr", stop_mult=10.0, target=None, time_exit_bars=2),
+        cost,
+        limits,
+        prepared=prepared,
+    )
+    assert len(result.trades) == 1
+    assert result.trades[0].swap_r < 0.0
+
+def test_cost_book_descarta_credito_en_discovery() -> None:
+    bars = _bars()
+    base = fastbt.run(
+        _signals(bars),
+        bars,
+        fastbt.ExitSpec(stop="atr", stop_mult=10.0, target=None, time_exit_bars=2),
+        fastbt.cfd_costs_from_bps(
+            commission_bps=0.0, slippage_bps=0.0, spread_bps=0.0
+        ),
+        _limits(),
+    )
+    account = _account("CREDIT", 100.0)
+    book = CostBook([account], mode="target", session_tz=NY)
+    book.panel(bars)
+    applied = book.apply(base.trades, session_tz=NY)
+    assert applied.trades[0].swap_r == 0.0

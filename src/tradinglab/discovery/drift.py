@@ -25,6 +25,7 @@ import numpy as np
 import pandas as pd
 
 from . import fastbt
+from .config import load_engine_config
 
 try:  # pragma: no cover - depende del entorno
     from numba import njit
@@ -196,6 +197,7 @@ def outcome_tables(
     prepared: fastbt.PreparedBars | None,
     horizon: int,
     swap_model=None,
+    allow_swap_credit: bool = True,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Resultado de una entrada aleatoria en cada vela, por lado.
 
@@ -271,6 +273,7 @@ def outcome_tables(
                     risk_price=risk,
                     entry_time=index[position],
                     exit_time=index[exit_position],
+                    allow_credit=allow_swap_credit,
                 )
                 values[position] += swap_r
     return r_long, r_short, held_long, held_short, eligible
@@ -422,6 +425,7 @@ def evaluate(
     r_long, r_short, held_long, held_short, eligible = outcome_tables(
         bars, control_spec, limits, panel, prepared, max(1, horizon),
         swap_model=getattr(cost, "swap", None),
+        allow_swap_credit=bool(load_engine_config().discovery.swap_credit),
     )
     long_held = held_long[eligible]
     long_held = long_held[long_held > 0]

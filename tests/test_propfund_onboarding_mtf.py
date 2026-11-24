@@ -116,6 +116,8 @@ def test_cost_r_compartido_onboarding_y_edge_map() -> None:
     )
     assert onboarding["cost_r"] == pytest.approx(screening["cost_r"])
     assert onboarding["viable"] == screening["viable"]
+    assert onboarding["swap_credit_r_night"]["long"] > 0.0
+    assert onboarding["swap_credit_r_night"]["short"] == 0.0
 
 
 def test_base_viability_usa_r_cost_de_operaciones() -> None:
