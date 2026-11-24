@@ -43,7 +43,15 @@ def _frame(
     )
 
 
-def _spec_path(tmp_path, *, edge: bool, campaign_id: str = "test-cesta") -> tuple:
+def _spec_path(
+    tmp_path,
+    *,
+    edge: bool,
+    campaign_id: str = "test-cesta",
+    single: bool = False,
+    cost_mode: str = "target",
+) -> tuple:
+    cost_accounts = ["CFD-001"] if cost_mode == "target" else ["CFD-001", "CFD-006"]
     path = tmp_path / "cesta.yaml"
     path.write_text(
         yaml.safe_dump(
@@ -68,14 +76,14 @@ def _spec_path(tmp_path, *, edge: bool, campaign_id: str = "test-cesta") -> tupl
                     "XAUUSD": {
                         "account": "CFD-001",
                         "firm": "ftmo",
-                        "cost_accounts": ["CFD-001"],
-                        "cost_mode": "target",
+                        "cost_accounts": cost_accounts,
+                        "cost_mode": cost_mode,
                     },
                     "US100": {
                         "account": "CFD-001",
                         "firm": "ftmo",
-                        "cost_accounts": ["CFD-001"],
-                        "cost_mode": "target",
+                        "cost_accounts": cost_accounts,
+                        "cost_mode": cost_mode,
                     },
                 },
                 "grid": {
@@ -84,13 +92,13 @@ def _spec_path(tmp_path, *, edge: bool, campaign_id: str = "test-cesta") -> tupl
                             "name": "n",
                             "kind": "path",
                             "path": "long_entry.n",
-                            "values": [1, 2],
+                            "values": [1] if single else [1, 2],
                         },
                         {
                             "name": "m",
                             "kind": "path",
                             "path": "long_entry.m",
-                            "values": [2, 3],
+                            "values": [2] if single else [2, 3],
                         },
                     ]
                 },
@@ -193,6 +201,25 @@ def test_run_cesta_sin_ventaja_no_pasa(tmp_path) -> None:
         assert evaluations
         payload = evaluations[0]["metrics"]
         assert float(payload["is"]["expectancy_r"]) <= 0
+
+
+def test_feasibility_cesta_cubre_todas_las_cuentas(tmp_path) -> None:
+    db = tmp_path / "discovery.db"
+    path, frames = _spec_path(
+        tmp_path,
+        edge=True,
+        campaign_id="cesta-best",
+        single=True,
+        cost_mode="best",
+    )
+    basket.register(path, frames=frames, db_path=db)
+
+    report = feasibility.check("cesta-best", db_path=db)
+
+    assert report["n_checked"] == 1
+    row = report["rows"][0]
+    assert set(row["cost_by_account"]) == {"CFD-001", "CFD-006"}
+    assert all(value is not None for value in row["cost_by_account"].values())
 
 
 def test_guard_impide_rendimiento_sin_aprobar(tmp_path, monkeypatch) -> None:

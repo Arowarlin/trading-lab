@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import math
 import sqlite3
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -79,6 +79,7 @@ class CostApplication:
     best_share: float
     selected_account: str | None
     selected_share: float
+    cost_values: dict[str, list[float]] = field(default_factory=dict)
 
 
 def _canonical_instrument(instrument: str) -> str:
@@ -495,6 +496,7 @@ class CostBook:
             best_share=_share(valid_best, best_account),
             selected_account=selected_account,
             selected_share=_share(valid_selected, selected_account),
+            cost_values=cost_values,
         )
 
 

@@ -310,7 +310,7 @@ def _run_leg(
         point=context.setup.point,
     )
     trades = [replace(trade, instrument=symbol) for trade in applied.trades]
-    return trades, applied.daily_r, full, context
+    return trades, applied.daily_r, full, context, applied.cost_values
 
 
 def _collect_combo(
@@ -326,6 +326,7 @@ def _collect_combo(
     trades: list[fastbt.Trade] = []
     daily: dict[str, pd.Series] = {}
     counts: dict[str, int] = {}
+    account_values: dict[str, list[float]] = {}
     contexts = contexts if contexts is not None else {}
     for symbol in campaign_or_spec["symbols"]:
         frame = frames[symbol]
@@ -335,7 +336,7 @@ def _collect_combo(
             {**strategy, "instrument": symbol, "timeframe": campaign_or_spec["timeframe"]}
         ))
         context = contexts.get(key)
-        leg_trades, leg_daily, _full, context = _run_leg(
+        leg_trades, leg_daily, _full, context, leg_costs = _run_leg(
             campaign_or_spec,
             symbol,
             strategy,
@@ -347,7 +348,9 @@ def _collect_combo(
         trades.extend(leg_trades)
         daily[symbol] = leg_daily
         counts[symbol] = len(leg_trades)
-    return trades, daily, counts
+        for account, values in leg_costs.items():
+            account_values.setdefault(account, []).extend(values)
+    return trades, daily, counts, account_values
 
 
 def _pool_cost_by_account(
@@ -436,6 +439,7 @@ def _basket_metrics(
     campaign_or_spec: dict[str, Any],
     *,
     segment: str,
+    account_values: dict[str, list[float]] | None = None,
 ) -> tuple[dict[str, Any], list[dict[str, Any]], float | None]:
     config = load_engine_config()
     validation = config.validation.for_timeframe(campaign_or_spec["timeframe"])
@@ -468,7 +472,14 @@ def _basket_metrics(
         if trade.r_cost is not None and np.isfinite(float(trade.r_cost))
     ]
     cost_r = float(np.median(cost_values)) if cost_values else None
-    costs_by_account = _pool_cost_by_account(trades)
+    costs_by_account = (
+        {
+            str(account): (float(np.median(values)) if values else None)
+            for account, values in account_values.items()
+        }
+        if account_values
+        else _pool_cost_by_account(trades)
+    )
     max_cost_r = float(config.fitness.cost_r_max)
     cost_viable = {
         account: (None if value is None else bool(float(value) <= max_cost_r))
@@ -1017,7 +1028,9 @@ def _check_frames(
         selected_account: str | None = None
         selected_share: float | None = None
         try:
-            trades, _daily, _counts = _collect_combo(spec, strategy, frames)
+            trades, _daily, _counts, account_values = _collect_combo(
+                spec, strategy, frames
+            )
             trades_is = len(trades)
             costs = [
                 float(trade.r_cost)
@@ -1041,7 +1054,10 @@ def _check_frames(
                         in dates
                     )
                 )
-            cost_by_account = _pool_cost_by_account(trades)
+            cost_by_account = {
+                str(account): (float(np.median(values)) if values else None)
+                for account, values in account_values.items()
+            }
             cost_viable_by_account = {
                 name: (
                     None
@@ -1166,7 +1182,7 @@ def _drift_basket(
         key = (symbol, dsl.strategy_hash(
             {**strategy, "instrument": symbol, "timeframe": spec["timeframe"]}
         ))
-        leg_trades, _daily, full, context = _run_leg(
+        leg_trades, _daily, full, context, _costs = _run_leg(
             spec, symbol, strategy, frame, segment="is", context=contexts.get(key)
         )
         contexts[key] = context
@@ -1253,6 +1269,7 @@ def _evaluate_combo(
 ) -> dict[str, Any]:
     trades: list[fastbt.Trade] = []
     daily: dict[str, pd.Series] = {}
+    account_values: dict[str, list[float]] = {}
     for symbol in spec["symbols"]:
         frame = frames[symbol]
         if len(frame) < 100:
@@ -1260,16 +1277,24 @@ def _evaluate_combo(
         key = (symbol, dsl.strategy_hash(
             {**strategy, "instrument": symbol, "timeframe": spec["timeframe"]}
         ))
-        leg_trades, leg_daily, _full, context = _run_leg(
+        leg_trades, leg_daily, _full, context, leg_costs = _run_leg(
             spec, symbol, strategy, frame, segment=segment,
             context=contexts.get(key),
         )
         contexts[key] = context
         trades.extend(leg_trades)
         daily[symbol] = leg_daily
+        for account, values in leg_costs.items():
+            account_values.setdefault(account, []).extend(values)
     combined = combine_daily(daily)
     payload, fold_rows, cost_r = _basket_metrics(
-        trades, combined, frames, strategy, spec, segment=segment
+        trades,
+        combined,
+        frames,
+        strategy,
+        spec,
+        segment=segment,
+        account_values=account_values,
     )
     base_model = dsl.Strategy.model_validate(
         {

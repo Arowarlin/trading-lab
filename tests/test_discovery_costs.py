@@ -94,6 +94,9 @@ def test_best_toma_el_minimo_por_operacion_y_guarda_ambas() -> None:
     assert applied.trades[0].r_cost == pytest.approx(0.02)
     assert applied.cost_by_account["A"] == pytest.approx(0.20)
     assert applied.cost_by_account["B"] == pytest.approx(0.02)
+    assert set(applied.cost_values) == {"A", "B"}
+    assert applied.cost_values["A"][0] == pytest.approx(0.20)
+    assert applied.cost_values["B"][0] == pytest.approx(0.02)
     assert applied.best_account == "B"
     assert applied.best_share == pytest.approx(1.0)
     assert applied.selected_account == "B"
