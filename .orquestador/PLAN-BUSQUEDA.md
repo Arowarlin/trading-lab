@@ -33,3 +33,10 @@ Ya probadas: reversión asiática USDJPY H1; Donchian+vol H4 en XAU y USDJPY; ny
 | 4-6 dic | Campaña 4 (rebote) |
 | 7-13 dic | Confirmaciones OOS-2 de lo que haya llegado; contraste con futuros |
 | 14 dic | Decisión: seguir (fase C) o parar |
+
+## ENMIENDA 2026-11-24 · pausa por la auditoría TL2 (decisión del operador)
+Decisión literal del operador: "SI PARA PORQUE SI LOS CORTE ESTAN MAL NO VA A ENCONTRAR".
+- La auditoría `.orquestador/tl2-audit/` demostró que (a) el backtester cobra el spread dos veces en las salidas que no son por objetivo, y (b) la cadena de validación no tiene potencia para ventajas realistas a baja frecuencia.
+- **Campañas pausadas** (incluida Q3, la de cesta) hasta cerrar la fase 0 (T00–T02) y la fase 1 de costes (T10–T13).
+- La regla de parada del 14 de diciembre queda **suspendida**. Se sustituirá por un número de campañas con potencia suficiente bajo el protocolo v2 (T20–T22), cuando ese protocolo esté aprobado.
+- Nada de lo registrado se reescribe. Las campañas anteriores conservan su veredicto y su versión de costes; las reevaluaciones serán campañas nuevas y sumarán al contador.

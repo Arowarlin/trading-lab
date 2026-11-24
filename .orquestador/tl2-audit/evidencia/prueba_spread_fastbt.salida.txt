@@ -1,0 +1,7 @@
+long time_exit ent_bps 2.0 ex_bps 2.0 r_cost 0.04 => bps 4.0
+short time_exit ent_bps 2.0 ex_bps 2.0 r_cost 0.04 => bps 4.0
+Modelo bid/ask independiente: barras BID planas, spread 2 bps.
+ largo: compra al ASK (bid+2bps), vende al BID -> coste 2 bps
+ corto: vende al BID, recompra al ASK -> coste 2 bps
+objetivo: long target ent 2.0 ex 0.0
+corto, ask sobre el stop en barra 8: time_exit salida barra 16
