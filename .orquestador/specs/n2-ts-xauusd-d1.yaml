@@ -1,0 +1,36 @@
+# N2 · momentum de serie temporal en D1 (XAUUSD).
+# Hipótesis (escrita antes de ver resultados): el oro persiste en horizontes de
+# semanas/meses; el cruce de SMA(50/200) captura esa tendencia y el trailing
+# deja correr la cola. Si es real, el bruto debe superar el coste en varios
+# regímenes, no solo en 2010-2012 o 2019-2020.
+campaign_id: n2-ts-xauusd-d1
+instrument: XAUUSD
+timeframe: D1
+template: ts_momentum_d1
+profile: small
+mode: grid
+seed: 31
+data_source: dukascopy
+account: CFD-001
+firm: ftmo
+cost_mode: best
+cost_accounts: [CFD-001, CFD-006]
+segments:
+  is: ["2005-01-01", "2024-06-30"]
+  oos1: ["2024-07-01", "2025-06-30"]
+  oos2: ["2025-07-01", null]
+# 3 × 3 × 3 = 27 combinaciones. Velocidad y lentitud siempre con fast < slow.
+grid:
+  dimensions:
+    - name: fast_n
+      kind: path
+      path: long_entry.left.n
+      values: [20, 50, 100]
+    - name: slow_n
+      kind: path
+      path: long_entry.right.n
+      values: [150, 200, 250]
+    - name: stop_mult
+      kind: path
+      path: exit.stop.mult
+      values: [2.5, 3.0, 3.5]

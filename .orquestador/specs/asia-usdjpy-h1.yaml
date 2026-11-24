@@ -1,0 +1,13 @@
+instrument: USDJPY
+timeframe: H1
+template: asia_range_reversion
+profile: small
+mode: ga
+seed: 11
+data_source: dukascopy
+account: CFD-001
+firm: ftmo
+segments:
+  is: ["2021-10-01", "2024-06-30"]
+  oos1: ["2024-07-01", "2025-06-30"]
+  oos2: ["2025-07-01", null]

@@ -1,0 +1,36 @@
+# N2 · reversión tras extensión en D1 (XAUUSD).
+# Hipótesis: en un oro que sigue por encima de SMA(200), una caída de varias
+# desviaciones (z < -2) con RSI(2) < 10 es sobrerreacción de liquidez y rebota.
+# Long-only: el sesgo largo es parte de la hipótesis; el espejo bajista sería
+# otra familia. Se excluye US100 por solape de subyacente con la incubación.
+campaign_id: n2-d1reversion-xauusd
+instrument: XAUUSD
+timeframe: D1
+template: d1_extension_reversion
+profile: small
+mode: grid
+seed: 51
+data_source: dukascopy
+account: CFD-001
+firm: ftmo
+cost_mode: best
+cost_accounts: [CFD-001, CFD-006]
+segments:
+  is: ["2005-01-01", "2024-06-30"]
+  oos1: ["2024-07-01", "2025-06-30"]
+  oos2: ["2025-07-01", null]
+# 3 × 3 × 3 = 27 combinaciones; short_entry queda null (long-only).
+grid:
+  dimensions:
+    - name: z_n
+      kind: path
+      path: long_entry.args[0].left.n
+      values: [10, 20, 30]
+    - name: z_entry
+      kind: path
+      path: long_entry.args[0].right.value
+      values: [-1.5, -2.0, -2.5]
+    - name: stop_mult
+      kind: path
+      path: exit.stop.mult
+      values: [1.5, 2.0, 2.5]

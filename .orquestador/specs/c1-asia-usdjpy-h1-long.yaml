@@ -1,0 +1,44 @@
+# C1-prep · primera campaña con historia larga
+# Hipótesis (escrita ANTES de ver resultados):
+# "El USDJPY concentra el flujo asiático. Los extremos del rango 18:00-03:00 NY
+#  actúan como zonas de liquidez y, cuando el precio los rebasa durante la sesión
+#  siguiente sin continuación, tiende a revertir hacia el interior del rango. Si
+#  es real, debe aparecer en varios regímenes (2010-2024), no solo en uno."
+campaign_id: c1-asia-usdjpy-h1-long
+instrument: USDJPY
+timeframe: H1
+template: asia_range_reversion
+profile: small
+mode: grid
+seed: 11
+data_source: dukascopy
+account: CFD-001
+firm: ftmo
+cost_mode: best
+cost_accounts: [CFD-001, CFD-006]
+segments:
+  is: ["2010-01-01", "2024-06-30"]
+  oos1: ["2024-07-01", "2025-06-30"]
+  oos2: ["2025-07-01", null]
+# Grid pequeño, estructura bloqueada. 3 dimensiones × 3 valores = 27 combinaciones.
+# Los valores son decisiones de mercado, no un ajuste fino:
+# - regime.threshold 15/20/25: exige un rango asiático más o menos "lateral"
+#   antes de operar la reversión; 20 es el valor base de la plantilla.
+# - stop.mult 1.5/2.0/2.5 ATR(14): el stop debe sobrevivir el ruido del H1 sin
+#   convertir la reversión en una operación de días; 2.0 es el base.
+# - target.rr 1.5/2.0/2.5: el objetivo se mide en R; 1.5 es el base y 2.5 prueba
+#   si el movimiento de vuelta al rango da más recorrido que el coste.
+grid:
+  dimensions:
+    - name: regime_threshold
+      kind: path
+      path: long_entry.args[1].params.threshold
+      values: [15, 20, 25]
+    - name: stop_mult
+      kind: path
+      path: exit.stop.mult
+      values: [1.5, 2.0, 2.5]
+    - name: target_rr
+      kind: path
+      path: exit.target.rr
+      values: [1.5, 2.0, 2.5]

@@ -1,0 +1,36 @@
+# R9 — espejo de CONFIRMACIÓN turn_of_month en US100 D1 (Databento NQ).
+# SOLO CONFIRMACIÓN: no registrar sin decisión explícita del operador.
+# Hipótesis (literal, escrita antes de calcular nada):
+# "Los índices de EE. UU. concentran una parte desproporcionada de su
+#  rentabilidad entre el último día hábil del mes y los primeros días hábiles
+#  del siguiente, por flujos de nóminas, fondos y rebalanceos. Si es real,
+#  comprar en esa ventana supera a comprar en días aleatorios del mismo número
+#  y duración."
+# Databento NQ desde 2010; entrada/salida al cierre del calendario NYSE.
+confirmation_only: true
+campaign_id: r9-tom-us100-d1-confirm
+instrument: US100
+timeframe: D1
+template: turn_of_month
+profile: small
+mode: grid
+seed: 62
+data_source: databento
+account: CFD-001
+firm: ftmo
+cost_mode: best
+cost_accounts: [CFD-001, CFD-006]
+segments:
+  is: ["2010-06-06", "2024-06-30"]
+  oos1: ["2024-07-01", "2025-06-30"]
+  oos2: ["2025-07-01", null]
+grid:
+  dimensions:
+    - name: n
+      kind: path
+      path: long_entry.n
+      values: [1, 2, 3]
+    - name: m
+      kind: path
+      path: long_entry.m
+      values: [2, 3, 4]

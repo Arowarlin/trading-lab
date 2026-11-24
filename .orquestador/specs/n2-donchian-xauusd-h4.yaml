@@ -1,0 +1,36 @@
+# N2 · ruptura Donchian con filtro de volatilidad en H4 (XAUUSD).
+# Hipótesis: una ruptura del máximo de N barras en H4 señala descubrimiento de
+# precio; el filtro ATR percentil exige que la volatilidad esté en la parte
+# alta de las últimas 100 barras para evitar rupturas dormidas. El stop ATR y
+# la salida a 5 días acotan la cola.
+campaign_id: n2-donchian-xauusd-h4
+instrument: XAUUSD
+timeframe: H4
+template: donchian_vol_h4
+profile: small
+mode: grid
+seed: 41
+data_source: dukascopy
+account: CFD-001
+firm: ftmo
+cost_mode: best
+cost_accounts: [CFD-001, CFD-006]
+segments:
+  is: ["2005-01-01", "2024-06-30"]
+  oos1: ["2024-07-01", "2025-06-30"]
+  oos2: ["2025-07-01", null]
+# 3 × 3 × 3 = 27 combinaciones.
+grid:
+  dimensions:
+    - name: channel_n
+      kind: path
+      path: long_entry.args[0].right.n
+      values: [20, 40, 55]
+    - name: vol_pct
+      kind: path
+      path: long_entry.args[1].params.pct
+      values: [0.6, 0.7, 0.8]
+    - name: stop_mult
+      kind: path
+      path: exit.stop.mult
+      values: [1.5, 2.0, 2.5]

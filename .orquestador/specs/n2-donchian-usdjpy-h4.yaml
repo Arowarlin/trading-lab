@@ -1,0 +1,35 @@
+# N2 · ruptura Donchian con filtro de volatilidad en H4 (USDJPY).
+# Hipótesis: el yen tiende a romper rangos H4 con continuación cuando la
+# volatilidad sale de un régimen comprimido; el filtro evita operar el ruido
+# de las sesiones asiáticas dormidas. Se excluye US100 por solape con la
+# incubación de tendencia D1.
+campaign_id: n2-donchian-usdjpy-h4
+instrument: USDJPY
+timeframe: H4
+template: donchian_vol_h4
+profile: small
+mode: grid
+seed: 42
+data_source: dukascopy
+account: CFD-001
+firm: ftmo
+cost_mode: best
+cost_accounts: [CFD-001, CFD-006]
+segments:
+  is: ["2004-01-01", "2024-06-30"]
+  oos1: ["2024-07-01", "2025-06-30"]
+  oos2: ["2025-07-01", null]
+grid:
+  dimensions:
+    - name: channel_n
+      kind: path
+      path: long_entry.args[0].right.n
+      values: [20, 40, 55]
+    - name: vol_pct
+      kind: path
+      path: long_entry.args[1].params.pct
+      values: [0.6, 0.7, 0.8]
+    - name: stop_mult
+      kind: path
+      path: exit.stop.mult
+      values: [1.5, 2.0, 2.5]
