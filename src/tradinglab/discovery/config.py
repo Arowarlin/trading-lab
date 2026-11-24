@@ -111,6 +111,9 @@ class DiscoveryConfig(BaseModel):
     # Un swap positivo (crédito) NO se cuenta en discovery: solo el coste
     # negativo. El crédito real se puede mostrar aparte en la capa de empresa.
     swap_credit: bool = False
+    # Copia automática de discovery.db tras register/approve/run/confirm/
+    # record-informal. La retención mueve a backups/_old, nunca borra.
+    backup: bool = True
 
 
 class AssumedSlippageConfig(BaseModel):

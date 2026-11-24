@@ -1015,7 +1015,7 @@ def run_campaign(
         if frontier_items
         else None
     )
-    return {
+    result = {
         "campaign_id": campaign_id,
         "synthetic": bool(synthetic),
         "n_total": total_budget,
@@ -1041,6 +1041,10 @@ def run_campaign(
         "seed": campaign_seed,
         "diagnostics": diagnostics,
     }
+    from . import backup
+
+    backup.backup_after_action(db_path)
+    return result
 
 
 __all__ = [

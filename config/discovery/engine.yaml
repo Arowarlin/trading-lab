@@ -10,6 +10,10 @@ discovery:
   # En discovery solo se cuenta el swap como coste (negativo); el crédito real
   # se puede mostrar aparte en la capa de empresa/onboarding sin seleccionar.
   swap_credit: false
+  # Copia automática de discovery.db tras register/approve/run/confirm/
+  # record-informal. Retención: 30 últimas + primera de cada mes; lo retirado
+  # se mueve a data/backups/_old/ (nunca se borra).
+  backup: true
 
 profiles:
   small:

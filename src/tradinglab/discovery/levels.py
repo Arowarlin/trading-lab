@@ -826,6 +826,9 @@ def confirm(
     updated["dsr_confirm"] = dsr
     updated["test_vs_random_oos2"] = random_oos2
     updated["firm_confirm"] = firm_payloads
+    from . import backup
+
+    backup.backup_after_action(db_path)
     return updated
 
 

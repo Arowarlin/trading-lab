@@ -471,6 +471,9 @@ def register(
     if campaign is None:  # pragma: no cover
         raise CampaignError("no se pudo registrar la campaña")
     campaign["campaign_id"] = campaign["id"]
+    from . import backup
+
+    backup.backup_after_action(db_path)
     return campaign
 
 
@@ -611,6 +614,9 @@ def approve(
         campaign_id, approved_by=approved_by, db_path=db_path
     )
     result["campaign_id"] = result["id"]
+    from . import backup
+
+    backup.backup_after_action(db_path)
     return result
 
 

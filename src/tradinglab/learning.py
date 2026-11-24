@@ -419,6 +419,9 @@ def record_informal(
         ).fetchone()
     result = dict(row)
     result["count_tests"] = count_tests(db_path, settings)
+    from .discovery.backup import backup_after_action
+
+    backup_after_action()
     return result
 
 
