@@ -145,6 +145,9 @@ class RunLimits:
     end_index: int | None = None
     execution: str = "open_next"  # open_next | close_signal
     series_ledger: bool = False
+    # 1 = modelo histórico (spread en la entrada y otra vez en la salida).
+    # 2 = BID/ASK: un solo spread por operación. Las campañas nuevas fijan 2.
+    cost_model_version: int = 1
 
 
 # ---------------------------------------------------------------------------
@@ -154,11 +157,40 @@ class RunLimits:
 
 @dataclass(frozen=True)
 class CostPanel:
-    entry_bps: np.ndarray
-    stop_bps: np.ndarray
-    target_bps: np.ndarray
+    """Coste por barra desglosado: spread, slippage y comisión (bps).
+
+    ``entry_bps``, ``stop_bps`` y ``target_bps`` son propiedades de
+    compatibilidad con el modelo v1. En v2 el motor usa los componentes.
+    Los overrides ``legacy_*`` solo existen para que ``CostBook`` reproduzca
+    exactamente la agregación de la v1 (mínimo/máximo de la suma, no suma de
+    mínimos/máximos).
+    """
+
     spread_bps: np.ndarray
+    slip_bps: np.ndarray
+    comm_bps: np.ndarray
     fut_price: float = 0.0
+    legacy_entry_bps: np.ndarray | None = None
+    legacy_stop_bps: np.ndarray | None = None
+    legacy_target_bps: np.ndarray | None = None
+
+    @property
+    def entry_bps(self) -> np.ndarray:
+        if self.legacy_entry_bps is not None:
+            return self.legacy_entry_bps
+        return self.comm_bps + self.slip_bps + self.spread_bps
+
+    @property
+    def stop_bps(self) -> np.ndarray:
+        if self.legacy_stop_bps is not None:
+            return self.legacy_stop_bps
+        return self.comm_bps + self.slip_bps + self.spread_bps
+
+    @property
+    def target_bps(self) -> np.ndarray:
+        if self.legacy_target_bps is not None:
+            return self.legacy_target_bps
+        return self.comm_bps
 
 
 def _non_negative(name: str, value: float | None, *, allow_zero: bool = True) -> float:
@@ -226,12 +258,10 @@ class CfdBpsCosts:
             spread = np.full(len(bars), float(self.spread_bps))
         commission = np.full(len(bars), self.commission_bps)
         slippage = np.full(len(bars), self.slippage_bps)
-        entry = commission + slippage + spread
         return CostPanel(
-            entry_bps=entry,
-            stop_bps=entry.copy(),
-            target_bps=commission.copy(),
             spread_bps=spread,
+            slip_bps=slippage,
+            comm_bps=commission,
         )
 
     def ledger_bps(self, bars: pd.DataFrame) -> pd.Series:
@@ -324,12 +354,10 @@ class CfdProfileCosts:
             spread = float(self.spread_price) / prices * 10_000.0
         commission = self._commission_bps(prices)
         slippage = float(self.profile.slippage_price) / prices * 10_000.0
-        entry = commission + slippage + spread
         return CostPanel(
-            entry_bps=entry,
-            stop_bps=entry.copy(),
-            target_bps=commission.copy(),
             spread_bps=spread,
+            slip_bps=slippage,
+            comm_bps=commission,
         )
 
     def ledger_bps(self, bars: pd.DataFrame) -> pd.Series:
@@ -395,12 +423,10 @@ class CfdHourlyCosts(CfdProfileCosts):
         if self.profile.slippage_price is None:  # pragma: no cover - validado
             raise MissingCostData("Sin datos: slippage CFD")
         slippage = float(self.profile.slippage_price) / prices * 10_000.0
-        entry = commission + slippage + spread
         return CostPanel(
-            entry_bps=entry,
-            stop_bps=entry.copy(),
-            target_bps=commission.copy(),
             spread_bps=spread,
+            slip_bps=slippage,
+            comm_bps=commission,
         )
 
 
@@ -450,10 +476,9 @@ class FuturesCosts:
     def panel(self, bars: pd.DataFrame) -> CostPanel:
         zeros = np.zeros(len(bars), dtype=float)
         return CostPanel(
-            entry_bps=zeros,
-            stop_bps=zeros.copy(),
-            target_bps=zeros.copy(),
             spread_bps=zeros.copy(),
+            slip_bps=zeros.copy(),
+            comm_bps=zeros.copy(),
             fut_price=self.fut_price,
         )
 
@@ -566,6 +591,9 @@ class Trade:
     r_cost: float | None
     r_net: float | None
     swap_r: float | None = None
+    spread_r: float | None = None
+    slip_r: float | None = None
+    comm_r: float | None = None
 
     @property
     def side_sign(self) -> int:
@@ -609,6 +637,9 @@ def _core(
     stop_bps,
     target_bps,
     spread_bps,
+    slip_bps,
+    comm_bps,
+    cost_model_version,
     fut_price,
     stop_kind,
     stop_mult,
@@ -668,7 +699,14 @@ def _core(
                     pos = 1 if long_sig[i] else -1
                     entry_i = i
                     entry_p = close[i]
-                    ent_b = entry_bps[i]
+                    if cost_model_version >= 2:
+                        ent_b = (
+                            comm_bps[i]
+                            + slip_bps[i]
+                            + (spread_bps[i] if pos == 1 else 0.0)
+                        )
+                    else:
+                        ent_b = entry_bps[i]
                 continue
             if long_sig[i] == 0 and short_sig[i] == 0:
                 ex_i[count] = i
@@ -680,7 +718,14 @@ def _core(
                 tgt0[count] = np.nan
                 reason_arr[count] = 7
                 ent_cost[count] = ent_b
-                ex_cost[count] = stop_bps[i]
+                if cost_model_version >= 2:
+                    ex_cost[count] = (
+                        comm_bps[i]
+                        + slip_bps[i]
+                        + (spread_bps[i] if pos == -1 else 0.0)
+                    )
+                else:
+                    ex_cost[count] = stop_bps[i]
                 held[count] = i - entry_i
                 count += 1
                 pos = 0
@@ -696,7 +741,14 @@ def _core(
                 tgt0[count] = np.nan
                 reason_arr[count] = 6
                 ent_cost[count] = ent_b
-                ex_cost[count] = stop_bps[last]
+                if cost_model_version >= 2:
+                    ex_cost[count] = (
+                        comm_bps[last]
+                        + slip_bps[last]
+                        + (spread_bps[last] if pos == -1 else 0.0)
+                    )
+                else:
+                    ex_cost[count] = stop_bps[last]
                 held[count] = last - entry_i
                 count += 1
         return (
@@ -749,7 +801,14 @@ def _core(
                 do_exit = True
                 reason_open = 7
             if do_exit:
-                ex_b = stop_bps[i]
+                if cost_model_version >= 2:
+                    ex_b = (
+                        comm_bps[i]
+                        + slip_bps[i]
+                        + (spread_bps[i] if pos == -1 else 0.0)
+                    )
+                else:
+                    ex_b = stop_bps[i]
                 px = open_[i]
                 stock_i = entry_i
                 ent_i[count] = stock_i
@@ -822,7 +881,14 @@ def _core(
                     stop_p = sp
                     tgt_p = tp
                     risk_d = dist
-                    ent_b = entry_bps[i]
+                    if cost_model_version >= 2:
+                        ent_b = (
+                            comm_bps[i]
+                            + slip_bps[i]
+                            + (spread_bps[i] if side == 1 else 0.0)
+                        )
+                    else:
+                        ent_b = entry_bps[i]
                     day_count += 1
                     last_entry_i = i
                     pending = 0
@@ -839,7 +905,12 @@ def _core(
             if pos == 1:
                 hit_stop = low[i] <= stop_p
             else:
-                hit_stop = high[i] >= stop_p
+                if cost_model_version >= 2:
+                    hit_stop = (
+                        high[i] + high[i] * spread_bps[i] / 10_000.0 >= stop_p
+                    )
+                else:
+                    hit_stop = high[i] >= stop_p
             if target_kind != 3:
                 if pos == 1:
                     hit_tgt = high[i] >= tgt_p
@@ -856,8 +927,16 @@ def _core(
                 if pos == 1:
                     px = min(stop_p, open_[i])
                 else:
-                    px = max(stop_p, open_[i])
-                ex_b = stop_bps[i]
+                    if cost_model_version >= 2:
+                        open_ask = open_[i] + open_[i] * spread_bps[i] / 10_000.0
+                        px = max(stop_p, open_ask)
+                    else:
+                        px = max(stop_p, open_[i])
+                if cost_model_version >= 2:
+                    # En el corto el ASK ya está en el precio de salida.
+                    ex_b = comm_bps[i] + slip_bps[i]
+                else:
+                    ex_b = stop_bps[i]
                 reason = 1
                 exit_now = True
             elif hit_tgt:
@@ -865,17 +944,31 @@ def _core(
                     px = min(tgt_p, high[i])
                 else:
                     px = max(tgt_p, low[i])
-                ex_b = target_bps[i]
+                ex_b = comm_bps[i] if cost_model_version >= 2 else target_bps[i]
                 reason = 2
                 exit_now = True
             elif flat_flag[i]:
                 px = close[i]
-                ex_b = stop_bps[i]
+                if cost_model_version >= 2:
+                    ex_b = (
+                        comm_bps[i]
+                        + slip_bps[i]
+                        + (spread_bps[i] if pos == -1 else 0.0)
+                    )
+                else:
+                    ex_b = stop_bps[i]
                 reason = 3
                 exit_now = True
             elif time_exit_bars > 0 and (i - entry_i) >= time_exit_bars:
                 px = close[i]
-                ex_b = stop_bps[i]
+                if cost_model_version >= 2:
+                    ex_b = (
+                        comm_bps[i]
+                        + slip_bps[i]
+                        + (spread_bps[i] if pos == -1 else 0.0)
+                    )
+                else:
+                    ex_b = stop_bps[i]
                 reason = 4
                 exit_now = True
 
@@ -939,7 +1032,14 @@ def _core(
     if close_at_end == 1 and pos != 0 and end_idx >= 0:
         last = end_idx
         if last > entry_i:
-            ex_b = stop_bps[last]
+            if cost_model_version >= 2:
+                ex_b = (
+                    comm_bps[last]
+                    + slip_bps[last]
+                    + (spread_bps[last] if pos == -1 else 0.0)
+                )
+            else:
+                ex_b = stop_bps[last]
             px = close[last]
             ent_i[count] = entry_i
             ex_i[count] = last
@@ -1001,6 +1101,10 @@ def _calendar_core(
     entry_bps,
     stop_bps,
     target_bps,
+    spread_bps,
+    slip_bps,
+    comm_bps,
+    cost_model_version,
     fut_price,
     stop_kind,
     stop_mult,
@@ -1078,7 +1182,14 @@ def _calendar_core(
                     stop_p = sp
                     tgt_p = tp if has_target else np.nan
                     risk_d = dist
-                    ent_b = entry_bps[i]
+                    if cost_model_version >= 2:
+                        ent_b = (
+                            comm_bps[i]
+                            + slip_bps[i]
+                            + (spread_bps[i] if side == 1 else 0.0)
+                        )
+                    else:
+                        ent_b = entry_bps[i]
                     exit_target = (
                         int(calendar_exit[i]) if calendar_exit[i] > i else -1
                     )
@@ -1090,7 +1201,14 @@ def _calendar_core(
         reason = 0
         if exit_target >= 0 and i >= exit_target:
             price = close[i]
-            exit_bps = stop_bps[i]
+            if cost_model_version >= 2:
+                exit_bps = (
+                    comm_bps[i]
+                    + slip_bps[i]
+                    + (spread_bps[i] if pos == -1 else 0.0)
+                )
+            else:
+                exit_bps = stop_bps[i]
             reason = 8
             exit_now = True
         elif allowed[i]:
@@ -1099,7 +1217,12 @@ def _calendar_core(
             if pos == 1:
                 hit_stop = low[i] <= stop_p
             else:
-                hit_stop = high[i] >= stop_p
+                if cost_model_version >= 2:
+                    hit_stop = (
+                        high[i] + high[i] * spread_bps[i] / 10_000.0 >= stop_p
+                    )
+                else:
+                    hit_stop = high[i] >= stop_p
             if target_kind != 3:
                 if pos == 1:
                     hit_target = high[i] >= tgt_p
@@ -1109,8 +1232,15 @@ def _calendar_core(
                 if pos == 1:
                     price = stop_p if stop_p < open_[i] else open_[i]
                 else:
-                    price = stop_p if stop_p > open_[i] else open_[i]
-                exit_bps = stop_bps[i]
+                    if cost_model_version >= 2:
+                        open_ask = open_[i] + open_[i] * spread_bps[i] / 10_000.0
+                        price = stop_p if stop_p > open_ask else open_ask
+                    else:
+                        price = stop_p if stop_p > open_[i] else open_[i]
+                if cost_model_version >= 2:
+                    exit_bps = comm_bps[i] + slip_bps[i]
+                else:
+                    exit_bps = stop_bps[i]
                 reason = 1
                 exit_now = True
             elif hit_target:
@@ -1118,12 +1248,19 @@ def _calendar_core(
                     price = tgt_p if tgt_p < high[i] else high[i]
                 else:
                     price = tgt_p if tgt_p > low[i] else low[i]
-                exit_bps = target_bps[i]
+                exit_bps = comm_bps[i] if cost_model_version >= 2 else target_bps[i]
                 reason = 2
                 exit_now = True
         if not exit_now and close_at_end and i == end_idx:
             price = close[i]
-            exit_bps = stop_bps[i]
+            if cost_model_version >= 2:
+                exit_bps = (
+                    comm_bps[i]
+                    + slip_bps[i]
+                    + (spread_bps[i] if pos == -1 else 0.0)
+                )
+            else:
+                exit_bps = stop_bps[i]
             reason = 6
             exit_now = True
 
@@ -1158,7 +1295,14 @@ def _calendar_core(
 
     if pos != 0 and close_at_end and end_idx >= 0:
         price = close[end_idx]
-        exit_bps = stop_bps[end_idx]
+        if cost_model_version >= 2:
+            exit_bps = (
+                comm_bps[end_idx]
+                + slip_bps[end_idx]
+                + (spread_bps[end_idx] if pos == -1 else 0.0)
+            )
+        else:
+            exit_bps = stop_bps[end_idx]
         ent_i[count] = entry_i
         ex_i[count] = end_idx
         side_arr[count] = pos
@@ -1456,6 +1600,7 @@ def _prepare(
     panel: CostPanel,
     market: str,
     prepared: PreparedBars | None = None,
+    cost_model_version: int = 1,
 ) -> tuple[dict[str, Any], int, int]:
     _validate_bars(bars)
     if prepared is not None and prepared.bars is not bars:
@@ -1529,6 +1674,9 @@ def _prepare(
         "stop_bps": panel.stop_bps,
         "target_bps": panel.target_bps,
         "spread_bps": panel.spread_bps,
+        "slip_bps": panel.slip_bps,
+        "comm_bps": panel.comm_bps,
+        "cost_model_version": int(cost_model_version),
         "fut_price": float(panel.fut_price),
         "stop_kind": int(stop_kind),
         "stop_mult": float(exit_spec.stop_mult),
@@ -1566,15 +1714,26 @@ def run(
     *,
     prepared: PreparedBars | None = None,
     collect_metrics: bool = True,
+    cost_model_version: int | None = None,
 ) -> FastResult:
     """Ejecuta las señales sobre barras ya cargadas (sin datos reales aquí).
 
     ``collect_metrics=False`` evita calcular expectativa/PF/Sharpe: lo usa el
     escaneo de viabilidad, que solo necesita operaciones y coste. No cambia la
     ejecución ni las operaciones.
+
+    ``cost_model_version``: 1 (histórico) o 2 (BID/ASK, un spread por
+    operación). Si no se pasa, manda ``limits.cost_model_version`` (1).
     """
 
     limits = limits or RunLimits()
+    version = int(
+        cost_model_version
+        if cost_model_version is not None
+        else getattr(limits, "cost_model_version", 1)
+    )
+    if version not in {1, 2}:
+        raise FastBtError(f"cost_model_version inválida: {version}")
     exit_spec = exit_spec.validated()
     market = getattr(cost, "market", None)
     if market not in {"cfd", "futures"}:
@@ -1583,7 +1742,7 @@ def run(
         raise MissingCostData("Sin datos: modelo de coste sin panel")
     panel = prepared.panel if prepared is not None else cost.panel(bars)
     payload, _n, _close_mode = _prepare(
-        signals, bars, exit_spec, limits, panel, market, prepared
+        signals, bars, exit_spec, limits, panel, market, prepared, version
     )
 
     if signals.exit_index is not None:
@@ -1607,6 +1766,10 @@ def run(
             payload["entry_bps"],
             payload["stop_bps"],
             payload["target_bps"],
+            payload["spread_bps"],
+            payload["slip_bps"],
+            payload["comm_bps"],
+            payload["cost_model_version"],
             payload["fut_price"],
             payload["stop_kind"],
             payload["stop_mult"],
@@ -1639,6 +1802,9 @@ def run(
             payload["stop_bps"],
             payload["target_bps"],
             payload["spread_bps"],
+            payload["slip_bps"],
+            payload["comm_bps"],
+            payload["cost_model_version"],
             payload["fut_price"],
             payload["stop_kind"],
             payload["stop_mult"],
@@ -1687,18 +1853,40 @@ def run(
     for k in range(int(count)):
         risk = float(risk_arr[k])
         net = float(r_net[k])
+        side_name = "long" if int(side_arr[k]) == 1 else "short"
+        reason_name = REASONS.get(int(reason_arr[k]), "unknown")
+        entry_i = int(ent_i[k])
+        exit_i = int(ex_i[k])
+        spread_r = slip_r = comm_r = None
+        if version >= 2 and np.isfinite(risk) and risk > 0.0:
+            factor = float(ent_px[k]) / risk / 10_000.0
+            comm_r = (
+                float(panel.comm_bps[entry_i] + panel.comm_bps[exit_i]) * factor
+                + 2.0 * float(panel.fut_price) / risk
+            )
+            slip_r = float(
+                panel.slip_bps[entry_i] + panel.slip_bps[exit_i]
+            ) * factor
+            if side_name == "long":
+                spread_bps_trade = float(panel.spread_bps[entry_i])
+            elif reason_name in {"stop", "target"}:
+                # El ASK ya está en el precio de salida / del objetivo.
+                spread_bps_trade = 0.0
+            else:
+                spread_bps_trade = float(panel.spread_bps[exit_i])
+            spread_r = spread_bps_trade * factor
         trades.append(
             Trade(
-                side="long" if int(side_arr[k]) == 1 else "short",
-                entry_index=int(ent_i[k]),
-                exit_index=int(ex_i[k]),
-                entry_time=index[int(ent_i[k])],
-                exit_time=index[int(ex_i[k])],
+                side=side_name,
+                entry_index=entry_i,
+                exit_index=exit_i,
+                entry_time=index[entry_i],
+                exit_time=index[exit_i],
                 entry_price=float(ent_px[k]),
                 exit_price=float(ex_px[k]),
                 stop=float(stop0[k]),
                 target=None if np.isnan(tgt0[k]) else float(tgt0[k]),
-                reason=REASONS.get(int(reason_arr[k]), "unknown"),
+                reason=reason_name,
                 bars_held=int(held[k]),
                 risk_price=None if np.isnan(risk) else risk,
                 entry_cost_bps=float(ent_cost[k]),
@@ -1706,6 +1894,9 @@ def run(
                 r_gross=None if np.isnan(r_gross[k]) else float(r_gross[k]),
                 r_cost=None if np.isnan(r_cost[k]) else float(r_cost[k]),
                 r_net=None if np.isnan(net) else net,
+                spread_r=spread_r,
+                slip_r=slip_r,
+                comm_r=comm_r,
             )
         )
 

@@ -27,6 +27,8 @@ def _scenario_panel(
     stop = panel.stop_bps.astype(float) * factor
     target = panel.target_bps.astype(float) * factor
     spread = panel.spread_bps.astype(float) * factor
+    slip = panel.slip_bps.astype(float) * factor
+    comm = panel.comm_bps.astype(float) * factor
     fut = float(panel.fut_price) * factor
     if slippage_points:
         prices = pd.to_numeric(bars["close"], errors="coerce").to_numpy(dtype=float)
@@ -37,12 +39,17 @@ def _scenario_panel(
             entry = entry + adder
             stop = stop + adder
             target = target + adder
+            slip = slip + adder
     return fastbt.CostPanel(
-        entry_bps=entry,
-        stop_bps=stop,
-        target_bps=target,
         spread_bps=spread,
+        slip_bps=slip,
+        comm_bps=comm,
         fut_price=fut,
+        # La v1 conserva exactamente el panel escalado de siempre; la v2 usa
+        # los componentes (el objetivo no paga slippage).
+        legacy_entry_bps=entry,
+        legacy_stop_bps=stop,
+        legacy_target_bps=target,
     )
 
 

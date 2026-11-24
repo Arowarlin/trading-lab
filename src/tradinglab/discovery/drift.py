@@ -62,6 +62,10 @@ def _fill_outcomes(
     entry_bps,
     stop_bps,
     target_bps,
+    spread_bps,
+    slip_bps,
+    comm_bps,
+    cost_model_version,
     fut_price,
     stop_kind,
     stop_mult,
@@ -99,6 +103,14 @@ def _fill_outcomes(
                 dist = (entry - stop_fixed) * side
             if not (dist > 0.0):
                 continue
+            if cost_model_version >= 2:
+                ent_b = (
+                    comm_bps[i]
+                    + slip_bps[i]
+                    + (spread_bps[i] if side == 1 else 0.0)
+                )
+            else:
+                ent_b = entry_bps[i]
             stop = entry - side * dist
             target = 0.0
             has_target = target_kind != 3
@@ -122,33 +134,72 @@ def _fill_outcomes(
                         if low[j] <= stop:
                             exit_j = j
                             price = stop if stop < open_[j] else open_[j]
-                            exit_bps = stop_bps[j]
+                            if cost_model_version >= 2:
+                                exit_bps = comm_bps[j] + slip_bps[j]
+                            else:
+                                exit_bps = stop_bps[j]
                             break
                         if has_target and high[j] >= target:
                             exit_j = j
                             price = target if target < high[j] else high[j]
-                            exit_bps = target_bps[j]
+                            exit_bps = (
+                                comm_bps[j]
+                                if cost_model_version >= 2
+                                else target_bps[j]
+                            )
                             break
                     else:
-                        if high[j] >= stop:
+                        if cost_model_version >= 2:
+                            hit_stop = (
+                                high[j] + high[j] * spread_bps[j] / 10_000.0
+                                >= stop
+                            )
+                        else:
+                            hit_stop = high[j] >= stop
+                        if hit_stop:
                             exit_j = j
-                            price = stop if stop > open_[j] else open_[j]
-                            exit_bps = stop_bps[j]
+                            if cost_model_version >= 2:
+                                open_ask = (
+                                    open_[j] + open_[j] * spread_bps[j] / 10_000.0
+                                )
+                                price = stop if stop > open_ask else open_ask
+                                exit_bps = comm_bps[j] + slip_bps[j]
+                            else:
+                                price = stop if stop > open_[j] else open_[j]
+                                exit_bps = stop_bps[j]
                             break
                         if has_target and low[j] <= target:
                             exit_j = j
                             price = target if target > low[j] else low[j]
-                            exit_bps = target_bps[j]
+                            exit_bps = (
+                                comm_bps[j]
+                                if cost_model_version >= 2
+                                else target_bps[j]
+                            )
                             break
                     if flat_flag[j] == 1:
                         exit_j = j
                         price = close[j]
-                        exit_bps = stop_bps[j]
+                        if cost_model_version >= 2:
+                            exit_bps = (
+                                comm_bps[j]
+                                + slip_bps[j]
+                                + (spread_bps[j] if side == -1 else 0.0)
+                            )
+                        else:
+                            exit_bps = stop_bps[j]
                         break
                 if j == last:
                     exit_j = j
                     price = close[j]
-                    exit_bps = stop_bps[j]
+                    if cost_model_version >= 2:
+                        exit_bps = (
+                            comm_bps[j]
+                            + slip_bps[j]
+                            + (spread_bps[j] if side == -1 else 0.0)
+                        )
+                    else:
+                        exit_bps = stop_bps[j]
                     break
             if exit_j < 0:
                 continue
@@ -157,7 +208,7 @@ def _fill_outcomes(
                 gross = price / entry - 1.0
                 r_long[i] = (
                     gross * entry / dist
-                    - (entry_bps[i] + exit_bps) / 10_000.0 * entry / dist
+                    - (ent_b + exit_bps) / 10_000.0 * entry / dist
                     - 2.0 * fut_price / dist
                 )
                 held_long[i] = held
@@ -165,7 +216,7 @@ def _fill_outcomes(
                 gross = 1.0 - price / entry
                 r_short[i] = (
                     gross * entry / dist
-                    - (entry_bps[i] + exit_bps) / 10_000.0 * entry / dist
+                    - (ent_b + exit_bps) / 10_000.0 * entry / dist
                     - 2.0 * fut_price / dist
                 )
                 held_short[i] = held
@@ -225,6 +276,10 @@ def outcome_tables(
         panel.entry_bps.astype(np.float64),
         panel.stop_bps.astype(np.float64),
         panel.target_bps.astype(np.float64),
+        panel.spread_bps.astype(np.float64),
+        panel.slip_bps.astype(np.float64),
+        panel.comm_bps.astype(np.float64),
+        int(getattr(limits, "cost_model_version", 1)),
         float(panel.fut_price),
         int({"atr": 0, "pct": 1, "fixed": 2}.get(exit_spec.stop, -1)),
         float(exit_spec.stop_mult),

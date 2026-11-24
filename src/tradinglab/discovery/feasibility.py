@@ -123,6 +123,7 @@ def _context(campaign_id: str, db_path):
         session_end=setup.session_end,
         flat_at=setup.flat_at,
         weekdays=setup.weekdays,
+        cost_model_version=setup.cost_model_version,
     )
     prepared = fastbt.prepare(
         bars,
@@ -157,6 +158,7 @@ def _context_from(campaign, setup, bars):
         session_end=setup.session_end,
         flat_at=setup.flat_at,
         weekdays=setup.weekdays,
+        cost_model_version=setup.cost_model_version,
     )
     prepared = fastbt.prepare(
         bars,
@@ -360,6 +362,7 @@ def check_spec(
     spec_path: str | Path,
     *,
     bars: pd.DataFrame | None = None,
+    cost_model_version: int | None = None,
 ) -> dict[str, Any]:
     """Feasibility sobre una especificación, sin registrar campaña."""
     from . import basket
@@ -368,6 +371,14 @@ def check_spec(
     if basket.is_basket_spec(spec_path):
         return basket.check_spec(spec_path)
     campaign = load_spec(spec_path)
+    if cost_model_version is not None:
+        campaign = {
+            **campaign,
+            "config": {
+                **(campaign.get("config") or {}),
+                "cost_model_version": int(cost_model_version),
+            },
+        }
     setup = jobs.QueueSetup.from_campaign(campaign)
     if bars is None:
         frame = campaigns._source_frame(
@@ -529,6 +540,7 @@ def _scan_timeframe(
         session_end=setup.session_end,
         flat_at=setup.flat_at,
         weekdays=setup.weekdays,
+        cost_model_version=setup.cost_model_version,
     )
     prepared = fastbt.prepare(frame, cost, sessions=(limits,))
     validation = config.validation.for_timeframe(timeframe)

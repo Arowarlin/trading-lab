@@ -263,6 +263,7 @@ def register(
     controls: bool = True,
     now: Any | None = None,
     db_path: str | Path | None = None,
+    cost_model_version: int | None = None,
 ) -> dict[str, Any]:
     """Registra un borrador (o previsualiza con ``dry_run``)."""
 
@@ -277,6 +278,9 @@ def register(
     mode = str(mode or "ga").strip().lower()
     if mode not in {"ga", "grid"}:
         raise CampaignError(f"modo desconocido: {mode}")
+    version = 2 if cost_model_version is None else int(cost_model_version)
+    if version not in {1, 2}:
+        raise CampaignError(f"cost_model_version inválida: {version}")
     side = str(side or "").strip().lower()
     if side not in {"", "long", "short"}:
         raise CampaignError(f"lado desconocido: {side}")
@@ -363,7 +367,8 @@ def register(
         "oos2_end": normalized["oos2"][1],
         "segments": normalized,
         "dataset_hash": digest,
-        "n_total": n_total,        "cost": {
+        "n_total": n_total,        "cost_model_version": version,
+        "cost": {
             "account": selected_costs[0],
             "firm": selected_firm,
             "use_p75": bool(use_p75),
@@ -530,6 +535,7 @@ def register_from_spec(
         frame=frame,
         dry_run=dry_run,
         db_path=db_path,
+        cost_model_version=payload.get("cost_model_version"),
     )
 
 

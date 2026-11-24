@@ -20,3 +20,22 @@ comprueba. El baseline de hashes vive en
 - **Qué no cambia:** el router sigue rechazando enviar órdenes a estrategias de
   motor externo. Solo demo/paper; ninguna orden real.
 - **Rollback:** tag `tl2-t00-pre`.
+
+## 2026-11-24 · Modelo de ejecución BID/ASK v2 en Discovery
+
+- **Qué cambia:** `CostPanel` lleva `spread_bps`, `slip_bps` y `comm_bps` por
+  barra. Las campañas nuevas registran `cost_model_version: 2`: un solo spread
+  por operación, stop de corto disparado por el ASK (`max(stop, open_ask)`) y
+  desglose por operación (`spread_r`, `slip_r`, `comm_r`). Las campañas
+  existentes se cargan como versión 1 y se reproducen igual.
+- **Alcance:** `discovery/fastbt.py`, `discovery/costs.py`, `discovery/drift.py`,
+  `discovery/jobs.py`, `discovery/fitness.py`, `discovery/robustness.py`,
+  `discovery/levels.py`, `discovery/feasibility.py`, `discovery/specs.py`,
+  `discovery/basket.py` y `discovery/campaigns.py`. No se toca
+  `ea_us100_engine.py` (es la referencia).
+- **Verificación:** `tests/test_discovery_execution_v2.py` (17 pruebas con
+  resultados a mano), paridad v1 en las fixtures existentes, paridad de
+  convención con `ea_us100_engine` y tabla de coste antes/después en
+  `docs/tradinglab2/06_TRADINGLAB_DATA_AND_COST_AUDIT.md`.
+- **Rollback:** tag `tl2-t10-pre` o `cost_model_version: 1` en la campaña.
+

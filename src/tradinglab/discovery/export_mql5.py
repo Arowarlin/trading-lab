@@ -1920,10 +1920,9 @@ class _ZeroCosts:
     def panel(self, bars: pd.DataFrame) -> CostPanel:
         zeros = np.zeros(len(bars), dtype=float)
         return CostPanel(
-            entry_bps=zeros,
-            stop_bps=zeros.copy(),
-            target_bps=zeros.copy(),
             spread_bps=zeros.copy(),
+            slip_bps=zeros.copy(),
+            comm_bps=zeros.copy(),
         )
 
 

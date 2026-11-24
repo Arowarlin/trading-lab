@@ -27,10 +27,12 @@ SEGMENTS = {
 def _panel(values: list[float]) -> fastbt.CostPanel:
     array = np.asarray(values, dtype=float)
     return fastbt.CostPanel(
-        entry_bps=array,
-        stop_bps=array.copy(),
-        target_bps=np.zeros_like(array),
         spread_bps=array.copy(),
+        slip_bps=np.zeros_like(array),
+        comm_bps=np.zeros_like(array),
+        legacy_entry_bps=array,
+        legacy_stop_bps=array.copy(),
+        legacy_target_bps=np.zeros_like(array),
     )
 
 

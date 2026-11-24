@@ -211,6 +211,7 @@ def _setup(spec: dict[str, Any], symbol: str, strategy: dict[str, Any]) -> jobs.
         firm=cost["firm"],
         cost_accounts=tuple(cost["cost_accounts"]),
         cost_mode=cost["cost_mode"],
+        cost_model_version=int(spec.get("cost_model_version", 1) or 1),
         session_tz=config.data_quality.tz_for(symbol),
         session_start=model.session.start,
         session_end=model.session.end,

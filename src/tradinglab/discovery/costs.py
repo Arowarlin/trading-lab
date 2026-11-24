@@ -327,10 +327,16 @@ class CostBook:
         *,
         mode: str,
         session_tz: str,
+        cost_model_version: int = 1,
     ) -> None:
         if not accounts:
             raise ValueError("Sin datos: CostBook sin cuentas")
         self.accounts = list(accounts)
+        self.cost_model_version = int(cost_model_version)
+        if self.cost_model_version not in {1, 2}:
+            raise ValueError(
+                f"cost_model_version inválida: {cost_model_version}"
+            )
         self.mode = str(mode).lower()
         if self.mode not in {"worst", "best", "target"}:
             raise ValueError(f"cost_mode desconocido: {mode}")
@@ -363,17 +369,29 @@ class CostBook:
             return self._worst_panel
         panels = [item.panel(bars) for item in self.accounts]
         reducer = np.min if self.mode == "best" else np.max
-        entry = reducer(np.vstack([item.entry_bps for item in panels]), axis=0)
-        stop = reducer(np.vstack([item.stop_bps for item in panels]), axis=0)
-        target = reducer(np.vstack([item.target_bps for item in panels]), axis=0)
         spread = reducer(np.vstack([item.spread_bps for item in panels]), axis=0)
+        slip = reducer(np.vstack([item.slip_bps for item in panels]), axis=0)
+        comm = reducer(np.vstack([item.comm_bps for item in panels]), axis=0)
+        legacy: dict[str, np.ndarray] = {}
+        if self.cost_model_version == 1:
+            legacy = {
+                "legacy_entry_bps": reducer(
+                    np.vstack([item.entry_bps for item in panels]), axis=0
+                ),
+                "legacy_stop_bps": reducer(
+                    np.vstack([item.stop_bps for item in panels]), axis=0
+                ),
+                "legacy_target_bps": reducer(
+                    np.vstack([item.target_bps for item in panels]), axis=0
+                ),
+            }
         self._panels = panels
         self._bars_id = id(bars)
         self._worst_panel = fastbt.CostPanel(
-            entry_bps=entry,
-            stop_bps=stop,
-            target_bps=target,
             spread_bps=spread,
+            slip_bps=slip,
+            comm_bps=comm,
+            **legacy,
         )
         return self._worst_panel
 
@@ -393,17 +411,64 @@ class CostBook:
         worst_flags: list[str | None] = []
         selected_flags: list[str | None] = []
         for trade in trades:
-            per_account: dict[str, tuple[float, float, float, float]] = {}
+            per_account: dict[str, tuple[float, float, float, float, float, float, float]] = {}
             for item, panel in zip(self.accounts, self._panels):
-                entry_bps = float(panel.entry_bps[trade.entry_index])
-                exit_bps = (
-                    float(panel.target_bps[trade.exit_index])
-                    if trade.reason == "target"
-                    else float(panel.stop_bps[trade.exit_index])
-                )
                 risk = trade.risk_price
                 if risk is None or not np.isfinite(float(risk)) or float(risk) <= 0:
                     continue
+                e = int(trade.entry_index)
+                x = int(trade.exit_index)
+                spread_r = slip_r = comm_r = None
+                if self.cost_model_version >= 2:
+                    comm_bps_sum = float(
+                        panel.comm_bps[e] + panel.comm_bps[x]
+                    )
+                    slip_bps_sum = float(panel.slip_bps[e] + panel.slip_bps[x])
+                    entry_bps = float(
+                        panel.comm_bps[e]
+                        + panel.slip_bps[e]
+                        + (panel.spread_bps[e] if trade.side == "long" else 0.0)
+                    )
+                    if trade.reason == "target":
+                        exit_bps = float(panel.comm_bps[x])
+                        spread_trade = (
+                            float(panel.spread_bps[e])
+                            if trade.side == "long"
+                            else 0.0
+                        )
+                    elif trade.reason == "stop":
+                        exit_bps = float(panel.comm_bps[x] + panel.slip_bps[x])
+                        spread_trade = (
+                            float(panel.spread_bps[e])
+                            if trade.side == "long"
+                            else 0.0
+                        )
+                    else:
+                        exit_bps = float(
+                            panel.comm_bps[x]
+                            + panel.slip_bps[x]
+                            + (
+                                panel.spread_bps[x]
+                                if trade.side == "short"
+                                else 0.0
+                            )
+                        )
+                        spread_trade = (
+                            float(panel.spread_bps[e])
+                            if trade.side == "long"
+                            else float(panel.spread_bps[x])
+                        )
+                    factor = trade.entry_price / float(risk) / 10_000.0
+                    comm_r = comm_bps_sum * factor
+                    slip_r = slip_bps_sum * factor
+                    spread_r = spread_trade * factor
+                else:
+                    entry_bps = float(panel.entry_bps[e])
+                    exit_bps = (
+                        float(panel.target_bps[x])
+                        if trade.reason == "target"
+                        else float(panel.stop_bps[x])
+                    )
                 rc = (entry_bps + exit_bps) / 10_000.0 * trade.entry_price / float(risk)
                 swap_r = 0.0
                 swap = getattr(item, "swap", None)
@@ -417,7 +482,9 @@ class CostBook:
                         allow_credit=self.swap_allow_credit,
                     )
                 rc -= swap_r
-                per_account[item.account] = (rc, entry_bps, exit_bps, swap_r)
+                per_account[item.account] = (
+                    rc, entry_bps, exit_bps, swap_r, spread_r, slip_r, comm_r
+                )
                 cost_values[item.account].append(rc)
             if not per_account:
                 adjusted.append(trade)
@@ -433,7 +500,7 @@ class CostBook:
                 selected_name = worst_name
             else:
                 selected_name = self.accounts[0].account
-            rc, entry_bps, exit_bps, swap_r = per_account[selected_name]
+            rc, entry_bps, exit_bps, swap_r, spread_r, slip_r, comm_r = per_account[selected_name]
             r_net = trade.r_gross - rc if trade.r_gross is not None else None
             adjusted.append(
                 replace(
@@ -443,6 +510,9 @@ class CostBook:
                     r_cost=rc,
                     r_net=r_net,
                     swap_r=swap_r,
+                    spread_r=spread_r,
+                    slip_r=slip_r,
+                    comm_r=comm_r,
                 )
             )
             best_flags.append(best_name)
@@ -505,6 +575,7 @@ def build_cost_book(
     session_tz: str = "America/New_York",
     db_path: str | Path | None = None,
     config: EngineConfig | None = None,
+    cost_model_version: int = 1,
 ) -> CostBook:
     selected, selected_mode = resolve_cost_accounts(instrument, accounts, mode)
     items = [
@@ -517,7 +588,12 @@ def build_cost_book(
         )
         for account in selected
     ]
-    return CostBook(items, mode=selected_mode, session_tz=session_tz)
+    return CostBook(
+        items,
+        mode=selected_mode,
+        session_tz=session_tz,
+        cost_model_version=cost_model_version,
+    )
 
 
 def build_cost_book_for_setup(setup: Any) -> CostBook:
@@ -529,6 +605,7 @@ def build_cost_book_for_setup(setup: Any) -> CostBook:
         mode=setup.cost_mode,
         session_tz=setup.session_tz,
         db_path=LAB_DB,
+        cost_model_version=int(getattr(setup, "cost_model_version", 1)),
     )
 
 

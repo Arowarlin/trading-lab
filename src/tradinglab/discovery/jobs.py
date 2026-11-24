@@ -67,6 +67,7 @@ class QueueSetup:
     cost_accounts: tuple[str, ...] = ()
     cost_mode: str = "target"
     legacy_cost: bool = True
+    cost_model_version: int = 1
     session_tz: str = "America/New_York"
     session_start: str = "09:35"
     session_end: str = "11:30"
@@ -133,6 +134,7 @@ class QueueSetup:
             cost_accounts=configured_accounts,
             cost_mode=configured_mode,
             legacy_cost=legacy_cost,
+            cost_model_version=int(config.get("cost_model_version", 1) or 1),
             session_tz=str(session.get("tz") or "America/New_York"),
             session_start=str(session.get("start") or "09:35"),
             session_end=str(session.get("end") or "11:30"),
@@ -172,6 +174,10 @@ class QueueSetup:
             raise QueueError("Sin datos: cost_accounts vacío")
         if self.cost_mode == "target" and len(self.cost_accounts) != 1:
             raise QueueError("cost_mode target exige exactamente una cuenta")
+        if int(self.cost_model_version) not in {1, 2}:
+            raise QueueError(
+                f"cost_model_version inválida: {self.cost_model_version}"
+            )
         if int(self.drift_simulations) < 0:
             raise QueueError("drift_simulations no puede ser negativo")
         if int(self.drift_simulations) > 0 and not (

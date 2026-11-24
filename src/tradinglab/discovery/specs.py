@@ -76,6 +76,7 @@ def run_limits_from_strategy(
         allow_next_day_entry=model.timeframe == "D1",
         close_at_end=close_at_end,
         end_index=end_index,
+        cost_model_version=int(getattr(setup, "cost_model_version", 1) or 1),
     )
 
 
