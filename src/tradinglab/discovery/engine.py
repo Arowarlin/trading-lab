@@ -202,8 +202,11 @@ def preflight(campaign_id: str, *, db_path=None) -> dict[str, Any]:
 
 def preflight_spec(spec_path: str | Path) -> dict[str, Any]:
     """Preflight sobre una especificación, sin registrar campaña."""
+    from . import basket
     from .spec import load_spec
 
+    if basket.is_basket_spec(spec_path):
+        return basket.preflight(spec_path)
     campaign = load_spec(spec_path)
     return _preflight_campaign(
         campaign, str(campaign["campaign_id"])

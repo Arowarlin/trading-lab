@@ -362,8 +362,11 @@ def check_spec(
     bars: pd.DataFrame | None = None,
 ) -> dict[str, Any]:
     """Feasibility sobre una especificación, sin registrar campaña."""
+    from . import basket
     from .spec import load_spec
 
+    if basket.is_basket_spec(spec_path):
+        return basket.check_spec(spec_path)
     campaign = load_spec(spec_path)
     setup = jobs.QueueSetup.from_campaign(campaign)
     if bars is None:

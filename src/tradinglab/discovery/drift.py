@@ -288,6 +288,7 @@ def percentile(
     simulations: int = DEFAULT_SIMULATIONS,
     seed: int = 0,
     approved: bool = False,
+    return_means: bool = False,
 ) -> dict[str, Any]:
     """Percentil de la expectativa de la estrategia frente a entradas al azar."""
 
@@ -351,7 +352,7 @@ def percentile(
     actual = float(strategy_expectancy)
     below = int(np.sum(valid < actual))
     value = 100.0 * below / valid.size
-    return {
+    result = {
         "percentile": round(value, 2),
         "simulations": simulations,
         "trades": count,
@@ -364,6 +365,9 @@ def percentile(
         "seed": int(seed),
         "passed": value >= DEFAULT_PERCENTILE_MIN,
     }
+    if return_means:
+        result["random_means"] = [float(item) for item in valid]
+    return result
 
 
 def evaluate(
@@ -378,6 +382,7 @@ def evaluate(
     simulations: int = DEFAULT_SIMULATIONS,
     percentile_min: float = DEFAULT_PERCENTILE_MIN,
     approved: bool = False,
+    return_means: bool = False,
 ) -> dict[str, Any]:
     """Calcula el percentil contra deriva de una estrategia ya evaluada.
 
@@ -438,6 +443,7 @@ def evaluate(
         simulations=simulations,
         seed=campaign_seed(campaign_id),
         approved=approved,
+        return_means=return_means,
     )
     result["mean_bars_realized"] = round(realized, 3)
     result["horizon_bars"] = int(max(1, horizon))

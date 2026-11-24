@@ -1,0 +1,50 @@
+# Q3 — momentum de serie temporal en cesta D1 (Dukascopy).
+# Hipótesis literal (escrita antes de calcular nada):
+# "Los precios de índices, oro y divisas persisten en horizontes de semanas o
+#  meses por infrarreacción a noticias, rebalanceo lento y flujo de trend
+#  followers. Si el cruce de medias largas captura esa persistencia, la
+#  expectativa bruta debe superar el coste en varios regímenes y en la cesta,
+#  no solo en un símbolo."
+# Referencias: Moskowitz, Ooi & Pedersen (2012), JFE; Hurst, Ooi & Pedersen
+# (2017), JPM. Una hipótesis, seis símbolos; n_total = combinaciones (18), no
+# 18 × 6. R agregado por fecha; coste y swap por símbolo/cuenta.
+basket: [XAUUSD, US500, US100, EURUSD, GBPUSD, USDJPY]
+campaign_id: q3-tsmom-cesta-d1
+instrument: XAUUSD          # símbolo base para el DSL; el basket manda
+timeframe: D1
+template: ts_momentum_d1
+profile: small
+mode: grid
+seed: 91
+data_source: dukascopy
+account: CFD-001
+firm: ftmo
+cost_mode: best
+cost_accounts: [CFD-001, CFD-006]
+basket_costs:
+  XAUUSD: {account: CFD-001, firm: ftmo, cost_accounts: [CFD-001, CFD-006], cost_mode: best}
+  US500:  {account: CFD-006, firm: fundingpips, cost_accounts: [CFD-006], cost_mode: target}
+  US100:  {account: CFD-001, firm: ftmo, cost_accounts: [CFD-001, CFD-006], cost_mode: best}
+  EURUSD: {account: CFD-001, firm: ftmo, cost_accounts: [CFD-001, CFD-006], cost_mode: best}
+  GBPUSD: {account: CFD-001, firm: ftmo, cost_accounts: [CFD-001, CFD-006], cost_mode: best}
+  USDJPY: {account: CFD-001, firm: ftmo, cost_accounts: [CFD-001, CFD-006], cost_mode: best}
+segments:
+  # IS común: el más tardío de los usable_from D1 (US500 2018-01-01).
+  is: ["2018-01-01", "2024-06-30"]
+  oos1: ["2024-07-01", "2025-06-30"]
+  oos2: ["2025-07-01", null]
+# 2 fast_n × 3 slow_n × 3 stop_mult = 18 combinaciones, no 18 × 6.
+grid:
+  dimensions:
+    - name: fast_n
+      kind: path
+      path: long_entry.left.n
+      values: [50, 100]
+    - name: slow_n
+      kind: path
+      path: long_entry.right.n
+      values: [150, 200, 250]
+    - name: stop_mult
+      kind: path
+      path: exit.stop.mult
+      values: [2.5, 3.0, 3.5]
