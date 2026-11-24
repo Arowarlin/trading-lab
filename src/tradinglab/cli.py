@@ -11433,6 +11433,15 @@ def discovery_results_cmd(
         f"evaluados {campaign['n_evaluated']} · finalistas {campaign['n_finalists']} · "
         "solo IS; OOS-2 no se lee.[/dim]"
     )
+    basket_symbols = (
+        (campaign.get("config") or {}).get("basket") or {}
+    ).get("symbols") or []
+    if basket_symbols:
+        console.print(
+            "[dim]Cesta: "
+            + ", ".join(str(symbol) for symbol in basket_symbols)
+            + " · R agregado por fecha; n_total cuenta combinaciones, no piernas.[/dim]"
+        )
 
 
 @discovery_app.command("show")

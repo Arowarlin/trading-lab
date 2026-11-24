@@ -443,6 +443,7 @@ class CostBook:
                     r_cost=rc,
                     r_net=r_net,
                     swap_r=swap_r,
+                    selected_account=selected_name,
                 )
             )
             best_flags.append(best_name)

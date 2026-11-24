@@ -566,6 +566,8 @@ class Trade:
     r_cost: float | None
     r_net: float | None
     swap_r: float | None = None
+    selected_account: str | None = None
+    instrument: str | None = None
 
     @property
     def side_sign(self) -> int:

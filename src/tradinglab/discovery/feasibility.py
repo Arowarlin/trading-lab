@@ -179,6 +179,13 @@ def _context(campaign_id: str, db_path):
 def check(campaign_id: str, *, db_path=None) -> dict[str, Any]:
     """Devuelve la viabilidad de cada combinación/individuo inicial."""
 
+    campaign = databank.get_campaign(campaign_id, db_path=db_path)
+    if campaign is None:
+        raise campaigns.CampaignError(f"campaña no registrada: {campaign_id}")
+    from . import basket
+
+    if basket.is_basket_campaign(campaign):
+        return basket.check_campaign(campaign, db_path=db_path)
     context = _context(campaign_id, db_path)
     return _check_context(*context, campaign_id=campaign_id)
 

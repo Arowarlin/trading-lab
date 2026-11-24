@@ -502,8 +502,15 @@ def register_from_spec(
     db_path: str | Path | None = None,
 ) -> dict[str, Any]:
     """Registra un borrador desde una especificación YAML (no aprueba)."""
+    from . import basket
     from .spec import load_spec
 
+    if basket.is_basket_spec(spec_path):
+        if frame is not None:
+            raise CampaignError(
+                "una spec de cesta no acepta un frame único; usa basket.register"
+            )
+        return basket.register(spec_path, dry_run=dry_run, db_path=db_path)
     campaign = load_spec(spec_path)
     payload = campaign["config"]
     cost = payload.get("cost") or {}
@@ -914,9 +921,14 @@ def read_holdout(
     strategy_id: int,
     *,
     frame: pd.DataFrame | None = None,
+    frames: dict[str, pd.DataFrame] | None = None,
     db_path: str | Path | None = None,
-) -> pd.DataFrame:
-    """Lectura única de OOS-2 por estrategia; la segunda falla."""
+) -> pd.DataFrame | dict[str, pd.DataFrame]:
+    """Lectura única de OOS-2 por estrategia; la segunda falla.
+
+    En una campaña de cesta devuelve ``{símbolo: barras}`` con todas las
+    piernas; la lectura sigue siendo única y queda registrada.
+    """
 
     strategy = databank.get_strategy(strategy_id, db_path=db_path)
     if strategy is None:
@@ -931,6 +943,34 @@ def read_holdout(
         raise HoldoutError(
             f"la estrategia {strategy_id} ya leyó OOS-2; segunda lectura prohibida"
         )
+    from . import basket
+
+    if basket.is_basket_campaign(campaign):
+        sealed = basket.segment_frames(
+            campaign, "oos2", frames=frames, db_path=db_path
+        )
+        rows = int(sum(len(value) for value in sealed.values()))
+        if rows == 0:
+            raise CampaignError("Sin datos en OOS-2")
+        try:
+            databank.add_holdout_read(
+                int(strategy_id),
+                campaign_id,
+                dataset_hash=(
+                    ((campaign.get("config") or {}).get("basket") or {}).get(
+                        "dataset_hash"
+                    )
+                    or campaign.get("snapshot_hash")
+                    or campaign["dataset_hash"]
+                ),
+                rows=rows,
+                db_path=db_path,
+            )
+        except sqlite3.IntegrityError as exc:
+            raise HoldoutError(
+                f"la estrategia {strategy_id} ya leyó OOS-2; segunda lectura prohibida"
+            ) from exc
+        return sealed
     source = campaign_bars(campaign, frame=frame, db_path=db_path)
     start = _start_ts(campaign["oos2_start"])
     end = _start_ts(campaign["oos2_end"])
