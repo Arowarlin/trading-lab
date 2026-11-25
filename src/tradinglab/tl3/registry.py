@@ -126,6 +126,16 @@ def init_db(path: str | Path = DB) -> None:
                 report TEXT NOT NULL,
                 created_at TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS warnings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                subject TEXT NOT NULL,
+                fecha TEXT NOT NULL,
+                etapa TEXT NOT NULL,
+                texto TEXT NOT NULL,
+                cifras TEXT NOT NULL,
+                source_path TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
             """
         )
         con.commit()

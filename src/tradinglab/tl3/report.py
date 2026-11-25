@@ -56,9 +56,10 @@ def ladder(
 def status_table(db_path=None) -> str:
     """Último estado por hipótesis, en Markdown (append-only por rowid)."""
 
-    from .registry import connect
+    from . import warnings as warnings_mod
+    from .registry import DB, connect
 
-    with connect(db_path) as con:
+    with connect(db_path or DB) as con:
         rows = con.execute(
             "SELECT h.hypothesis_id, h.parent_id, h.status, h.rejection_reason, h.created_at"
             " FROM hypotheses h"
@@ -66,15 +67,45 @@ def status_table(db_path=None) -> str:
             " ON h.rowid = x.last"
             " ORDER BY h.rowid"
         ).fetchall()
+    items = (
+        warnings_mod.all_warnings(db_path=db_path)
+        if db_path is not None
+        else warnings_mod.all_warnings()
+    )
+    by_subject: dict[str, list[dict]] = {}
+    for item in items:
+        by_subject.setdefault(str(item["subject"]), []).append(item)
+    subject_by_hypothesis = {
+        "H-2026-008": "ea:us100-ftmo1",
+        "H-2026-008b": "ea:us100-ftmo1",
+        "H-2026-012": "ai_trader",
+    }
     lines = [
-        "| ID | Padre | Estado | Motivo | Creado |",
-        "|---|---|---|---|---|",
+        "| ID | Padre | Estado | Motivo | Creado | Avisos |",
+        "|---|---|---|---|---|---|",
     ]
     for row in rows:
+        subject = subject_by_hypothesis.get(str(row["hypothesis_id"]))
+        related = by_subject.get(subject, []) if subject else []
+        if related:
+            last = related[-1]
+            warning_cell = f"{len(related)} · {last['fecha']} {last['etapa']}"
+        else:
+            warning_cell = "—"
         lines.append(
             f"| {row['hypothesis_id']} | {row['parent_id'] or ''} | "
-            f"{row['status']} | {row['rejection_reason'] or ''} | {row['created_at']} |"
+            f"{row['status']} | {row['rejection_reason'] or ''} | {row['created_at']} | "
+            f"{warning_cell} |"
         )
+    if items:
+        last = items[-1]
+        lines += [
+            "",
+            f"Avisos globales: **{len(items)}**. Último: {last['fecha']} · "
+            f"{last['etapa']} ({last['subject']}).",
+        ]
+    else:
+        lines += ["", "Avisos globales: **0**."]
     return "\n".join(lines)
 
 

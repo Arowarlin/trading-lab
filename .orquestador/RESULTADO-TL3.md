@@ -83,3 +83,13 @@ Prop Fund, riesgo FTMO, forward, `config/schedule.yaml` ni las tareas.
 | D6 | Bloqueado (contador) | `ruff` OK; pytest **2000 passed + 1 skipped** (34m37s); `lab doctor` Frescura FAIL 7/17 (aviso), resto OK; `lab propfund verify` OK. `count_tests` **1926**, no 1897: +29 por `informal_trials` 6 (n=7) y 7 (n=22) de NASDAQ EDGE, 20:49Z, ajenas a TL3-D; `bloqueado: contador cambiado`. Tag `tl3-ciclo1e`. |
 | D7 | Hecho | Resumen enviado a Telegram (`lab telegram send --file`), mensaje confirmado: protecciones, P(financiada), sesiones por índice, n/fechas de ai_trader y EA, TCA y bloqueo de contador. |
 
+## TL3-E · Estado de la cadena (2026-11-25)
+
+- **Arranque:** `count_tests` = **1926**; solo `reports/discovery/edge_map.md` modificado (externo permitido) y la propia cola. Sin otro `pytest -q`.
+- **E0:** cola versionada con `git add -f`.
+- **E1:** `orq_lock` (acquire/release/status/held), CLI `scripts/orq_lock.py`, 6 tests, sección de `AGENTS.md` y plantilla de cola. Locks viejos se informan, no se roban.
+- **E2:** `docs/VERIFICACION.md`, `tl3/verify.py`, tabla `verifications` y `require_verified`; verificación NQF-A/B/C **Conforma** (29 comprobaciones, 0 defectos, 1 aviso documental: ejemplo `1.25` en `forward_daily.py`). Informe `TL3_REPORTS/verificacion_nqf.md`; hash del modelo `cb7ee5a9…`.
+- **E3:** tabla `warnings`, `add_warning`/`warnings_for`/`render`, CLI `scripts/tl3_warnings.py`, siembra idempotente de **12 avisos** (ea 4, ai_trader 4, cuenta:CFD-006 1, prop.simulator 2, nqedge 1) y columna "Avisos" en `report.status_table`.
+- **Siguiente paso anotado:** mostrar los avisos en Prop Fund, la web o `lab propfund` es **producción**: no se hace en esta cola.
+- **E4/E5:** pendientes al escribir esta sección; se completan antes de cerrar.
+
