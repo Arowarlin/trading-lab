@@ -1,0 +1,438 @@
+// This Pine Script® code is subject to the terms of the Mozilla Public License 2.0
+// NASDAQ EDGE INSTITUTIONAL V1.0 · CONTEXTO Y RIESGO · SIN SEÑALES
+//
+// La investigación (Fase C, 2026-11-25) no encontró una ventaja estadística: 0 de 22
+// variantes preregistradas superaron los criterios. Este indicador NO emite BUY/SELL.
+// Muestra contexto de sesión, protección de noticias y el presupuesto de riesgo de la
+// cuenta de fondeo seleccionada para una operación que el usuario planifica a mano.
+// Estado permanente: NO EDGE VALIDATED.
+//
+// No ejecuta órdenes. No lee la cuenta: el saldo, el umbral de drawdown y el P&L del día
+// se introducen a mano desde el dashboard de la firma. No garantiza el precio de ejecución.
+//@version=6
+indicator("NASDAQ EDGE INSTITUTIONAL V1.0 · contexto y riesgo (sin señales)", shorttitle = "NEI V1.0", overlay = true, max_lines_count = 50, max_labels_count = 20)
+
+// ═════════════════════════════════════════════════════════════ CALENDARIO DE NOTICIAS
+// Bloque generado. Regenerar con tools/build_pine_news.py; no editar a mano.
+// <NEWS-BEGIN>
+// GENERADO 2026-11-25 por tools/build_pine_news.py · 81 eventos · fuentes: BLS, BEA, Census, Federal Reserve
+CAL_GENERATED = "2026-11-25"
+CAL_VALID_UNTIL = timestamp("America/New_York", 2027, 11, 30, 23, 59)
+var array<int> EV_T = array.from(timestamp("America/New_York", 2026, 12, 1, 10, 0), timestamp("America/New_York", 2026, 12, 4, 8, 30), timestamp("America/New_York", 2026, 12, 9, 14, 0), timestamp("America/New_York", 2026, 12, 10, 8, 30), timestamp("America/New_York", 2026, 12, 15, 8, 30), timestamp("America/New_York", 2026, 12, 16, 8, 30), timestamp("America/New_York", 2026, 12, 23, 8, 30), timestamp("America/New_York", 2027, 1, 5, 10, 0), timestamp("America/New_York", 2027, 1, 8, 8, 30), timestamp("America/New_York", 2027, 1, 13, 8, 30), timestamp("America/New_York", 2027, 1, 14, 8, 30), timestamp("America/New_York", 2027, 1, 15, 8, 30), timestamp("America/New_York", 2027, 1, 27, 14, 0), timestamp("America/New_York", 2027, 1, 28, 8, 30), timestamp("America/New_York", 2027, 2, 2, 10, 0), timestamp("America/New_York", 2027, 2, 5, 8, 30), timestamp("America/New_York", 2027, 2, 11, 8, 30), timestamp("America/New_York", 2027, 2, 12, 8, 30), timestamp("America/New_York", 2027, 2, 17, 8, 30), timestamp("America/New_York", 2027, 2, 25, 8, 30), timestamp("America/New_York", 2027, 3, 5, 8, 30), timestamp("America/New_York", 2027, 3, 9, 10, 0), timestamp("America/New_York", 2027, 3, 10, 8, 30), timestamp("America/New_York", 2027, 3, 12, 8, 30), timestamp("America/New_York", 2027, 3, 16, 8, 30), timestamp("America/New_York", 2027, 3, 17, 14, 0), timestamp("America/New_York", 2027, 3, 30, 10, 0), timestamp("America/New_York", 2027, 3, 31, 8, 30), timestamp("America/New_York", 2027, 4, 2, 8, 30), timestamp("America/New_York", 2027, 4, 13, 8, 30), timestamp("America/New_York", 2027, 4, 14, 8, 30), timestamp("America/New_York", 2027, 4, 16, 8, 30), timestamp("America/New_York", 2027, 4, 28, 14, 0), timestamp("America/New_York", 2027, 4, 29, 8, 30), timestamp("America/New_York", 2027, 5, 4, 10, 0), timestamp("America/New_York", 2027, 5, 7, 8, 30), timestamp("America/New_York", 2027, 5, 12, 8, 30), timestamp("America/New_York", 2027, 5, 13, 8, 30), timestamp("America/New_York", 2027, 5, 14, 8, 30), timestamp("America/New_York", 2027, 5, 27, 8, 30), timestamp("America/New_York", 2027, 6, 2, 10, 0), timestamp("America/New_York", 2027, 6, 4, 8, 30), timestamp("America/New_York", 2027, 6, 9, 14, 0), timestamp("America/New_York", 2027, 6, 10, 8, 30), timestamp("America/New_York", 2027, 6, 11, 8, 30), timestamp("America/New_York", 2027, 6, 16, 8, 30), timestamp("America/New_York", 2027, 6, 25, 8, 30), timestamp("America/New_York", 2027, 6, 29, 10, 0), timestamp("America/New_York", 2027, 7, 2, 8, 30), timestamp("America/New_York", 2027, 7, 14, 8, 30), timestamp("America/New_York", 2027, 7, 15, 8, 30), timestamp("America/New_York", 2027, 7, 16, 8, 30), timestamp("America/New_York", 2027, 7, 28, 14, 0), timestamp("America/New_York", 2027, 7, 29, 8, 30), timestamp("America/New_York", 2027, 8, 3, 10, 0), timestamp("America/New_York", 2027, 8, 6, 8, 30), timestamp("America/New_York", 2027, 8, 10, 8, 30), timestamp("America/New_York", 2027, 8, 11, 8, 30), timestamp("America/New_York", 2027, 8, 16, 8, 30), timestamp("America/New_York", 2027, 8, 25, 8, 30), timestamp("America/New_York", 2027, 8, 31, 10, 0), timestamp("America/New_York", 2027, 9, 3, 8, 30), timestamp("America/New_York", 2027, 9, 10, 8, 30), timestamp("America/New_York", 2027, 9, 14, 8, 30), timestamp("America/New_York", 2027, 9, 15, 14, 0), timestamp("America/New_York", 2027, 9, 16, 8, 30), timestamp("America/New_York", 2027, 9, 30, 8, 30), timestamp("America/New_York", 2027, 10, 5, 10, 0), timestamp("America/New_York", 2027, 10, 8, 8, 30), timestamp("America/New_York", 2027, 10, 14, 8, 30), timestamp("America/New_York", 2027, 10, 15, 8, 30), timestamp("America/New_York", 2027, 10, 15, 8, 30), timestamp("America/New_York", 2027, 10, 27, 14, 0), timestamp("America/New_York", 2027, 10, 28, 8, 30), timestamp("America/New_York", 2027, 11, 2, 10, 0), timestamp("America/New_York", 2027, 11, 5, 8, 30), timestamp("America/New_York", 2027, 11, 10, 8, 30), timestamp("America/New_York", 2027, 11, 12, 8, 30), timestamp("America/New_York", 2027, 11, 16, 8, 30), timestamp("America/New_York", 2027, 11, 17, 14, 0), timestamp("America/New_York", 2027, 11, 24, 8, 30))
+var array<int> EV_TIER = array.from(3, 1, 1, 1, 1, 2, 2, 3, 1, 1, 1, 2, 1, 2, 3, 1, 1, 1, 2, 2, 1, 3, 1, 1, 2, 1, 3, 2, 1, 1, 1, 2, 1, 2, 3, 1, 1, 1, 2, 2, 3, 1, 1, 1, 1, 2, 2, 3, 1, 1, 1, 2, 1, 2, 3, 1, 1, 1, 2, 2, 3, 1, 1, 1, 1, 2, 2, 3, 1, 1, 1, 2, 1, 2, 3, 1, 1, 1, 2, 1, 2)
+var array<string> EV_NAME = array.from("JOLTS", "NFP", "FOMC", "CPI", "PPI", "RetailSales", "GDP+PCE", "JOLTS", "NFP", "CPI", "PPI", "RetailSales", "FOMC", "GDP+PCE", "JOLTS", "NFP", "CPI", "PPI", "RetailSales", "GDP+PCE", "NFP", "JOLTS", "CPI", "PPI", "RetailSales", "FOMC", "JOLTS", "GDP+PCE", "NFP", "CPI", "PPI", "RetailSales", "FOMC", "GDP+PCE", "JOLTS", "NFP", "CPI", "PPI", "RetailSales", "GDP+PCE", "JOLTS", "NFP", "FOMC", "CPI", "PPI", "RetailSales", "GDP+PCE", "JOLTS", "NFP", "CPI", "PPI", "RetailSales", "FOMC", "GDP+PCE", "JOLTS", "NFP", "PPI", "CPI", "RetailSales", "GDP+PCE", "JOLTS", "NFP", "PPI", "CPI", "FOMC", "RetailSales", "GDP+PCE", "JOLTS", "NFP", "CPI", "PPI", "RetailSales", "FOMC", "GDP+PCE", "JOLTS", "NFP", "CPI", "PPI", "RetailSales", "FOMC", "GDP+PCE")
+// <NEWS-END>
+
+// ═════════════════════════════════════════════════════════════ INPUTS
+G_ACC  = "1 · Cuenta de fondeo"
+G_STA  = "2 · Estado de la cuenta (copiar del dashboard de la firma)"
+G_RSK  = "3 · Riesgo personal"
+G_PLAN = "4 · Operación planificada (manual)"
+G_NEWS = "5 · Protección de noticias"
+G_VIS  = "6 · Visual"
+
+P_TS_C   = "Topstep 50K · Trading Combine"
+P_TS_X   = "Topstep 50K · Express Funded (XFA)"
+P_AP_EE  = "Apex 50K · Evaluación EOD"
+P_AP_EI  = "Apex 50K · Evaluación Intraday Trailing"
+P_AP_PE  = "Apex 50K · PA EOD"
+P_AP_PI  = "Apex 50K · PA Intraday Trailing"
+P_TF_G   = "Tradeify 50K · Growth (evaluación)"
+P_TF_S   = "Tradeify 50K · Select (evaluación)"
+P_TF_L   = "Tradeify 50K · Lightning Funded"
+P_CUSTOM = "Personalizado"
+
+profile      = input.string(P_TS_C, "Perfil", options = [P_TS_C, P_TS_X, P_AP_EE, P_AP_EI, P_AP_PE, P_AP_PI, P_TF_G, P_TF_S, P_TF_L, P_CUSTOM], group = G_ACC)
+tsDllOn      = input.bool(false, "Topstep: DLL opcional de $1.000 contratado", group = G_ACC)
+cMaxDD       = input.float(2000, "Personalizado: drawdown máximo ($)", group = G_ACC)
+cDll         = input.float(0, "Personalizado: límite diario de la firma ($, 0 = no hay)", group = G_ACC)
+cMaxMinis    = input.int(5, "Personalizado: máximo de minis", group = G_ACC)
+cCutoff      = input.session("1608-1609", "Personalizado: hora límite de entradas (ET, inicio)", group = G_ACC)
+bufferUsd    = input.float(100, "Colchón sobre el umbral de drawdown ($)", minval = 0, group = G_ACC)
+
+balance      = input.float(50000, "Saldo actual ($)", group = G_STA)
+ddLevel      = input.float(48000, "Umbral de drawdown/MLL vigente ($)", tooltip = "Copiar del dashboard. En trailing intradía cambia con el pico no realizado.", group = G_STA)
+pnlToday     = input.float(0, "P&L realizado hoy ($)", group = G_STA)
+tradesToday  = input.int(0, "Operaciones hoy", minval = 0, group = G_STA)
+lossStreak   = input.int(0, "Pérdidas consecutivas hoy", minval = 0, group = G_STA)
+stateDate    = input.time(timestamp("2026-11-25 00:00"), "Fecha del estado introducido", group = G_STA)
+
+riskUsual    = input.float(150, "Riesgo habitual por operación ($)", minval = 1, group = G_RSK)
+riskMax      = input.float(250, "Riesgo máximo absoluto ($)", minval = 1, group = G_RSK)
+dayLossMax   = input.float(300, "Pérdida diaria personal ($)", minval = 1, group = G_RSK)
+maxLosses    = input.int(2, "Pérdidas consecutivas máximas", minval = 1, group = G_RSK)
+maxTrades    = input.int(3, "Operaciones máximas por día", minval = 1, maxval = 5, group = G_RSK)
+commRT       = input.float(0, "Comisión ida y vuelta por contrato ($) · OBLIGATORIA", minval = 0, group = G_RSK)
+slipTicks    = input.int(1, "Slippage estimado por lado (ticks)", minval = 0, group = G_RSK)
+pvOverride   = input.float(0, "Valor por punto US100/CFD ($/pt por lote; 0 = usar syminfo)", minval = 0, group = G_RSK)
+
+planOn       = input.bool(false, "Activar operación planificada", group = G_PLAN)
+planSide     = input.string("Largo", "Dirección", options = ["Largo", "Corto"], group = G_PLAN)
+planEntry    = input.price(0, "Entrada", confirm = false, group = G_PLAN)
+planStop     = input.price(0, "Stop", confirm = false, group = G_PLAN)
+
+t1Before     = input.int(15, "Tier 1: minutos antes", minval = 0, group = G_NEWS)
+t1After      = input.int(20, "Tier 1 08:30: minutos después", minval = 0, group = G_NEWS)
+fomcAfter    = input.int(60, "FOMC: minutos después", minval = 0, group = G_NEWS)
+fomcRest     = input.bool(true, "FOMC: sin nuevas entradas el resto de la sesión", group = G_NEWS)
+t2Before     = input.int(10, "Tier 2: minutos antes", minval = 0, group = G_NEWS)
+t2After      = input.int(10, "Tier 2: minutos después", minval = 0, group = G_NEWS)
+t3RiskMult   = input.float(0.5, "Tier 3: multiplicador de riesgo del día", minval = 0, maxval = 1, group = G_NEWS)
+m1On         = input.bool(false, "Evento manual 1", inline = "m1", group = G_NEWS)
+m1T          = input.time(timestamp("2026-12-01 10:00"), "", inline = "m1", group = G_NEWS)
+m1Tier       = input.int(2, "Tier", minval = 1, maxval = 3, inline = "m1", group = G_NEWS)
+m2On         = input.bool(false, "Evento manual 2", inline = "m2", group = G_NEWS)
+m2T          = input.time(timestamp("2026-12-01 10:00"), "", inline = "m2", group = G_NEWS)
+m2Tier       = input.int(2, "Tier", minval = 1, maxval = 3, inline = "m2", group = G_NEWS)
+
+showLevels   = input.bool(true, "Mostrar niveles", group = G_VIS)
+orShow       = input.int(15, "Opening range a dibujar (min)", options = [5, 15, 30], group = G_VIS)
+tblPos       = input.string("Arriba derecha", "Posición del panel", options = ["Arriba derecha", "Arriba izquierda", "Abajo derecha", "Abajo izquierda"], group = G_VIS)
+
+// ═════════════════════════════════════════════════════════════ PERFILES (versión 2026-11-25.1)
+// Fuente y fecha por perfil en 05_RISK/*.md. Verificados el 2026-11-25. Reverificar cada 30 días.
+PROFILE_VERSION = "2026-11-25.1"
+PROFILE_VERIFIED = timestamp("America/New_York", 2026, 11, 25, 0, 0)
+DAY_MS = 86400000
+
+isTS = str.startswith(profile, "Topstep")
+isAP = str.startswith(profile, "Apex")
+isTF = str.startswith(profile, "Tradeify")
+
+// Apex PA: nivel por beneficio sobre 50.000 (help-center/additional-helpful-items/scaling-levels-pa-explained)
+apProfit = balance - 50000
+apPaContracts = apProfit >= 3000 ? 4 : apProfit >= 1500 ? 3 : 2
+apPaDll = apProfit >= 6000 ? 3000.0 : apProfit >= 3000 ? 2000.0 : 1000.0
+
+float firmDll = switch profile
+    P_TS_C => tsDllOn ? 1000.0 : 0.0
+    P_TS_X => tsDllOn ? 1000.0 : 0.0
+    P_AP_EE => 1000.0
+    P_AP_EI => 0.0
+    P_AP_PE => apPaDll
+    P_AP_PI => apPaDll
+    P_TF_G => 1250.0
+    P_TF_S => 0.0
+    P_TF_L => 1250.0
+    => cDll
+int firmMaxMinis = switch profile
+    P_TS_C => 5
+    P_TS_X => 5            // techo; el Scaling Plan XFA (tabla no leída) puede ser menor
+    P_AP_EE => 6
+    P_AP_EI => 6
+    P_AP_PE => apPaContracts
+    P_AP_PI => apPaContracts
+    P_TF_G => 4
+    P_TF_S => 4
+    P_TF_L => 4
+    => cMaxMinis
+string ddType = switch profile
+    P_TS_C => "Trailing EOD; vigilado en tiempo real con P&L abierto"
+    P_TS_X => "Trailing EOD; se bloquea en $0"
+    P_AP_EE => "EOD; vigilado en tiempo real"
+    P_AP_EI => "INTRADÍA: sigue el pico NO realizado"
+    P_AP_PE => "EOD; se fija en +$100"
+    P_AP_PI => "INTRADÍA (pico no realizado); se fija en +$100"
+    P_TF_G => "EOD; vigilado en tiempo real"
+    P_TF_S => "EOD; vigilado en tiempo real"
+    P_TF_L => "EOD; vigilado en tiempo real"
+    => "Personalizado"
+// Hora límite de nuevas entradas (minutos ET desde medianoche)
+int cutoffMin = isTS ? 16 * 60 + 8 : isTF ? 16 * 60 + 40 : isAP ? 16 * 60 + 55 : (int(str.tonumber(str.substring(cCutoff, 0, 2))) * 60 + int(str.tonumber(str.substring(cCutoff, 2, 4))))
+string closeNote = isTS ? "Plano 15:10 CT (16:10 ET)" : isTF ? "Plano 16:45 ET" : isAP ? "Sin posiciones al cierre (17:00 ET; hora exacta Sin datos)" : "Personalizado"
+string newsNote = isTS ? "Tier 1 ±5 min: NQ bloqueado, MNQ ≤ 3" : isAP ? "Permitido; prohibido 'news trading' a ambos lados" : isTF ? "Sin restricción de firma" : "Personalizado"
+rulesStale = timenow > PROFILE_VERIFIED + 30 * DAY_MS
+stateStale = timenow - stateDate > DAY_MS
+
+// ═════════════════════════════════════════════════════════════ INSTRUMENTO
+root = syminfo.root
+isMNQ = root == "MNQ"
+isNQ = root == "NQ"
+isCME = isMNQ or isNQ
+pv = pvOverride > 0 ? pvOverride : syminfo.pointvalue
+tickSz = syminfo.mintick
+instrLabel = isMNQ ? "MNQ · $2/pt · tick $0,50" : isNQ ? "NQ · $20/pt · tick $5" : syminfo.ticker + " · CFD/otro (" + str.tostring(pv) + " $/pt)"
+// Máximo de contratos en la unidad del instrumento (1 mini = 10 micros)
+firmMaxContracts = isMNQ ? firmMaxMinis * 10 : firmMaxMinis
+
+// ═════════════════════════════════════════════════════════════ SESIÓN (America/New_York, DST automático)
+TZ = "America/New_York"
+nyMin = hour(time, TZ) * 60 + minute(time, TZ)
+nyDay = dayofmonth(time, TZ)
+inRTH = nyMin >= 570 and nyMin < 960
+newDay = ta.change(nyDay) != 0
+rthStart = inRTH and (not inRTH[1] or newDay)
+globexStart = nyMin >= 1080 and (nyMin[1] < 1080 or newDay)
+
+var float onH = na
+var float onL = na
+var float onHf = na
+var float onLf = na
+if globexStart
+    onH := high
+    onL := low
+else if nyMin >= 1080 or nyMin < 570
+    onH := math.max(nz(onH, high), high)
+    onL := math.min(nz(onL, low), low)
+if rthStart
+    onHf := onH
+    onLf := onL
+    onH := na
+    onL := na
+
+var float rH = na
+var float rL = na
+var float pdh = na
+var float pdl = na
+if rthStart
+    if not na(rH)
+        pdh := rH
+        pdl := rL
+    rH := high
+    rL := low
+else if inRTH
+    rH := math.max(rH, high)
+    rL := math.min(rL, low)
+
+var float or5H = na
+var float or5L = na
+var float or15H = na
+var float or15L = na
+var float or30H = na
+var float or30L = na
+if rthStart
+    or5H := high, or5L := low, or15H := high, or15L := low, or30H := high, or30L := low
+else if inRTH
+    if nyMin < 575
+        or5H := math.max(or5H, high), or5L := math.min(or5L, low)
+    if nyMin < 585
+        or15H := math.max(or15H, high), or15L := math.min(or15L, low)
+    if nyMin < 600
+        or30H := math.max(or30H, high), or30L := math.min(or30L, low)
+or15Done = nyMin >= 585 or not inRTH
+orH = orShow == 5 ? or5H : orShow == 15 ? or15H : or30H
+orL = orShow == 5 ? or5L : orShow == 15 ? or15L : or30L
+orDone = orShow == 5 ? nyMin >= 575 : orShow == 15 ? nyMin >= 585 : nyMin >= 600
+
+[vw, vwU, vwL] = ta.vwap(hlc3, rthStart, 1.0)
+vwapRTH = inRTH ? vw : na
+
+// ═════════════════════════════════════════════════════════════ CONTEXTO (temporalidad superior sin repintado)
+fAdx() =>
+    [_p, _m, _a] = ta.dmi(14, 14)
+    _a
+atrD = request.security(syminfo.tickerid, "D", ta.atr(14)[1], lookahead = barmerge.lookahead_on)
+atrPct = request.security(syminfo.tickerid, "D", ta.percentrank(ta.atr(14), 252)[1], lookahead = barmerge.lookahead_on)
+adx15 = request.security(syminfo.tickerid, "15", fAdx()[1], lookahead = barmerge.lookahead_on)
+volSma20 = ta.sma(volume, 20)
+rvolBar = isCME and volSma20 > 0 ? volume / volSma20 : na
+
+or15Atr = atrD > 0 ? (or15H - or15L) / atrD : na
+regTrend = na(adx15) ? "Sin datos" : adx15 > 25 ? "Tendencia (ADX15m " + str.tostring(adx15, "#.0") + ")" : adx15 < 20 ? "Rango (ADX15m " + str.tostring(adx15, "#.0") + ")" : "Neutro (ADX15m " + str.tostring(adx15, "#.0") + ")"
+regVol = na(atrPct) ? "Sin datos" : atrPct > 75 ? "Volatilidad alta (ATR p" + str.tostring(atrPct, "#") + ")" : atrPct < 25 ? "Volatilidad baja (ATR p" + str.tostring(atrPct, "#") + ")" : "Volatilidad media (ATR p" + str.tostring(atrPct, "#") + ")"
+// Compresión: OR15/ATR por debajo del p25 medido en DEV NQ 2010-2018 (0,216; Fase B)
+regComp = or15Done and not na(or15Atr) ? (or15Atr < 0.216 ? "Compresión (OR15 " + str.tostring(or15Atr, "#.00") + "×ATR)" : or15Atr > 0.361 ? "Expansión (OR15 " + str.tostring(or15Atr, "#.00") + "×ATR)" : "OR15 normal (" + str.tostring(or15Atr, "#.00") + "×ATR)") : "OR15 en formación"
+bias = na(vwapRTH) ? "Fuera de RTH" : close > vwapRTH ? "Precio sobre VWAP" : "Precio bajo VWAP"
+
+// ═════════════════════════════════════════════════════════════ NOTICIAS
+// Rendimiento: puntero monótono sobre el calendario ordenado; cada vela solo
+// evalúa los eventos de su día y busca el siguiente Tier 1–2 (RE10110 corregido).
+calLoaded = array.size(EV_T) > 0 and CAL_VALID_UNTIL > 0
+calStale = not calLoaded or time > CAL_VALID_UNTIL
+dayStart = timestamp(TZ, year(time, TZ), month(time, TZ), dayofmonth(time, TZ), 0, 0)
+dayEnd = dayStart + DAY_MS
+
+evalEv(int et, int tier, string nm) =>
+    bool isFomc = nm == "FOMC"
+    bool sameDay = et >= dayStart and et < dayEnd
+    int before = tier == 1 ? t1Before : t2Before
+    int after = tier == 1 ? (isFomc ? fomcAfter : t1After) : t2After
+    bool inWin = tier <= 2 and time >= et - before * 60000 and time <= et + after * 60000
+    bool rest = isFomc and fomcRest and sameDay and time > et
+    string why = rest ? "FOMC: resto de sesión" : nm + " (Tier " + str.tostring(tier) + ")"
+    float mult = tier == 3 and sameDay ? t3RiskMult : 1.0
+    bool cap = isTS and tier == 1 and time >= et - 5 * 60000 and time <= et + 5 * 60000
+    [inWin or rest, why, mult, cap]
+
+newsBlock = false
+newsReason = ""
+newsRiskMult = 1.0
+topstepCap = false
+nextName = ""
+nextT = 0
+evCount = array.size(EV_T)
+var int evPtr = 0
+while evPtr < evCount and array.get(EV_T, evPtr) < dayStart
+    evPtr += 1
+if evPtr < evCount
+    for i = evPtr to evCount - 1
+        int et = array.get(EV_T, i)
+        int tier = array.get(EV_TIER, i)
+        string nm = array.get(EV_NAME, i)
+        if et >= dayEnd and nextT > 0
+            break
+        if et < dayEnd
+            [b, w, m, cp] = evalEv(et, tier, nm)
+            if b
+                newsBlock := true
+                newsReason := w
+            newsRiskMult := math.min(newsRiskMult, m)
+            topstepCap := topstepCap or cp
+        if et > time and tier <= 2 and nextT == 0
+            nextT := et
+            nextName := nm
+if m1On
+    [b1, w1, mm1, c1] = evalEv(m1T, m1Tier, "Manual 1")
+    if b1
+        newsBlock := true
+        newsReason := w1
+    newsRiskMult := math.min(newsRiskMult, mm1)
+    topstepCap := topstepCap or c1
+    if m1T > time and m1Tier <= 2 and (nextT == 0 or m1T < nextT)
+        nextT := m1T
+        nextName := "Manual 1"
+if m2On
+    [b2, w2, mm2, c2] = evalEv(m2T, m2Tier, "Manual 2")
+    if b2
+        newsBlock := true
+        newsReason := w2
+    newsRiskMult := math.min(newsRiskMult, mm2)
+    topstepCap := topstepCap or c2
+    if m2T > time and m2Tier <= 2 and (nextT == 0 or m2T < nextT)
+        nextT := m2T
+        nextName := "Manual 2"
+minsToNext = nextT > 0 ? (nextT - time) / 60000 : na
+newsState = calStale ? "NEWS DATA STALE · calendario caducado o no cargado" : newsBlock ? "BLOQUEO · " + newsReason : newsRiskMult < 1 ? "Tier 3 hoy · riesgo ×" + str.tostring(newsRiskMult) : "NEWS CLEAR (calendario válido hasta " + str.format_time(CAL_VALID_UNTIL, "yyyy-MM-dd", TZ) + ")"
+
+// ═════════════════════════════════════════════════════════════ MOTOR DE RIESGO
+distDD = balance - ddLevel
+dayRemainPersonal = dayLossMax + math.min(pnlToday, 0)
+dayRemainFirm = firmDll > 0 ? firmDll + math.min(pnlToday, 0) : na
+budgetRaw = math.min(riskUsual, riskMax)
+budget = math.min(budgetRaw, dayRemainPersonal, nz(dayRemainFirm, 1e9), distDD - bufferUsd) * newsRiskMult
+slipUsd = 2 * slipTicks * tickSz * pv
+isLong = planSide == "Largo"
+stopPts = planOn ? (isLong ? planEntry - planStop : planStop - planEntry) : na
+perContract = stopPts * pv + commRT + slipUsd
+contractsRaw = perContract > 0 ? math.floor(budget / perContract) : 0
+newsCap = topstepCap ? (isNQ ? 0 : 3) : 1000000
+contracts = math.max(0, math.min(contractsRaw, firmMaxContracts, newsCap))
+riskTotal = contracts * perContract
+tp1 = planOn ? planEntry + (isLong ? 1 : -1) * stopPts : na
+tp2 = planOn ? planEntry + (isLong ? 2 : -2) * stopPts : na
+
+// ── Motivos de NO TRADE (el primero que aplica)
+string block = ""
+if calStale
+    block := "Calendario de noticias caducado/no cargado"
+else if rulesStale
+    block := "Reglas de la firma sin reverificar (> 30 días)"
+else if stateStale
+    block := "Estado de cuenta sin actualizar hoy"
+else if commRT <= 0
+    block := "Configura la comisión por contrato"
+else if newsBlock
+    block := "Noticias: " + newsReason
+else if tradesToday >= maxTrades
+    block := "Máximo de operaciones del día (" + str.tostring(maxTrades) + ")"
+else if lossStreak >= maxLosses
+    block := str.tostring(lossStreak) + " pérdidas consecutivas"
+else if dayRemainPersonal <= 0
+    block := "Límite diario personal alcanzado"
+else if not na(dayRemainFirm) and dayRemainFirm <= 0
+    block := "Límite diario de la firma alcanzado"
+else if distDD - bufferUsd <= 0
+    block := "Sin margen sobre el umbral de drawdown"
+else if nyMin >= cutoffMin or not inRTH
+    block := "Fuera de horario de entradas"
+else if planOn and (planStop <= 0 or stopPts <= 0)
+    block := "Operación sin stop válido"
+else if planOn and contracts < 1
+    block := "Stop demasiado ancho para el presupuesto"
+state = block != "" ? "NO TRADE" : "WAIT"
+
+// ═════════════════════════════════════════════════════════════ DIBUJO
+plot(showLevels ? vwapRTH : na, "VWAP RTH", color.new(color.orange, 0), 2, plot.style_linebr)
+plot(showLevels and orDone and inRTH ? orH : na, "OR alto", color.new(color.teal, 0), 1, plot.style_linebr)
+plot(showLevels and orDone and inRTH ? orL : na, "OR bajo", color.new(color.teal, 0), 1, plot.style_linebr)
+plot(showLevels and inRTH ? onHf : na, "ONH", color.new(color.purple, 20), 1, plot.style_linebr)
+plot(showLevels and inRTH ? onLf : na, "ONL", color.new(color.purple, 20), 1, plot.style_linebr)
+plot(showLevels and inRTH ? pdh : na, "PDH", color.new(color.gray, 0), 1, plot.style_linebr)
+plot(showLevels and inRTH ? pdl : na, "PDL", color.new(color.gray, 0), 1, plot.style_linebr)
+plot(planOn ? planEntry : na, "Entrada planificada", color.new(color.blue, 0), 1, plot.style_linebr)
+plot(planOn ? planStop : na, "Stop planificado", color.new(color.red, 0), 2, plot.style_linebr)
+plot(planOn ? tp1 : na, "TP1 1R (referencia)", color.new(color.green, 40), 1, plot.style_linebr)
+plot(planOn ? tp2 : na, "TP2 2R (referencia)", color.new(color.green, 0), 1, plot.style_linebr)
+bgcolor(newsBlock ? color.new(color.red, 88) : na, title = "Bloqueo de noticias")
+
+// ═════════════════════════════════════════════════════════════ PANEL
+pos = tblPos == "Arriba derecha" ? position.top_right : tblPos == "Arriba izquierda" ? position.top_left : tblPos == "Abajo derecha" ? position.bottom_right : position.bottom_left
+var table tb = table.new(pos, 2, 30, bgcolor = color.new(#101418, 5), border_width = 1, border_color = color.new(color.gray, 70))
+fmt(x) => na(x) ? "Sin datos" : str.tostring(x, format.mintick)
+usd(x) => na(x) ? "Sin datos" : "$" + str.tostring(x, "#,##0")
+row(r, k, v, c) =>
+    table.cell(tb, 0, r, k, text_color = color.new(color.white, 25), text_size = size.small, text_halign = text.align_left)
+    table.cell(tb, 1, r, v, text_color = c, text_size = size.small, text_halign = text.align_left)
+if barstate.islast
+    W = color.white
+    R = color.new(#ff5252, 0)
+    G = color.new(#4caf50, 0)
+    Y = color.new(#ffc107, 0)
+    row(0, "NASDAQ EDGE V1.0", "NO EDGE VALIDATED · solo contexto", Y)
+    row(1, "Estado", state + (block != "" ? " · " + block : " · sin señal (no hay edge)"), block != "" ? R : Y)
+    row(2, "Instrumento", instrLabel, W)
+    row(3, "Hora NY", str.format_time(time, "yyyy-MM-dd HH:mm", TZ) + (inRTH ? " · RTH" : " · fuera de RTH"), W)
+    row(4, "Régimen", regTrend + " · " + regVol, W)
+    row(5, "Compresión", regComp, W)
+    row(6, "Sesgo (no es señal)", bias, W)
+    row(7, "VWAP RTH", fmt(vwapRTH) + (isCME ? "" : " (tick volume: proxy)"), W)
+    row(8, "OR" + str.tostring(orShow), orDone ? fmt(orL) + " – " + fmt(orH) : "en formación", W)
+    row(9, "ONH / ONL", fmt(onHf) + " / " + fmt(onLf), W)
+    row(10, "PDH / PDL", fmt(pdh) + " / " + fmt(pdl), W)
+    row(11, "ATR diario (víspera)", fmt(atrD), W)
+    row(12, "RVOL barra (20)", isCME ? str.tostring(rvolBar, "0.00") : "Sin datos (no es volumen CME)", W)
+    row(13, "Noticias", newsState, calStale or newsBlock ? R : W)
+    row(14, "Próximo Tier 1–2", nextT > 0 ? nextName + " en " + (minsToNext >= 1440 ? str.tostring(math.floor(minsToNext / 1440)) + "d " + str.tostring(math.floor((minsToNext % 1440) / 60)) + "h" : minsToNext >= 60 ? str.tostring(math.floor(minsToNext / 60)) + "h " + str.tostring(math.floor(minsToNext % 60)) + "m" : str.tostring(minsToNext, "#") + " min") + " (" + str.format_time(nextT, "MM-dd HH:mm", TZ) + ")" : "Sin datos", W)
+    row(15, "Perfil", profile + " · v" + PROFILE_VERSION + (rulesStale ? " · SIN REVERIFICAR" : " · verificado 2026-11-25"), rulesStale ? R : W)
+    row(16, "Drawdown", ddType, W)
+    row(17, "Distancia al umbral", usd(distDD) + " (colchón " + usd(bufferUsd) + ")", distDD - bufferUsd <= 0 ? R : W)
+    row(18, "DLL firma restante", firmDll > 0 ? usd(dayRemainFirm) + " de " + usd(firmDll) : "No aplica", W)
+    row(19, "Pérdida diaria personal restante", usd(dayRemainPersonal) + " de " + usd(dayLossMax), dayRemainPersonal <= 0 ? R : W)
+    row(20, "Operaciones / pérdidas seguidas", str.tostring(tradesToday) + "/" + str.tostring(maxTrades) + " · " + str.tostring(lossStreak) + "/" + str.tostring(maxLosses), W)
+    row(21, "Presupuesto de riesgo", usd(budget) + (newsRiskMult < 1 ? " (Tier 3 ×" + str.tostring(newsRiskMult) + ")" : ""), W)
+    row(22, "Stop planificado", planOn ? fmt(planStop) + " · " + str.tostring(stopPts, "#.##") + " pt" : "—", W)
+    row(23, "Coste/contrato (stop+com+slip)", planOn ? usd(perContract) : "—", W)
+    row(24, "Contratos calculados", planOn ? str.tostring(contracts) + " (máx firma " + str.tostring(firmMaxContracts) + (topstepCap ? ", ventana Tier 1 Topstep" : "") + ")" : "—", planOn and contracts < 1 ? R : W)
+    row(25, "Riesgo previsto", planOn ? usd(riskTotal) + " (no es pérdida garantizada)" : "—", W)
+    row(26, "TP1 / TP2 (referencia)", planOn ? fmt(tp1) + " / " + fmt(tp2) : "—", W)
+    row(27, "Cierre de la firma", closeNote, W)
+    row(28, "Noticias según la firma", newsNote, W)
+    row(29, "Calendario", "generado " + CAL_GENERATED + (stateStale ? " · ESTADO DE CUENTA SIN ACTUALIZAR" : ""), stateStale ? R : W)
+
+// ═════════════════════════════════════════════════════════════ ALERTAS (informativas; sin ejecución)
+// Solo en vela cerrada para no duplicar ni repintar.
+var string lastState = ""
+var bool lastNewsSoon = false
+newsSoon = nextT > 0 and minsToNext <= 10 and minsToNext > 0
+payload(kind) =>
+    '{"tipo":"' + kind + '","instrumento":"' + syminfo.ticker + '","hora_ny":"' + str.format_time(time_close, "yyyy-MM-dd HH:mm", TZ) + '","estado":"' + state + '","motivo":"' + block + '","direccion":"' + (planOn ? planSide : "") + '","entrada":"' + (planOn ? fmt(planEntry) : "") + '","stop":"' + (planOn ? fmt(planStop) : "") + '","tp1":"' + (planOn ? fmt(tp1) : "") + '","tp2":"' + (planOn ? fmt(tp2) : "") + '","contratos":"' + (planOn ? str.tostring(contracts) : "") + '","riesgo":"' + (planOn ? str.tostring(riskTotal, "#") : "") + '","justificacion":"NO EDGE VALIDATED: herramienta de contexto y riesgo, sin señales"}'
+if barstate.isconfirmed
+    if state != lastState
+        alert(payload(state == "NO TRADE" ? "NO_TRADE" : "WAIT"), alert.freq_once_per_bar_close)
+    if newsSoon and not lastNewsSoon
+        alert(payload("NOTICIA_PROXIMA " + nextName), alert.freq_once_per_bar_close)
+    lastState := state
+    lastNewsSoon := newsSoon
+
+hitStop = planOn and (isLong ? low <= planStop : high >= planStop)
+hitTp1 = planOn and (isLong ? high >= tp1 : low <= tp1)
+hitTp2 = planOn and (isLong ? high >= tp2 : low <= tp2)
+alertcondition(hitStop, "SL planificado alcanzado", "NEI: precio en el stop planificado {{ticker}} {{close}}")
+alertcondition(hitTp1, "TP1 (1R) alcanzado", "NEI: TP1 1R alcanzado {{ticker}} {{close}}. Revisar break-even.")
+alertcondition(hitTp2, "TP2 (2R) alcanzado", "NEI: TP2 2R alcanzado {{ticker}} {{close}}")
+alertcondition(newsSoon, "Noticia próxima (≤ 10 min)", "NEI: noticia Tier 1–2 en ≤ 10 min {{ticker}}")
+alertcondition(newsBlock, "Bloqueo de noticias activo", "NEI: bloqueo de noticias activo {{ticker}}")
+alertcondition(tradesToday >= maxTrades, "Máximo de operaciones", "NEI: máximo de operaciones del día alcanzado")
+alertcondition(lossStreak >= maxLosses, "Pérdidas consecutivas", "NEI: pérdidas consecutivas máximas alcanzadas")
+alertcondition(state == "NO TRADE", "NO TRADE", "NEI: NO TRADE {{ticker}}")
+alertcondition(state == "WAIT", "WAIT", "NEI: WAIT (sin señal; no hay edge validado) {{ticker}}")

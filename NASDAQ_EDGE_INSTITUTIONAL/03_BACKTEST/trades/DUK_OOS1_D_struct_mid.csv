@@ -1,0 +1,2 @@
+day,tag,side,entry_min,entry,stop,risk_pts,contracts,exit_min,r_gross,r_net,usd_net,reason,extra
+2023-02-14,D,-1,661,12484.589,12519.929,35.340000000000146,2,690,1.5,1.4787775891341257,209.04000000000087,tp2,{}
