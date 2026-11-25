@@ -38,11 +38,9 @@ guarda en cada fila del ledger. No define senales.
   - 2026-11-26: festivo (Thanksgiving).
   - 2026-11-27: cierre anticipado (13:00), no completa.
   - **2026-11-30 (lunes), primera sesion completa.**
-- **Efectivo:** condicionado al input del operador. La comision MNQ por
-  contrato y lado no esta fijada: **Sin datos**.
-  `bloqueado: falta comision MNQ del operador`. El forward no arranca hasta
-  que el operador la fije; la fecha de inicio se desplaza a la primera sesion
-  completa siguiente a ese input.
+- **Efectivo:** **2026-11-30 (lunes)**, primera sesion completa.
+  Comision MNQ fijada por el operador el 2026-11-25: **0,75 USD por contrato y
+  lado**. Sin bloqueo.
 - Sin fecha de fin. Termina al llegar a **n = 200 operaciones cerradas por
   variante**, cada una por separado.
 
@@ -78,8 +76,8 @@ guarda en cada fila del ledger. No define senales.
 - Instrumento: **MNQ**, 150 USD de riesgo por operacion.
 - Contratos = floor(150 / (stop_pt x 2 USD + comision x 2 + slippage x 2)),
   con slippage de 1 tick por lado. Si sale 0: NO TRADE. No se agranda el stop.
-- Comision: **Sin datos** (input del operador). Slippage: 1 tick por lado;
-  estres de 2 y 4 ticks.
+- Comision: **0,75 USD por contrato y lado** (dato del operador, 2026-11-25).
+  Slippage: 1 tick por lado; estres de 2 y 4 ticks.
 
 ## Datos
 
