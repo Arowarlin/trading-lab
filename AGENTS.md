@@ -33,3 +33,11 @@
 
   Si Telegram no está configurado, usar `lab alerts send` (ntfy). El resumen usa
   el formato: **Hecho / 1..N / Aviso / Siguiente**.
+
+## Coordinación entre sesiones
+
+- Tomar el lock `readme-plan` antes de escribir `README.md`/`PLAN.md`, `changelog-produccion` antes del CHANGELOG de producción, `protected-manifest` antes del manifiesto protegido y `tl3-registry` antes del registro TL3.
+- Hacer los commits por ruta (`git add <rutas>`), nunca `git add -A`, `git add .` ni `git commit -a`.
+- Una sola cola activa por proyecto: `proyecto-<nombre>` (por ejemplo, `proyecto-nqedge`).
+- Antes de cambiar el plan de un proyecto: comprobar locks, procesos y ficheros sin commit, y anotar el «Plan vigente» en el README del proyecto.
+- Los locks viejos (más de 2 h) no se roban: se informan y decide el operador.
