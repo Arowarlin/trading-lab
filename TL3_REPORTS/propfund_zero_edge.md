@@ -42,3 +42,28 @@ o EV supera esta línea base con la misma regla de riesgo.
 El simulador con datos diarios subestima el riesgo intradía.
 
 Aviso (2026-11-25, TL2-DIARIO): las 9 filas de FundingPips de esta tabla se calcularon con el simulador anterior (`max(initial, day_start)`); la tabla antes/despues esta en `TL3_REPORTS/tl2_diario_inventario.md` §9.
+
+## Aviso · FundingPips (D3b)
+
+**Cifras de FundingPips no fiables: las 9 filas de D2 se calcularon con el error del simulador protegido `max(initial, day_start)`, ya corregido en TL2-DIARIO `020b41b`; ver COLA-TL3-D D3b y `TL3_REPORTS/tl2_diario_inventario.md §9`.**
+
+El código anterior usaba `np.maximum(initial, day_start) - eff_daily`, es decir, el balance **inicial**. La regla de `firms.yaml` es el mayor de balance o equidad **al inicio del día**. Así, quedar 5 % por debajo del balance inicial contaba como rotura diaria aunque la pérdida del día fuera menor. La versión actual usa `day_start - eff_daily` y no se toca `prop/`.
+
+Comprobación con los mismos 5.000 caminos y semilla 42 de D2, replicando el consumo del generador en ambas versiones:
+
+| b | Riesgo | Caminos afectados (antes) | Rotura diaria (antes) | Caminos afectados (actual) | Rotura diaria (actual) |
+|---:|---:|---:|---:|---:|---:|
+| 1 | 0.25% | 918 | 918 | 0 | 0 |
+| 1 | 0.50% | 3095 | 3095 | 0 | 0 |
+| 1 | 1.00% | 4655 | 4655 | 0 | 0 |
+| 2 | 0.25% | 1644 | 1644 | 0 | 0 |
+| 2 | 0.50% | 3981 | 3981 | 0 | 0 |
+| 2 | 1.00% | 4802 | 4802 | 0 | 0 |
+| 3 | 0.25% | 2347 | 2347 | 0 | 0 |
+| 3 | 0.50% | 4371 | 4371 | 0 | 0 |
+| 3 | 1.00% | 4859 | 4859 | 0 | 0 |
+
+Agregado: **30672 de 45000** caminos (68.2 %) rompen el diario en la versión anterior en un día cuya pérdida es menor que el 5 % del balance de ese día y sin romper el límite total. En la versión actual: **0 de 45000**.
+
+**Confirma el error de la versión anterior del simulador** para FundingPips; la versión corregida no lo reproduce.
+No se modifica `prop/` (Prop Fund protegido) y D2 no se reejecuta en D3b: su tabla queda como valores anteriores, marcados como no fiables.

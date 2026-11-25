@@ -69,9 +69,11 @@ def main():
     def real_reason(row):
         if row["possible_no_exec"]:
             return "posible no ejecutada"
-        if abs(float(row["real_exit"]) - float(row["real_tp"])) <= 2 * float(row["spread"]):
+        point = POINT[row["symbol"]]
+        tolerance = 2 * float(row["spread"]) * point
+        if abs(float(row["real_exit"]) - float(row["real_tp"])) <= tolerance:
             return "TP"
-        if abs(float(row["real_exit"]) - float(row["real_sl"])) <= 2 * float(row["spread"]):
+        if abs(float(row["real_exit"]) - float(row["real_sl"])) <= tolerance:
             return "SL"
         forced = pd.Timestamp(row["forced"])
         exit_ts = pd.Timestamp(row["real_exit_ts"])
@@ -80,10 +82,19 @@ def main():
         return "otro"
 
     def sim_reason(row):
+        dist_sl = float(row["dist_sl"])
         tp_dist = abs(float(row["real_tp"]) - float(row["real_entry"]))
-        if abs(float(row["ia"]) + 1.0) < 0.02:
+        model_cost = (
+            (float(row["spread"]) + 1.0)
+            * POINT[row["symbol"]]
+            / dist_sl
+        )
+        tp_target = tp_dist / dist_sl - model_cost
+        sl_target = -1.0 - model_cost
+        ia = float(row["ia"])
+        if abs(ia - sl_target) <= 0.02:
             return "SL"
-        if tp_dist > 0 and abs(float(row["ia"]) - tp_dist / float(row["dist_sl"])) < 0.05:
+        if abs(ia - tp_target) <= 0.02:
             return "TP"
         return "forzoso"
 
@@ -111,6 +122,8 @@ def main():
         "",
         "> Rehecho en TL3-C: la versión de 134f7c9 usó otro conjunto de 48;",
         "> ver COLA-TL3-C H-g. Este informe usa las 48 de T5 (todas menos #52 y #54).",
+        "> D3b corrige solo la tabla de motivos y la conclusión; las cifras agregadas",
+        "> de C1 y T5 no cambian.",
         "",
         f"Agregados de control: IA {aggregates['ia']:.4f}, gemela {aggregates['shadow']:.4f}, "
         f"tendencia {aggregates['trend']:.4f}, real {aggregates['real']:.4f}.",
@@ -143,11 +156,43 @@ def main():
     lines += ["", "## Motivos de salida", "", "| Real | Simulado | n |", "|---|---|---:|"]
     for (real, sim), group in df.groupby(["real_reason", "sim_reason"]):
         lines.append(f"| {real} | {sim} | {len(group)} |")
+    opposite = df[
+        df["real_reason"].isin(["TP", "SL"])
+        & df["sim_reason"].isin(["TP", "SL"])
+        & (df["real_reason"] != df["sim_reason"])
+    ]
     lines += [
         "",
         f"Coincidencias de motivo: {int(df['reason_match'].sum())}/{len(df)}.",
         f"Posibles no ejecutadas: {int(df['possible_no_exec'].sum())} "
         f"({', '.join('#' + str(int(i)) for i in df.loc[df['possible_no_exec'], 'id']) or 'ninguna'}).",
+        "",
+        "## Gestión real y simulación",
+        "",
+        "La gestión real mueve el stop: `ai_trader.py:44` importa `trailing.next_stop`,",
+        "`ai_trader.py:3080` llama a `broker.modify_position` y `execution/mt5.py:881`",
+        "envía `TRADE_ACTION_SLTP`. La simulación de T5 usa SL/TP fijos. Las columnas",
+        "`ai_trades.sl`/`tp` guardan el nivel **inicial**: se escriben al insertar la",
+        "operación (`ai_trader.py:2042-2054`) y no se actualiza al mover el stop en el",
+        "bróker, así que no refleja el último nivel.",
+        "",
+        "## Barreras opuestas real y simulado",
+        "",
+    ]
+    if opposite.empty:
+        lines.append("Ninguna.")
+    else:
+        lines += [
+            "| ID | Símbolo | Real | Sim | R real | R sim | Salida | SL | TP |",
+            "|---:|---|---|---|---:|---:|---:|---:|---:|",
+        ]
+        for row in opposite.itertuples():
+            lines.append(
+                f"| {row.id} | {row.symbol} | {row.real_reason} | {row.sim_reason} | "
+                f"{row.real_r:+.4f} | {row.ia:+.4f} | {row.real_exit:.5f} | "
+                f"{row.real_sl:.5f} | {row.real_tp:.5f} |"
+            )
+    lines += [
         "",
         "## Mayores gaps",
         "",
@@ -165,10 +210,11 @@ def main():
         "",
         "## Conclusión",
         "",
-        "El gap se concentra en la **entrada** y en la **salida/resto** (ejecución real",
-        "frente a la apertura de la vela siguiente y cierre forzoso). Los costes del",
-        "modelo no explican el gap. No se encontró un error en la simulación de T5 y",
-        "no se modificó `ai_trader`.",
+        "La entrada es **favorable** (+0.0661 R) y los costes del modelo son pequeños",
+        "(-0.0089 R). El gap está en la **salida y la trayectoria** (-0.3047 R), no en",
+        "la entrada. La gestión real con stop móvil frente a la simulación con SL/TP",
+        "fijos es una explicación estructural candidata, no una descomposición causal.",
+        "Las cifras agregadas de C1 y T5 no cambian. No se modificó `ai_trader`.",
         "",
     ]
     OUT.write_text("\n".join(lines), encoding="utf-8")

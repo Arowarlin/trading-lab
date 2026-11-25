@@ -2,6 +2,8 @@
 
 > Rehecho en TL3-C: la versión de 134f7c9 usó otro conjunto de 48;
 > ver COLA-TL3-C H-g. Este informe usa las 48 de T5 (todas menos #52 y #54).
+> D3b corrige solo la tabla de motivos y la conclusión; las cifras agregadas
+> de C1 y T5 no cambian.
 
 Agregados de control: IA 0.2953, gemela 0.2594, tendencia 0.3179, real 0.0479.
 
@@ -31,16 +33,37 @@ queda dentro de Salida/resto.
 
 | Real | Simulado | n |
 |---|---|---:|
-| SL | forzoso | 4 |
-| TP | TP | 10 |
-| TP | forzoso | 29 |
-| forzoso | forzoso | 2 |
-| otro | forzoso | 1 |
+| SL | SL | 6 |
+| SL | TP | 1 |
+| SL | forzoso | 6 |
+| TP | SL | 1 |
+| TP | TP | 8 |
+| TP | forzoso | 3 |
+| forzoso | forzoso | 9 |
+| otro | SL | 1 |
+| otro | TP | 2 |
+| otro | forzoso | 9 |
 | posible no ejecutada | TP | 1 |
 | posible no ejecutada | forzoso | 1 |
 
-Coincidencias de motivo: 12/48.
+Coincidencias de motivo: 23/48.
 Posibles no ejecutadas: 2 (#3, #5).
+
+## Gestión real y simulación
+
+La gestión real mueve el stop: `ai_trader.py:44` importa `trailing.next_stop`,
+`ai_trader.py:3080` llama a `broker.modify_position` y `execution/mt5.py:881`
+envía `TRADE_ACTION_SLTP`. La simulación de T5 usa SL/TP fijos. Las columnas
+`ai_trades.sl`/`tp` guardan el nivel **inicial**: se escriben al insertar la
+operación (`ai_trader.py:2042-2054`) y no se actualiza al mover el stop en el
+bróker, así que no refleja el último nivel.
+
+## Barreras opuestas real y simulado
+
+| ID | Símbolo | Real | Sim | R real | R sim | Salida | SL | TP |
+|---:|---|---|---|---:|---:|---:|---:|---:|
+| 27 | XAUUSD | TP | SL | +1.3181 | -1.0680 | 3700.28000 | 3713.83000 | 3700.41750 |
+| 51 | XAUUSD | SL | TP | -0.9689 | +1.4179 | 3471.29000 | 3471.09143 | 3445.55036 |
 
 ## Mayores gaps
 
@@ -59,7 +82,8 @@ Posibles no ejecutadas: 2 (#3, #5).
 
 ## Conclusión
 
-El gap se concentra en la **entrada** y en la **salida/resto** (ejecución real
-frente a la apertura de la vela siguiente y cierre forzoso). Los costes del
-modelo no explican el gap. No se encontró un error en la simulación de T5 y
-no se modificó `ai_trader`.
+La entrada es **favorable** (+0.0661 R) y los costes del modelo son pequeños
+(-0.0089 R). El gap está en la **salida y la trayectoria** (-0.3047 R), no en
+la entrada. La gestión real con stop móvil frente a la simulación con SL/TP
+fijos es una explicación estructural candidata, no una descomposición causal.
+Las cifras agregadas de C1 y T5 no cambian. No se modificó `ai_trader`.

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -26,8 +27,13 @@ def test_modo_desconocido():
 
 
 def test_noches_dia_triple():
-    assert nights(5) == 3
-    assert nights(2) == 1
+    assert nights(date(2026, 11, 27)) == 3  # viernes
+    assert nights(date(2026, 11, 24)) == 1  # martes
+
+
+def test_noches_rechaza_weekday():
+    with pytest.raises(TypeError, match="fecha"):
+        nights(5)
 
 
 def test_t8_usa_la_misma_constante():
