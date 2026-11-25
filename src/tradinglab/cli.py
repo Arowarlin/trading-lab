@@ -3110,6 +3110,61 @@ def ea_horizon_cmd(
     console.print(f"[dim]JSON: {files['json']} · MD: {files['markdown']}[/dim]")
 
 
+@ea_app.command("parity")
+def ea_parity_cmd(
+    ea_id: str = typer.Argument("us100-ftmo1", help="ID del EA"),
+    since: str = typer.Option(
+        "2026-11-23", "--since", help="Inicio del forward (hora de Nueva York)"
+    ),
+    json_output: bool = typer.Option(False, "--json", help="Salida JSON"),
+) -> None:
+    """Compara el motor con las operaciones reales de MT5 (solo lectura)."""
+    from .ea_parity import ParityError, parity_payload
+
+    try:
+        payload = parity_payload(ea_id, since=since)
+    except ParityError as exc:
+        console.print(f"[red]Paridad imposible:[/red] {exc}")
+        raise typer.Exit(1) from exc
+    if json_output:
+        console.print_json(
+            data=json.dumps(payload, ensure_ascii=False, default=str)
+        )
+        return
+
+    table = Table(title=f"Paridad EA · {payload['ea']} · {payload['symbol']}")
+    for column in (
+        "Lado", "Entrada motor", "Entrada MT5", "Dif. entrada",
+        "Dif. salida", "Dif. resultado",
+    ):
+        table.add_column(column)
+    for row in payload["rows"]:
+        table.add_row(
+            row["side"],
+            str(row["engine_entry"])[:16].replace("T", " "),
+            str(row["real_entry"])[:16].replace("T", " "),
+            f"{row['entry_diff_pts']:+.1f} pts",
+            f"{row['exit_diff_pts']:+.1f} pts",
+            f"{row['result_diff_pts']:+.1f} pts",
+        )
+    console.print(table)
+    for label, key in (("Solo motor", "engine_only"), ("Solo MT5", "real_only")):
+        for item in payload.get(key) or []:
+            console.print(
+                f"[yellow]{label}:[/yellow] {item['side']} "
+                f"{str(item['entry_time'])[:16]} "
+                f"@ {float(item['entry_price']):.2f}"
+            )
+    console.print(
+        f"[dim]Emparejadas {payload['matched']}/{payload['real_trades']} "
+        f"({payload['matched_pct']:.1f} %) · "
+        f"slip entrada {payload['mean_entry_slip_pts'] if payload['mean_entry_slip_pts'] is not None else 'Sin datos'} · "
+        f"slip salida {payload['mean_exit_slip_pts'] if payload['mean_exit_slip_pts'] is not None else 'Sin datos'} · "
+        f"motor {payload['engine_trades']} ops · MT5 {payload['real_trades']} ops · "
+        f"login {payload['login']}[/dim]"
+    )
+
+
 @ea_app.command("validate")
 def ea_validate_cmd(
     ea_id: str = typer.Argument("us100-ftmo1", help="ID del EA"),

@@ -3,7 +3,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from tradinglab.ea_us100 import _dynamic_risk
+from tradinglab.ea_us100 import _dynamic_risk, drop_forming_bar
 
 
 def _values(daily_stop: float = 100.0) -> dict:
@@ -36,3 +36,24 @@ def test_dynamic_risk_aplica_el_tope_diario():
 
     assert result["daily_returns"] == pytest.approx([-0.015])
     assert result["equity"] == pytest.approx(98_500.0)
+
+
+def test_drop_forming_bar_descarta_la_vela_en_curso():
+    index = pd.DatetimeIndex(
+        pd.to_datetime(
+            ["2026-11-24 10:00", "2026-11-24 10:05", "2026-11-24 10:10"]
+        )
+    )
+    frame = pd.DataFrame({"open": [1.0, 2.0, 3.0]}, index=index)
+
+    # 15:12 UTC = 10:12 NY: la vela de 10:10 cierra a las 10:15, aún no.
+    forming = drop_forming_bar(
+        frame, now_utc=pd.Timestamp("2026-11-24 15:12", tz="UTC")
+    )
+    assert list(forming.index) == [index[0], index[1]]
+
+    # 15:15 UTC = 10:15 NY: la vela de 10:10 ya cerró.
+    closed = drop_forming_bar(
+        frame, now_utc=pd.Timestamp("2026-11-24 15:15", tz="UTC")
+    )
+    assert list(closed.index) == list(index)

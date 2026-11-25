@@ -167,6 +167,39 @@ def params_from_set(values: dict) -> dict:
     return params
 
 
+def drop_forming_bar(
+    frame: pd.DataFrame,
+    *,
+    timeframe_minutes: int = 5,
+    now_utc: datetime | None = None,
+) -> pd.DataFrame:
+    """Descarta la última vela si aún no ha cerrado.
+
+    La caché guarda el índice en hora de Nueva York sin zona. La comparación
+    se hace en tiempo absoluto: una vela solo se conserva si
+    ``apertura + duración <= ahora``. Evita guardar la barra en curso.
+    """
+
+    if frame is None or frame.empty:
+        return frame
+    now = pd.Timestamp(now_utc or datetime.now(timezone.utc))
+    if now.tzinfo is None:
+        now = now.tz_localize("UTC")
+    now_ny = now.tz_convert("America/New_York")
+
+    index = pd.DatetimeIndex(frame.index)
+    last = index[-1]
+    if last.tzinfo is None:
+        last_ny = last.tz_localize(
+            "America/New_York", ambiguous=True, nonexistent="shift_forward"
+        )
+    else:
+        last_ny = last.tz_convert("America/New_York")
+    if last_ny + pd.Timedelta(minutes=int(timeframe_minutes)) > now_ny:
+        return frame.iloc[:-1]
+    return frame
+
+
 def load_bars(
     settings: Settings | None = None,
     *,
@@ -192,6 +225,9 @@ def load_bars(
     frame = frame.rename(columns={"volume": "tickvol"})
     frame.index = pd.DatetimeIndex(frame.index).tz_convert("America/New_York").tz_localize(None)
     frame = frame.sort_index()
+    frame = drop_forming_bar(
+        frame, timeframe_minutes=5, now_utc=datetime.now(timezone.utc)
+    )
     for column in ("tickvol", "spread"):
         if column not in frame.columns:
             frame[column] = 0.0
