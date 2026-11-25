@@ -28,6 +28,11 @@
       ],
       "date": "2026-11-25",
       "reason": "N1: simulador de dos fases, dias minimos y cache sin barra en curso; motor y setfile del EA intactos"
+    },
+    {
+      "changes": [],
+      "date": "2026-11-25",
+      "reason": "TL2-DIARIO: estado previo a corregir el suelo diario higher_of_balance_or_equity en prop/simulator.py y prop/guard.py"
     }
   ],
   "groups": {
