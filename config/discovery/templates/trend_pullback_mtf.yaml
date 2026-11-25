@@ -1,0 +1,90 @@
+﻿name: trend_pullback_mtf
+symmetric: true
+timeframes: [M15, M30, H1, H4]
+valid_timeframes: [M15, M30, H1, H4]
+description: >-
+  Tendencia en D1 y entrada en el retroceso/reanudacion de la media rapida en la
+  temporalidad base. Familia de continuacion de tendencia con entrada en pullback.
+hypothesis: >-
+  La tendencia diaria persiste y el retroceso intradia ofrece un precio mejor
+  para entrar a favor del flujo. Se compra cuando D1 esta en regimen tendencial
+  (ADX) y el precio base vuelve a cruzar al alza su media rapida tras haber
+  cotizado por debajo; el corto es el espejo exacto. La ventaja esperada es la
+  continuacion tras la pausa, no la ruptura de un maximo.
+invalidation: >-
+  Se invalida si la continuacion tras el cruce de la media rapida no supera el
+  coste (spread p75 + slippage x2) de forma estable en IS/OOS-1, o si el filtro
+  D1 deja tan pocas operaciones que la muestra no permite concluir.
+parameter_space:
+  fast_ema: [10, 20, 30]
+  trend_threshold: [20, 25, 30]
+  stop_mult: [1.5, 2.0, 2.5]
+grid:
+  dimensions:
+    - name: fast_ema
+      kind: path
+      path: long_entry.args[1].right.n
+      values: [10, 20, 30]
+    - name: trend_threshold
+      kind: path
+      path: long_entry.args[0].expr.params.threshold
+      values: [20, 25, 30]
+    - name: stop_mult
+      kind: path
+      path: exit.stop.mult
+      values: [1.5, 2.0, 2.5]
+strategy:
+  dsl_version: "1"
+  instrument: US100
+  market: cfd
+  timeframe: M15
+  warmup_minutes: 28800
+  session:
+    start: "00:00"
+    end: "23:59"
+    flat_at: "23:55"
+    or_minutes: 15
+  long_entry:
+    kind: and
+    args:
+      - kind: htf
+        tf: D1
+        expr:
+          kind: regime
+          regime: trending
+          n: 14
+          params: {threshold: 25}
+      - kind: cross_up
+        left: {kind: price, price: close}
+        right:
+          kind: indicator
+          ind: ema
+          src: close
+          n: 20
+  short_entry:
+    kind: and
+    args:
+      - kind: htf
+        tf: D1
+        expr:
+          kind: regime
+          regime: trending
+          n: 14
+          params: {threshold: 25}
+      - kind: cross_down
+        left: {kind: price, price: close}
+        right:
+          kind: indicator
+          ind: ema
+          src: close
+          n: 20
+  exit:
+    stop: {type: atr, mult: 2.0, n: 14}
+    target: {type: rr, rr: 2.0}
+    time_exit_minutes: 2880
+    opposite_signal: false
+  sizing:
+    risk_per_trade_r: 1.0
+  limits:
+    max_trades_per_day: 2
+    cooldown_minutes: 60

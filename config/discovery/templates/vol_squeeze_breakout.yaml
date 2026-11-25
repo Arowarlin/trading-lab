@@ -1,0 +1,78 @@
+name: vol_squeeze_breakout
+symmetric: true
+timeframes: [M15, M30, H1, H4]
+valid_timeframes: [M15, M30, H1, H4]
+description: >-
+  Compresion de volatilidad (percentil bajo del ATR) y ruptura del canal
+  Donchian en la direccion de la expansion. Familia de breakout de regimen.
+hypothesis: >-
+  La volatilidad se agrupa en regimenes. Tras una compresion, la expansion
+  tiende a continuar porque las ordenes acumuladas se ejecutan al romper el
+  rango. Se compra al cruzar el maximo de N barras con ATR en percentil bajo y
+  se vende al cruzar el minimo; el filtro evita rupturas en mercados dormidos
+  donde el spread pesa mas que el movimiento.
+invalidation: >-
+  Se invalida si la ruptura filtrada no conserva expectativa neta positiva con
+  spread p75 y slippage x2, o si el percentil de volatilidad deja menos del
+  minimo de operaciones por pliegue del TF.
+parameter_space:
+  channel_n: [20, 40, 55]
+  vol_pct: [0.15, 0.20, 0.25]
+  stop_mult: [1.5, 2.0, 2.5]
+grid:
+  dimensions:
+    - name: channel_n
+      kind: path
+      path: long_entry.args[1].right.n
+      values: [20, 40, 55]
+    - name: vol_pct
+      kind: path
+      path: long_entry.args[0].params.pct
+      values: [0.15, 0.20, 0.25]
+    - name: stop_mult
+      kind: path
+      path: exit.stop.mult
+      values: [1.5, 2.0, 2.5]
+strategy:
+  dsl_version: "1"
+  instrument: US100
+  market: cfd
+  timeframe: M15
+  warmup_minutes: 14400
+  session:
+    start: "00:00"
+    end: "23:59"
+    flat_at: "23:55"
+    or_minutes: 15
+  long_entry:
+    kind: and
+    args:
+      - kind: regime
+        regime: vol_low
+        n: 14
+        lookback: 100
+        params: {pct: 0.20}
+      - kind: cross_up
+        left: {kind: price, price: close}
+        right: {kind: level, level: donchian_high, n: 20}
+  short_entry:
+    kind: and
+    args:
+      - kind: regime
+        regime: vol_low
+        n: 14
+        lookback: 100
+        params: {pct: 0.20}
+      - kind: cross_down
+        left: {kind: price, price: close}
+        right: {kind: level, level: donchian_low, n: 20}
+  exit:
+    stop: {type: atr, mult: 2.0, n: 14}
+    target: {type: rr, rr: 2.0}
+    time_exit_minutes: 1440
+    opposite_signal: false
+  sizing:
+    risk_per_trade_r: 1.0
+  limits:
+    max_trades_per_day: 2
+    cooldown_minutes: 60

@@ -1,0 +1,71 @@
+name: st_reversal_idx
+symmetric: true
+timeframes: [M15, M30, H1]
+valid_timeframes: [M15, M30, H1]
+valid_instruments: [US100, US500, US30]
+description: >-
+  Reversion de corto plazo en indices: RSI(2/3/5) extremo, salida por tiempo o
+  a un objetivo de 1R. Familia de sobrerreaccion y provision de liquidez.
+hypothesis: >-
+  En indices liquidos, un movimiento corto y extremo suele sobrerreaccionar y
+  parte se revierte cuando los creadores de mercado absorben el flujo. Se compra
+  con RSI muy bajo y se vende con RSI muy alto; la salida por tiempo evita
+  quedarse atrapado si la tendencia continua y el objetivo de 1R captura la
+  parte rapida de la reversion.
+invalidation: >-
+  Se invalida si la reversion no cubre el coste de ida y vuelta (spread p75 +
+  slippage x2) en IS/OOS-1, o si el numero de senales por pliegue queda por
+  debajo del minimo del TF.
+parameter_space:
+  rsi_n: [2, 3, 5]
+  rsi_level: [10, 20, 30]
+  stop_mult: [1.5, 2.0, 3.0]
+grid:
+  dimensions:
+    - name: rsi_n
+      kind: path
+      path: long_entry.left.n
+      values: [2, 3, 5]
+    - name: rsi_level
+      kind: path
+      path: long_entry.right.value
+      values: [10, 20, 30]
+    - name: stop_mult
+      kind: path
+      path: exit.stop.mult
+      values: [1.5, 2.0, 3.0]
+strategy:
+  dsl_version: "1"
+  instrument: US100
+  market: cfd
+  timeframe: M15
+  warmup_minutes: 14400
+  session:
+    start: "09:35"
+    end: "15:55"
+    flat_at: "15:55"
+    or_minutes: 15
+  long_entry:
+    kind: lt
+    left:
+      kind: indicator
+      ind: rsi
+      n: 2
+    right: {kind: const, value: 10}
+  short_entry:
+    kind: gt
+    left:
+      kind: indicator
+      ind: rsi
+      n: 2
+    right: {kind: const, value: 90}
+  exit:
+    stop: {type: atr, mult: 2.0, n: 14}
+    target: {type: rr, rr: 1.0}
+    time_exit_minutes: 240
+    opposite_signal: false
+  sizing:
+    risk_per_trade_r: 1.0
+  limits:
+    max_trades_per_day: 3
+    cooldown_minutes: 60

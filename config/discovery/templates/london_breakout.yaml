@@ -1,0 +1,64 @@
+name: london_breakout
+symmetric: true
+timeframes: [M15, M30, H1]
+valid_timeframes: [M15, M30, H1]
+valid_instruments: [EURUSD, GBPUSD, XAUUSD]
+description: >-
+  Ruptura del rango tardio de Asia en la apertura de Londres (EURUSD, GBPUSD,
+  XAUUSD), con rango construido en la primera hora de la ventana de sesion.
+hypothesis: >-
+  La apertura europea trae informacion y liquidez. El rango acumulado durante
+  la ultima parte de Asia contiene las ordenes de ambos lados; al romperse con
+  la llegada de Londres, el flujo institucional empuja el precio en la direccion
+  de la ruptura. Es lo contrario de asumir reversion dentro del rango asiatico.
+invalidation: >-
+  Se invalida si la ruptura en la ventana de Londres no supera el coste real
+  (spread p75 + slippage x2 + comision) de forma estable, o si el rango de
+  apertura es tan estrecho que el stop queda dentro del ruido.
+parameter_space:
+  or_minutes: [30, 60, 90]
+  stop_mult: [1.0, 1.5, 2.0]
+  target_rr: [1.5, 2.0, 3.0]
+grid:
+  dimensions:
+    - name: or_minutes
+      kind: path
+      path: session.or_minutes
+      values: [30, 60, 90]
+    - name: stop_mult
+      kind: path
+      path: exit.stop.mult
+      values: [1.0, 1.5, 2.0]
+    - name: target_rr
+      kind: path
+      path: exit.target.rr
+      values: [1.5, 2.0, 3.0]
+strategy:
+  dsl_version: "1"
+  instrument: EURUSD
+  market: cfd
+  timeframe: M15
+  warmup_minutes: 14400
+  session:
+    start: "02:00"
+    end: "11:00"
+    flat_at: "10:45"
+    or_minutes: 60
+  long_entry:
+    kind: cross_up
+    left: {kind: price, price: close}
+    right: {kind: level, level: opening_range_high}
+  short_entry:
+    kind: cross_down
+    left: {kind: price, price: close}
+    right: {kind: level, level: opening_range_low}
+  exit:
+    stop: {type: atr, mult: 1.5, n: 14}
+    target: {type: rr, rr: 2.0}
+    time_exit_minutes: 480
+    opposite_signal: false
+  sizing:
+    risk_per_trade_r: 1.0
+  limits:
+    max_trades_per_day: 2
+    cooldown_minutes: 120
