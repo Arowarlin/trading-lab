@@ -153,6 +153,15 @@ al bróker`. No se ejecuta.
 | Informe | `TL3_REPORTS/ea_oop_dukascopy.md`: tabla por año, largo/corto, slippage 0/0,5/1/2/3 pt, `slip_eq`, exclusiones |
 | Ejecuciones | **Una.** Registrar en `experiments` y `sample_usage` (US100, M5, 2012-2021, `holdout`) |
 
+**Nota previa a T7 (2026-11-25, escrita antes de ejecutar T7; no cambia criterio, lectura ni ejecución).**
+Tres trabajos independientes sobre reglas de apertura en NQ (Marx 2026, ORB prerregistrado con prueba
+2015-2019 fallida; Krueger 2026, réplica de Zarattini-Aziz en 5 índices CFD con 2015-2017 negativo y
+neto ≈ 0; Chuk 2026, banda de ruido con 2014-2019 plano) encuentran el patrón plano o negativo antes
+de 2020 y positivo después. Por tanto, "no confirma" en T7 es esperable tanto si el EA está ajustado
+como si su ventaja es real pero limitada al régimen posterior a 2020; T7 no separa ambas causas y la
+tabla por año **no** se usará para reformular ni para elegir subperiodos. "Confirma" sería evidencia
+especialmente fuerte, porque llegaría en el régimen donde las reglas simples fallaron.
+
 ### T8 · H2 deriva previa al FOMC (1 prueba)
 
 | Campo | Prerregistro |

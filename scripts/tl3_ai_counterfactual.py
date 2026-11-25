@@ -61,7 +61,6 @@ def _forced(entry_time, style, exit_ts):
 
 
 def _simulate(side, entry, sl_dist, tp_dist, bars, forced, point, spread):
-    entry_time = bars.index[0]
     short = side == "sell"
     risk = float(sl_dist)
     if risk <= 0 or np.isnan(risk):
