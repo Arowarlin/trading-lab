@@ -337,7 +337,7 @@ def main(argv=None) -> int:
         lines = [
             "# NQ-B · A-1 puente Dukascopy vs US100.cash (2022)",
             "",
-            f"Datos de referencia: {label}",
+            f"Datos de referencia: {args.reference_m1 if not args.synthetic else label}",
             "La caché del EA solo se usa como referencia del puente.",
             "",
         ]
@@ -399,6 +399,14 @@ def main(argv=None) -> int:
         f"| Emparejadas | {validity.matched} ({validity.matched_pct:.1f} %) |",
         f"| Correlación de R | {_fmt(validity.correlation)} |",
         f"| ¿Válida? | {'Sí' if validity.valid else 'No'} |",
+        "",
+        "### Exclusiones A-2",
+        "",
+        f"- Sesiones de roll: {len(sessions)}; festivos/cierres NYSE: {len(holidays)}",
+        f"- NQ rolls: {sum(nq_roll_excluded.values())}; por año: {nq_roll_excluded}",
+        f"- NQ festivos/cierres: {sum(nq_holiday_excluded.values())}; por año: {nq_holiday_excluded}",
+        f"- Referencia rolls: {sum(ref_roll_excluded.values())}; por año: {ref_roll_excluded}",
+        f"- Referencia festivos/cierres: {sum(ref_holiday_excluded.values())}; por año: {ref_holiday_excluded}",
         "",
     ]
 
