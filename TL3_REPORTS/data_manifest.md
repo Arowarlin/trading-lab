@@ -136,3 +136,4 @@
 | data/cache/mt5/XPDUSD_H4.parquet | MT5 XPDUSD_H4 | cfd | H4 | 16842 | 0.00% | 2015 |
 | data/cache/mt5/XPTUSD_H1.parquet | MT5 XPTUSD_H1 | cfd | H1 | 50000 | 0.00% | 2018 |
 | data/cache/mt5/XPTUSD_H4.parquet | MT5 XPTUSD_H4 | cfd | H4 | 16892 | 0.00% | 2015 |
+- Cobertura de datos: [data_coverage.md](data_coverage.md) (D3, solo conteos de velas).

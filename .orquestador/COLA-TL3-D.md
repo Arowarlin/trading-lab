@@ -2,7 +2,7 @@
 
 **Creada:** 2026-11-25, aprobada por el operador ("Sí, las cinco").
 **Arranca:** en cuanto termine C6 de `COLA-TL3-C.md`, **sin pedir confirmación**.
-**Modo:** cadena continua D0 → D5 → D5b → D6 → D7. Un commit pequeño por bloque.
+**Modo:** cadena continua D0 → D3 → D3b → D4 → D5 → D5b → D6 → D7. Un commit pequeño por bloque.
 
 **Nada de esta cola suma al contador.** No hay hipótesis de mercado nuevas. D2 usa datos sintéticos.
 D3 solo cuenta velas. D4 y D5 solo calculan tamaños de muestra con datos ya publicados y fijan reglas
@@ -116,6 +116,59 @@ aporta si supera esta línea base con la misma regla de riesgo.
    `TL3_REPORTS/data_manifest.md` que apunte al informe. **No** se modifica `data/tl3/manifest.json`.
 5. Commit `tl3: D3 - mapa de cobertura`.
 
+**Estado al relanzar (2026-11-25):**
+- D0-D2 hechos (`29459cf`, `4ecafaa`, `b2d980b`).
+- D3 tiene función y script en `c0a3a89`, pero **no se ejecutó**: falta ejecutar
+  `scripts/tl3_d3_coverage.py` y generar `data_coverage.md`, `coverage.json` y la línea del manifiesto
+  de informes.
+- `data/tl3/manifest.json` aparece modificado sin commit. Si el diff es **solo** `generated_at`,
+  restáuralo con `git checkout -- data/tl3/manifest.json` y busca qué script lo reescribe (no debe
+  hacerlo). Si cambia algo más, no lo toques e infórmalo.
+- `.orquestador/COLA-TL3-C.md` tiene una edición del operador sin commit (el encadenamiento C6 → D):
+  `git add -f` en el commit de D3.
+
+### D3b · Correcciones de la revisión de Claude (descriptivo, no suma)
+1. **T5-bis (C1): tabla de motivos de salida.** `scripts/tl3_c1_t5bis.py:72-74` compara
+   `|exit − tp| ≤ 2 × spread` con el spread en **puntos MT5** (p. ej. 90) como si fuera precio, así que
+   casi todo sale "TP". Lo mismo ocurre con el motivo simulado (37 "forzoso", cuando los R simulados
+   son ±1 y ~1,5).
+
+   Corrige así:
+   - spread × `point` del símbolo (US100.cash 0,01; XAUUSD 0,01; GBPUSD 0,00001; USDJPY 0,001);
+   - motivo simulado a partir de la salida simulada: TP o SL si el R simulado coincide con `±dist/dist_SL`
+     menos los costes del modelo (tolerancia 0,02 R); si no, forzoso.
+
+   Referencia de Claude: unos 12 TP, 13 SL y 23 "otro" reales.
+
+   Rehaz **solo** la tabla de motivos, las coincidencias y la conclusión. La conclusión debe decir lo que
+   dicen las cifras: entrada **+0,0661** (favorable), costes −0,0089, salida/resto **−0,3047**, es
+   decir, el gap está en la salida y la trayectoria, no en la entrada.
+
+   Añade además el hecho estructural: la gestión real usa stops móviles (`ai_trader.py:44` importa
+   `trailing.next_stop`; `execution/mt5.py:881` envía `TRADE_ACTION_SLTP`), y la simulación de T5 usa
+   SL/TP fijos. Indica si `ai_trades.sl/tp` guardan el nivel inicial o el último; si no se puede
+   saber, **Sin datos**.
+
+   Lista los trades en los que real y simulado terminan en barreras opuestas. Las cifras agregadas de
+   C1 y T5 no cambian.
+2. **`tl3/costs.nights`.** Hoy recibe el día con la convención MT5 (5 = viernes): quien pase
+   `date.weekday()` de Python (viernes = 4) obtiene 1 en vez de 3. Cámbialo para que reciba una fecha
+   (`nights(entry_date, rollover3days=5)`) y haga la conversión dentro. Test con un viernes y un martes
+   reales.
+3. **D2 · aviso sobre FundingPips.**
+   - Para `daily_loss_mode == "higher_of_balance_or_equity"`, `prop/simulator.py:87` y `:225` usan
+     `np.maximum(initial, day_start) - eff_daily`, es decir, el balance **inicial**.
+   - La regla de `firms.yaml` dice "el mayor de balance o equidad **al inicio del día**". Con el código
+     actual, quedar 5 % por debajo del balance inicial cuenta como rotura diaria. Eso explica
+     P(diario) = 18 % con un riesgo de solo 0,25 % al día, cuando la pérdida diaria máxima es 0,25 %.
+   - Añade un aviso en `propfund_zero_edge.md`: "Cifras de FundingPips no fiables: posible error del
+     simulador protegido; ver COLA-TL3-D D3b". **No** se modifica `prop/` (Prop Fund protegido): la
+     corrección irá en otra cola con aprobación y con el protocolo de producción.
+   - Como comprobación, sin tocar el simulador: cuenta cuántos caminos de FundingPips rompen el diario
+     **en un día cuya pérdida es menor que el 5 %** del balance de ese día. Si son > 0, confirma el
+     error.
+4. Commit `tl3: D3b - correcciones de la revision`.
+
 ### D4 · Plan de potencia de `ai_trader` (no suma, no mira operaciones nuevas)
 1. Fuente: las **48 de T5** (`ai_trader_t5_rows.json` sin los `id` 52 y 54). Por operación:
    - Δ_t = IA − tendencia;
@@ -203,7 +256,7 @@ aporta si supera esta línea base con la misma regla de riesgo.
 
 ### D6 · Cierre
 - `ruff check`, `pytest -q` completo, `lab doctor`, `lab propfund verify`.
-- README §11 y PLAN: una línea por D1-D5b.
+- README §11 y PLAN: una línea por D1-D5b (incluido D3b).
 - `count_tests` debe seguir en **1897**; si no, `bloqueado: contador cambiado` y se informa.
 - Commit `tl3: cierre ciclo 1e` y tag `tl3-ciclo1e`.
 
@@ -215,5 +268,6 @@ aporta si supera esta línea base con la misma regla de riesgo.
   - las sesiones válidas por índice;
   - el n y la fecha de la próxima evaluación de `ai_trader` y de los puntos de control del EA;
   - la causa de la TCA en 0 y el slippage decisión → ejecución (o Sin datos);
+  - si se confirma el error del límite diario de FundingPips en el simulador (D3b.3);
   - los bloqueos, si los hubo.
 - Fin de la cola. No se empieza nada más.

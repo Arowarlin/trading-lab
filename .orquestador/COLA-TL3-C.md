@@ -152,4 +152,5 @@ no calculó ningún evento. **Contador:** la fila `TL3-T8` ya existente cubre es
   - el veredicto de T8 (o "pendiente");
   - `count_tests` (debe seguir en 1897);
   - los tests y los bloqueos, si los hubo.
-- Fin de la cola. No se empieza nada más.
+- Fin de esta cola. **Después, sin pedir confirmación, sigue con `.orquestador/COLA-TL3-D.md`
+  (D0 → D7)**, aprobada por el operador el 2026-11-25.

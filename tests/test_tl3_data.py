@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from tradinglab.tl3 import data
@@ -9,7 +11,8 @@ from tradinglab.tl3 import data
 
 @pytest.fixture(scope="module")
 def manifest():
-    return data.build_manifest()
+    # Leer, no reconstruir: build_manifest() reescribe data/tl3/manifest.json.
+    return json.loads(data.MANIFEST.read_text(encoding="utf-8"))
 
 
 def test_manifest_clasifica_cfd_y_futuros(manifest):

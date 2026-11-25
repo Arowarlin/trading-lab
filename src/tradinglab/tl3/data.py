@@ -6,12 +6,14 @@ import hashlib
 import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
 
 from ..config import ROOT
+from ..discovery.calendars import NYSE_SPECIAL_CLOSURES, nyse_holidays
 
 CACHE = ROOT / "data" / "cache"
 OUTPUT = ROOT / "data" / "tl3"
@@ -141,41 +143,70 @@ def _info(path: Path) -> FileInfo:
     )
 
 
+@lru_cache(maxsize=32)
+def _nyse_closure_keys(start_year: int, end_year: int) -> frozenset[int]:
+    keys = set(nyse_holidays(start_year, end_year))
+    keys.update(NYSE_SPECIAL_CLOSURES)
+    return frozenset(keys)
+
+
+def _previous_session(target: pd.Timestamp) -> pd.Timestamp:
+    """Sesión NYSE anterior (salta fines de semana y festivos)."""
+
+    day = target - pd.Timedelta(days=1)
+    closures = _nyse_closure_keys(day.year - 1, day.year + 1)
+    while day.day_of_week >= 5 or int(day.strftime("%Y%m%d")) in closures:
+        day -= pd.Timedelta(days=1)
+    return day
+
+
 def session_coverage(
-    m1: pd.DataFrame,
+    m1: pd.DataFrame | pd.DatetimeIndex,
     day,
     *,
     session_min: int = 357,
     night_min: int = 744,
     check_previous: bool = True,
 ) -> dict:
-    """Regla prerregistrada de T7 para una sesión NY."""
+    """Regla prerregistrada de T7 para una sesión NY.
 
-    frame = m1.copy()
-    frame.index = pd.DatetimeIndex(frame.index)
-    if frame.index.tz is not None:
-        frame.index = frame.index.tz_convert("America/New_York").tz_localize(None)
+    Cuenta velas por rango sobre el índice; no copia ni lee precios.
+    """
+
+    index = m1.index if isinstance(m1, pd.DataFrame) else m1
+    index = pd.DatetimeIndex(index)
+    if index.tz is not None:
+        index = index.tz_convert("America/New_York").tz_localize(None)
+    if not index.is_monotonic_increasing:
+        index = index.sort_values()
     target = pd.Timestamp(day).normalize()
-    session = frame.loc[
-        target + pd.Timedelta(hours=9, minutes=30) : target + pd.Timedelta(hours=15, minutes=44)
-    ]
-    night = frame.loc[
-        target - pd.Timedelta(days=1) + pd.Timedelta(hours=18) : target + pd.Timedelta(hours=9, minutes=29)
-    ]
-    prev_day = target - pd.Timedelta(days=1)
-    while prev_day.day_of_week >= 5:
-        prev_day -= pd.Timedelta(days=1)
-    previous = frame.loc[
-        prev_day + pd.Timedelta(hours=9, minutes=30) : prev_day + pd.Timedelta(hours=15, minutes=44)
-    ]
-    valid = len(session) >= session_min and len(night) >= night_min
+
+    def count(start: pd.Timestamp, end: pd.Timestamp) -> int:
+        return int(
+            index.searchsorted(end, side="right")
+            - index.searchsorted(start, side="left")
+        )
+
+    session_start = target + pd.Timedelta(hours=9, minutes=30)
+    session_end = target + pd.Timedelta(hours=15, minutes=44)
+    night_start = target - pd.Timedelta(days=1) + pd.Timedelta(hours=18)
+    night_end = target + pd.Timedelta(hours=9, minutes=29)
+    prev_day = _previous_session(target)
+
+    session_bars = count(session_start, session_end)
+    night_bars = count(night_start, night_end)
+    previous_bars = count(
+        prev_day + pd.Timedelta(hours=9, minutes=30),
+        prev_day + pd.Timedelta(hours=15, minutes=44),
+    )
+    valid = session_bars >= session_min and night_bars >= night_min
     if check_previous:
-        valid = valid and len(previous) >= session_min
+        valid = valid and previous_bars >= session_min
     return {
         "day": target.date().isoformat(),
-        "session_bars": int(len(session)),
-        "previous_bars": int(len(previous)),
-        "night_bars": int(len(night)),
+        "session_bars": session_bars,
+        "previous_bars": previous_bars,
+        "night_bars": night_bars,
         "valid": bool(valid),
     }
 
