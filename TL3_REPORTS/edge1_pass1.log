@@ -1,2 +1,4 @@
 2026-11-25 23:23:39Z edge1-01-trend-pullback-mtf-usdjpy-h4 status=done eval=439 eff=76 finalists=2 elapsed=489.0s
 2026-11-25 23:32:23Z edge1-02-vol-squeeze-breako-usdjpy-h4 status=done eval=436 eff=30 finalists=1 elapsed=516.9s
+2026-11-25 23:41:48Z edge1-03-donchian-vol-h4-eurusd-h4 status=done eval=435 eff=41 finalists=0 elapsed=565.1s
+2026-11-25 23:50:29Z edge1-04-trend-pullback-mtf-eurusd-h4 status=done eval=438 eff=66 finalists=0 elapsed=521.2s
