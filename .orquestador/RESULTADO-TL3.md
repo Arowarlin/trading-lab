@@ -1,6 +1,7 @@
 # RESULTADO TL3 · Ciclo 1 (revisión C)
 
 - **Fecha:** 2026-11-25
+- **Tag de cierre:** `tl3-ciclo1d`
 - **Rama:** `feature/prop-fund-multifirm`
 - **count_tests:** **1897**
 
@@ -20,7 +21,7 @@
 | T8 | Hecho (C3) | 117 eventos; σ bruta 94,06 bps; MDE 21,65; t 1,909; neto 8,04 bps; LCB −0,60 → no confirma. |
 | T9 | Hecho | H1 `rejected: cost_gate`; H3 `rejected: no_power`. |
 | T10 | Hecho | `TL3_RESULTS_CICLO1.md`. |
-| T11 | Hecho | Cierres `tl3-ciclo1b`, `tl3-ciclo1c`; cierre 1d en C5. |
+| T11 | Hecho | Cierres `tl3-ciclo1b`, `tl3-ciclo1c` y `tl3-ciclo1d` (C5); pytest 1980 passed + 1 skipped. |
 
 ## T5-bis · Simulación vs real
 
