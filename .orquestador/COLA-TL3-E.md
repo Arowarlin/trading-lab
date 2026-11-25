@@ -24,11 +24,16 @@ sesiones siguieron planes contrarios sobre NASDAQ_EDGE al mismo tiempo. Los avis
 - Las de `AGENTS.md` y `COLA-TL3-D.md §1`. Escritura solo con Python o con `git`.
 - **Commits por ruta:** `git add <rutas>` y `git commit -- <rutas>`. Nunca `git add -A`, `git add .`
   ni `git commit -a`.
-- **Arranque:** solo con el árbol de trabajo limpio. Se permiten los externos conocidos
-  `reports/discovery/edge_map.md` y `tl2-edge-map.patch`.
-  - Si hay otros ficheros versionados modificados (p. ej. `PLAN.md` o `NASDAQ_EDGE_INSTITUTIONAL/`
-    de otra sesión), comprueba cada 5 min durante 60 min como máximo.
-  - Si siguen así: `bloqueado: otra sesión con cambios sin commit`. **No** los toques ni los incluyas.
+- **Arranque (aclarado por Claude a las 17:21, mismo día):** la condición se aplica a los ficheros
+  **versionados modificados** (`git status --untracked-files=no`), salvo el externo conocido
+  `reports/discovery/edge_map.md`.
+  - Los ficheros **sin seguimiento** de otras sesiones (p. ej. `NASDAQ_EDGE_INSTITUTIONAL/03_BACKTEST/`,
+    `tl2-edge-map.patch`) **no bloquean**: tus commits son por ruta y no los incluyen ni los tocan.
+  - Si hay otros ficheros versionados modificados (p. ej. `PLAN.md` o `README.md` de otra sesión),
+    comprueba cada 5 min durante 60 min como máximo. Si siguen así:
+    `bloqueado: otra sesión con cambios sin commit`. **No** los toques ni los incluyas.
+  - Si hay **otro `pytest -q` en marcha**, E1-E3 siguen. Solo E4 espera (cada 5 min, máximo 60) a que
+    termine antes de lanzar su suite.
 - **Prohibido:** producción (EA, `ai_trader`, forward, Prop Fund/`prop/`, riesgo FTMO, `execution/`,
   `config/propfund/`, `schedule.yaml`, `.env`); `record-informal`; órdenes; campañas; push; borrar
   ficheros; modificar el código congelado de `NASDAQ_EDGE_INSTITUTIONAL/tools/forward_models.py`.
