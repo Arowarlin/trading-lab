@@ -51,3 +51,24 @@ Filtro de noticias no modelado (igual que el backtest).
 `slip_eq` ≈ **0.26 puntos/lado**.
 
 Solo una ejecución del criterio. La tabla por año es descriptiva.
+
+## Correcci?n TL3-C
+
+La regla del script usaba 371 velas de sesi?n (?99 %) y no comprobaba la sesi?n anterior; el prerregistro exige **?357 (95 %) en la sesi?n y en la anterior** y **?744 nocturnas**.
+
+| A?o | D?as NYSE | V?lidos script (371 + noche) | V?lidos prerregistro | Mediana velas nocturnas |
+|---|---:|---:|---:|---:|
+| 2012 | 235 | 0 | 0 | 0.0 |
+| 2013 | 186 | 67 | 73 | 891.0 |
+| 2014 | 248 | 136 | 176 | 885.5 |
+| 2015 | 250 | 37 | 37 | 450.0 |
+| 2016 | 251 | 0 | 0 | 450.0 |
+| 2017 | 249 | 0 | 0 | 442.0 |
+| 2018 | 248 | 176 | 178 | 927.0 |
+| 2019 | 249 | 248 | 249 | 930.0 |
+| 2020 | 251 | 246 | 247 | 930.0 |
+| 2021 | 167 | 167 | 167 | 930.0 |
+
+**Sesiones v?lidas en la ventana: 1077 de 2334 con la regla del script; 1127 con el prerregistro** (el 2363 anterior contaba 2011-2026). La muestra efectiva es **2013-2014 y 2018-2021**; 2012, 2016 y 2017 no tienen sesiones v?lidas y 2015 solo 37.
+
+Cota: para que el veredicto pasara de ?no confirma? a ?confirma? har?an falta ~2,8 R de media en cada una de las ~51 operaciones a?adidas; el veredicto **no cambia**. No se reejecuta el motor ni se toca el registro.
