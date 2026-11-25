@@ -84,7 +84,10 @@ def monte_carlo(
 
         daily_floor = day_start - eff_daily
         if rules.daily_loss_mode == "higher_of_balance_or_equity":
-            daily_floor = np.maximum(initial, day_start) - eff_daily
+            # modelo diario: sin posiciones abiertas entre días;
+            # balance = equidad al inicio del día
+            day_start_balance = day_start
+            daily_floor = np.maximum(day_start_balance, day_start) - eff_daily
         max_floor = max_base - eff_max
         floor = np.maximum(daily_floor, max_floor)
 
@@ -222,7 +225,10 @@ def monte_carlo_program(
                 max_base = np.full(n_paths, initial)
 
             if rules.daily_loss_mode == "higher_of_balance_or_equity":
-                daily_floor = np.maximum(initial, day_start) - eff_daily
+                # modelo diario: sin posiciones abiertas entre días;
+                # balance = equidad al inicio del día
+                day_start_balance = day_start
+                daily_floor = np.maximum(day_start_balance, day_start) - eff_daily
             else:
                 daily_floor = day_start - eff_daily
             floor = np.maximum(daily_floor, max_base - eff_max)

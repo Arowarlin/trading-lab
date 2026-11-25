@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import Literal
@@ -10,6 +11,8 @@ import pandas as pd
 from .rules import PropRules
 
 Severity = Literal["ok", "warn", "block", "breach"]
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class PropError(RuntimeError):
@@ -98,9 +101,25 @@ class PropGuard:
     def _bases(self, state: AccountState) -> tuple[float, float]:
         """Base del límite diario y del límite máximo, según el modo."""
         rules = self.rules
-        daily_base = (
-            state.day_start_balance if rules.daily_loss_mode == "balance" else state.day_start_equity
-        )
+        if rules.daily_loss_mode == "balance":
+            daily_base = state.day_start_balance
+        elif rules.daily_loss_mode == "higher_of_balance_or_equity":
+            balance = state.day_start_balance
+            equity = state.day_start_equity
+            if balance is None and equity is None:
+                _LOGGER.warning(
+                    "higher_of_balance_or_equity sin day_start_balance ni "
+                    "day_start_equity: se conserva la base de equidad anterior"
+                )
+                daily_base = equity
+            elif balance is None:
+                daily_base = equity
+            elif equity is None:
+                daily_base = balance
+            else:
+                daily_base = max(balance, equity)
+        else:
+            daily_base = state.day_start_equity
         if rules.max_loss_mode == "static":
             max_base = state.initial_balance
         elif rules.max_loss_mode == "trailing_eod":
