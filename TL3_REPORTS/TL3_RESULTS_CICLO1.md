@@ -15,7 +15,7 @@
 | T8 | **Bloqueado** | Falta `record-informal` `TL3-T8`; no se ejecutó. |
 | T9 | Hecho | H1: swap 7,33 %/365 = 2,01-2,81 bps + spread 0,69 + slippage 0,38 ≈ 3,1-3,9 bps; 2× > 3,5 → **`rejected: cost_gate`**. H3: 207 días, MDE 0,1731 > 0,12 → `no_power`. |
 | T10 | Hecho | Este informe. |
-| T11 | Pendiente | Cierre, suite, tag `tl3-ciclo1b` y Telegram. |
+| T11 | Hecho | Cierre 1c; pytest 1976 passed + 1 skipped; tag `tl3-ciclo1c`. |
 
 ## Hipótesis
 
@@ -28,9 +28,9 @@
 | H-2026-005 | Donchian | `inconclusive` | `no_power_cost_v1` |
 | H-2026-006 | Momentum intradía | `inconclusive` | `no_power_cost_v1` |
 | H-2026-007 | NY open GA | `inconclusive` | `no_power_cost_v1` |
-| H-2026-008 | EA OOP (T7) | `draft` | bloqueado: falta registro `TL3-T7` |
-| H-2026-009 | H2 FOMC (T8) | `draft` | bloqueado: falta registro `TL3-T8` |
-| H-2026-010 | H1 nocturna | `rejected` | `cost_gate` (fila nueva H-2026-010b, append-only) |
+| H-2026-008 | EA OOP (T7) | `rejected` | `holdout_fail` (374 ops, exp ?0,0296, LCB ?0,1753) |
+| H-2026-009 | H2 FOMC (T8) | `rejected` | `no_power` (MDE 43,76 > 30 bps) |
+| H-2026-010 | H1 nocturna | `rejected` | `cost_gate` (H-2026-010b) |
 | H-2026-011 | H3 OR | `rejected` | `no_power` |
 
 ## Recomendaciones para el operador
@@ -53,6 +53,5 @@
 
 ## Contador
 
-- `count_tests` = **1895**.
-- T7 y T8 no suman porque no se ejecutaron. A-1/A-2 de NQ-B son paridad, no
-  suma.
+- `count_tests` = **1897**.
+- T7 y T8 suman 1 cada uno: 1895 + 2 = **1897**. A-1/A-2 de NQ-B son paridad, no suma.

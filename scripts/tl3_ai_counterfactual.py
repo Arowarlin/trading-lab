@@ -123,7 +123,7 @@ def main():
     trades = [
         dict(row)
         for row in con.execute(
-            "SELECT symbol,side,entry,sl,tp,ts,exit_ts,style,setup,shadow_seed,result_r "
+            "SELECT id,symbol,side,entry,sl,tp,ts,exit_ts,exit_price,style,setup,shadow_seed,result_r,pnl,volume,risk_usd "
             "FROM ai_trades WHERE result_r IS NOT NULL AND shadow_seed IS NOT NULL"
         )
     ]
@@ -201,8 +201,25 @@ def main():
             )
         spread = float(next_bar.iloc[0]["spread"])
         result = {
+            "id": row["id"],
             "symbol": symbol,
             "side": side_ai,
+            "ts": str(row["ts"]),
+            "real_entry": row["entry"],
+            "real_exit": row.get("exit_price"),
+            "real_exit_ts": row.get("exit_ts"),
+            "real_sl": row["sl"],
+            "real_tp": row["tp"],
+            "real_r": row["result_r"],
+            "pnl": row.get("pnl"),
+            "volume": row.get("volume"),
+            "risk_usd": row.get("risk_usd"),
+            "style": row["style"],
+            "setup": row["setup"],
+            "sim_entry": entry,
+            "sim_entry_time": str(entry_time),
+            "forced": str(forced),
+            "spread": spread,
             "ia": _simulate(
                 side_ai, entry, sl_dist, tp_dist, window, forced, points[symbol], spread
             ),
@@ -329,6 +346,9 @@ def main():
         "",
     ]
     OUT.write_text("\n".join(lines), encoding="utf-8")
+    Path("TL3_REPORTS/ai_trader_t5_rows.json").write_text(
+        json.dumps(rows, indent=1, default=str), encoding="utf-8"
+    )
     print("\n".join(lines))
     Path("C:/Users/PC/AppData/Local/Temp/opencode/t5_summary.json").write_text(
         json.dumps(summary, indent=1, default=str), encoding="utf-8"

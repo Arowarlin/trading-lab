@@ -5,7 +5,9 @@
 | data/cache/ea/US100_CASH_M5_NY.parquet | US100.cash | cfd | M5 | 368802 | 0.00% | 2021 |
 | data/cache/ea/us100_spread_profile_ny5m.parquet | us100_spread_profile_ny5m.cash | cfd |  | 288 | 0.00% | Sin datos |
 | data/cache/ea/US30_CASH_M5_NY.parquet | US30.cash | cfd | M5 | 538260 | 0.00% | 2019 |
+| data/cache/ea/us30_spread_profile_ny5m.parquet | us30_spread_profile_ny5m.cash | cfd |  | 288 | 0.00% | Sin datos |
 | data/cache/ea/US500_CASH_M5_NY.parquet | US500.cash | cfd | M5 | 368761 | 0.00% | 2021 |
+| data/cache/ea/us500_spread_profile_ny5m.parquet | us500_spread_profile_ny5m.cash | cfd |  | 288 | 0.00% | Sin datos |
 | data/cache/dukascopy/EURUSD_M1.parquet | Dukascopy EURUSD | cfd | M1 | 8801267 | 10.92% | 2003 |
 | data/cache/dukascopy/GBPUSD_M1.parquet | Dukascopy GBPUSD | cfd | M1 | 8797879 | 0.00% | 2003 |
 | data/cache/dukascopy/US100_M1.parquet | Dukascopy USATECHIDXUSD | cfd | M1 | 4275591 | 0.00% | 2011 |

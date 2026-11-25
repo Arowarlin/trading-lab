@@ -173,6 +173,6 @@ Los cierres están en `.orquestador/RESULTADO-*.md` y los informes en
   el operador registre `TL3-T7` y `TL3-T8` en `record-informal`.
 - H1 nocturna: **rejected: cost_gate** (3,1-3,9 bps/noche, 2× > 3,5);
   H3 sin potencia (MDE 0,173 > 0,12).
-- `count_tests` = 1895.
+- `count_tests` = 1897.
 
 

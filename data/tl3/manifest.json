@@ -1,5 +1,5 @@
 {
- "generated_at": "2026-11-25T17:07:29.406740+00:00",
+ "generated_at": "2026-11-25T17:53:16.466308+00:00",
  "cache": "data/cache",
  "files": [
   {
@@ -60,6 +60,20 @@
    "sha256": "38baf47e71e69691733e09b6064f9a12186e1adcc925d5e889d3f772041ae797"
   },
   {
+   "path": "data/cache/ea/us30_spread_profile_ny5m.parquet",
+   "source": "ea",
+   "instrument_real": "us30_spread_profile_ny5m.cash",
+   "instrument_class": "cfd",
+   "timeframe": "",
+   "rows": 288,
+   "has_ask": 0.0,
+   "usable_from": null,
+   "dominant_step_by_year": {
+    "1970": 1e-09
+   },
+   "sha256": "c5bb00cab66fbbc09b8c0f5392d6c304094d49c03237b6ef23e161ff8d945c66"
+  },
+  {
    "path": "data/cache/ea/US500_CASH_M5_NY.parquet",
    "source": "ea",
    "instrument_real": "US500.cash",
@@ -80,6 +94,20 @@
     "2026": 300.0
    },
    "sha256": "f7d2391c87291dbc24d0a31d075b24b3aa81ee4945ed4935f41c961a805a3d35"
+  },
+  {
+   "path": "data/cache/ea/us500_spread_profile_ny5m.parquet",
+   "source": "ea",
+   "instrument_real": "us500_spread_profile_ny5m.cash",
+   "instrument_class": "cfd",
+   "timeframe": "",
+   "rows": 288,
+   "has_ask": 0.0,
+   "usable_from": null,
+   "dominant_step_by_year": {
+    "1970": 1e-09
+   },
+   "sha256": "b9312238ee7fc71a68d8a170df5c30f766453a727766a7b982a72d5a3f0a3c4f"
   },
   {
    "path": "data/cache/dukascopy/EURUSD_M1.parquet",

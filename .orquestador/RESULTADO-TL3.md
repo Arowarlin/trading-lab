@@ -19,7 +19,7 @@
 | T8 | **Bloqueado** | Falta la fila `TL3-T8` de `record-informal`; no se ejecutó. |
 | T9 | Hecho | H1: swap 7,33 %/365 = 2,01-2,81 bps + spread 0,69 + slippage 0,38 ≈ 3,1-3,9 bps; 2× > 3,5 → **`rejected: cost_gate`**. H3: 207 días, MDE 0,1731 > 0,12 → `no_power`. |
 | T10 | Hecho | `TL3_REPORTS/TL3_RESULTS_CICLO1.md`. |
-| T11 | Hecho | ruff limpio; pytest **1976 passed, 1 skipped** (32:23); `lab doctor` OK; `lab propfund verify` 4/4; README/PLAN; commit y tag. |
+| T11 | Hecho | ruff limpio; pytest **1976 passed, 1 skipped** (29:49); `lab doctor` OK; `lab propfund verify` 4/4; README/PLAN; tag `tl3-ciclo1c`. |
 
 ## T5 · `ai_trader`
 
@@ -58,11 +58,11 @@ esos bloques.
 
 - `TL3_REPORTS/TL3_RESULTS_CICLO1.md` con estados y recomendaciones.
 - `ruff check`: limpio.
-- `pytest -q`: **1976 passed, 1 skipped** (32:23); aviso de `psutil`.
+- `pytest -q`: **1976 passed, 1 skipped** (29:49).
 - `lab doctor`: OK (avisos preexistentes de plantilla FTMO).
 - `lab propfund verify`: 4/4 grupos OK.
 - README §11 y PLAN actualizados.
-- Commit `tl3: ciclo 1b`, tag `tl3-ciclo1b`.
+- Commit `tl3: cierre ciclo 1c`, tag `tl3-ciclo1c`. Telegram enviado.
 
 ## Cumplimiento
 
