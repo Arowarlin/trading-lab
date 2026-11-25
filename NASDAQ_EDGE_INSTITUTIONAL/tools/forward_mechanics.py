@@ -34,6 +34,7 @@ fm = _load("forward_models", "forward_models.py")
 
 DEV = {"NQ": "2018-12-31", "DUK": "2021-12-31"}
 START = "2026-11-30"  # primera sesion NYSE completa tras el cierre de Thanks giving
+COMMISSION_SIDE_USD = 0.75  # input del operador, 2026-11-25
 
 
 def dev_rows() -> dict[str, list[dict]]:
@@ -61,10 +62,10 @@ def summarise(rows: list[dict], variant: str, fomc, tier1) -> dict:
     days_with: set = set()
     stops: list[float] = []
     counts = {"raw": 0, "fomc": 0, "tier1": 0, "after_news": 0, "after_cap": 0,
-              "no_trade_zero": 0, "target_lt": 0, "bad_stop": 0}
+              "no_trade": 0, "target_lt": 0, "bad_stop": 0}
     by_year = defaultdict(lambda: {
         "sessions": 0, "days_with": 0, "raw": 0, "fomc": 0, "tier1": 0,
-        "after_news": 0, "after_cap": 0, "stops": [], "no_trade_zero": 0,
+        "after_news": 0, "after_cap": 0, "stops": [], "no_trade": 0,
         "target_lt": 0, "bad_stop": 0,
     })
     for r in rows:
@@ -103,9 +104,10 @@ def summarise(rows: list[dict], variant: str, fomc, tier1) -> dict:
                 counts["target_lt"] += 1
                 y["target_lt"] += 1
                 continue
-            if stop_pt * fm.MNQ_USD_PER_POINT > fm.RISK_USD:
-                counts["no_trade_zero"] += 1
-                y["no_trade_zero"] += 1
+            if fm.contracts_for_risk(stop_pt, COMMISSION_SIDE_USD) < 1:
+                counts["no_trade"] += 1
+                y["no_trade"] += 1
+                continue
             kept.append((s, stop_pt))
         kept = kept[:3]
         counts["after_cap"] += len(kept)
@@ -137,7 +139,7 @@ def summarise(rows: list[dict], variant: str, fomc, tier1) -> dict:
                 "tier1": v["tier1"],
                 "after_news": v["after_news"],
                 "after_cap": v["after_cap"],
-                "no_trade_zero": v["no_trade_zero"],
+                "no_trade": v["no_trade"],
                 "target_lt": v["target_lt"],
                 "bad_stop": v["bad_stop"],
                 "stop_median_pt": (
@@ -154,7 +156,12 @@ def main() -> None:
     rows = dev_rows()
     prepared = {src: fm.prepare_sessions(r) for src, r in rows.items()}
     all_rows = prepared["NQ"] + prepared["DUK"]
-    out = {"generated": pd.Timestamp.now(tz="UTC").isoformat(), "variants": {}}
+    out = {
+        "generated": pd.Timestamp.now(tz="UTC").isoformat(),
+        "start": START,
+        "commission_side_usd": COMMISSION_SIDE_USD,
+        "variants": {},
+    }
     for v in fm.VARIANTS:
         res = summarise(all_rows, v, fomc, tier1)
         res["estimate_n200_signals"] = _estimate(res)
@@ -186,7 +193,7 @@ def _table(res: dict) -> list[str]:
     return [
         f"| {y} | {v['sessions']} | {v['days_with_signal']} | {v['pct_days']:.2f} % | "
         f"{v['raw']} | {v['fomc']} | {v['tier1']} | {v['after_news']} | {v['after_cap']} | "
-        f"{v['no_trade_zero']} | {v['target_lt']} | {v['bad_stop']} | "
+        f"{v['no_trade']} | {v['target_lt']} | {v['bad_stop']} | "
         f"{'' if v['stop_median_pt'] is None else format(v['stop_median_pt'], ',.2f')} |"
         for y, v in res["by_year"].items()
     ]
@@ -204,11 +211,10 @@ def write_report(out: dict, fomc, tier1) -> None:
         "",
         "## Comision",
         "",
-        "**Sin datos.** El operador no fijo la comision MNQ por contrato y lado.",
-        "`bloqueado: falta comision MNQ del operador`.",
-        "Lo que sigue son conteos de senales y stops; la columna `NO TRADE 0` cuenta",
-        "solo los casos imposibles incluso con comision 0 (stop > 75 puntos). El NO",
-        "TRADE real y los contratos no se pueden calcular sin la comision.",
+        "**0,75 USD por contrato y lado** (input del operador, 2026-11-25).",
+        "La columna `NO TRADE` aplica la formula de contratos con esa comision y",
+        "slippage de 1 tick por lado. El corte por 2 perdidas no se aplica (necesita",
+        "desenlaces).",
         "",
     ]
     for v, res in out["variants"].items():
@@ -224,14 +230,14 @@ def write_report(out: dict, fomc, tier1) -> None:
             f"Objetivo invalido (<1R): {c['target_lt']}; stop invalido: {c['bad_stop']}.",
             f"- Stop: mediana {res['stop_median_pt']} pt ({res['stop_median_ticks']} ticks); "
             f"p90 {res['stop_p90_pt']} pt ({res['stop_p90_ticks']} ticks).",
-            f"- NO TRADE seguro (stop > 75 pt): {c['no_trade_zero']}. "
-            f"NO TRADE con comision: **Sin datos**.",
-            f"- Estimacion de fecha para n=200 (solo senales, no operaciones): "
+            f"- NO TRADE (comision 0,75): {c['no_trade']} "
+            f"({_pct(c['no_trade'], c['after_news'])} % de las senales tras noticias).",
+            f"- Estimacion de fecha para n=200 operaciones (tras NO TRADE; sin el corte por perdidas): "
             f"{res['estimate_n200_signals']['sessions_needed']} sesiones, "
             f"~{res['estimate_n200_signals']['weeks_needed']} semanas, "
             f"{res['estimate_n200_signals']['estimated_date']}, desde {START}.",
             "",
-            "| Ano | Sesiones | Dias con senal | % dias | Brutas | FOMC | Tier1 | Tras noticias | Tras 3/dia | NO TRADE 0 | <1R | Stop invalido | Stop mediana pt |",
+            "| Ano | Sesiones | Dias con senal | % dias | Brutas | FOMC | Tier1 | Tras noticias | Tras 3/dia | NO TRADE | <1R | Stop invalido | Stop mediana pt |",
             "|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
             *_table(res),
             "",
@@ -239,9 +245,8 @@ def write_report(out: dict, fomc, tier1) -> None:
     lines += [
         "## Lectura",
         "",
-        "- La fecha estimada es una **cota optimista**: cuenta senales, no operaciones.",
-        "  Con la comision faltante no se puede descontar el NO TRADE ni el corte por",
-        "  perdidas; ambas cosas retrasarian la fecha.",
+        "- La fecha estimada es una **cota optimista**: descuenta el NO TRADE, pero no",
+        "  el corte por 2 perdidas ni el -300 USD/dia, que necesitan desenlaces.",
         "- No se leyo ningun desenlace ni se calculo ningun resultado.",
         "",
     ]

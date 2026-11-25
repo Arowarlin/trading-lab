@@ -1,25 +1,27 @@
 {
- "generated": "2026-11-25T20:50:52.782660+00:00",
+ "generated": "2026-11-25T21:28:04.343296+00:00",
+ "start": "2026-11-30",
+ "commission_side_usd": 0.75,
  "variants": {
   "NQF-A": {
    "variant": "NQF-A",
    "sessions": 2486,
-   "days_with_signal": 2332,
-   "pct_days_with_signal": 93.81,
+   "days_with_signal": 2329,
+   "pct_days_with_signal": 93.68,
    "counts": {
     "raw": 2388,
     "fomc": 56,
     "tier1": 0,
     "after_news": 2332,
-    "after_cap": 2332,
-    "no_trade_zero": 3,
+    "after_cap": 2329,
+    "no_trade": 3,
     "target_lt": 0,
     "bad_stop": 0
    },
    "stop_median_pt": 6.84,
-   "stop_p90_pt": 25.79,
+   "stop_p90_pt": 25.72,
    "stop_median_ticks": 27.4,
-   "stop_p90_ticks": 103.2,
+   "stop_p90_ticks": 102.9,
    "by_year": {
     "2010": {
      "sessions": 115,
@@ -30,7 +32,7 @@
      "tier1": 0,
      "after_news": 108,
      "after_cap": 108,
-     "no_trade_zero": 0,
+     "no_trade": 0,
      "target_lt": 0,
      "bad_stop": 0,
      "stop_median_pt": 4.04
@@ -44,7 +46,7 @@
      "tier1": 0,
      "after_news": 198,
      "after_cap": 198,
-     "no_trade_zero": 0,
+     "no_trade": 0,
      "target_lt": 0,
      "bad_stop": 0,
      "stop_median_pt": 4.28
@@ -58,7 +60,7 @@
      "tier1": 0,
      "after_news": 194,
      "after_cap": 194,
-     "no_trade_zero": 0,
+     "no_trade": 0,
      "target_lt": 0,
      "bad_stop": 0,
      "stop_median_pt": 4.29
@@ -72,7 +74,7 @@
      "tier1": 0,
      "after_news": 189,
      "after_cap": 189,
-     "no_trade_zero": 0,
+     "no_trade": 0,
      "target_lt": 0,
      "bad_stop": 0,
      "stop_median_pt": 3.96
@@ -86,7 +88,7 @@
      "tier1": 0,
      "after_news": 184,
      "after_cap": 184,
-     "no_trade_zero": 0,
+     "no_trade": 0,
      "target_lt": 0,
      "bad_stop": 0,
      "stop_median_pt": 4.89
@@ -100,7 +102,7 @@
      "tier1": 0,
      "after_news": 194,
      "after_cap": 194,
-     "no_trade_zero": 0,
+     "no_trade": 0,
      "target_lt": 0,
      "bad_stop": 0,
      "stop_median_pt": 6.89
@@ -114,7 +116,7 @@
      "tier1": 0,
      "after_news": 187,
      "after_cap": 187,
-     "no_trade_zero": 0,
+     "no_trade": 0,
      "target_lt": 0,
      "bad_stop": 0,
      "stop_median_pt": 6.0
@@ -128,7 +130,7 @@
      "tier1": 0,
      "after_news": 190,
      "after_cap": 190,
-     "no_trade_zero": 0,
+     "no_trade": 0,
      "target_lt": 0,
      "bad_stop": 0,
      "stop_median_pt": 5.46
@@ -142,7 +144,7 @@
      "tier1": 0,
      "after_news": 189,
      "after_cap": 189,
-     "no_trade_zero": 0,
+     "no_trade": 0,
      "target_lt": 0,
      "bad_stop": 0,
      "stop_median_pt": 12.99
@@ -156,24 +158,24 @@
      "tier1": 0,
      "after_news": 229,
      "after_cap": 229,
-     "no_trade_zero": 0,
+     "no_trade": 0,
      "target_lt": 0,
      "bad_stop": 0,
      "stop_median_pt": 10.85
     },
     "2020": {
      "sessions": 247,
-     "days_with_signal": 230,
-     "pct_days": 93.12,
+     "days_with_signal": 227,
+     "pct_days": 91.9,
      "raw": 238,
      "fomc": 8,
      "tier1": 0,
      "after_news": 230,
-     "after_cap": 230,
-     "no_trade_zero": 3,
+     "after_cap": 227,
+     "no_trade": 3,
      "target_lt": 0,
      "bad_stop": 0,
-     "stop_median_pt": 24.71
+     "stop_median_pt": 24.41
     },
     "2021": {
      "sessions": 251,
@@ -184,14 +186,14 @@
      "tier1": 0,
      "after_news": 240,
      "after_cap": 240,
-     "no_trade_zero": 0,
+     "no_trade": 0,
      "target_lt": 0,
      "bad_stop": 0,
      "stop_median_pt": 24.53
     }
    },
    "estimate_n200_signals": {
-    "signals_per_session": 0.938,
+    "signals_per_session": 0.937,
     "sessions_needed": 214,
     "weeks_needed": 42.8,
     "estimated_date": "2027-09-26"
@@ -208,7 +210,7 @@
     "tier1": 0,
     "after_news": 1275,
     "after_cap": 491,
-    "no_trade_zero": 0,
+    "no_trade": 0,
     "target_lt": 784,
     "bad_stop": 0
    },
@@ -226,7 +228,7 @@
      "tier1": 0,
      "after_news": 54,
      "after_cap": 17,
-     "no_trade_zero": 0,
+     "no_trade": 0,
      "target_lt": 37,
      "bad_stop": 0,
      "stop_median_pt": 2.75
@@ -240,7 +242,7 @@
      "tier1": 0,
      "after_news": 99,
      "after_cap": 38,
-     "no_trade_zero": 0,
+     "no_trade": 0,
      "target_lt": 61,
      "bad_stop": 0,
      "stop_median_pt": 2.25
@@ -254,7 +256,7 @@
      "tier1": 0,
      "after_news": 112,
      "after_cap": 41,
-     "no_trade_zero": 0,
+     "no_trade": 0,
      "target_lt": 71,
      "bad_stop": 0,
      "stop_median_pt": 2.5
@@ -268,7 +270,7 @@
      "tier1": 0,
      "after_news": 109,
      "after_cap": 30,
-     "no_trade_zero": 0,
+     "no_trade": 0,
      "target_lt": 79,
      "bad_stop": 0,
      "stop_median_pt": 2.25
@@ -282,7 +284,7 @@
      "tier1": 0,
      "after_news": 119,
      "after_cap": 41,
-     "no_trade_zero": 0,
+     "no_trade": 0,
      "target_lt": 78,
      "bad_stop": 0,
      "stop_median_pt": 3.25
@@ -296,7 +298,7 @@
      "tier1": 0,
      "after_news": 89,
      "after_cap": 33,
-     "no_trade_zero": 0,
+     "no_trade": 0,
      "target_lt": 56,
      "bad_stop": 0,
      "stop_median_pt": 3.25
@@ -310,7 +312,7 @@
      "tier1": 0,
      "after_news": 102,
      "after_cap": 47,
-     "no_trade_zero": 0,
+     "no_trade": 0,
      "target_lt": 55,
      "bad_stop": 0,
      "stop_median_pt": 3.75
@@ -324,7 +326,7 @@
      "tier1": 0,
      "after_news": 111,
      "after_cap": 35,
-     "no_trade_zero": 0,
+     "no_trade": 0,
      "target_lt": 76,
      "bad_stop": 0,
      "stop_median_pt": 3.5
@@ -338,7 +340,7 @@
      "tier1": 0,
      "after_news": 112,
      "after_cap": 42,
-     "no_trade_zero": 0,
+     "no_trade": 0,
      "target_lt": 70,
      "bad_stop": 0,
      "stop_median_pt": 8.88
@@ -352,7 +354,7 @@
      "tier1": 0,
      "after_news": 117,
      "after_cap": 56,
-     "no_trade_zero": 0,
+     "no_trade": 0,
      "target_lt": 61,
      "bad_stop": 0,
      "stop_median_pt": 5.65
@@ -366,7 +368,7 @@
      "tier1": 0,
      "after_news": 114,
      "after_cap": 57,
-     "no_trade_zero": 0,
+     "no_trade": 0,
      "target_lt": 57,
      "bad_stop": 0,
      "stop_median_pt": 11.43
@@ -380,7 +382,7 @@
      "tier1": 0,
      "after_news": 137,
      "after_cap": 54,
-     "no_trade_zero": 0,
+     "no_trade": 0,
      "target_lt": 83,
      "bad_stop": 0,
      "stop_median_pt": 11.52
@@ -396,22 +398,22 @@
   "NQF-C": {
    "variant": "NQF-C",
    "sessions": 2486,
-   "days_with_signal": 1797,
-   "pct_days_with_signal": 72.28,
+   "days_with_signal": 1796,
+   "pct_days_with_signal": 72.24,
    "counts": {
     "raw": 3986,
     "fomc": 99,
     "tier1": 0,
     "after_news": 3887,
-    "after_cap": 2785,
-    "no_trade_zero": 6,
+    "after_cap": 2779,
+    "no_trade": 6,
     "target_lt": 1049,
     "bad_stop": 14
    },
    "stop_median_pt": 4.0,
-   "stop_p90_pt": 15.75,
+   "stop_p90_pt": 15.59,
    "stop_median_ticks": 16.0,
-   "stop_p90_ticks": 63.0,
+   "stop_p90_ticks": 62.4,
    "by_year": {
     "2010": {
      "sessions": 115,
@@ -422,7 +424,7 @@
      "tier1": 0,
      "after_news": 159,
      "after_cap": 126,
-     "no_trade_zero": 0,
+     "no_trade": 0,
      "target_lt": 31,
      "bad_stop": 1,
      "stop_median_pt": 2.5
@@ -436,7 +438,7 @@
      "tier1": 0,
      "after_news": 353,
      "after_cap": 241,
-     "no_trade_zero": 0,
+     "no_trade": 0,
      "target_lt": 108,
      "bad_stop": 1,
      "stop_median_pt": 2.5
@@ -450,7 +452,7 @@
      "tier1": 0,
      "after_news": 333,
      "after_cap": 233,
-     "no_trade_zero": 0,
+     "no_trade": 0,
      "target_lt": 95,
      "bad_stop": 1,
      "stop_median_pt": 2.75
@@ -464,7 +466,7 @@
      "tier1": 0,
      "after_news": 334,
      "after_cap": 229,
-     "no_trade_zero": 0,
+     "no_trade": 0,
      "target_lt": 100,
      "bad_stop": 1,
      "stop_median_pt": 2.25
@@ -478,7 +480,7 @@
      "tier1": 0,
      "after_news": 299,
      "after_cap": 214,
-     "no_trade_zero": 0,
+     "no_trade": 0,
      "target_lt": 81,
      "bad_stop": 1,
      "stop_median_pt": 2.75
@@ -492,7 +494,7 @@
      "tier1": 0,
      "after_news": 293,
      "after_cap": 201,
-     "no_trade_zero": 0,
+     "no_trade": 0,
      "target_lt": 90,
      "bad_stop": 1,
      "stop_median_pt": 4.25
@@ -506,7 +508,7 @@
      "tier1": 0,
      "after_news": 338,
      "after_cap": 233,
-     "no_trade_zero": 0,
+     "no_trade": 0,
      "target_lt": 100,
      "bad_stop": 1,
      "stop_median_pt": 3.75
@@ -520,7 +522,7 @@
      "tier1": 0,
      "after_news": 285,
      "after_cap": 207,
-     "no_trade_zero": 0,
+     "no_trade": 0,
      "target_lt": 76,
      "bad_stop": 0,
      "stop_median_pt": 3.25
@@ -534,7 +536,7 @@
      "tier1": 0,
      "after_news": 308,
      "after_cap": 229,
-     "no_trade_zero": 0,
+     "no_trade": 0,
      "target_lt": 70,
      "bad_stop": 1,
      "stop_median_pt": 7.5
@@ -548,24 +550,24 @@
      "tier1": 0,
      "after_news": 404,
      "after_cap": 303,
-     "no_trade_zero": 0,
+     "no_trade": 0,
      "target_lt": 98,
      "bad_stop": 0,
      "stop_median_pt": 6.35
     },
     "2020": {
      "sessions": 247,
-     "days_with_signal": 180,
-     "pct_days": 72.87,
+     "days_with_signal": 179,
+     "pct_days": 72.47,
      "raw": 434,
      "fomc": 19,
      "tier1": 0,
      "after_news": 415,
-     "after_cap": 307,
-     "no_trade_zero": 5,
+     "after_cap": 302,
+     "no_trade": 5,
      "target_lt": 104,
      "bad_stop": 2,
-     "stop_median_pt": 13.82
+     "stop_median_pt": 13.49
     },
     "2021": {
      "sessions": 251,
@@ -575,15 +577,15 @@
      "fomc": 7,
      "tier1": 0,
      "after_news": 366,
-     "after_cap": 262,
-     "no_trade_zero": 1,
+     "after_cap": 261,
+     "no_trade": 1,
      "target_lt": 96,
      "bad_stop": 4,
-     "stop_median_pt": 13.83
+     "stop_median_pt": 13.82
     }
    },
    "estimate_n200_signals": {
-    "signals_per_session": 1.12,
+    "signals_per_session": 1.118,
     "sessions_needed": 179,
     "weeks_needed": 35.8,
     "estimated_date": "2027-08-08"

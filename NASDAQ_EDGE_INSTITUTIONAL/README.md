@@ -39,7 +39,7 @@ reglas de `AGENTS.md` aplican.
 
 ## Forward (2026-11-25)
 
-- NQF-A/B/C congeladas en `04_FORWARD/prerregistro.md`; inicio nominal 2026-11-30, **bloqueado** hasta que el operador fije la comisión MNQ; sin resultados **forward** hasta n = 200 por variante.
+- NQF-A/B/C congeladas en `04_FORWARD/prerregistro.md`; inicio 2026-11-30, comisión MNQ 0,75 USD por contrato y lado (operador, 2026-11-25); sin resultados **forward** hasta n = 200 por variante.
 
 ## Conclusión de la Fase C
 

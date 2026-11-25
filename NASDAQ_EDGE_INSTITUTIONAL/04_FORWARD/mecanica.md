@@ -8,22 +8,21 @@ con los rolls de NQ excluidos. Ventana 9:35-11:30 ET; maximas 3 senales/dia.
 
 ## Comision
 
-**Sin datos.** El operador no fijo la comision MNQ por contrato y lado.
-`bloqueado: falta comision MNQ del operador`.
-Lo que sigue son conteos de senales y stops; la columna `NO TRADE 0` cuenta
-solo los casos imposibles incluso con comision 0 (stop > 75 puntos). El NO
-TRADE real y los contratos no se pueden calcular sin la comision.
+**0,75 USD por contrato y lado** (input del operador, 2026-11-25).
+La columna `NO TRADE` aplica la formula de contratos con esa comision y
+slippage de 1 tick por lado. El corte por 2 perdidas no se aplica (necesita
+desenlaces).
 
 ## NQF-A
 
-- Sesiones: 2486; dias con senal: 2332 (93.81 %).
+- Sesiones: 2486; dias con senal: 2329 (93.68 %).
 - Senales brutas: 2388; bloqueadas por FOMC: 56; por Tier 1: 0; tras noticias: 2332.
-- Tras el maximo de 3/dia: 2332 senales. Objetivo invalido (<1R): 0; stop invalido: 0.
-- Stop: mediana 6.84 pt (27.4 ticks); p90 25.79 pt (103.2 ticks).
-- NO TRADE seguro (stop > 75 pt): 3. NO TRADE con comision: **Sin datos**.
-- Estimacion de fecha para n=200 (solo senales, no operaciones): 214 sesiones, ~42.8 semanas, 2027-09-26, desde 2026-11-30.
+- Tras el maximo de 3/dia: 2329 senales. Objetivo invalido (<1R): 0; stop invalido: 0.
+- Stop: mediana 6.84 pt (27.4 ticks); p90 25.72 pt (102.9 ticks).
+- NO TRADE (comision 0,75): 3 (0.13 % de las senales tras noticias).
+- Estimacion de fecha para n=200 operaciones (tras NO TRADE; sin el corte por perdidas): 214 sesiones, ~42.8 semanas, 2027-09-26, desde 2026-11-30.
 
-| Ano | Sesiones | Dias con senal | % dias | Brutas | FOMC | Tier1 | Tras noticias | Tras 3/dia | NO TRADE 0 | <1R | Stop invalido | Stop mediana pt |
+| Ano | Sesiones | Dias con senal | % dias | Brutas | FOMC | Tier1 | Tras noticias | Tras 3/dia | NO TRADE | <1R | Stop invalido | Stop mediana pt |
 |---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
 | 2010 | 115 | 108 | 93.91 % | 110 | 2 | 0 | 108 | 108 | 0 | 0 | 0 | 4.04 |
 | 2011 | 210 | 198 | 94.29 % | 203 | 5 | 0 | 198 | 198 | 0 | 0 | 0 | 4.28 |
@@ -35,7 +34,7 @@ TRADE real y los contratos no se pueden calcular sin la comision.
 | 2017 | 202 | 190 | 94.06 % | 194 | 4 | 0 | 190 | 190 | 0 | 0 | 0 | 5.46 |
 | 2018 | 201 | 189 | 94.03 % | 194 | 5 | 0 | 189 | 189 | 0 | 0 | 0 | 12.99 |
 | 2019 | 249 | 229 | 91.97 % | 234 | 5 | 0 | 229 | 229 | 0 | 0 | 0 | 10.85 |
-| 2020 | 247 | 230 | 93.12 % | 238 | 8 | 0 | 230 | 230 | 3 | 0 | 0 | 24.71 |
+| 2020 | 247 | 227 | 91.90 % | 238 | 8 | 0 | 230 | 227 | 3 | 0 | 0 | 24.41 |
 | 2021 | 251 | 240 | 95.62 % | 248 | 8 | 0 | 240 | 240 | 0 | 0 | 0 | 24.53 |
 
 ## NQF-B
@@ -44,10 +43,10 @@ TRADE real y los contratos no se pueden calcular sin la comision.
 - Senales brutas: 1314; bloqueadas por FOMC: 39; por Tier 1: 0; tras noticias: 1275.
 - Tras el maximo de 3/dia: 491 senales. Objetivo invalido (<1R): 784; stop invalido: 0.
 - Stop: mediana 4.25 pt (17.0 ticks); p90 16.32 pt (65.3 ticks).
-- NO TRADE seguro (stop > 75 pt): 0. NO TRADE con comision: **Sin datos**.
-- Estimacion de fecha para n=200 (solo senales, no operaciones): 1013 sesiones, ~202.6 semanas, 2030-10-18, desde 2026-11-30.
+- NO TRADE (comision 0,75): 0 (0.0 % de las senales tras noticias).
+- Estimacion de fecha para n=200 operaciones (tras NO TRADE; sin el corte por perdidas): 1013 sesiones, ~202.6 semanas, 2030-10-18, desde 2026-11-30.
 
-| Ano | Sesiones | Dias con senal | % dias | Brutas | FOMC | Tier1 | Tras noticias | Tras 3/dia | NO TRADE 0 | <1R | Stop invalido | Stop mediana pt |
+| Ano | Sesiones | Dias con senal | % dias | Brutas | FOMC | Tier1 | Tras noticias | Tras 3/dia | NO TRADE | <1R | Stop invalido | Stop mediana pt |
 |---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
 | 2010 | 115 | 17 | 14.78 % | 56 | 2 | 0 | 54 | 17 | 0 | 37 | 0 | 2.75 |
 | 2011 | 210 | 38 | 18.10 % | 103 | 4 | 0 | 99 | 38 | 0 | 61 | 0 | 2.25 |
@@ -64,14 +63,14 @@ TRADE real y los contratos no se pueden calcular sin la comision.
 
 ## NQF-C
 
-- Sesiones: 2486; dias con senal: 1797 (72.28 %).
+- Sesiones: 2486; dias con senal: 1796 (72.24 %).
 - Senales brutas: 3986; bloqueadas por FOMC: 99; por Tier 1: 0; tras noticias: 3887.
-- Tras el maximo de 3/dia: 2785 senales. Objetivo invalido (<1R): 1049; stop invalido: 14.
-- Stop: mediana 4.0 pt (16.0 ticks); p90 15.75 pt (63.0 ticks).
-- NO TRADE seguro (stop > 75 pt): 6. NO TRADE con comision: **Sin datos**.
-- Estimacion de fecha para n=200 (solo senales, no operaciones): 179 sesiones, ~35.8 semanas, 2027-08-08, desde 2026-11-30.
+- Tras el maximo de 3/dia: 2779 senales. Objetivo invalido (<1R): 1049; stop invalido: 14.
+- Stop: mediana 4.0 pt (16.0 ticks); p90 15.59 pt (62.4 ticks).
+- NO TRADE (comision 0,75): 6 (0.15 % de las senales tras noticias).
+- Estimacion de fecha para n=200 operaciones (tras NO TRADE; sin el corte por perdidas): 179 sesiones, ~35.8 semanas, 2027-08-08, desde 2026-11-30.
 
-| Ano | Sesiones | Dias con senal | % dias | Brutas | FOMC | Tier1 | Tras noticias | Tras 3/dia | NO TRADE 0 | <1R | Stop invalido | Stop mediana pt |
+| Ano | Sesiones | Dias con senal | % dias | Brutas | FOMC | Tier1 | Tras noticias | Tras 3/dia | NO TRADE | <1R | Stop invalido | Stop mediana pt |
 |---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
 | 2010 | 115 | 81 | 70.43 % | 161 | 2 | 0 | 159 | 126 | 0 | 31 | 1 | 2.50 |
 | 2011 | 210 | 155 | 73.81 % | 363 | 10 | 0 | 353 | 241 | 0 | 108 | 1 | 2.50 |
@@ -83,12 +82,11 @@ TRADE real y los contratos no se pueden calcular sin la comision.
 | 2017 | 202 | 137 | 67.82 % | 294 | 9 | 0 | 285 | 207 | 0 | 76 | 0 | 3.25 |
 | 2018 | 201 | 146 | 72.64 % | 317 | 9 | 0 | 308 | 229 | 0 | 70 | 1 | 7.50 |
 | 2019 | 249 | 191 | 76.71 % | 412 | 8 | 0 | 404 | 303 | 0 | 98 | 0 | 6.35 |
-| 2020 | 247 | 180 | 72.87 % | 434 | 19 | 0 | 415 | 307 | 5 | 104 | 2 | 13.82 |
-| 2021 | 251 | 171 | 68.13 % | 373 | 7 | 0 | 366 | 262 | 1 | 96 | 4 | 13.83 |
+| 2020 | 247 | 179 | 72.47 % | 434 | 19 | 0 | 415 | 302 | 5 | 104 | 2 | 13.49 |
+| 2021 | 251 | 171 | 68.13 % | 373 | 7 | 0 | 366 | 261 | 1 | 96 | 4 | 13.82 |
 
 ## Lectura
 
-- La fecha estimada es una **cota optimista**: cuenta senales, no operaciones.
-  Con la comision faltante no se puede descontar el NO TRADE ni el corte por
-  perdidas; ambas cosas retrasarian la fecha.
+- La fecha estimada es una **cota optimista**: descuenta el NO TRADE, pero no
+  el corte por 2 perdidas ni el -300 USD/dia, que necesitan desenlaces.
 - No se leyo ningun desenlace ni se calculo ningun resultado.
