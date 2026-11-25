@@ -67,3 +67,19 @@ H3: 207 días con señal, MDE 0,1731 > 0,12 → **rejected: no_power**.
 Sin campañas, OOS, `confirm`, `record-informal`, push, borrado ni órdenes.
 No se tocó el EA, el setfile, `ea_us100_engine.py`, `ea_lab/`, `ai_trader.py`,
 Prop Fund, riesgo FTMO, forward, `config/schedule.yaml` ni las tareas.
+
+## TL3-D · Estado de la cadena (2026-11-25)
+
+| Bloque | Estado | Detalle |
+|---|---|---|
+| D0 | Hecho | `29459cf` cola TL3-D. |
+| D1 | Hecho | `4ecafaa` swap, codificación y registro. |
+| D2 | Hecho | `b2d980b` línea base sin ventaja. FundingPips marcado no fiable (simulador anterior); corregido en TL2-DIARIO `020b41b`. |
+| D3 | Hecho | `e68936b` cobertura: 270 filas; US100 2012-2021 = 1116 vs ~1128 (−12), 0 en 2012/2016/2017; `data_coverage.md` y `coverage.json`. |
+| D3b | Hecho | `db760c7` T5-bis: 12 TP / 13 SL / 23 otro, 23/48 coincidencias, opuestas #27 y #51; `nights(fecha)`; FundingPips: 30.672/45.000 (68,2 %) caminos afectados con el código anterior, 0 con el corregido. |
+| D4 | Hecho | Plan de potencia: sd Δ_t 0,5341 → n 177, redondeo 180; Δ_g 0,4059 → 103; R real 0,9871 → 605. Ritmo 5,33 ops/día hábil; evaluación única a 180 (~2027-01-04). H-2026-012 `draft`. |
+| D5 | Pendiente | Plan de seguimiento del EA. |
+| D5b | Pendiente | Diagnóstico de la TCA. |
+| D6 | Pendiente | Cierre, README/PLAN y `count_tests` 1897. |
+| D7 | Pendiente | Aviso a Telegram. |
+
