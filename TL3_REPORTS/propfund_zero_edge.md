@@ -40,3 +40,5 @@ Neto: **Sin datos** (no hay coste por operación en R sin suponer).
 Lectura: una estrategia real aporta sobre las reglas solo si su P(financiada)
 o EV supera esta línea base con la misma regla de riesgo.
 El simulador con datos diarios subestima el riesgo intradía.
+
+Aviso (2026-11-25, TL2-DIARIO): las 9 filas de FundingPips de esta tabla se calcularon con el simulador anterior (`max(initial, day_start)`); la tabla antes/despues esta en `TL3_REPORTS/tl2_diario_inventario.md` §9.

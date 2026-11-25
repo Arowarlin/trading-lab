@@ -27,21 +27,23 @@ def _rules(**overrides) -> PropRules:
     return PropRules(**base)
 
 
-def test_fundingpips_usa_max_balance_equity_en_el_reinicio():
+def test_fundingpips_no_usa_el_balance_inicial_en_el_modelo_diario():
     max_base = _rules(
         firm="FundingPips",
         daily_loss_mode="higher_of_balance_or_equity",
     )
     equity_base = _rules(firm="FundingPips", daily_loss_mode="equity")
 
-    # -3 % diario: al segundo día la equidad (94,09k) está por debajo del
-    # balance inicial (100k). Con max(balance, equity) el suelo diario es 95k
-    # y rompe; con equity el suelo es 92k y no rompe.
-    broken = monte_carlo(max_base, [-0.03], n_paths=200, horizon=2, seed=7)
-    survives = monte_carlo(equity_base, [-0.03], n_paths=200, horizon=2, seed=7)
+    # En el modelo diario no hay posiciones abiertas entre días, así que
+    # balance = equidad al inicio del día (base = day_start). Dos días de
+    # -3 %: el suelo del segundo día es 97k - 5k = 92k y la equidad 94,09k,
+    # así que no rompe. El código anterior usaba el balance inicial (95k) y
+    # marcaba rotura diaria.
+    max_path = monte_carlo(max_base, [-0.03], n_paths=200, horizon=2, seed=7)
+    equity_path = monte_carlo(equity_base, [-0.03], n_paths=200, horizon=2, seed=7)
 
-    assert broken["breach_rate"] == 1.0
-    assert survives["breach_rate"] == 0.0
+    assert max_path["breach_rate"] == 0.0
+    assert equity_path["breach_rate"] == 0.0
 
 
 def test_verificacion_del_2step_empieza_en_el_balance_inicial():

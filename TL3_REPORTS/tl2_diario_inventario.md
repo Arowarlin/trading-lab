@@ -78,3 +78,38 @@ P3.3 exige que **todos** los consumidores soporten el modo para pasar el literal
 
 - No se ejecuto ninguna simulacion de estrategia real ni se sumo al contador.
 - `Sin datos`: generador de `reports/ea/p-pasar-oficial.md` y curva historica de balance por dia de CFD-006.
+
+
+## 9. Antes / despues de las 9 filas de FundingPips (P4.3)
+
+Mismas reglas y mismos retornos sinteticos de D2 (5.000 caminos, 180 dias por fase, semilla 42). La unica diferencia es la base del limite diario.
+
+**Antes** (codigo con `max(initial, day_start)`; valores de `propfund_zero_edge.md`):
+
+| b | Riesgo | P(fase 1) | P(fase 2) | P(financiada) | P(romper) | P(diario) | P(total) | Dias |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1 | 0,25% | 1,96% | 0,24% | 0,24% | 18,36% | 18,36% | 0,58% | 253,0 |
+| 1 | 0,50% | 19,86% | 7,40% | 7,40% | 61,28% | 61,28% | 21,66% | 173,5 |
+| 1 | 1,00% | 36,30% | 17,30% | 17,30% | 82,08% | 82,08% | 63,08% | 66,0 |
+| 2 | 0,25% | 10,70% | 2,94% | 2,94% | 32,86% | 32,86% | 4,10% | 226,0 |
+| 2 | 0,50% | 34,10% | 15,86% | 15,86% | 75,46% | 75,46% | 38,84% | 113,0 |
+| 2 | 1,00% | 37,66% | 18,00% | 18,00% | 82,00% | 82,00% | 65,34% | 34,0 |
+| 3 | 0,25% | 19,10% | 7,18% | 7,18% | 46,82% | 46,82% | 9,76% | 186,0 |
+| 3 | 0,50% | 35,88% | 16,74% | 16,74% | 80,88% | 80,88% | 52,54% | 80,0 |
+| 3 | 1,00% | 37,02% | 17,32% | 17,32% | 82,68% | 82,68% | 67,68% | 24,0 |
+
+**Despues** (codigo corregido, base `day_start`):
+
+| b | Riesgo | P(fase 1) | P(fase 2) | P(financiada) | P(romper) | P(diario) | P(total) | Dias |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1 | 0,25% | 1,96% | 0,24% | 0,24% | 0,58% | 0,00% | 0,58% | 253,0 |
+| 1 | 0,50% | 20,50% | 8,22% | 8,22% | 21,66% | 0,00% | 21,66% | 180,0 |
+| 1 | 1,00% | 46,82% | 28,04% | 28,04% | 63,08% | 0,00% | 63,08% | 90,0 |
+| 2 | 0,25% | 10,72% | 2,98% | 2,98% | 4,10% | 0,00% | 4,10% | 226,0 |
+| 2 | 0,50% | 39,68% | 22,46% | 22,46% | 38,84% | 0,00% | 38,84% | 135,0 |
+| 2 | 1,00% | 53,12% | 33,92% | 33,92% | 65,34% | 0,00% | 65,34% | 53,5 |
+| 3 | 0,25% | 19,38% | 7,50% | 7,50% | 9,76% | 0,00% | 9,76% | 188,0 |
+| 3 | 0,50% | 45,86% | 28,06% | 28,06% | 52,54% | 0,00% | 52,54% | 110,0 |
+| 3 | 1,00% | 52,30% | 32,26% | 32,26% | 67,68% | 0,00% | 67,68% | 36,0 |
+
+Lectura: la P(diario) pasa de 18,36-67,68 % a **0** en las 9 filas; con riesgo 0,25 % al dia no hay ninguna rotura diaria. La P(total) no cambia (esas corridas aislan el limite total), y la P(financiada) sube porque los caminos que antes morian por el diario falso ahora siguen. El unico limite que sigue mordiendo es el 10 % estatico.
