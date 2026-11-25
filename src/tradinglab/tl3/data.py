@@ -141,6 +141,45 @@ def _info(path: Path) -> FileInfo:
     )
 
 
+def session_coverage(
+    m1: pd.DataFrame,
+    day,
+    *,
+    session_min: int = 357,
+    night_min: int = 744,
+    check_previous: bool = True,
+) -> dict:
+    """Regla prerregistrada de T7 para una sesión NY."""
+
+    frame = m1.copy()
+    frame.index = pd.DatetimeIndex(frame.index)
+    if frame.index.tz is not None:
+        frame.index = frame.index.tz_convert("America/New_York").tz_localize(None)
+    target = pd.Timestamp(day).normalize()
+    session = frame.loc[
+        target + pd.Timedelta(hours=9, minutes=30) : target + pd.Timedelta(hours=15, minutes=44)
+    ]
+    night = frame.loc[
+        target - pd.Timedelta(days=1) + pd.Timedelta(hours=18) : target + pd.Timedelta(hours=9, minutes=29)
+    ]
+    prev_day = target - pd.Timedelta(days=1)
+    while prev_day.day_of_week >= 5:
+        prev_day -= pd.Timedelta(days=1)
+    previous = frame.loc[
+        prev_day + pd.Timedelta(hours=9, minutes=30) : prev_day + pd.Timedelta(hours=15, minutes=44)
+    ]
+    valid = len(session) >= session_min and len(night) >= night_min
+    if check_previous:
+        valid = valid and len(previous) >= session_min
+    return {
+        "day": target.date().isoformat(),
+        "session_bars": int(len(session)),
+        "previous_bars": int(len(previous)),
+        "night_bars": int(len(night)),
+        "valid": bool(valid),
+    }
+
+
 def build_manifest() -> dict[str, Any]:
     files = []
     for directory in ("ea", "dukascopy", "databento", "mt5"):
@@ -252,4 +291,5 @@ __all__ = [
     "build_manifest",
     "dominant_step",
     "load",
+    "session_coverage",
 ]
