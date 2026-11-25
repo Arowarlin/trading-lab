@@ -33,6 +33,14 @@
       "changes": [],
       "date": "2026-11-25",
       "reason": "TL2-DIARIO: estado previo a corregir el suelo diario higher_of_balance_or_equity en prop/simulator.py y prop/guard.py"
+    },
+    {
+      "changes": [
+        "ftmo_risk: src/tradinglab/prop/guard.py (changed)",
+        "ftmo_risk: src/tradinglab/prop/simulator.py (changed)"
+      ],
+      "date": "2026-11-25",
+      "reason": "TL2-DIARIO: corregido suelo diario higher_of_balance_or_equity (simulator/guard); ver CHANGELOG 2026-11-25"
     }
   ],
   "groups": {
@@ -106,10 +114,10 @@
         "src/tradinglab/guardian.py": "a9bbeda2b6dce38e97de3d780a7361d828632ab7ba89ee08329bc829c3637559",
         "src/tradinglab/prop/__init__.py": "2b5f0229b536875861f8c5a94b0b7ccec5b2474ee14c6950be58e6461f0da816",
         "src/tradinglab/prop/defense.py": "d8113ed244e1dbbd180468dfd7fa08d29fa368ee0c4c63369dfc2637c6703573",
-        "src/tradinglab/prop/guard.py": "a442f04df619da00fab16122bbef11cf86162dd6dcdadefe5d69c0ddefdbd597",
+        "src/tradinglab/prop/guard.py": "d07586548a1e3c2841cde3dfe9370a53c7334af22a5310706a92e24cceaa8d4d",
         "src/tradinglab/prop/overlay.py": "5e601846fda871963b94457b1722bb534e47bf0c6aa30bf04fa4ef3e70e4d025",
         "src/tradinglab/prop/rules.py": "fefc0aabb9911e5bc87bb2035d9f1d7eafb3157cbcea3c6174bcea7575b572cf",
-        "src/tradinglab/prop/simulator.py": "b095ceb8421fbcad1d9e8f070d2dff496768be8d96d3f3500b4d57772e4e6834",
+        "src/tradinglab/prop/simulator.py": "63f2173b9a386f53678309d96f4fa3fccb4bcf42db4d68fc96f2d8da60951eb7",
         "src/tradinglab/symbol_risk.py": "c0f9e941d1811054f2e09b9fe7230a2471acbd47286d14fe13df9c59f43c1486"
       }
     }

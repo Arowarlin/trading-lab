@@ -7,6 +7,47 @@ comprueba. El baseline de hashes vive en
 `config/propfund/protected_manifest.json` y se consulta con
 `lab propfund verify`; se reescribe con `lab propfund baseline --reason "..."`.
 
+## 2026-11-25 · Suelo diario `higher_of_balance_or_equity` (TL2-DIARIO)
+
+- **Autorización del operador (literal):** "APRUEBO CAMBIO DE PRODUCCIÓN
+  TL2-DIARIO: solo la rama higher_of_balance_or_equity de prop/simulator.py y
+  prop/guard.py (y snapshots.py solo si P1 lo permite), con tag
+  tl2-diario-pre, baseline, tests de regresión y CHANGELOG. Sin órdenes, sin
+  push."
+- **Qué cambia (E-1):** en `prop/simulator.py::monte_carlo` y
+  `monte_carlo_program`, la rama `higher_of_balance_or_equity` deja de usar el
+  balance inicial. En el modelo diario no hay posiciones abiertas entre días,
+  así que `day_start_balance = day_start` y el suelo es
+  `max(day_start_balance, day_start) - effective_daily_limit_usd`. Antes, toda
+  cuenta 5 % por debajo del balance inicial contaba como rotura diaria.
+- **Qué cambia (E-2):** en `prop/guard.py::_bases`, la rama nueva usa
+  `max(day_start_balance, day_start_equity)`. Si falta uno de los dos, usa el
+  disponible; si faltan ambos, registra un aviso y conserva la base de equidad
+  anterior. Los modos `balance` y `equity` no cambian.
+- **E-3 (pendiente):** `propfund/snapshots.py` sigue traduciendo
+  `higher_of_balance_or_equity` a `equity` y lo anota. P1 mostró que `overlay`,
+  `defense` y `risk` no leen el modo ni reciben balance de inicio de día;
+  darles soporte exige cambiar sus firmas y la fuente de datos, más que el
+  cambio mínimo autorizado. Queda anotado para otra cola.
+- **Qué no cambia:** los modos `balance`/`equity` (identidad bit a bit contra
+  `tests/data/prop_daily_golden.json`), los límites y porcentajes, las reglas
+  FTMO, `config/propfund/*.yaml`, el EA, `ai_trader`, el forward, las tareas y
+  `.env`. No se envía ninguna orden ni se activa ningún bot.
+- **Verificación:** `tests/test_prop_daily.py` (identidad de los 15 casos
+  golden, camino de −0,25 % diario sin rotura en 30 días, día de −5,1 % que
+  rompe ese día, suelo de `guard` en 95.000 con balance 100.000 y equidad
+  98.000) y `tests/test_prop_n1.py` corregido. `ruff check` y los tests de
+  `prop`/`propfund` en verde. Tabla antes/después de las 9 filas FundingPips de
+  D2 en `TL3_REPORTS/tl2_diario_inventario.md` §9; P(diario) pasa de
+  18,36-67,68 % a 0.
+- **Informes históricos afectados (no reescritos):**
+  `TL3_REPORTS/propfund_zero_edge.md` (9 filas de FundingPips; se le añade una
+  línea que remite a la tabla nueva) y `reports/ea/p-pasar-oficial.md`
+  (FundingPips 2-Step: backtest 0,25 % → P(pasar) 95,66 % / P(romper) 4,34 %;
+  0,35 % → 87,52 % / 12,5 %; mitad y LCB95 → "ninguno").
+- **Rollback:** tag `tl2-diario-pre` (HEAD de P1, antes de tocar el código).
+  Tag de cierre: `tl2-diario`.
+
 ## 2026-11-24 · Retirada de la protección de componentes
 
 - **Autorización del operador (literal):** "EL PASO YA NO ESTA PROTEGIDO
