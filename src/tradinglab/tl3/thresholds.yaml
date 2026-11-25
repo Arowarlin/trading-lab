@@ -1,0 +1,9 @@
+mde_rule: 2.49
+cost_gate_ratio: 2.0
+lcb_z: 1.645
+validity_match_pct: 80
+validity_corr: 0.7
+bootstrap:
+  block: week
+  n: 10000
+  seed: 42

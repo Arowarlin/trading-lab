@@ -159,3 +159,18 @@ Los cierres están en `.orquestador/RESULTADO-*.md` y los informes en
 - Al cerrar un bloque, resumen a Telegram (o ntfy) y **PARA** si la cola lo
   pide.
 
+## 11 · TL3 ciclo 1 (2026-11-25)
+
+- Manifiesto de datos y cargador con comprobación de granularidad/clase;
+  copias de futuros en `data/tl3/futures/`.
+- Registro append-only `data/tl3/tl3_research.db` con 11 hipótesis, candados
+  de potencia/coste/identidad y umbrales con hash.
+- `ai_trader` frente a su gemela: Δ +0,1675 R, IC95 [−0,209; +0,541], n=48
+  → **Sin datos**.
+- Réplica EA v3.2: 479 ops, +0,3104 R; el corto pierde en 2023 (−0,1368 R).
+- T7 (EA Dukascopy 2012-2021) y T8 (H2 FOMC) quedan **bloqueados** hasta que
+  el operador registre `TL3-T7` y `TL3-T8` en `record-informal`.
+- H1 nocturna pasa coste en CFD-006; H3 sin potencia (MDE 0,173 > 0,12).
+- `count_tests` = 1895.
+
+
