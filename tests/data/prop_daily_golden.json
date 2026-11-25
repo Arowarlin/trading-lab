@@ -1,0 +1,741 @@
+{
+  "cases": [
+    {
+      "function": "monte_carlo",
+      "kwargs": {
+        "horizon": 60,
+        "n_paths": 2000,
+        "seed": 42
+      },
+      "name": "ftmo_2step_monte_carlo",
+      "result": {
+        "block_size": 1,
+        "breach_rate": 0.0675,
+        "daily_volatility": 0.007084478416173026,
+        "firm": "FTMO",
+        "horizon_days": 60,
+        "mean_daily_return": 3.774999999999994e-05,
+        "median_days_to_pass": 46.0,
+        "median_max_drawdown": -0.05410513504821651,
+        "p5_max_drawdown": -0.10514913050280783,
+        "p90_days_to_pass": 58.0,
+        "pass_ci95": [
+          0.06008479764983322,
+          0.08256200636900739
+        ],
+        "pass_rate": 0.0705,
+        "paths": 2000,
+        "phase": "challenge",
+        "rules": "FTMO 2-step \u00b7 challenge \u00b7 $100,000 \u00b7 objetivo 10.0% \u00b7 diario 5.0% \u00b7 m\u00e1ximo 10.0% (static) \u00b7 colch\u00f3n 10%",
+        "sample_days": 20000,
+        "timeout_rate": 0.862,
+        "worst_max_drawdown": -0.16554359257790452
+      },
+      "rules": [
+        "FTMO 2-step \u00b7 challenge \u00b7 $100,000 \u00b7 objetivo 10.0% \u00b7 diario 5.0% \u00b7 m\u00e1ximo 10.0% (static) \u00b7 colch\u00f3n 10%"
+      ]
+    },
+    {
+      "function": "monte_carlo_program",
+      "kwargs": {
+        "horizon": 180,
+        "n_paths": 2000,
+        "seed": 42
+      },
+      "name": "ftmo_2step_program",
+      "result": {
+        "block_size": 1,
+        "breach_rate": 0.3815,
+        "daily_volatility": 0.007084478416173026,
+        "firm": "FTMO",
+        "horizon_days": 180,
+        "mean_daily_return": 3.774999999999994e-05,
+        "median_days_to_pass": 152.5,
+        "median_max_drawdown": -0.10748731151395702,
+        "p5_max_drawdown": -0.19153959318408578,
+        "p90_days_to_pass": 242.9000000000002,
+        "pass_ci95": [
+          0.14458678108597353,
+          0.1767168588823753
+        ],
+        "pass_rate": 0.16,
+        "paths": 2000,
+        "phases": [
+          {
+            "breach_rate": 0.291,
+            "horizon_days": 180,
+            "min_trading_days": 4,
+            "pass_rate": 0.3,
+            "phase": "challenge",
+            "rules": "FTMO 2-step \u00b7 challenge \u00b7 $100,000 \u00b7 objetivo 10.0% \u00b7 diario 5.0% \u00b7 m\u00e1ximo 10.0% (static) \u00b7 colch\u00f3n 10%"
+          },
+          {
+            "breach_rate": 0.1035,
+            "horizon_days": 180,
+            "min_trading_days": 4,
+            "pass_rate": 0.16,
+            "phase": "verification",
+            "rules": "FTMO 2-step \u00b7 verification \u00b7 $100,000 \u00b7 objetivo 5.0% \u00b7 diario 5.0% \u00b7 m\u00e1ximo 10.0% (static) \u00b7 colch\u00f3n 10%"
+          }
+        ],
+        "program": "2-step",
+        "sample_days": 20000,
+        "timeout_rate": 0.4585,
+        "worst_max_drawdown": -0.26194919934103866
+      },
+      "rules": [
+        "FTMO 2-step \u00b7 challenge \u00b7 $100,000 \u00b7 objetivo 10.0% \u00b7 diario 5.0% \u00b7 m\u00e1ximo 10.0% (static) \u00b7 colch\u00f3n 10%",
+        "FTMO 2-step \u00b7 verification \u00b7 $100,000 \u00b7 objetivo 5.0% \u00b7 diario 5.0% \u00b7 m\u00e1ximo 10.0% (static) \u00b7 colch\u00f3n 10%"
+      ]
+    },
+    {
+      "function": "monte_carlo",
+      "kwargs": {
+        "horizon": 60,
+        "n_paths": 2000,
+        "seed": 42
+      },
+      "name": "ftmo_1step_monte_carlo",
+      "result": {
+        "block_size": 1,
+        "breach_rate": 0.0675,
+        "daily_volatility": 0.007084478416173026,
+        "firm": "FTMO",
+        "horizon_days": 60,
+        "mean_daily_return": 3.774999999999994e-05,
+        "median_days_to_pass": 46.0,
+        "median_max_drawdown": -0.05410513504821651,
+        "p5_max_drawdown": -0.10514913050280783,
+        "p90_days_to_pass": 58.0,
+        "pass_ci95": [
+          0.06008479764983322,
+          0.08256200636900739
+        ],
+        "pass_rate": 0.0705,
+        "paths": 2000,
+        "phase": "challenge",
+        "rules": "FTMO 1-step \u00b7 challenge \u00b7 $100,000 \u00b7 objetivo 10.0% \u00b7 diario 3.0% \u00b7 m\u00e1ximo 10.0% (static) \u00b7 colch\u00f3n 10%",
+        "sample_days": 20000,
+        "timeout_rate": 0.862,
+        "worst_max_drawdown": -0.16554359257790452
+      },
+      "rules": [
+        "FTMO 1-step \u00b7 challenge \u00b7 $100,000 \u00b7 objetivo 10.0% \u00b7 diario 3.0% \u00b7 m\u00e1ximo 10.0% (static) \u00b7 colch\u00f3n 10%"
+      ]
+    },
+    {
+      "function": "monte_carlo_program",
+      "kwargs": {
+        "horizon": 180,
+        "n_paths": 2000,
+        "seed": 42
+      },
+      "name": "ftmo_1step_program",
+      "result": {
+        "block_size": 1,
+        "breach_rate": 0.2895,
+        "daily_volatility": 0.007084478416173026,
+        "firm": "FTMO",
+        "horizon_days": 180,
+        "mean_daily_return": 3.774999999999994e-05,
+        "median_days_to_pass": 94.0,
+        "median_max_drawdown": -0.09690973889680365,
+        "p5_max_drawdown": -0.1846230077524515,
+        "p90_days_to_pass": 160.0,
+        "pass_ci95": [
+          0.2803149978293942,
+          0.32045184921081094
+        ],
+        "pass_rate": 0.3,
+        "paths": 2000,
+        "phases": [
+          {
+            "breach_rate": 0.291,
+            "horizon_days": 180,
+            "min_trading_days": 0,
+            "pass_rate": 0.3,
+            "phase": "challenge",
+            "rules": "FTMO 1-step \u00b7 challenge \u00b7 $100,000 \u00b7 objetivo 10.0% \u00b7 diario 3.0% \u00b7 m\u00e1ximo 10.0% (static) \u00b7 colch\u00f3n 10%"
+          }
+        ],
+        "program": "1-step",
+        "sample_days": 20000,
+        "timeout_rate": 0.4105,
+        "worst_max_drawdown": -0.26194919934103866
+      },
+      "rules": [
+        "FTMO 1-step \u00b7 challenge \u00b7 $100,000 \u00b7 objetivo 10.0% \u00b7 diario 3.0% \u00b7 m\u00e1ximo 10.0% (static) \u00b7 colch\u00f3n 10%"
+      ]
+    },
+    {
+      "function": "monte_carlo",
+      "kwargs": {
+        "horizon": 60,
+        "n_paths": 2000,
+        "seed": 42
+      },
+      "name": "equity_synthetic_monte_carlo",
+      "result": {
+        "block_size": 1,
+        "breach_rate": 0.0005,
+        "daily_volatility": 0.0034776978049381913,
+        "firm": "Synthetic",
+        "horizon_days": 60,
+        "mean_daily_return": -0.00020000000000000017,
+        "median_days_to_pass": null,
+        "median_max_drawdown": -0.032587900444378815,
+        "p5_max_drawdown": -0.06406324588450776,
+        "p90_days_to_pass": null,
+        "pass_ci95": [
+          0.0,
+          0.0019171176005129348
+        ],
+        "pass_rate": 0.0,
+        "paths": 2000,
+        "phase": "challenge",
+        "rules": "Synthetic 1-step \u00b7 challenge \u00b7 $100,000 \u00b7 objetivo 10.0% \u00b7 diario 3.0% \u00b7 m\u00e1ximo 10.0% (static) \u00b7 colch\u00f3n 0%",
+        "sample_days": 90,
+        "timeout_rate": 0.9995,
+        "worst_max_drawdown": -0.10281753479264955
+      },
+      "rules": [
+        "Synthetic 1-step \u00b7 challenge \u00b7 $100,000 \u00b7 objetivo 10.0% \u00b7 diario 3.0% \u00b7 m\u00e1ximo 10.0% (static) \u00b7 colch\u00f3n 0%"
+      ]
+    },
+    {
+      "function": "monte_carlo_program",
+      "kwargs": {
+        "horizon": 180,
+        "n_paths": 2000,
+        "seed": 42
+      },
+      "name": "equity_synthetic_program",
+      "result": {
+        "block_size": 1,
+        "breach_rate": 0.11,
+        "daily_volatility": 0.0034776978049381913,
+        "firm": "Synthetic",
+        "horizon_days": 180,
+        "mean_daily_return": -0.00020000000000000017,
+        "median_days_to_pass": 147.5,
+        "median_max_drawdown": -0.0661604801641868,
+        "p5_max_drawdown": -0.12181521968664698,
+        "p90_days_to_pass": 168.9,
+        "pass_ci95": [
+          0.0034355600294584893,
+          0.01045855215984829
+        ],
+        "pass_rate": 0.006,
+        "paths": 2000,
+        "phases": [
+          {
+            "breach_rate": 0.11,
+            "horizon_days": 180,
+            "min_trading_days": 0,
+            "pass_rate": 0.006,
+            "phase": "challenge",
+            "rules": "Synthetic 1-step \u00b7 challenge \u00b7 $100,000 \u00b7 objetivo 10.0% \u00b7 diario 3.0% \u00b7 m\u00e1ximo 10.0% (static) \u00b7 colch\u00f3n 0%"
+          }
+        ],
+        "program": "1-step",
+        "sample_days": 90,
+        "timeout_rate": 0.884,
+        "worst_max_drawdown": -0.18144547525439303
+      },
+      "rules": [
+        "Synthetic 1-step \u00b7 challenge \u00b7 $100,000 \u00b7 objetivo 10.0% \u00b7 diario 3.0% \u00b7 m\u00e1ximo 10.0% (static) \u00b7 colch\u00f3n 0%"
+      ]
+    },
+    {
+      "function": "monte_carlo_program",
+      "kwargs": {
+        "horizon": 180,
+        "n_paths": 2000,
+        "seed": 42
+      },
+      "name": "ftmo_2step_b1_r25",
+      "result": {
+        "block_size": 1,
+        "breach_rate": 0.0065,
+        "daily_volatility": 0.002500014450680772,
+        "firm": "FTMO",
+        "horizon_days": 180,
+        "mean_daily_return": -1.5499999999999997e-05,
+        "median_days_to_pass": 293.0,
+        "median_max_drawdown": -0.036995268342302434,
+        "p5_max_drawdown": -0.07266274862958763,
+        "p90_days_to_pass": 293.0,
+        "pass_ci95": [
+          8.826546015058292e-05,
+          0.0028269350227618393
+        ],
+        "pass_rate": 0.0005,
+        "paths": 2000,
+        "phases": [
+          {
+            "breach_rate": 0.006,
+            "horizon_days": 180,
+            "min_trading_days": 4,
+            "pass_rate": 0.0035,
+            "phase": "challenge",
+            "rules": "FTMO 2-step \u00b7 challenge \u00b7 $100,000 \u00b7 objetivo 10.0% \u00b7 diario 5.0% \u00b7 m\u00e1ximo 10.0% (static) \u00b7 colch\u00f3n 10%"
+          },
+          {
+            "breach_rate": 0.0005,
+            "horizon_days": 180,
+            "min_trading_days": 4,
+            "pass_rate": 0.0005,
+            "phase": "verification",
+            "rules": "FTMO 2-step \u00b7 verification \u00b7 $100,000 \u00b7 objetivo 5.0% \u00b7 diario 5.0% \u00b7 m\u00e1ximo 10.0% (static) \u00b7 colch\u00f3n 10%"
+          }
+        ],
+        "program": "2-step",
+        "sample_days": 20000,
+        "timeout_rate": 0.993,
+        "worst_max_drawdown": -0.12003961697023302
+      },
+      "rules": [
+        "FTMO 2-step \u00b7 challenge \u00b7 $100,000 \u00b7 objetivo 10.0% \u00b7 diario 5.0% \u00b7 m\u00e1ximo 10.0% (static) \u00b7 colch\u00f3n 10%",
+        "FTMO 2-step \u00b7 verification \u00b7 $100,000 \u00b7 objetivo 5.0% \u00b7 diario 5.0% \u00b7 m\u00e1ximo 10.0% (static) \u00b7 colch\u00f3n 10%"
+      ]
+    },
+    {
+      "function": "monte_carlo_program",
+      "kwargs": {
+        "horizon": 180,
+        "n_paths": 2000,
+        "seed": 42
+      },
+      "name": "ftmo_2step_b1_r50",
+      "result": {
+        "block_size": 1,
+        "breach_rate": 0.196,
+        "daily_volatility": 0.005000028901361544,
+        "firm": "FTMO",
+        "horizon_days": 180,
+        "mean_daily_return": -3.0999999999999995e-05,
+        "median_days_to_pass": 195.0,
+        "median_max_drawdown": -0.07744951128885535,
+        "p5_max_drawdown": -0.14116419951452813,
+        "p90_days_to_pass": 277.20000000000005,
+        "pass_ci95": [
+          0.04309957134080411,
+          0.06261816602925548
+        ],
+        "pass_rate": 0.052,
+        "paths": 2000,
+        "phases": [
+          {
+            "breach_rate": 0.177,
+            "horizon_days": 180,
+            "min_trading_days": 4,
+            "pass_rate": 0.121,
+            "phase": "challenge",
+            "rules": "FTMO 2-step \u00b7 challenge \u00b7 $100,000 \u00b7 objetivo 10.0% \u00b7 diario 5.0% \u00b7 m\u00e1ximo 10.0% (static) \u00b7 colch\u00f3n 10%"
+          },
+          {
+            "breach_rate": 0.0195,
+            "horizon_days": 180,
+            "min_trading_days": 4,
+            "pass_rate": 0.052,
+            "phase": "verification",
+            "rules": "FTMO 2-step \u00b7 verification \u00b7 $100,000 \u00b7 objetivo 5.0% \u00b7 diario 5.0% \u00b7 m\u00e1ximo 10.0% (static) \u00b7 colch\u00f3n 10%"
+          }
+        ],
+        "program": "2-step",
+        "sample_days": 20000,
+        "timeout_rate": 0.752,
+        "worst_max_drawdown": -0.2262563361780764
+      },
+      "rules": [
+        "FTMO 2-step \u00b7 challenge \u00b7 $100,000 \u00b7 objetivo 10.0% \u00b7 diario 5.0% \u00b7 m\u00e1ximo 10.0% (static) \u00b7 colch\u00f3n 10%",
+        "FTMO 2-step \u00b7 verification \u00b7 $100,000 \u00b7 objetivo 5.0% \u00b7 diario 5.0% \u00b7 m\u00e1ximo 10.0% (static) \u00b7 colch\u00f3n 10%"
+      ]
+    },
+    {
+      "function": "monte_carlo_program",
+      "kwargs": {
+        "horizon": 180,
+        "n_paths": 2000,
+        "seed": 42
+      },
+      "name": "ftmo_2step_b1_r100",
+      "result": {
+        "block_size": 1,
+        "breach_rate": 0.632,
+        "daily_volatility": 0.010000057802723087,
+        "firm": "FTMO",
+        "horizon_days": 180,
+        "mean_daily_return": -6.199999999999999e-05,
+        "median_days_to_pass": 106.0,
+        "median_max_drawdown": -0.16176433050930206,
+        "p5_max_drawdown": -0.27309594315372165,
+        "p90_days_to_pass": 189.0,
+        "pass_ci95": [
+          0.21450983873042448,
+          0.25151581918585003
+        ],
+        "pass_rate": 0.2325,
+        "paths": 2000,
+        "phases": [
+          {
+            "breach_rate": 0.521,
+            "horizon_days": 180,
+            "min_trading_days": 4,
+            "pass_rate": 0.3865,
+            "phase": "challenge",
+            "rules": "FTMO 2-step \u00b7 challenge \u00b7 $100,000 \u00b7 objetivo 10.0% \u00b7 diario 5.0% \u00b7 m\u00e1ximo 10.0% (static) \u00b7 colch\u00f3n 10%"
+          },
+          {
+            "breach_rate": 0.201,
+            "horizon_days": 180,
+            "min_trading_days": 4,
+            "pass_rate": 0.2325,
+            "phase": "verification",
+            "rules": "FTMO 2-step \u00b7 verification \u00b7 $100,000 \u00b7 objetivo 5.0% \u00b7 diario 5.0% \u00b7 m\u00e1ximo 10.0% (static) \u00b7 colch\u00f3n 10%"
+          }
+        ],
+        "program": "2-step",
+        "sample_days": 20000,
+        "timeout_rate": 0.1355,
+        "worst_max_drawdown": -0.4031367796852646
+      },
+      "rules": [
+        "FTMO 2-step \u00b7 challenge \u00b7 $100,000 \u00b7 objetivo 10.0% \u00b7 diario 5.0% \u00b7 m\u00e1ximo 10.0% (static) \u00b7 colch\u00f3n 10%",
+        "FTMO 2-step \u00b7 verification \u00b7 $100,000 \u00b7 objetivo 5.0% \u00b7 diario 5.0% \u00b7 m\u00e1ximo 10.0% (static) \u00b7 colch\u00f3n 10%"
+      ]
+    },
+    {
+      "function": "monte_carlo_program",
+      "kwargs": {
+        "horizon": 180,
+        "n_paths": 2000,
+        "seed": 42
+      },
+      "name": "ftmo_2step_b2_r25",
+      "result": {
+        "block_size": 1,
+        "breach_rate": 0.045,
+        "daily_volatility": 0.003542239208086513,
+        "firm": "FTMO",
+        "horizon_days": 180,
+        "mean_daily_return": 1.887499999999997e-05,
+        "median_days_to_pass": 229.0,
+        "median_max_drawdown": -0.05129684710716398,
+        "p5_max_drawdown": -0.0979962104803908,
+        "p90_days_to_pass": 307.5,
+        "pass_ci95": [
+          0.013029914582859979,
+          0.02481818678403449
+        ],
+        "pass_rate": 0.018,
+        "paths": 2000,
+        "phases": [
+          {
+            "breach_rate": 0.043,
+            "horizon_days": 180,
+            "min_trading_days": 4,
+            "pass_rate": 0.05,
+            "phase": "challenge",
+            "rules": "FTMO 2-step \u00b7 challenge \u00b7 $100,000 \u00b7 objetivo 10.0% \u00b7 diario 5.0% \u00b7 m\u00e1ximo 10.0% (static) \u00b7 colch\u00f3n 10%"
+          },
+          {
+            "breach_rate": 0.002,
+            "horizon_days": 180,
+            "min_trading_days": 4,
+            "pass_rate": 0.018,
+            "phase": "verification",
+            "rules": "FTMO 2-step \u00b7 verification \u00b7 $100,000 \u00b7 objetivo 5.0% \u00b7 diario 5.0% \u00b7 m\u00e1ximo 10.0% (static) \u00b7 colch\u00f3n 10%"
+          }
+        ],
+        "program": "2-step",
+        "sample_days": 20000,
+        "timeout_rate": 0.937,
+        "worst_max_drawdown": -0.14009775955320558
+      },
+      "rules": [
+        "FTMO 2-step \u00b7 challenge \u00b7 $100,000 \u00b7 objetivo 10.0% \u00b7 diario 5.0% \u00b7 m\u00e1ximo 10.0% (static) \u00b7 colch\u00f3n 10%",
+        "FTMO 2-step \u00b7 verification \u00b7 $100,000 \u00b7 objetivo 5.0% \u00b7 diario 5.0% \u00b7 m\u00e1ximo 10.0% (static) \u00b7 colch\u00f3n 10%"
+      ]
+    },
+    {
+      "function": "monte_carlo_program",
+      "kwargs": {
+        "horizon": 180,
+        "n_paths": 2000,
+        "seed": 42
+      },
+      "name": "ftmo_2step_b2_r50",
+      "result": {
+        "block_size": 1,
+        "breach_rate": 0.3815,
+        "daily_volatility": 0.007084478416173026,
+        "firm": "FTMO",
+        "horizon_days": 180,
+        "mean_daily_return": 3.774999999999994e-05,
+        "median_days_to_pass": 152.5,
+        "median_max_drawdown": -0.10748731151395702,
+        "p5_max_drawdown": -0.19153959318408578,
+        "p90_days_to_pass": 242.9000000000002,
+        "pass_ci95": [
+          0.14458678108597353,
+          0.1767168588823753
+        ],
+        "pass_rate": 0.16,
+        "paths": 2000,
+        "phases": [
+          {
+            "breach_rate": 0.291,
+            "horizon_days": 180,
+            "min_trading_days": 4,
+            "pass_rate": 0.3,
+            "phase": "challenge",
+            "rules": "FTMO 2-step \u00b7 challenge \u00b7 $100,000 \u00b7 objetivo 10.0% \u00b7 diario 5.0% \u00b7 m\u00e1ximo 10.0% (static) \u00b7 colch\u00f3n 10%"
+          },
+          {
+            "breach_rate": 0.1035,
+            "horizon_days": 180,
+            "min_trading_days": 4,
+            "pass_rate": 0.16,
+            "phase": "verification",
+            "rules": "FTMO 2-step \u00b7 verification \u00b7 $100,000 \u00b7 objetivo 5.0% \u00b7 diario 5.0% \u00b7 m\u00e1ximo 10.0% (static) \u00b7 colch\u00f3n 10%"
+          }
+        ],
+        "program": "2-step",
+        "sample_days": 20000,
+        "timeout_rate": 0.4585,
+        "worst_max_drawdown": -0.26194919934103866
+      },
+      "rules": [
+        "FTMO 2-step \u00b7 challenge \u00b7 $100,000 \u00b7 objetivo 10.0% \u00b7 diario 5.0% \u00b7 m\u00e1ximo 10.0% (static) \u00b7 colch\u00f3n 10%",
+        "FTMO 2-step \u00b7 verification \u00b7 $100,000 \u00b7 objetivo 5.0% \u00b7 diario 5.0% \u00b7 m\u00e1ximo 10.0% (static) \u00b7 colch\u00f3n 10%"
+      ]
+    },
+    {
+      "function": "monte_carlo_program",
+      "kwargs": {
+        "horizon": 180,
+        "n_paths": 2000,
+        "seed": 42
+      },
+      "name": "ftmo_2step_b2_r100",
+      "result": {
+        "block_size": 1,
+        "breach_rate": 0.6975,
+        "daily_volatility": 0.014168956832346051,
+        "firm": "FTMO",
+        "horizon_days": 180,
+        "mean_daily_return": 7.549999999999988e-05,
+        "median_days_to_pass": 62.0,
+        "median_max_drawdown": -0.21168987962452246,
+        "p5_max_drawdown": -0.3553605758499494,
+        "p90_days_to_pass": 131.0,
+        "pass_ci95": [
+          0.26906392752509684,
+          0.3087470132199201
+        ],
+        "pass_rate": 0.2885,
+        "paths": 2000,
+        "phases": [
+          {
+            "breach_rate": 0.6135,
+            "horizon_days": 180,
+            "min_trading_days": 4,
+            "pass_rate": 0.474,
+            "phase": "challenge",
+            "rules": "FTMO 2-step \u00b7 challenge \u00b7 $100,000 \u00b7 objetivo 10.0% \u00b7 diario 5.0% \u00b7 m\u00e1ximo 10.0% (static) \u00b7 colch\u00f3n 10%"
+          },
+          {
+            "breach_rate": 0.2955,
+            "horizon_days": 180,
+            "min_trading_days": 4,
+            "pass_rate": 0.2885,
+            "phase": "verification",
+            "rules": "FTMO 2-step \u00b7 verification \u00b7 $100,000 \u00b7 objetivo 5.0% \u00b7 diario 5.0% \u00b7 m\u00e1ximo 10.0% (static) \u00b7 colch\u00f3n 10%"
+          }
+        ],
+        "program": "2-step",
+        "sample_days": 20000,
+        "timeout_rate": 0.014,
+        "worst_max_drawdown": -0.4900566695993047
+      },
+      "rules": [
+        "FTMO 2-step \u00b7 challenge \u00b7 $100,000 \u00b7 objetivo 10.0% \u00b7 diario 5.0% \u00b7 m\u00e1ximo 10.0% (static) \u00b7 colch\u00f3n 10%",
+        "FTMO 2-step \u00b7 verification \u00b7 $100,000 \u00b7 objetivo 5.0% \u00b7 diario 5.0% \u00b7 m\u00e1ximo 10.0% (static) \u00b7 colch\u00f3n 10%"
+      ]
+    },
+    {
+      "function": "monte_carlo_program",
+      "kwargs": {
+        "horizon": 180,
+        "n_paths": 2000,
+        "seed": 42
+      },
+      "name": "ftmo_2step_b3_r25",
+      "result": {
+        "block_size": 1,
+        "breach_rate": 0.103,
+        "daily_volatility": 0.004343148270188901,
+        "firm": "FTMO",
+        "horizon_days": 180,
+        "mean_daily_return": 2.249999999999982e-05,
+        "median_days_to_pass": 204.0,
+        "median_max_drawdown": -0.0631838850753133,
+        "p5_max_drawdown": -0.1180368648172173,
+        "p90_days_to_pass": 265.0,
+        "pass_ci95": [
+          0.03270481486601491,
+          0.050057016208856484
+        ],
+        "pass_rate": 0.0405,
+        "paths": 2000,
+        "phases": [
+          {
+            "breach_rate": 0.0925,
+            "horizon_days": 180,
+            "min_trading_days": 4,
+            "pass_rate": 0.11,
+            "phase": "challenge",
+            "rules": "FTMO 2-step \u00b7 challenge \u00b7 $100,000 \u00b7 objetivo 10.0% \u00b7 diario 5.0% \u00b7 m\u00e1ximo 10.0% (static) \u00b7 colch\u00f3n 10%"
+          },
+          {
+            "breach_rate": 0.0105,
+            "horizon_days": 180,
+            "min_trading_days": 4,
+            "pass_rate": 0.0405,
+            "phase": "verification",
+            "rules": "FTMO 2-step \u00b7 verification \u00b7 $100,000 \u00b7 objetivo 5.0% \u00b7 diario 5.0% \u00b7 m\u00e1ximo 10.0% (static) \u00b7 colch\u00f3n 10%"
+          }
+        ],
+        "program": "2-step",
+        "sample_days": 20000,
+        "timeout_rate": 0.8565,
+        "worst_max_drawdown": -0.18613991897173243
+      },
+      "rules": [
+        "FTMO 2-step \u00b7 challenge \u00b7 $100,000 \u00b7 objetivo 10.0% \u00b7 diario 5.0% \u00b7 m\u00e1ximo 10.0% (static) \u00b7 colch\u00f3n 10%",
+        "FTMO 2-step \u00b7 verification \u00b7 $100,000 \u00b7 objetivo 5.0% \u00b7 diario 5.0% \u00b7 m\u00e1ximo 10.0% (static) \u00b7 colch\u00f3n 10%"
+      ]
+    },
+    {
+      "function": "monte_carlo_program",
+      "kwargs": {
+        "horizon": 180,
+        "n_paths": 2000,
+        "seed": 42
+      },
+      "name": "ftmo_2step_b3_r50",
+      "result": {
+        "block_size": 1,
+        "breach_rate": 0.521,
+        "daily_volatility": 0.008686296540377801,
+        "firm": "FTMO",
+        "horizon_days": 180,
+        "mean_daily_return": 4.499999999999964e-05,
+        "median_days_to_pass": 127.0,
+        "median_max_drawdown": -0.13288733774462191,
+        "p5_max_drawdown": -0.22505511376669163,
+        "p90_days_to_pass": 212.0,
+        "pass_ci95": [
+          0.2077204833663125,
+          0.24433201419636913
+        ],
+        "pass_rate": 0.2255,
+        "paths": 2000,
+        "phases": [
+          {
+            "breach_rate": 0.402,
+            "horizon_days": 180,
+            "min_trading_days": 4,
+            "pass_rate": 0.3755,
+            "phase": "challenge",
+            "rules": "FTMO 2-step \u00b7 challenge \u00b7 $100,000 \u00b7 objetivo 10.0% \u00b7 diario 5.0% \u00b7 m\u00e1ximo 10.0% (static) \u00b7 colch\u00f3n 10%"
+          },
+          {
+            "breach_rate": 0.152,
+            "horizon_days": 180,
+            "min_trading_days": 4,
+            "pass_rate": 0.2255,
+            "phase": "verification",
+            "rules": "FTMO 2-step \u00b7 verification \u00b7 $100,000 \u00b7 objetivo 5.0% \u00b7 diario 5.0% \u00b7 m\u00e1ximo 10.0% (static) \u00b7 colch\u00f3n 10%"
+          }
+        ],
+        "program": "2-step",
+        "sample_days": 20000,
+        "timeout_rate": 0.2535,
+        "worst_max_drawdown": -0.3389062879888911
+      },
+      "rules": [
+        "FTMO 2-step \u00b7 challenge \u00b7 $100,000 \u00b7 objetivo 10.0% \u00b7 diario 5.0% \u00b7 m\u00e1ximo 10.0% (static) \u00b7 colch\u00f3n 10%",
+        "FTMO 2-step \u00b7 verification \u00b7 $100,000 \u00b7 objetivo 5.0% \u00b7 diario 5.0% \u00b7 m\u00e1ximo 10.0% (static) \u00b7 colch\u00f3n 10%"
+      ]
+    },
+    {
+      "function": "monte_carlo_program",
+      "kwargs": {
+        "horizon": 180,
+        "n_paths": 2000,
+        "seed": 42
+      },
+      "name": "ftmo_2step_b3_r100",
+      "result": {
+        "block_size": 1,
+        "breach_rate": 0.7285,
+        "daily_volatility": 0.017372593080755602,
+        "firm": "FTMO",
+        "horizon_days": 180,
+        "mean_daily_return": 8.999999999999927e-05,
+        "median_days_to_pass": 44.0,
+        "median_max_drawdown": -0.2541797539465211,
+        "p5_max_drawdown": -0.408104120929983,
+        "p90_days_to_pass": 90.0,
+        "pass_ci95": [
+          0.24904656817342527,
+          0.2878429743932127
+        ],
+        "pass_rate": 0.268,
+        "paths": 2000,
+        "phases": [
+          {
+            "breach_rate": 0.69,
+            "horizon_days": 180,
+            "min_trading_days": 4,
+            "pass_rate": 0.4705,
+            "phase": "challenge",
+            "rules": "FTMO 2-step \u00b7 challenge \u00b7 $100,000 \u00b7 objetivo 10.0% \u00b7 diario 5.0% \u00b7 m\u00e1ximo 10.0% (static) \u00b7 colch\u00f3n 10%"
+          },
+          {
+            "breach_rate": 0.331,
+            "horizon_days": 180,
+            "min_trading_days": 4,
+            "pass_rate": 0.268,
+            "phase": "verification",
+            "rules": "FTMO 2-step \u00b7 verification \u00b7 $100,000 \u00b7 objetivo 5.0% \u00b7 diario 5.0% \u00b7 m\u00e1ximo 10.0% (static) \u00b7 colch\u00f3n 10%"
+          }
+        ],
+        "program": "2-step",
+        "sample_days": 20000,
+        "timeout_rate": 0.0035,
+        "worst_max_drawdown": -0.5662901171249659
+      },
+      "rules": [
+        "FTMO 2-step \u00b7 challenge \u00b7 $100,000 \u00b7 objetivo 10.0% \u00b7 diario 5.0% \u00b7 m\u00e1ximo 10.0% (static) \u00b7 colch\u00f3n 10%",
+        "FTMO 2-step \u00b7 verification \u00b7 $100,000 \u00b7 objetivo 5.0% \u00b7 diario 5.0% \u00b7 m\u00e1ximo 10.0% (static) \u00b7 colch\u00f3n 10%"
+      ]
+    }
+  ],
+  "note": "Golden de TL2-DIARIO generado con el codigo anterior a la correccion. Solo modos balance/equity: deben ser identicos bit a bit tras el cambio.",
+  "return_sets": {
+    "synthetic_equity": {
+      "days": 90,
+      "kind": "synthetic_equity"
+    },
+    "zero_edge_b2_r50": {
+      "b": 2,
+      "days": 20000,
+      "kind": "zero_edge",
+      "risk": 0.005,
+      "seed": 42
+    }
+  }
+}
