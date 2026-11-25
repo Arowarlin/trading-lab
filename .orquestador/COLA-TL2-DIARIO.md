@@ -137,3 +137,29 @@ la protección permite perder por debajo del suelo de la firma.
   - E-3 hecho o pendiente;
   - el rollback.
 - Fin de la cola.
+
+
+## Estado de ejecución (2026-11-25)
+
+- **P0-P6 hechos.** P7 (aviso) pendiente de envío.
+- Commits: `5303e4e` (cola), `591b03e` (inventario y golden, **tag `tl2-diario-pre`**),
+  `74cadbc` (baseline previo), `020b41b` (suelo diario higher_of),
+  `7bd100b` (tests de regresión), `cac3bec` (CHANGELOG y baseline).
+- Cambios de producción: solo `src/tradinglab/prop/simulator.py` y
+  `src/tradinglab/prop/guard.py`, rama `higher_of_balance_or_equity`.
+  `propfund/snapshots.py` **no** se tocó: P1 demostró que `overlay`, `defense`
+  y `risk` no reciben el modo ni balance de inicio de día; E-3 queda pendiente
+  en el CHANGELOG.
+- Confirmación P1.3: el código anterior rompía en el día 21 con −0,25 % diario;
+  el corregido no rompe en 30 días y un día de −5,1 % rompe ese día.
+- Identidad: 15/15 casos `balance`/`equity` del golden, bit a bit.
+- Tests: `pytest -q` completo **1999 passed, 1 skipped**; dirigidos de
+  `prop`/`propfund` **59 passed**; `ruff check .` limpio; `lab doctor` con el
+  FAIL preexistente de Frescura; `lab propfund verify` OK tras el baseline.
+- Nota: otra sesión ejecutó TL3-D en paralelo (commits `e68936b` a `a65db83`).
+  Todos los commits de esta cola usan rutas explícitas; el trabajo ajeno no se
+  incluyó. El `pytest -q` se lanzó con el árbol de esa sesión y terminó en
+  verde.
+- Rollback: tag `tl2-diario-pre` (`591b03e`). Tag de cierre: `tl2-diario`.
+- Sin órdenes, sin push, sin tocar `config/propfund/*.yaml`, EA, `ai_trader`,
+  forward, `schedule.yaml`, tareas ni `.env`.

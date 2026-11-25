@@ -137,6 +137,7 @@ de backtest no son una predicción.
 | TL2 CNT | Contador v2 = `n_total`; `count_tests` 1894. |
 | TL2 EA (E1-E3) | Caché sin barra en curso, paridad 1/1, fuera de instrumento "no transfiere" y P(pasar) contraída. |
 | TL2 NOCHE3 (N1-N4) | N1 reglas oficiales y P(pasar); N2 código muerto; N3/N4 en curso. |
+| TL2-DIARIO | Suelo diario `higher_of_balance_or_equity` corregido en `prop/simulator.py` y `prop/guard.py`; identidad `balance`/`equity` y P(diario) FundingPips a 0; tag `tl2-diario`. |
 
 Los cierres están en `.orquestador/RESULTADO-*.md` y los informes en
 `reports/`. La cola del EA no cambió el motor ni el setfile.
@@ -169,10 +170,26 @@ Los cierres están en `.orquestador/RESULTADO-*.md` y los informes en
   0,2594 R, tendencia 0,3179 R; Δ vs tendencia −0,0225 R, IC95
   [−0,183; +0,121] → **no concluyente**.
 - Réplica EA v3.2: 479 ops, +0,3104 R; el corto pierde en 2023 (−0,1368 R).
-- T7 (EA Dukascopy 2012-2021) y T8 (H2 FOMC) quedan **bloqueados** hasta que
-  el operador registre `TL3-T7` y `TL3-T8` en `record-informal`.
+- T7 (EA Dukascopy 2012-2021) **no confirma** (374 ops, −0,0296 R, LCB −0,1753);
+  T8 (H2 FOMC) **no confirma** (117 eventos, neto 8,04 bps, LCB −0,60).
 - H1 nocturna: **rejected: cost_gate** (3,1-3,9 bps/noche, 2× > 3,5);
   H3 sin potencia (MDE 0,173 > 0,12).
 - `count_tests` = 1897.
+
+### Cierre 1e · TL3-D (2026-11-25)
+
+- D1: swap 2,008 bps/noche, `nights(fecha)`, codificación UTF-8 y `add_status`/`status_table`.
+- D2: línea base sin ventaja; FundingPips no fiable por el simulador anterior
+  (`max(initial, day_start)`), corregido en TL2-DIARIO `020b41b`.
+- D3: cobertura de datos; US100 2012-2021 = 1116 sesiones válidas frente a ~1128,
+  0 en 2012/2016/2017.
+- D3b: T5-bis con 12 TP / 13 SL / 23 otro y 23/48 coincidencias; FundingPips
+  30.672/45.000 caminos afectados con el código anterior, 0 con el corregido.
+- D4: plan de potencia de `ai_trader`; n=180 (Δ_t 177), evaluación única estimada
+  ~2027-01-04; H-2026-012 `draft`.
+- D5: forward del EA con 3 cerradas; T6 sd 1,9173; n 237/515; puntos 30/60/515.
+- D5b: TCA con 68 filas y 66 en 0; causa en `mt5.py:772-783`; decisión→fill
+  0,44 bps de mediana (45/48).
+- `count_tests` = 1897; tag `tl3-ciclo1e`.
 
 
