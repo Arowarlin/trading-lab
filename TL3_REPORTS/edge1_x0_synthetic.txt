@@ -1,0 +1,4 @@
+M15: n_total=440 evaluados=437 efectivas=103 factibles=434 frontera=40 finalistas=0 tiempo=102.0s semilla=1
+M30: n_total=440 evaluados=435 efectivas=93 factibles=421 frontera=40 finalistas=5 tiempo=87.7s semilla=2
+H1: n_total=440 evaluados=436 efectivas=84 factibles=394 frontera=40 finalistas=4 tiempo=91.6s semilla=3
+H4: n_total=440 evaluados=439 efectivas=68 factibles=349 frontera=40 finalistas=3 tiempo=82.8s semilla=4
