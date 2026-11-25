@@ -137,3 +137,10 @@ comprueba. El baseline de hashes vive en
   del registro informal + 9 de `v2-fix-londres-eurgbp-h1`); tests de contador
   v1/v2/fila antigua y de `register` con `protocol_version=None`.
 - **Rollback:** tag `tl2-cnt-pre`.
+
+## 2026-11-24 - Reglas oficiales de firmas y P(pasar) real (N1)
+
+- **Que cambia:** `config/propfund/firms.yaml` pasa a fuentes oficiales de FTMO (2-Step y 1-Step) con `effective_from: 2026-11-24`, anade el programa 1-Step, la fase de verificacion del 2-Step (5 %), `max_days: null` y la base diaria de FundingPips `max(balance, equity)`. `prop.simulator.monte_carlo_program` simula dos fases, dias minimos, tope tecnico de 180 dias habiles por fase y `P(sin terminar)`; `robustness._challenge` lo usa.
+- **Alcance:** `prop/rules.py`, `prop/simulator.py`, `discovery/robustness.py`, `propfund/models.py` y `config/propfund/firms.yaml`. El motor y el setfile del EA no se tocan.
+- **Verificacion:** tests de FundingPips max(balance, equity), verificacion desde balance inicial, dias minimos y 1-Step al 3 %; baseline de produccion actualizado; suite completa.
+- **Rollback:** tag `tl2-n1-pre`.

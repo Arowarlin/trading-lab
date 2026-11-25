@@ -117,6 +117,7 @@ class FirmRule(_Strict):
     phase: str = "all"
     platform: str = "all"
     instrument: str = "all"
+    effective_from: date | None = None
     status: VerificationStatus = VerificationStatus.NEEDS_VERIFICATION
     source: Source | None = None
     notes: str = ""

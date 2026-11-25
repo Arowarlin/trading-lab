@@ -19,6 +19,15 @@
       ],
       "date": "2026-11-24",
       "reason": "C4: registrar bid/ask/precio solicitado en tca desde execution/mt5.py; no cambia el envio de ordenes"
+    },
+    {
+      "changes": [
+        "ea_us100_ftmo1: src/tradinglab/ea_us100.py (changed)",
+        "ftmo_risk: src/tradinglab/prop/rules.py (changed)",
+        "ftmo_risk: src/tradinglab/prop/simulator.py (changed)"
+      ],
+      "date": "2026-11-25",
+      "reason": "N1: simulador de dos fases, dias minimos y cache sin barra en curso; motor y setfile del EA intactos"
     }
   ],
   "groups": {
@@ -63,7 +72,7 @@
         "src/tradinglab/ea_forward.py": "9671db092f2b5b54a976eec2108aba170d98d05f81b7c71f9cbdd866bcbed585",
         "src/tradinglab/ea_horizon.py": "01a4895b8aecc0006429fc86147a313c388e7501abbe50336f97e1ce13c00838",
         "src/tradinglab/ea_registry.py": "bb97597de5f20625ce44e9b3d2581424980a964490ada45ffef1fb06103b4047",
-        "src/tradinglab/ea_us100.py": "90e93f40fd259f8ca12edc36ea82892937bf7d44561d623c2029c05c4854ff62",
+        "src/tradinglab/ea_us100.py": "ee71e40114fa69d1ed76199a7d9455474645828feff1064e2c428f5ce7fe2a3e",
         "src/tradinglab/ea_us100_engine.py": "10b183ca0b9812f4859c2445d23412318cbbc9365565c87eff0d019030cb4adb"
       }
     },
@@ -94,8 +103,8 @@
         "src/tradinglab/prop/defense.py": "d8113ed244e1dbbd180468dfd7fa08d29fa368ee0c4c63369dfc2637c6703573",
         "src/tradinglab/prop/guard.py": "a442f04df619da00fab16122bbef11cf86162dd6dcdadefe5d69c0ddefdbd597",
         "src/tradinglab/prop/overlay.py": "5e601846fda871963b94457b1722bb534e47bf0c6aa30bf04fa4ef3e70e4d025",
-        "src/tradinglab/prop/rules.py": "69a7708b6cea6d20baf4312012235b71d79e6d66fc887c99ebd814daf36032fe",
-        "src/tradinglab/prop/simulator.py": "e5afbd61826a3fa8592b6efbfaaea68b133769d8f9bd94071bbb73941c02bb7e",
+        "src/tradinglab/prop/rules.py": "fefc0aabb9911e5bc87bb2035d9f1d7eafb3157cbcea3c6174bcea7575b572cf",
+        "src/tradinglab/prop/simulator.py": "b095ceb8421fbcad1d9e8f070d2dff496768be8d96d3f3500b4d57772e4e6834",
         "src/tradinglab/symbol_risk.py": "c0f9e941d1811054f2e09b9fe7230a2471acbd47286d14fe13df9c59f43c1486"
       }
     }

@@ -10,7 +10,7 @@ from ..config import CONFIG_DIR
 
 Phase = Literal["challenge", "verification", "funded"]
 LossMode = Literal["static", "trailing_eod", "trailing_intraday"]
-DailyBase = Literal["balance", "equity"]
+DailyBase = Literal["balance", "equity", "higher_of_balance_or_equity"]
 
 
 @dataclass(frozen=True)
@@ -34,6 +34,7 @@ class PropRules:
     daily_loss_mode: DailyBase = "equity"
 
     min_trading_days: int = 4
+    max_days: int | None = None
     consistency_pct: float | None = None
 
     max_lots: float | None = None

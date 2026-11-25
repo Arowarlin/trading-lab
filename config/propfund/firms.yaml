@@ -29,7 +29,7 @@ firms:
     website: https://ftmo.com
     platforms: [mt4, mt5, ctrader, dxtrade]
     execution_providers: [mt5]
-    rules_version: "2026-11-19.1"
+    rules_version: "2026-11-24.1"
     notes: >
       Implementación existente (EA us100-ftmo1, ai_trader, forward FX). Las reglas
       numéricas viven en config/prop.yaml (hash F13) y no se duplican aquí.
@@ -53,13 +53,30 @@ firms:
         platforms: [mt5]
         sizes: [10000, 25000, 50000, 100000, 200000]
         rules:
-          - {key: profit_target_pct, value: 0.10, unit: fraction, phase: evaluation, status: verified_secondary, source: {url: "https://app.luxalgo.com/api/propfirms/list", consulted_at: 2026-11-05, kind: secondary}, notes: "Referencia de config/prop.yaml"}
-          - {key: profit_target_pct, value: 0.05, unit: fraction, phase: verification, status: verified_secondary, source: {url: "https://app.luxalgo.com/api/propfirms/list", consulted_at: 2026-11-05, kind: secondary}}
-          - {key: max_daily_loss_pct, value: 0.05, unit: fraction, status: verified_secondary, source: {url: "https://app.luxalgo.com/api/propfirms/list", consulted_at: 2026-11-05, kind: secondary}}
-          - {key: max_loss_pct, value: 0.10, unit: fraction, status: verified_secondary, source: {url: "https://app.luxalgo.com/api/propfirms/list", consulted_at: 2026-11-05, kind: secondary}}
-          - {key: drawdown_mode, value: static, status: verified_secondary, source: {url: "https://app.luxalgo.com/api/propfirms/list", consulted_at: 2026-11-05, kind: secondary}}
-          - {key: reset_tz, value: Europe/Prague, status: verified_secondary}
-          - {key: max_server_requests_per_day, value: 2000, unit: requests, status: verified_official, source: {url: "https://ftmo.oanda.com/forbidden-trading-practices/", consulted_at: 2026-11-19}}
+          - {key: profit_target_pct, value: 0.10, unit: fraction, phase: evaluation, status: verified_official, effective_from: 2026-11-24, source: {url: "https://ftmo.com/en/2-step-challenge/", consulted_at: 2026-11-24, kind: official}}
+          - {key: profit_target_pct, value: 0.05, unit: fraction, phase: verification, status: verified_official, effective_from: 2026-11-24, source: {url: "https://ftmo.com/en/2-step-challenge/", consulted_at: 2026-11-24, kind: official}}
+          - {key: max_daily_loss_pct, value: 0.05, unit: fraction, status: verified_official, effective_from: 2026-11-24, source: {url: "https://ftmo.com/en/2-step-challenge/", consulted_at: 2026-11-24, kind: official}}
+          - {key: max_loss_pct, value: 0.10, unit: fraction, status: verified_official, effective_from: 2026-11-24, source: {url: "https://ftmo.com/en/2-step-challenge/", consulted_at: 2026-11-24, kind: official}}
+          - {key: drawdown_mode, value: static, status: verified_official, effective_from: 2026-11-24, source: {url: "https://ftmo.com/en/2-step-challenge/", consulted_at: 2026-11-24, kind: official}}
+          - {key: daily_loss_base, value: balance, status: verified_official, effective_from: 2026-11-24, source: {url: "https://ftmo.com/en/maximum-daily-loss/", consulted_at: 2026-11-24, kind: official}, notes: "Cerradas del día + flotantes, con comisiones y swaps, sobre el balance inicial del día; día en hora CE(S)T."}
+          - {key: min_trading_days, value: 4, unit: days_per_phase, phase: evaluation, status: verified_official, effective_from: 2026-11-24, source: {url: "https://ftmo.com/en/2-step-challenge/", consulted_at: 2026-11-24, kind: official}}
+          - {key: min_trading_days, value: 4, unit: days_per_phase, phase: verification, status: verified_official, effective_from: 2026-11-24, source: {url: "https://ftmo.com/en/2-step-challenge/", consulted_at: 2026-11-24, kind: official}}
+          - {key: max_days, value: null, phase: evaluation, status: verified_official, effective_from: 2026-11-24, source: {url: "https://ftmo.com/en/2-step-challenge/", consulted_at: 2026-11-24, kind: official}, notes: "Periodo ilimitado."}
+          - {key: max_days, value: null, phase: verification, status: verified_official, effective_from: 2026-11-24, source: {url: "https://ftmo.com/en/2-step-challenge/", consulted_at: 2026-11-24, kind: official}, notes: "Periodo ilimitado."}
+          - {key: reset_tz, value: Europe/Prague, status: verified_official, effective_from: 2026-11-24, source: {url: "https://ftmo.com/en/maximum-daily-loss/", consulted_at: 2026-11-24, kind: official}}
+          - {key: max_server_requests_per_day, value: 2000, unit: requests, status: verified_official, effective_from: 2026-11-24, source: {url: "https://ftmo.oanda.com/forbidden-trading-practices/", consulted_at: 2026-11-19, kind: official}}
+      - id: ftmo_1step
+        name: FTMO Challenge 1-Step
+        phases: [evaluation, funded]
+        platforms: [mt5]
+        sizes: [10000, 25000, 50000, 100000, 200000]
+        rules:
+          - {key: profit_target_pct, value: 0.10, unit: fraction, phase: evaluation, status: verified_official, effective_from: 2026-11-24, source: {url: "https://ftmo.com/en/blog/how-ftmo-works/", consulted_at: 2026-11-24, kind: official}}
+          - {key: max_daily_loss_pct, value: 0.03, unit: fraction, status: verified_official, effective_from: 2026-11-24, source: {url: "https://ftmo.com/en/blog/how-ftmo-works/", consulted_at: 2026-11-24, kind: official}}
+          - {key: max_loss_pct, value: 0.10, unit: fraction, status: verified_official, effective_from: 2026-11-24, source: {url: "https://ftmo.com/en/blog/drawdowns/", consulted_at: 2026-11-24, kind: official}}
+          - {key: drawdown_mode, value: static, status: verified_official, effective_from: 2026-11-24, source: {url: "https://ftmo.com/en/blog/drawdowns/", consulted_at: 2026-11-24, kind: official}}
+          - {key: min_trading_days, value: 0, unit: days_per_phase, phase: evaluation, status: verified_official, effective_from: 2026-11-24, source: {url: "https://ftmo.com/en/blog/how-ftmo-works/", consulted_at: 2026-11-24, kind: official}, notes: "Sin días mínimos."}
+          - {key: max_days, value: null, phase: evaluation, status: verified_official, effective_from: 2026-11-24, source: {url: "https://ftmo.com/en/blog/how-ftmo-works/", consulted_at: 2026-11-24, kind: official}, notes: "Periodo ilimitado."}
 
   - id: the5ers
     name: The5ers

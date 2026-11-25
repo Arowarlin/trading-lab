@@ -41,6 +41,9 @@ def monte_carlo(
     if n_paths <= 0 or horizon <= 0:
         raise ValueError("n_paths y horizon deben ser > 0")
 
+    if rules.max_days is not None:
+        horizon = min(int(horizon), int(rules.max_days))
+
     block_size = max(1, int(block_size))
     rng = np.random.default_rng(seed)
 
@@ -80,13 +83,20 @@ def monte_carlo(
             max_base = np.full(n_paths, initial)
 
         daily_floor = day_start - eff_daily
+        if rules.daily_loss_mode == "higher_of_balance_or_equity":
+            daily_floor = np.maximum(initial, day_start) - eff_daily
         max_floor = max_base - eff_max
         floor = np.maximum(daily_floor, max_floor)
 
         breached_now = (breach_at < 0) & (equity <= floor)
         breach_at[breached_now & (passed_at < 0)] = day
 
-        hit_target = (passed_at < 0) & (breach_at < 0) & (equity >= target)
+        hit_target = (
+            (passed_at < 0)
+            & (breach_at < 0)
+            & (equity >= target)
+            & (day + 1 >= int(rules.min_trading_days or 0))
+        )
         if rules.profit_target_pct > 0:
             passed_at[hit_target] = day
 
@@ -120,6 +130,164 @@ def monte_carlo(
         "median_max_drawdown": float(np.median(max_dd)),
         "p5_max_drawdown": float(np.percentile(max_dd, 5)),
         "worst_max_drawdown": float(np.min(max_dd)),
+        "mean_daily_return": float(r.mean()),
+        "daily_volatility": float(r.std(ddof=1)) if r.size > 1 else 0.0,
+        "sample_days": int(r.size),
+    }
+
+
+def monte_carlo_program(
+    phases,
+    daily_returns,
+    *,
+    n_paths: int = 5_000,
+    horizon: int = 180,
+    seed: int = 42,
+    block_size: int = 1,
+) -> dict:
+    """Simula un programa de varias fases (2-Step) con días mínimos.
+
+    Cada fase empieza con el balance inicial. La segunda fase solo la juegan
+    los caminos que pasaron la primera. El tope técnico es 180 días hábiles
+    por fase (o ``rules.max_days`` si es menor).
+    """
+
+    rules_list = list(phases)
+    if not rules_list:
+        raise ValueError("el programa necesita al menos una fase")
+    raw_returns = daily_returns
+    if isinstance(raw_returns, (list, tuple)) and len(raw_returns) == len(
+        rules_list
+    ):
+        per_phase = [np.asarray(item, dtype=float) for item in raw_returns]
+    else:
+        per_phase = [np.asarray(raw_returns, dtype=float)] * len(rules_list)
+    cleaned = []
+    for values in per_phase:
+        values = values[np.isfinite(values)]
+        if values.size == 0:
+            raise ValueError("no hay retornos válidos para simular")
+        cleaned.append(np.clip(values, -0.95, 1.0))
+    if n_paths <= 0 or horizon <= 0:
+        raise ValueError("n_paths y horizon deben ser > 0")
+    block_size = max(1, int(block_size))
+    rng = np.random.default_rng(seed)
+
+    active = np.ones(n_paths, dtype=bool)
+    phase_rows: list[dict] = []
+    total_days = np.zeros(n_paths, dtype=int)
+    any_breach = np.zeros(n_paths, dtype=bool)
+    worst_dd = np.zeros(n_paths, dtype=float)
+
+    for rules, r in zip(rules_list, cleaned):
+        initial = float(rules.account_size)
+        eff_daily = rules.effective_daily_limit_usd
+        eff_max = rules.effective_max_loss_usd
+        target = initial + rules.profit_target_usd
+        trailing = rules.max_loss_mode != "static"
+        limit = (
+            min(int(horizon), int(rules.max_days))
+            if rules.max_days is not None
+            else int(horizon)
+        )
+        equity = np.full(n_paths, initial, dtype=float)
+        peak = equity.copy()
+        running_peak = equity.copy()
+        passed_at = np.full(n_paths, -1, dtype=int)
+        breach_at = np.full(n_paths, -1, dtype=int)
+        max_dd = np.zeros(n_paths, dtype=float)
+
+        for day in range(limit):
+            if block_size == 1:
+                draws = rng.choice(r, size=n_paths, replace=True)
+            else:
+                starts = rng.integers(
+                    0, max(1, r.size - block_size + 1), size=n_paths
+                )
+                idx = (
+                    starts[:, None] + np.arange(block_size)[None, :]
+                ) % r.size
+                draws = (1.0 + r[idx]).prod(axis=1) - 1.0
+
+            day_start = equity.copy()
+            equity = np.where(active, equity * (1.0 + draws), equity)
+            running_peak = np.maximum(running_peak, equity)
+            dd = equity / running_peak - 1.0
+            max_dd = np.minimum(max_dd, dd)
+
+            if trailing:
+                peak = np.maximum(peak, equity)
+                max_base = peak
+            else:
+                max_base = np.full(n_paths, initial)
+
+            if rules.daily_loss_mode == "higher_of_balance_or_equity":
+                daily_floor = np.maximum(initial, day_start) - eff_daily
+            else:
+                daily_floor = day_start - eff_daily
+            floor = np.maximum(daily_floor, max_base - eff_max)
+            breached = active & (breach_at < 0) & (equity <= floor)
+            breach_at[breached] = day
+
+            hit_target = (
+                active
+                & (passed_at < 0)
+                & (breach_at < 0)
+                & (equity >= target)
+                & (day + 1 >= int(rules.min_trading_days or 0))
+                & (rules.profit_target_pct > 0)
+            )
+            passed_at[hit_target] = day
+            if not active.any():
+                break
+
+        phase_pass = passed_at >= 0
+        phase_breach = breach_at >= 0
+        any_breach |= phase_breach
+        worst_dd = np.minimum(worst_dd, max_dd)
+        total_days += np.where(phase_pass, passed_at + 1, 0)
+        phase_rows.append(
+            {
+                "phase": rules.phase,
+                "rules": rules.describe(),
+                "horizon_days": limit,
+                "pass_rate": float(phase_pass.sum()) / n_paths,
+                "breach_rate": float(phase_breach.sum()) / n_paths,
+                "min_trading_days": int(rules.min_trading_days or 0),
+            }
+        )
+        active = active & phase_pass
+        if not active.any():
+            break
+
+    passed = active
+    breached = any_breach & ~passed
+    timed_out = ~passed & ~breached
+    days_to_pass = total_days[passed]
+    pass_count = int(passed.sum())
+    breach_count = int(breached.sum())
+    timeout_count = int(timed_out.sum())
+    lo, hi = _wilson(pass_count, n_paths)
+    return {
+        "firm": rules_list[0].firm,
+        "program": rules_list[0].program,
+        "paths": n_paths,
+        "horizon_days": horizon,
+        "block_size": block_size,
+        "phases": phase_rows,
+        "pass_rate": pass_count / n_paths,
+        "pass_ci95": (lo, hi),
+        "breach_rate": breach_count / n_paths,
+        "timeout_rate": timeout_count / n_paths,
+        "median_days_to_pass": (
+            float(np.median(days_to_pass)) if pass_count else None
+        ),
+        "p90_days_to_pass": (
+            float(np.percentile(days_to_pass, 90)) if pass_count else None
+        ),
+        "median_max_drawdown": float(np.median(worst_dd)),
+        "p5_max_drawdown": float(np.percentile(worst_dd, 5)),
+        "worst_max_drawdown": float(np.min(worst_dd)),
         "mean_daily_return": float(r.mean()),
         "daily_volatility": float(r.std(ddof=1)) if r.size > 1 else 0.0,
         "sample_days": int(r.size),
@@ -234,4 +402,4 @@ def multiverse_by_trade(
     }
 
 
-__all__ = ["monte_carlo", "multiverse_by_trade"]
+__all__ = ["monte_carlo", "monte_carlo_program", "multiverse_by_trade"]

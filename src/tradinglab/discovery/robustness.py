@@ -14,7 +14,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from ..prop.simulator import monte_carlo
+from ..prop.simulator import monte_carlo_program
 from ..propfund.registry import load_registry
 from ..propfund.snapshots import _rules_from_account
 from ..validation import cscv_pbo
@@ -413,12 +413,22 @@ def _challenge(daily_r: pd.Series) -> dict[str, Any]:
                 rules = rules_for_account(legacy)
             else:
                 rules = _rules_from_account(account, {})
-            simulation = monte_carlo(
-                rules,
+            simulation = monte_carlo_program(
+                [
+                    rules,
+                    rules.with_phase(
+                        "verification",
+                        profit_target_pct=0.05,
+                        min_trading_days=4,
+                        max_days=None,
+                    ),
+                ]
+                if rules.program == "2-step"
+                else [rules],
                 pd.to_numeric(daily_r, errors="coerce").dropna().to_numpy(dtype=float)
                 * float(risk),
                 n_paths=int(config.challenge_paths),
-                horizon=60,
+                horizon=180,
                 seed=42,
                 block_size=5,
             )
