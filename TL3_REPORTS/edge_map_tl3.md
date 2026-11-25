@@ -12,7 +12,7 @@ NQ/E2/T41. **No** se toca `reports/discovery/edge_map.md`.
 | H-2026-005 | Donchian | H4 | `inconclusive` | `no_power_cost_v1` |
 | H-2026-006 | Momentum intradía | M5 | `inconclusive` | `no_power_cost_v1` |
 | H-2026-007 | NY open GA | M5 | `inconclusive` | `no_power_cost_v1` |
-| H-2026-008 | EA v3.2 fuera de periodo (T7) | M5 | `rejected` | `holdout_fail`: 374 ops, exp ?0,0296 R, LCB ?0,1753 |
+| H-2026-008 | EA v3.2 fuera de periodo (T7) | M5 | `rejected` | `holdout_fail`: 374 ops, exp −0,0296 R, LCB −0,1753 |
 | H-2026-009 | H2 deriva pre-FOMC (T8) | D1 | `rejected` | `no_power`: MDE 43,76 > 30 bps |
 | H-2026-010 | H1 deriva nocturna (T9) | D1 | `rejected` | `cost_gate` (H-2026-010b) |
 | H-2026-011 | H3 impulso de apertura (T9) | M5 | `draft` | Solo conteo/MDE; no se ejecuta |
