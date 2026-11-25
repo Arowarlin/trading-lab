@@ -83,10 +83,34 @@ def sprt(
     }
 
 
-def wald_expected_n(delta: float, sigma: float = 1.0) -> float:
-    """N esperado aproximado de Wald para μ = δ."""
+def wald_expected_n(
+    delta: float,
+    sigma: float = 1.0,
+    *,
+    alpha: float = 0.05,
+    beta: float = 0.2,
+) -> float:
+    """E[N | μ = δ] de Wald: [(1−β)·A + β·B] / (δ²/(2σ²))."""
 
-    return float((sigma / float(delta)) ** 2)
+    a_threshold = math.log((1.0 - beta) / alpha)
+    b_threshold = math.log(beta / (1.0 - alpha))
+    drift = float(delta) ** 2 / (2.0 * float(sigma) ** 2)
+    return float(((1.0 - beta) * a_threshold + beta * b_threshold) / drift)
+
+
+def wald_expected_n_null(
+    delta: float,
+    sigma: float = 1.0,
+    *,
+    alpha: float = 0.05,
+    beta: float = 0.2,
+) -> float:
+    """E[N | μ = 0]: [α·A + (1−α)·B] / (−δ²/(2σ²))."""
+
+    a_threshold = math.log((1.0 - beta) / alpha)
+    b_threshold = math.log(beta / (1.0 - alpha))
+    drift = -(float(delta) ** 2) / (2.0 * float(sigma) ** 2)
+    return float((alpha * a_threshold + (1.0 - alpha) * b_threshold) / drift)
 
 
 def load_forward_returns(
@@ -105,10 +129,11 @@ def load_forward_returns(
     except Exception as exc:  # noqa: BLE001
         return [], f"Sin datos: {type(exc).__name__}"
     wanted = str(strategy or "").strip()
+    allowed = {wanted, f"forward:{wanted}"}
     values: list[float] = []
     for trade in trades:
         bot = str(getattr(trade, "bot", "") or "")
-        if bot in {wanted, f"forward:{wanted}"} or wanted in bot:
+        if bot in allowed:
             value = getattr(trade, "r_multiple", None)
             if value is not None:
                 values.append(float(value))
@@ -117,4 +142,9 @@ def load_forward_returns(
     return values, "OK"
 
 
-__all__ = ["load_forward_returns", "sprt", "wald_expected_n"]
+__all__ = [
+    "load_forward_returns",
+    "sprt",
+    "wald_expected_n",
+    "wald_expected_n_null",
+]

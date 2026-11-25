@@ -12306,6 +12306,14 @@ def forward_sprt_cmd(
     table.add_row(
         "σ", "Sin datos" if result["sigma"] is None else f"{result['sigma']:.4f}"
     )
+    sigma_value = float(result["sigma"] or 1.0)
+    table.add_row(
+        "E[N] H1", f"{sprt.wald_expected_n(delta, sigma_value):.0f}"
+    )
+    table.add_row(
+        "E[N] H0",
+        f"{sprt.wald_expected_n_null(delta, sigma_value):.0f}",
+    )
     table.add_row("Decisión", result["decision"])
     table.add_row("Motivo", result["reason"])
     console.print(table)
