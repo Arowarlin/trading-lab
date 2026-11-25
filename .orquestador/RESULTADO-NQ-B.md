@@ -65,8 +65,8 @@ se repitió. Se aplicó la regla de respaldo CME §3.3.3:
 
 | Métrica | Valor |
 |---|---:|
-| Operaciones referencia Dukascopy | 84 |
-| Operaciones US100.cash | 85 |
+| Operaciones Dukascopy | 85 |
+| Operaciones US100.cash | 84 |
 | Emparejadas | 72 (**85,7 %**) |
 | Correlación de R | **0,9129** |
 | ¿Válida? | **Sí** |

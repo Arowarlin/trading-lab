@@ -13,20 +13,22 @@
 | T2 | Hecho | 8 copias en `data/tl3/futures/`; originales intactos; hashes en el manifiesto. |
 | T3 | Hecho | `tl3_research.db` con 11 hipótesis, `thresholds.yaml`, candados y edge map; 4 tests. |
 | T4 | Hecho | `tl3/report.py`: escalera bruto → neto con test a mano; 1 test. |
-| T5 | Hecho | `ai_trader` vs gemela: Δ +0,1675 R, IC95 [−0,209; +0,541], n=48 → **Sin datos**. |
+| T5 | Hecho | `ai_trader` vs gemela recalculada: IA 0,2953 R, gemela 0,2594 R, tendencia 0,3179 R; Δ vs tendencia −0,0225 R, IC95 [−0,1833; +0,1206], n=48 → **no concluyente**. |
 | T6 | Hecho | Réplica EA v3.2: 479 ops, +0,3104 R, total 148,7 R; reproduce T41 ±1 op nueva. |
 | T7 | **Bloqueado** | Falta la fila `TL3-T7` de `record-informal`; no se ejecutó. |
 | T8 | **Bloqueado** | Falta la fila `TL3-T8` de `record-informal`; no se ejecutó. |
-| T9 | Hecho | H1: coste 0,724 bps, pasa en CFD-006; CFD-001 bloqueado por swap. H3: 207 días, MDE 0,1731 > 0,12 → `no_power`. |
+| T9 | Hecho | H1: swap 7,33 %/365 = 2,01-2,81 bps + spread 0,69 + slippage 0,38 ≈ 3,1-3,9 bps; 2× > 3,5 → **`rejected: cost_gate`**. H3: 207 días, MDE 0,1731 > 0,12 → `no_power`. |
 | T10 | Hecho | `TL3_REPORTS/TL3_RESULTS_CICLO1.md`. |
 | T11 | Hecho | ruff limpio; pytest **1976 passed, 1 skipped** (32:23); `lab doctor` OK; `lab propfund verify` 4/4; README/PLAN; commit y tag. |
 
 ## T5 · `ai_trader`
 
-48 operaciones cerradas: IA +0,0479 R, gemela −0,1196 R, Δ +0,1675 R,
-sd 1,3379, IC95 [−0,2090; +0,5411]. Compras 13 → −0,4454; ventas 35 →
-+0,3952. La regla de tendencia y el "siempre tomar" quedan **Sin datos**.
-Veredicto: **Sin datos**; no se cambia `ai_trader`.
+48 operaciones cerradas, M1 de MT5 attach-only, gemela recalculada con
+`shadow_seed`, regla de tendencia y "siempre tomar":
+IA 0,2953 R, gemela 0,2594 R, tendencia 0,3179 R, siempre tomar = IA.
+Δ vs gemela +0,0360 R, IC95 [−0,0843; +0,1462]; Δ vs tendencia −0,0225 R,
+IC95 [−0,1833; +0,1206]. Veredicto: **no concluyente**; no se cambia
+`ai_trader`.
 
 ## T6 · Réplica EA
 
@@ -44,8 +46,11 @@ esos bloques.
 
 ## T9
 
-- H1: coste 0,724 bps/noche en CFD-006, 2× = 1,449 < 3,5 declarado → pasa;
-  CFD-001 `blocked: swap sin datos fiables`.
+- **H1 corregida:** `swap_mode: 5` de CFD-006 = interés anual; 7,33 %/365 =
+  2,01 bps/noche (2,81 de media con día triple), + spread 0,69 bps +
+  slippage 0,38 bps ≈ **3,1-3,9 bps**. 2 × coste > 3,5 →
+  **H-2026-010 = `rejected: cost_gate`** (fila append-only H-2026-010b).
+  CFD-001 sigue `blocked: swap sin datos fiables`.
 - H3: 655 sesiones válidas, 207 con señal; MDE 0,1731 > 0,12 →
   `rejected: no_power`.
 
@@ -57,7 +62,7 @@ esos bloques.
 - `lab doctor`: OK (avisos preexistentes de plantilla FTMO).
 - `lab propfund verify`: 4/4 grupos OK.
 - README §11 y PLAN actualizados.
-- Commit `tl3: ciclo 1`, tag `tl3-ciclo1`.
+- Commit `tl3: ciclo 1b`, tag `tl3-ciclo1b`.
 
 ## Cumplimiento
 

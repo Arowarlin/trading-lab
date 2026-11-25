@@ -5,8 +5,8 @@ La caché del EA solo se usa como referencia del puente.
 
 | Métrica | Valor |
 |---|---:|
-| Operaciones referencia | 84 |
-| Operaciones US100.cash | 85 |
+| Operaciones Dukascopy | 85 |
+| Operaciones US100.cash | 84 |
 | Emparejadas | 72 (85.7 %) |
 | Correlación de R | 0.9129 |
 | ¿Válida? | Sí |

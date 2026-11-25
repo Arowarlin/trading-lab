@@ -9,13 +9,13 @@
 | T2 | Hecho | 8 copias de futuros en `data/tl3/futures/`; originales intactos. |
 | T3 | Hecho | Registro `tl3_research.db` con 11 hipótesis; candados y umbrales. |
 | T4 | Hecho | Escalera bruto → neto con test a mano. |
-| T5 | Hecho | `ai_trader` vs gemela: Δ +0,1675 R, IC95 [−0,2090; +0,5411], n=48 → **Sin datos**. |
+| T5 | Hecho | `ai_trader` vs gemela recalculada: IA 0,2953 R, gemela 0,2594 R, tendencia 0,3179 R; Δ vs tendencia −0,0225 R, IC95 [−0,1833; +0,1206], n=48 → **no concluyente**. |
 | T6 | Hecho | Réplica EA v3.2: 479 ops, +0,3104 R; réplica reproduce (±1 op nueva). |
 | T7 | **Bloqueado** | Falta `record-informal` `TL3-T7`; no se ejecutó. |
 | T8 | **Bloqueado** | Falta `record-informal` `TL3-T8`; no se ejecutó. |
-| T9 | Hecho | H1: coste 0,724 bps, pasa en CFD-006; CFD-001 bloqueado por swap. H3: 207 días, MDE 0,1731 > 0,12 → `no_power`. |
+| T9 | Hecho | H1: swap 7,33 %/365 = 2,01-2,81 bps + spread 0,69 + slippage 0,38 ≈ 3,1-3,9 bps; 2× > 3,5 → **`rejected: cost_gate`**. H3: 207 días, MDE 0,1731 > 0,12 → `no_power`. |
 | T10 | Hecho | Este informe. |
-| T11 | Pendiente | Cierre, suite, tag y Telegram. |
+| T11 | Pendiente | Cierre, suite, tag `tl3-ciclo1b` y Telegram. |
 
 ## Hipótesis
 
@@ -30,7 +30,7 @@
 | H-2026-007 | NY open GA | `inconclusive` | `no_power_cost_v1` |
 | H-2026-008 | EA OOP (T7) | `draft` | bloqueado: falta registro `TL3-T7` |
 | H-2026-009 | H2 FOMC (T8) | `draft` | bloqueado: falta registro `TL3-T8` |
-| H-2026-010 | H1 nocturna | `draft` | puerta de coste; no se ejecuta |
+| H-2026-010 | H1 nocturna | `rejected` | `cost_gate` (fila nueva H-2026-010b, append-only) |
 | H-2026-011 | H3 OR | `rejected` | `no_power` |
 
 ## Recomendaciones para el operador
@@ -39,11 +39,12 @@
    del registro del contador; si se registra `TL3-T7`, la prueba Dukascopy
    2012-2021 está lista y A-1 ya es válido (85,7 %, 0,9129). No cambiar el
    EA ni el riesgo por este ciclo.
-2. **`ai_trader`:** no se distingue de la gemela (Δ +0,1675 R, IC95 incluye
-   0; n=48). No aumenta el riesgo; el benchmark de tendencia sigue Sin datos.
+2. **`ai_trader`:** **no concluyente**. IA 0,2953 R, gemela 0,2594 R,
+   tendencia 0,3179 R; Δ vs tendencia −0,0225 R, IC95 [−0,1833; +0,1206],
+   n=48. No aumenta el riesgo.
 3. **Siguiente lista**, ordenada por (bruto esperado − coste) / MDE:
-   - H1 nocturna: pasa coste en CFD-006, pero el swap de CFD-001 no es fiable;
-     medir swap ≥ 20 sesiones antes de registrarla.
+   - H1 nocturna: **rejected: cost_gate** (coste 3,1-3,9 bps, 2× > 3,5);
+     medir swap ≥ 20 sesiones antes de reabrirla.
    - H3 OR: sin potencia (MDE 0,1731 > 0,12); no registrar hasta ampliar
      muestra o bajar δ.
    - T7 EA Dukascopy: pendiente solo del registro `TL3-T7`.

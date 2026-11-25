@@ -349,8 +349,8 @@ def main(argv=None) -> int:
         lines += [
             "| Métrica | Valor |",
             "|---|---:|",
-            f"| Operaciones referencia | {bridge['reference']} |",
-            f"| Operaciones US100.cash | {bridge['candidate']} |",
+            f"| Operaciones Dukascopy | {bridge['candidate']} |",
+            f"| Operaciones US100.cash | {bridge['reference']} |",
             f"| Emparejadas | {bridge['matched']} ({bridge['matched_pct']:.1f} %) |",
             f"| Correlación de R | {_fmt(bridge['correlation'])} |",
             f"| ¿Válida? | {'Sí' if bridge['valid'] else 'No'} |",
