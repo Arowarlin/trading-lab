@@ -54,7 +54,7 @@ Solo una ejecución del criterio. La tabla por año es descriptiva.
 
 ## Correcci?n TL3-C
 
-La regla del script usaba 371 velas de sesi?n (?99 %) y no comprobaba la sesi?n anterior; el prerregistro exige **?357 (95 %) en la sesi?n y en la anterior** y **?744 nocturnas**.
+La regla del script usaba 371 velas de sesi?n (−99 %) y no comprobaba la sesi?n anterior; el prerregistro exige **−357 (95 %) en la sesi?n y en la anterior** y **−744 nocturnas**.
 
 | A?o | D?as NYSE | V?lidos script (371 + noche) | V?lidos prerregistro | Mediana velas nocturnas |
 |---|---:|---:|---:|---:|
