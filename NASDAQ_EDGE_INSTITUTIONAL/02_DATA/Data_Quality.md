@@ -44,7 +44,24 @@ mira precios ni retornos del tramo sellado.
      - excluir también los días con salto detectado (más 3 días);
      - no usar PDH/PDL cuando la víspera está excluida.
    - Resultado: 1.733 sesiones NQ útiles en DEV de 2.080 completas.
-8. **Contaminación previa.** NQ 2010–2018 ya se usó en el laboratorio para el EA `us100-ftmo1` (otra estrategia). Para las familias A–F de este proyecto no hay uso previo registrado. Se declara.
+8. **Contaminación declarada.** Las familias A–F son componentes de confluencia del EA `us100-ftmo1` (`src/tradinglab/ea_us100_engine.py`):
+
+   | EA `us100-ftmo1` | Familia de este proyecto |
+   |---|---|
+   | `trade_start=935`, `trade_end=1130` | misma ventana de entrada (9:35–11:30 ET) |
+   | `or_end=945`, modo `ORB_RETEST`, `fb_window=6` | A · NY Open Breakout (retest en ≤ 6 velas) |
+   | `use_pd` / `use_on`, `sweep_window=12` | B · Liquidity Sweep |
+   | `vwap_ext_sd=2.0` | C · VWAP ± 2σ |
+   | FVG con `htf_min=15` | D · Displacement + FVG |
+   | RVOL, `rr=2.0`, BE a 1R | E/F y reglas comunes |
+   | SL primero si SL y TP caen en la misma barra | regla común de ejecución |
+
+   Usos previos de la historia:
+   - NQ 2010–2017 con el EA: `reports/ea/us100-ftmo1-nq-2010-2017.md`.
+   - Dukascopy 2012–2021 con T7: `TL3_REPORTS/ea_oop_dukascopy.md`; **no confirma**.
+   - US100 2021–2026: periodo de diseño del EA.
+
+   **OOS-1 y OOS-2 no son fuera de muestra para estas familias.**
 
 ## 3. Cobertura por año (sesiones RTH completas)
 

@@ -9,7 +9,7 @@ reglas de `AGENTS.md` aplican.
 |---|---|---|
 | A · Mercado, noticias y firmas | hecha y aprobada (2026-11-25) | `01_RESEARCH/*` |
 | B · Datos históricos | **hecha 2026-11-25. Pendiente de revisión** | `02_DATA/*`, `tools/`, `tests/` |
-| C · Seis familias | bloqueada: preregistro + `record-informal` del operador | `03_BACKTEST/*` |
+| C · Seis familias | **sustituida por forward** (decisión del operador 2026-11-25). Las 22 variantes históricas no se ejecutan ni se registran | `03_BACKTEST/*` (histórico, sin usar) |
 | D · Selección | — | — |
 | E · Indicador y Strategy Tester (Pine v6) | — | `04_PINE_SCRIPT/*` |
 | F · OOS y auditoría de riesgo | — | `05_RISK/*`, `07_AUDIT/*` |
