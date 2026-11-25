@@ -63,6 +63,8 @@ mira precios ni retornos del tramo sellado.
 
    **OOS-1 y OOS-2 no son fuera de muestra para estas familias.**
 
+9. **Fase C histórica: ejecutada y registrada, contaminada.** La Fase C **sí se ejecutó** en `03_BACKTEST` (16:43-16:51) y el operador la **registró** en `informal_trials` (fila 7, n=22; fila 6, n=7). Esos resultados históricos están **contaminados por el EA** `us100-ftmo1` (ver §2.8 y `COLA-NQEDGE-FORWARD §1`, bloque F1): no son una prueba limpia ni fuera de muestra. El forward NQF-A/B/C sigue siendo el prerregistrado, sin cambios.
+
 ## 3. Cobertura por año (sesiones RTH completas)
 
 | Año | NQ | Dukascopy |
