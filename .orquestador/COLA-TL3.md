@@ -163,7 +163,7 @@ al bróker`. No se ejecuta.
 | Entrada | Largo a las **15:55 NY** de la sesión NYSE anterior al anuncio (ASK = BID + spread de la franja) |
 | Salida | **12:25 NY** para eventos anteriores a 2016-01-01 (en 2011-2012 hubo comunicados a las 12:30 y la hora 2010-2015 no está verificada); **13:55 NY** desde 2016 (14:00 verificada). Regla fija, sin buscar horas |
 | Observación | Una por evento: media igual ponderada de los índices disponibles, en bps (log-retorno × 1e4) |
-| Costes | Spread por franja de 5 min NY: perfil de cada índice construido igual que el de US100 (mediana por franja) desde `data/cache/ea/US500_CASH_M5_NY.parquet`, `US30_CASH_M5_NY.parquet` y `us100_spread_profile_ny5m.parquet`. Slippage 0,5 pt/lado. Swap de **una noche**: débito de `swap.yaml` CFD-001; los créditos cuentan 0 |
+| Costes | Spread por franja de 5 min NY: perfil de cada índice construido igual que el de US100 (mediana por franja) desde `data/cache/ea/US500_CASH_M5_NY.parquet`, `US30_CASH_M5_NY.parquet` y `us100_spread_profile_ny5m.parquet`. Slippage 0,5 pt/lado. Swap de **una noche**: ~~débito de `swap.yaml` CFD-001; los créditos cuentan 0~~ **enmienda 2026-11-25 (abajo):** interés largo de `swap.yaml` CFD-006 (`swap_mode` 5: −7,33 % anual sobre el precio de entrada) = 7,33 % / 365 por noche en cada índice, ×3 si la noche cruza el rollover del día triple (`swap_rollover3days` = 5, 17:00 NY) |
 | Placebo | Mismo reloj (15:55 del día previo → hora de salida de la época) en todos los demás días NYSE, excluyendo t−1, t y t+1 de cada FOMC, festivos y cierres tempranos |
 | Potencia (antes de mirar los eventos) | σ = desviación del placebo; MDE = 2,49 × σ / √n_eventos. **δ = 30 bps.** Si MDE > 30 bps: `rejected: no_power`, no se calcula el retorno de los eventos |
 | Criterio | (a) diferencia bruta FOMC − placebo con t de Welch unilateral ≥ 1,645, **y** (b) LCB95 de la media **neta** de los eventos > 0 (bootstrap de eventos, 10.000, semilla 42) |
@@ -171,6 +171,19 @@ al bróker`. No se ejecuta.
 | Veredicto | "confirma" / "no confirma"; sin reinterpretación |
 | Informe | `TL3_REPORTS/h2_pre_fomc.md`: n, σ, MDE, escalera bruto → neto (T4), tabla por año y por época (≤2015 / ≥2016), placebo |
 | Ejecuciones | **Una.** Registrar en `experiments` y `sample_usage` |
+
+**Enmienda de costes T8 (2026-11-25, aprobada por el operador antes de ejecutar T8 y sin ver ningún
+evento).** Motivo: los créditos de CFD-001 en US100/US500 son una sola medición y probablemente un ajuste
+por dividendos; contarlos como 0 infravalora la financiación real de un largo en CFD. CFD-006 es la única
+medición de interés plausible (~2,0 bps/noche). El cambio solo encarece el neto, es decir, hace el
+criterio (b) más exigente; no cambia eventos, horas, placebo, δ ni el criterio (a). Se refleja en la fila
+de swap de la escalera bruto → neto del informe.
+
+**Decisión del operador (2026-11-25, antes de ejecutar T8):** tras revisar `TL3_REPORTS/literatura_T8_H1.md`,
+se mantiene T8 sin cambios (δ = 30 bps, mismas ventanas y criterio). Lectura fijada ahora, antes de ver
+eventos: "no confirma" descarta un efecto del tamaño de 1994-2011 (≥ 30 bps), pero **no** uno de ~20 bps
+como el de la literatura posterior a 2011 (potencia estimada ~55 %), y no se reformula sobre esta
+muestra; "confirma" es una replicación independiente 2011-2026 en CFD, neta de costes.
 
 ## 5. Puertas sin rendimiento (T9)
 
