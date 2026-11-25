@@ -165,12 +165,14 @@ Los cierres están en `.orquestador/RESULTADO-*.md` y los informes en
   copias de futuros en `data/tl3/futures/`.
 - Registro append-only `data/tl3/tl3_research.db` con 11 hipótesis, candados
   de potencia/coste/identidad y umbrales con hash.
-- `ai_trader` frente a su gemela: Δ +0,1675 R, IC95 [−0,209; +0,541], n=48
-  → **Sin datos**.
+- `ai_trader` frente a su gemela recalculada con M1: IA 0,2953 R, gemela
+  0,2594 R, tendencia 0,3179 R; Δ vs tendencia −0,0225 R, IC95
+  [−0,183; +0,121] → **no concluyente**.
 - Réplica EA v3.2: 479 ops, +0,3104 R; el corto pierde en 2023 (−0,1368 R).
 - T7 (EA Dukascopy 2012-2021) y T8 (H2 FOMC) quedan **bloqueados** hasta que
   el operador registre `TL3-T7` y `TL3-T8` en `record-informal`.
-- H1 nocturna pasa coste en CFD-006; H3 sin potencia (MDE 0,173 > 0,12).
+- H1 nocturna: **rejected: cost_gate** (3,1-3,9 bps/noche, 2× > 3,5);
+  H3 sin potencia (MDE 0,173 > 0,12).
 - `count_tests` = 1895.
 
 
