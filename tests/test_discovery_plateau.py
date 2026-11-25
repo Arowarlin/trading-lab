@@ -19,6 +19,26 @@ def _individual(name: str, expectancy: float) -> engine.Individual:
     )
 
 
+def _approved_campaign(
+    db: Path,
+    name: str,
+    config: dict,
+    *,
+    n_total: int = 9,
+) -> None:
+    databank.add_campaign(
+        name,
+        config,
+        instrument="US100",
+        timeframe="M5",
+        template="ny_open_vol_filter",
+        status="draft",
+        n_total=n_total,
+        db_path=db,
+    )
+    databank.approve_campaign(name, approved_by="test", db_path=db)
+
+
 def test_meseta_3x3():
     values = [0.1, 0.2, -0.1, 0.3, 0.1, 0.2, -0.2, 0.05, 0.01]
     payload = plateau.summary(values)
@@ -36,25 +56,50 @@ def test_primaria_no_cambia_al_permutar_la_rejilla():
     assert [item.strategy_hash for item in second] == ["h1"]
 
 
-def test_contador_suma_uno_mas_plateau_n(tmp_path: Path):
+def test_contador_v1_suma_n_total(tmp_path: Path):
     db = tmp_path / "discovery.db"
     databank.init_databank(db)
-    databank.add_campaign(
-        "p2",
+    _approved_campaign(
+        db,
+        "v1",
+        {"protocol_version": 1, "plateau_n": 0, "decision_n_total": None},
+    )
+    tests = campaigns.discovery_tests(db)
+    assert tests["campaigns"] == 9
+    assert tests["total"] == 9
+
+
+def test_contador_v2_con_primaria_suma_n_total(tmp_path: Path):
+    db = tmp_path / "discovery.db"
+    databank.init_databank(db)
+    _approved_campaign(
+        db,
+        "v2",
         {
             "protocol_version": 2,
             "primary": {"stop": 2.0},
             "plateau_n": 8,
             "decision_n_total": 1,
         },
-        instrument="US100",
-        timeframe="M5",
-        template="ny_open_vol_filter",
-        status="draft",
-        n_total=9,
-        db_path=db,
     )
-    databank.approve_campaign("p2", approved_by="test", db_path=db)
     tests = campaigns.discovery_tests(db)
-    assert tests["campaigns"] == 9  # 1 + 8
+    assert tests["campaigns"] == 9
+    assert tests["total"] == 9
+
+
+def test_contador_v2_antigua_plateau_cero_suma_n_total(tmp_path: Path):
+    db = tmp_path / "discovery.db"
+    databank.init_databank(db)
+    _approved_campaign(
+        db,
+        "v2-old",
+        {
+            "protocol_version": 2,
+            "primary": {"stop": 2.0},
+            "plateau_n": 0,
+            "decision_n_total": 1,
+        },
+    )
+    tests = campaigns.discovery_tests(db)
+    assert tests["campaigns"] == 9
     assert tests["total"] == 9

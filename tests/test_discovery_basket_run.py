@@ -121,6 +121,74 @@ def _register(tmp_path, *, edge: bool, campaign_id: str = "test-cesta"):
     return campaign, frames, db
 
 
+def _v2_spec_path(tmp_path, *, campaign_id: str = "cesta-v2-cnt"):
+    path = tmp_path / "cesta-v2.yaml"
+    cost = {
+        symbol: {
+            "account": "CFD-001",
+            "firm": "ftmo",
+            "cost_accounts": ["CFD-001"],
+            "cost_mode": "target",
+        }
+        for symbol in ("XAUUSD", "US100")
+    }
+    grid = {
+        "dimensions": [
+            {
+                "name": "n",
+                "kind": "path",
+                "path": "long_entry.n",
+                "values": [1, 2],
+            },
+            {
+                "name": "m",
+                "kind": "path",
+                "path": "long_entry.m",
+                "values": [2, 3],
+            },
+        ]
+    }
+    path.write_text(
+        yaml.safe_dump(
+            {
+                "family_symbols": ["XAUUSD", "US100"],
+                "campaign_id": campaign_id,
+                "instrument": "XAUUSD",
+                "timeframe": "D1",
+                "template": "turn_of_month",
+                "profile": "small",
+                "mode": "grid",
+                "seed": 7,
+                "data_source": "dukascopy",
+                "account": "CFD-001",
+                "firm": "ftmo",
+                "segments": {
+                    "is": ["2018-01-01", "2020-12-31"],
+                    "oos1": ["2021-01-01", "2021-12-31"],
+                    "oos2": ["2022-01-01", None],
+                },
+                "protocol_version": 2,
+                "cost_model_version": 2,
+                "spread_model": "historical_scaled",
+                "holdout_start": "2025-07-01",
+                "plausible_edge_r": 0.1,
+                "family": "calendario",
+                "primary": {"n": 1, "m": 3},
+                "plateau_grid": grid,
+                "grid": grid,
+                "cost": cost,
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    frames = {
+        "XAUUSD": _frame(True, price=2000.0, seed=2),
+        "US100": _frame(True, price=20_000.0, seed=3),
+    }
+    return path, frames
+
+
 def test_register_cesta_n_total_no_se_multiplica_por_simbolos(tmp_path) -> None:
     campaign, frames, db = _register(tmp_path, edge=True)
 
@@ -143,6 +211,25 @@ def test_register_cesta_n_total_no_se_multiplica_por_simbolos(tmp_path) -> None:
     check = feasibility.check("test-cesta", db_path=db)
     assert check["n_checked"] == 4
     assert check["n_feasible"] >= 1
+
+
+def test_register_cesta_v2_guarda_campos_de_la_spec(tmp_path) -> None:
+    db = tmp_path / "discovery.db"
+    path, frames = _v2_spec_path(tmp_path)
+    campaign = basket.register(path, frames=frames, db_path=db)
+    config = campaign["config"]
+
+    assert campaign["n_total"] == 4
+    assert config["n_total"] == 4
+    assert config["protocol_version"] == 2
+    assert config["primary"] == {"n": 1, "m": 3}
+    assert config["plateau_n"] == 3
+    assert config["decision_n_total"] == 1
+    assert config["cost_model_version"] == 2
+    assert config["holdout_start"] == "2025-07-01"
+    assert config["plausible_edge_r"] == 0.1
+    assert config["family"] == "calendario"
+    assert config["plateau_grid"]["dimensions"][0]["name"] == "n"
 
 
 def test_run_cesta_con_ventaja_pasa(tmp_path) -> None:

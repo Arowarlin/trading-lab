@@ -121,3 +121,19 @@ comprueba. El baseline de hashes vive en
 
 
 
+
+## 2026-11-24 - Contador de pruebas v2 = n_total (CNT)
+
+- **Que cambia:** `discovery_tests` suma siempre `n_total` de cada campana
+  aprobada y no reemplazada, sea v1 o v2. Desaparece la rama
+  `1 + plateau_n`, que contaba de menos las campanas v2 con primaria y
+  `plateau_n = 0`. `register` calcula un unico `protocol_version` efectivo y
+  guarda `plateau_n = n_total - 1` (puntos de rejilla sin la primaria, solo
+  informativo) y `decision_n_total = 1` cuando hay primaria v2. La ruta de
+  cesta guarda tambien `plateau_grid` y `plausible_edge_r`.
+- **Alcance:** `discovery/campaigns.py` y `discovery/basket.py`. No cambia
+  ninguna fila de las bases de datos ni reejecuta campanas.
+- **Verificacion:** `lab research-trials` pasa de 1886 a **1894** (1883 + 2
+  del registro informal + 9 de `v2-fix-londres-eurgbp-h1`); tests de contador
+  v1/v2/fila antigua y de `register` con `protocol_version=None`.
+- **Rollback:** tag `tl2-cnt-pre`.

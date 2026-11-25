@@ -77,3 +77,48 @@ def test_campana_nueva_guarda_holdout_start(tmp_path):
     )
     assert preview["config"]["protocol_version"] == 2
     assert preview["config"]["holdout_start"] == "2025-07-01"
+
+
+def test_register_con_protocol_version_none_es_coherente(tmp_path):
+    from tradinglab.discovery import campaigns, engine
+
+    frame = engine.synthetic_frame(years=0.5, seed=17)
+    segments = {
+        "is": ["2023-01-02", "2023-04-30"],
+        "oos1": ["2023-05-01", "2023-05-31"],
+        "oos2": ["2023-06-01", None],
+    }
+    preview = campaigns.register(
+        "US100",
+        "M5",
+        "ny_open_vol_filter",
+        "small",
+        segments=segments,
+        frame=frame,
+        campaign_id="v2-none",
+        dry_run=True,
+        primary={"stop": 2.0},
+        db_path=tmp_path / "discovery.db",
+    )
+    config = preview["config"]
+    assert config["protocol_version"] == 2
+    assert config["primary"] == {"stop": 2.0}
+    assert config["plateau_n"] == config["n_total"] - 1
+    assert config["decision_n_total"] == 1
+
+    v1 = campaigns.register(
+        "US100",
+        "M5",
+        "ny_open_vol_filter",
+        "small",
+        segments=segments,
+        frame=frame,
+        campaign_id="v1-none",
+        dry_run=True,
+        primary={"stop": 2.0},
+        protocol_version=1,
+        db_path=tmp_path / "discovery.db",
+    )
+    assert v1["config"]["protocol_version"] == 1
+    assert v1["config"]["plateau_n"] == 0
+    assert v1["config"]["decision_n_total"] is None

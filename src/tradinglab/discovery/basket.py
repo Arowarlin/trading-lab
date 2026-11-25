@@ -742,6 +742,15 @@ def register(
     base_cost = spec["cost"][base]
     slippage_value, slippage_source = assumed_slippage_for(base)
     session = dict(spec["strategies"][0].get("session") or {})
+    effective_protocol = int(
+        spec.get("protocol_version")
+        if spec.get("protocol_version") is not None
+        else 2
+    )
+    primary_payload = dict(spec.get("primary") or {}) or None
+    plateau_grid_payload = dict(spec.get("plateau_grid") or {}) or None
+    plausible_edge = spec.get("plausible_edge_r")
+    n_total_spec = len(spec["strategies"])
     config_payload: dict[str, Any] = {
         "instrument": base,
         "timeframe": spec["timeframe"],
@@ -760,14 +769,24 @@ def register(
         "oos2_end": segments["oos2"][1],
         "segments": segments,
         "dataset_hash": dataset_digest,
-        "n_total": len(spec["strategies"]),
-        "decision_n_total": 1,
-        "protocol_version": int(spec.get("protocol_version") or 2),
+        "n_total": n_total_spec,
+        "decision_n_total": (
+            1 if effective_protocol >= 2 and primary_payload else None
+        ),
+        "protocol_version": effective_protocol,
         "holdout_start": str(spec.get("holdout_start") or "2025-07-01"),
         "family": str(spec.get("family") or "basket"),
         "family_symbols": list(symbols),
-        "primary": dict(spec.get("primary") or {}) or None,
-        "plateau_n": 0,
+        "primary": primary_payload,
+        "plateau_n": (
+            max(0, n_total_spec - 1)
+            if effective_protocol >= 2 and primary_payload
+            else 0
+        ),
+        "plateau_grid": plateau_grid_payload,
+        "plausible_edge_r": (
+            None if plausible_edge is None else float(plausible_edge)
+        ),
         "cost_model_version": int(spec.get("cost_model_version") or 2),
         "spread_model": str(
             spec.get("spread_model") or "historical_scaled"

@@ -306,6 +306,9 @@ def register(
     version = 2 if cost_model_version is None else int(cost_model_version)
     if version not in {1, 2}:
         raise CampaignError(f"cost_model_version inválida: {version}")
+    effective_protocol = int(
+        protocol_version if protocol_version is not None else 2
+    )
     spread_model = str(
         spread_model
         or ("historical_scaled" if version >= 2 else "p75_static")
@@ -383,6 +386,7 @@ def register(
 
     hashed = _hash_range(source, normalized["is"][0], oos2_end)
     digest = dataset_hash(hashed)
+    primary_payload = dict(primary or {}) or None
     config_payload: dict[str, Any] = {
         "instrument": instrument,
         "timeframe": timeframe,
@@ -406,18 +410,18 @@ def register(
             None if plausible_edge_r is None else float(plausible_edge_r)
         ),
         "sigma_r": 1.0 if sigma_r is None else float(sigma_r),
-        "protocol_version": int(protocol_version or 2),
+        "protocol_version": effective_protocol,
         "holdout_start": str(holdout_start or "2025-07-01"),
         "family": str(family or "").strip() or None,
-        "primary": dict(primary or {}) or None,
+        "primary": primary_payload,
         "plateau_grid": dict(plateau_grid or {}) or None,
         "plateau_n": (
-            int(n_total)
-            if int(protocol_version or 1) >= 2 and primary
+            max(0, int(n_total) - 1)
+            if effective_protocol >= 2 and primary_payload
             else 0
         ),
         "decision_n_total": (
-            1 if int(protocol_version or 1) >= 2 and primary else None
+            1 if effective_protocol >= 2 and primary_payload else None
         ),
         "cost": {
             "account": selected_costs[0],
@@ -1100,24 +1104,11 @@ def discovery_tests(
     try:
         try:
             rows = con.execute(
-                "SELECT n_total, config_json FROM disc_campaigns"
+                "SELECT n_total FROM disc_campaigns"
                 " WHERE approved_at IS NOT NULL"
                 " AND COALESCE(status, '') != 'superseded'"
             ).fetchall()
-            campaigns = 0
-            for row in rows:
-                n_total = int(row[0] or 0)
-                try:
-                    config = json.loads(row[1] or "{}")
-                except (TypeError, ValueError):
-                    config = {}
-                if (
-                    int(config.get("protocol_version") or 1) >= 2
-                    and config.get("primary")
-                ):
-                    campaigns += 1 + int(config.get("plateau_n") or 0)
-                else:
-                    campaigns += n_total
+            campaigns = sum(int(row[0] or 0) for row in rows)
         except sqlite3.OperationalError:
             campaigns = 0
         try:
