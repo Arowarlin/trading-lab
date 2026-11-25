@@ -79,7 +79,7 @@ Prop Fund, riesgo FTMO, forward, `config/schedule.yaml` ni las tareas.
 | D3b | Hecho | `db760c7` T5-bis: 12 TP / 13 SL / 23 otro, 23/48 coincidencias, opuestas #27 y #51; `nights(fecha)`; FundingPips: 30.672/45.000 (68,2 %) caminos afectados con el código anterior, 0 con el corregido. |
 | D4 | Hecho | Plan de potencia: sd Δ_t 0,5341 → n 177, redondeo 180; Δ_g 0,4059 → 103; R real 0,9871 → 605. Ritmo 5,33 ops/día hábil; evaluación única a 180 (~2027-01-04). H-2026-012 `draft`. |
 | D5 | Hecho | Forward EA: 3 cerradas (2026-11-16, 11-18, 11-24), solo conteo. T6: 479 ops, +0,3104 R, sd 1,9173 → n 237 (real 0) y 515 (real 0,10); puntos 30/60/515 (~2027-03-16, ~2027-07-13, ~2032-06-14). `drift.py` citado. |
-| D5b | Pendiente | Diagnóstico de la TCA. |
+| D5b | Hecho | TCA: 68 filas, 66 con slippage 0, 2 sin `fill_px`, 68 sin latencia, 58 pre-migración. Causa confirmada en `mt5.py:772-783` y `paper.py:140-155`. Decisión→fill real (45/48, ≤20 s): mediana 0,440 bps / p95 2,263 bps; media +0,0114 R. `fill_px` de TCA difiere del fill real (mediana 0,426 bps; máx 2,899). Propuesta no aplicada. |
 | D6 | Pendiente | Cierre, README/PLAN y `count_tests` 1897. |
 | D7 | Pendiente | Aviso a Telegram. |
 
