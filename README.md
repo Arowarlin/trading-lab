@@ -190,6 +190,9 @@ Los cierres están en `.orquestador/RESULTADO-*.md` y los informes en
 - D5: forward del EA con 3 cerradas; T6 sd 1,9173; n 237/515; puntos 30/60/515.
 - D5b: TCA con 68 filas y 66 en 0; causa en `mt5.py:772-783`; decisión→fill
   0,44 bps de mediana (45/48).
-- `count_tests` = 1897; tag `tl3-ciclo1e`.
+- D6: `ruff` limpio; **pytest 2000 passed + 1 skipped**; `lab propfund verify` OK;
+  `lab doctor` con Frescura FAIL 7/17 (aviso). `count_tests` **1926**, no 1897:
+  +29 de `informal_trials` 6 (n=7) y 7 (n=22) de NASDAQ EDGE, ajenas a TL3-D;
+  `bloqueado: contador cambiado`. Tag `tl3-ciclo1e`.
 
 
