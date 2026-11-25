@@ -1,0 +1,52 @@
+# Fase 4 · cambio de mes en índices (familia calendario)
+# Primaria por la literatura (Ariel 1987; Lakonishok & Smidt 1988;
+# McConnell & Xu 2008): entrar el último día hábil (N=1) y salir el día 3 (M=3).
+campaign_id: v2-tom-indices-d1
+family: calendario
+family_symbols: [US500, US100]
+instrument: US500
+timeframe: D1
+template: turn_of_month
+profile: small
+mode: grid
+seed: 11
+data_source: dukascopy
+account: CFD-006
+firm: fundingpips
+cost_mode: best
+cost_accounts: [CFD-006]
+segments:
+  is: ["2018-01-01", "2024-06-30"]
+  oos1: ["2024-07-01", "2025-06-30"]
+  oos2: ["2025-07-01", null]
+protocol_version: 2
+cost_model_version: 2
+spread_model: historical_scaled
+holdout_start: "2025-07-01"
+plausible_edge_r: 0.10
+primary:
+  n: 1
+  m: 3
+plateau_grid:
+  dimensions:
+    - name: n
+      kind: path
+      path: long_entry.n
+      values: [1, 2, 3]
+    - name: m
+      kind: path
+      path: long_entry.m
+      values: [2, 3, 4]
+grid:
+  dimensions:
+    - name: n
+      kind: path
+      path: long_entry.n
+      values: [1, 2, 3]
+    - name: m
+      kind: path
+      path: long_entry.m
+      values: [2, 3, 4]
+cost:
+  US500: {account: CFD-006, firm: fundingpips, cost_accounts: [CFD-006], cost_mode: best}
+  US100: {account: CFD-006, firm: fundingpips, cost_accounts: [CFD-006], cost_mode: best}

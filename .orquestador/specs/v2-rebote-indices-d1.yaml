@@ -1,0 +1,57 @@
+# Fase 4 · rebote de índices en D1 (familia reversion)
+# Primaria por Connors/Alvarez (RSI-2, 2008), Jegadeesh (1990) y
+# De Bondt/Thaler (1985): extensión de 2σ con stop 1,5 ATR.
+campaign_id: v2-rebote-indices-d1
+family: reversion
+family_symbols: [US500, US100]
+instrument: US500
+timeframe: D1
+template: d1_extension_reversion
+profile: small
+mode: grid
+seed: 31
+data_source: dukascopy
+account: CFD-006
+firm: fundingpips
+cost_mode: best
+cost_accounts: [CFD-006]
+segments:
+  is: ["2018-01-01", "2024-06-30"]
+  oos1: ["2024-07-01", "2025-06-30"]
+  oos2: ["2025-07-01", null]
+protocol_version: 2
+cost_model_version: 2
+spread_model: historical_scaled
+holdout_start: "2025-07-01"
+plausible_edge_r: 0.10
+primary:
+  z_n: 10
+  z_entry: -2.0
+  stop_mult: 1.5
+plateau_grid:
+  dimensions:
+    - name: z_n
+      kind: path
+      path: long_entry.args[0].left.n
+      values: [10, 20, 30]
+    - name: z_entry
+      kind: path
+      path: long_entry.args[0].right.value
+      values: [-1.5, -2.0, -2.5]
+grid:
+  dimensions:
+    - name: z_n
+      kind: path
+      path: long_entry.args[0].left.n
+      values: [10, 20, 30]
+    - name: z_entry
+      kind: path
+      path: long_entry.args[0].right.value
+      values: [-1.5, -2.0, -2.5]
+    - name: stop_mult
+      kind: path
+      path: exit.stop.mult
+      values: [1.5]
+cost:
+  US500: {account: CFD-006, firm: fundingpips, cost_accounts: [CFD-006], cost_mode: best}
+  US100: {account: CFD-006, firm: fundingpips, cost_accounts: [CFD-006], cost_mode: best}

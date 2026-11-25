@@ -1,0 +1,55 @@
+# Fase 4 · fix de Londres en EURUSD + GBPUSD (familia fx_fix)
+# Primaria elegida por la literatura (Krohn, Mueller & Whelan 2024): salida 1 h.
+# No se usa ningún resultado ya visto. No registrar sin aprobación.
+campaign_id: v2-fix-londres-eurgbp-h1
+family: fx_fix
+family_symbols: [EURUSD, GBPUSD]
+instrument: EURUSD
+timeframe: H1
+template: fix_reversal
+profile: small
+mode: grid
+seed: 82
+data_source: dukascopy
+account: CFD-001
+firm: ftmo
+cost_mode: best
+cost_accounts: [CFD-001, CFD-006]
+side: long
+fix_start: "15:00"
+fix_end: "15:59"
+segments:
+  is: ["2010-01-01", "2024-06-30"]
+  oos1: ["2024-07-01", "2025-06-30"]
+  oos2: ["2025-07-01", null]
+protocol_version: 2
+cost_model_version: 2
+spread_model: historical_scaled
+holdout_start: "2025-07-01"
+plausible_edge_r: 0.05
+primary:
+  hold_hours: 60
+  stop_mult: 2.5
+plateau_grid:
+  dimensions:
+    - name: hold_hours
+      kind: path
+      path: exit.time_exit_minutes
+      values: [60, 120, 180]
+    - name: stop_mult
+      kind: path
+      path: exit.stop.mult
+      values: [2.0, 2.5, 3.0]
+grid:
+  dimensions:
+    - name: hold_hours
+      kind: path
+      path: exit.time_exit_minutes
+      values: [60, 120, 180]
+    - name: stop_mult
+      kind: path
+      path: exit.stop.mult
+      values: [2.0, 2.5, 3.0]
+cost:
+  EURUSD: {account: CFD-001, firm: ftmo, cost_accounts: [CFD-001, CFD-006], cost_mode: best}
+  GBPUSD: {account: CFD-001, firm: ftmo, cost_accounts: [CFD-001, CFD-006], cost_mode: best}

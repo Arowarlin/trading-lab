@@ -1,0 +1,63 @@
+# Fase 4 · momentum de serie temporal en la cesta de Q3 (familia momentum)
+# Primaria por Moskowitz/Ooi/Pedersen (2012) y Hurst/Ooi/Pedersen (2017):
+# tendencia lenta 12m/1m. La plantilla D1 no tiene ventanas de 12 meses ni de
+# 1 mes; se usa el proxy declarado fast_n=50 / slow_n=200 y se explica en el
+# RESULTADO. La cesta es la de Q3 (6 símbolos), no una cesta nueva.
+campaign_id: v2-tsmom-cesta-d1
+family: momentum
+family_symbols: [XAUUSD, US500, US100, EURUSD, GBPUSD, USDJPY]
+instrument: XAUUSD
+timeframe: D1
+template: ts_momentum_d1
+profile: small
+mode: grid
+seed: 21
+data_source: dukascopy
+account: CFD-006
+firm: fundingpips
+cost_mode: best
+cost_accounts: [CFD-006]
+segments:
+  is: ["2018-01-01", "2024-06-30"]
+  oos1: ["2024-07-01", "2025-06-30"]
+  oos2: ["2025-07-01", null]
+protocol_version: 2
+cost_model_version: 2
+spread_model: historical_scaled
+holdout_start: "2025-07-01"
+plausible_edge_r: 0.10
+primary:
+  fast_n: 50
+  slow_n: 200
+  stop_mult: 2.5
+plateau_grid:
+  dimensions:
+    - name: fast_n
+      kind: path
+      path: long_entry.left.n
+      values: [20, 50, 100]
+    - name: slow_n
+      kind: path
+      path: long_entry.right.n
+      values: [150, 200, 250]
+grid:
+  dimensions:
+    - name: fast_n
+      kind: path
+      path: long_entry.left.n
+      values: [20, 50, 100]
+    - name: slow_n
+      kind: path
+      path: long_entry.right.n
+      values: [150, 200, 250]
+    - name: stop_mult
+      kind: path
+      path: exit.stop.mult
+      values: [2.5]
+cost:
+  XAUUSD: {account: CFD-006, firm: fundingpips, cost_accounts: [CFD-006], cost_mode: best}
+  US500: {account: CFD-006, firm: fundingpips, cost_accounts: [CFD-006], cost_mode: best}
+  US100: {account: CFD-006, firm: fundingpips, cost_accounts: [CFD-006], cost_mode: best}
+  EURUSD: {account: CFD-006, firm: fundingpips, cost_accounts: [CFD-006], cost_mode: best}
+  GBPUSD: {account: CFD-006, firm: fundingpips, cost_accounts: [CFD-006], cost_mode: best}
+  USDJPY: {account: CFD-006, firm: fundingpips, cost_accounts: [CFD-006], cost_mode: best}

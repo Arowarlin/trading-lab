@@ -160,6 +160,14 @@ def load(path: str | Path) -> dict[str, Any]:
         "strategies": base,
         "session": data.get("session"),
         "spec_path": str(target),
+        "protocol_version": data.get("protocol_version"),
+        "holdout_start": data.get("holdout_start"),
+        "family": data.get("family"),
+        "primary": data.get("primary"),
+        "plateau_grid": data.get("plateau_grid"),
+        "plausible_edge_r": data.get("plausible_edge_r"),
+        "cost_model_version": data.get("cost_model_version"),
+        "spread_model": data.get("spread_model"),
     }
 
 
@@ -1202,6 +1210,11 @@ def _check_frames(
         "n_feasible": feasible,
         "feasible_pct": pct,
         "passes": pct >= 50.0,
+        "trades_is": (
+            float(np.median([row["trades_is"] for row in rows]))
+            if rows
+            else None
+        ),
         "rows": rows,
     }
 

@@ -240,6 +240,7 @@ def test_feasibility_cesta_no_calcula_rendimiento(tmp_path, monkeypatch) -> None
     monkeypatch.setattr(basket.metrics, "summarize", _boom)
     report = feasibility.check("cesta-feas", db_path=db)
     assert report["n_checked"] == 4
+    assert report["trades_is"] is not None and report["trades_is"] > 0
     assert all("trades_is" in row for row in report["rows"])
 
 
