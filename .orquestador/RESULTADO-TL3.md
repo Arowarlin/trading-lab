@@ -92,5 +92,5 @@ Prop Fund, riesgo FTMO, forward, `config/schedule.yaml` ni las tareas.
 - **E3:** tabla `warnings`, `add_warning`/`warnings_for`/`render`, CLI `scripts/tl3_warnings.py`, siembra idempotente de **12 avisos** (ea 4, ai_trader 4, cuenta:CFD-006 1, prop.simulator 2, nqedge 1) y columna "Avisos" en `report.status_table`.
 - **Siguiente paso anotado:** mostrar los avisos en Prop Fund, la web o `lab propfund` es **producción**: no se hace en esta cola.
 - **E4:** `ruff` limpio; pytest **2017 passed + 1 skipped** (31m28s); `lab propfund verify` OK; `lab doctor` con Frescura FAIL 6/17 e IA sesiones WARN (entorno); `count_tests` **1926** sin cambios; tag `tl3-ciclo1f`.
-- **E5:** pendiente de envío.
+- **E5:** resumen enviado a Telegram (`lab telegram send --file`), mensaje confirmado: locks, verificaciones, avisos y bloqueos.
 
