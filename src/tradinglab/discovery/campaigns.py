@@ -46,6 +46,23 @@ from .data_sources import (
 from .timeframes import TimeframeError, normalize_timeframe, timeframe_minutes
 
 SEGMENTS = ("is", "oos1", "oos2")
+D1_TEMPLATES = {"turn_of_month", "d1_extension_reversion", "ts_momentum_d1"}
+
+
+def d1_usable_start(
+    template: str,
+    instrument: str,
+    timeframe: str,
+    data_source: str,
+) -> str | None:
+    """Inicio usable para plantillas D1; ``None`` si no aplica."""
+
+    if str(timeframe).upper() != "D1" or str(template) not in D1_TEMPLATES:
+        return None
+    limit = load_engine_config().data_quality.usable_from_for(
+        str(data_source), str(instrument), "D1"
+    )
+    return None if limit is None else str(limit)
 
 
 class CampaignError(ValueError):
@@ -353,6 +370,9 @@ def register(
     )
     source = snapshots.closed_bars(source, timeframe, now=now)
     normalized = _normalize_segments(segments, engine.data_quality.default_segments)
+    d1_start = d1_usable_start(template, instrument, timeframe, data_source)
+    if d1_start is not None:
+        normalized["is"][0] = d1_start
     oos2_end = _resolve_oos2_end(source, normalized["oos2"][1])
     normalized["oos2"][1] = oos2_end.isoformat()
     report, useful_start = _quality(

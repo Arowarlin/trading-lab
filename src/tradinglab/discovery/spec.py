@@ -102,7 +102,9 @@ def load_spec(path: str | Path) -> dict[str, Any]:
     limit = config.data_quality.usable_from_for(
         source, instrument, timeframe
     )
-    if limit is not None and start.date() < limit:
+    if limit is not None and str(template) in campaigns.D1_TEMPLATES:
+        segments["is"][0] = str(limit)
+    elif limit is not None and start.date() < limit:
         raise SpecError(
             f"IS empieza antes de usable_from ({start.date()} < {limit})"
         )
