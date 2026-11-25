@@ -11587,6 +11587,20 @@ def discovery_results_cmd(
             str(row.get("reason") or ""),
         )
     console.print(table)
+    basket_block = (
+        campaign.get("basket")
+        or (campaign.get("config") or {}).get("basket")
+        or {}
+    )
+    basket_symbols = basket_block.get("symbols") or (
+        (campaign.get("config") or {}).get("family_symbols")
+    ) or []
+    if basket_symbols:
+        console.print(
+            "[dim]Cesta: "
+            + ", ".join(str(symbol) for symbol in basket_symbols)
+            + " · R agregado por fecha; n_total cuenta combinaciones, no piernas.[/dim]"
+        )
     console.print(
         f"[dim]{campaign['status']} · n_total {campaign['n_total']} · "
         f"evaluados {campaign['n_evaluated']} · finalistas {campaign['n_finalists']} · "

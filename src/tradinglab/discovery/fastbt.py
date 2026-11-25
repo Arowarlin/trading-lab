@@ -678,6 +678,8 @@ class Trade:
     r_net: float | None
     swap_r: float | None = None
     swap_source: str | None = None
+    selected_account: str | None = None
+    instrument: str | None = None
     spread_r: float | None = None
     slip_r: float | None = None
     comm_r: float | None = None

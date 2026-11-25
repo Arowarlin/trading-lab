@@ -84,6 +84,12 @@ class CostApplication:
     selected_account: str | None
     selected_share: float
 
+    @property
+    def cost_values(self) -> dict[str, float | None]:
+        """Alias heredado de la rama de cesta; mismo contenido que cost_by_account."""
+
+        return self.cost_by_account
+
 
 def _canonical_instrument(instrument: str) -> str:
     try:
@@ -612,6 +618,7 @@ class CostBook:
                     r_net=r_net,
                     swap_r=swap_r,
                     swap_source=swap_source,
+                    selected_account=selected_name,
                     spread_r=spread_r,
                     slip_r=slip_r,
                     comm_r=comm_r,

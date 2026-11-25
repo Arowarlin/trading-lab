@@ -205,6 +205,10 @@ def preflight(
     campaign = databank.get_campaign(campaign_id, db_path=db_path)
     if campaign is None:
         raise campaigns.CampaignError(f"campaña no registrada: {campaign_id}")
+    if (campaign.get("config") or {}).get("basket"):
+        from . import basket
+
+        return basket.preflight_campaign(campaign)
     return _preflight_campaign(
         campaign,
         campaign_id,
@@ -666,6 +670,23 @@ def run_campaign(
     campaign = databank.get_campaign(campaign_id, db_path=db_path)
     if campaign is None:
         raise campaigns.CampaignError(f"campaña no registrada: {campaign_id}")
+    if (campaign.get("config") or {}).get("basket"):
+        from . import basket
+
+        if synthetic:
+            raise campaigns.CampaignError(
+                "una campaña de cesta no se ejecuta con --synthetic"
+            )
+        if bars is not None:
+            raise campaigns.CampaignError(
+                "una campaña de cesta carga sus snapshots por símbolo"
+            )
+        return basket.run_campaign(
+            campaign_id,
+            workers=workers,
+            time_limit=time_limit,
+            db_path=db_path,
+        )
     if not synthetic:
         campaign = campaigns.reopen_empty_running(
             campaign_id, db_path=db_path
