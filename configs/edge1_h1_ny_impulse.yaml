@@ -1,0 +1,161 @@
+# Prerregistro — EDGE-1 · H1 · impulso de apertura de Nueva York
+#
+# Escrito ANTES de ejecutar el backtest. Cambiar cualquier regla, ventana,
+# instrumento, coste o criterio después de ver el resultado invalida este
+# prerregistro y exige un hypothesis_id nuevo con un holdout nuevo.
+#
+# El OOS 2024-2026 no se lee en esta ejecución: el único backtest es IS.
+
+schema_version: 1
+hypothesis_id: EDGE1_H1_NY_IMPULSE_CONTINUATION
+title: "Continuación del impulso de apertura de Nueva York en índices, H1"
+status: preregistered
+created_utc: "2026-11-25T22:30:00Z"
+owner: operador
+counted: 1
+n_variants: 1
+plateau_grid: {}
+
+# ---------------------------------------------------------------- mecanismo
+economic_rationale: >
+  La apertura del efectivo de Nueva York libera la información acumulada
+  durante la noche y ejecuta órdenes institucionales acumuladas. Cuando la
+  primera vela H1 de la sesión (09:00-10:00 NY, que contiene la apertura de
+  las 09:30) cierra con un impulso direccional claro y rompe el rango de las
+  tres horas previas, el desequilibrio de órdenes continúa durante la sesión.
+  Es la versión H1, sin parámetros libres, del mecanismo H3 de la metodología
+  TL3 (expansión de rango en la apertura), no el EA de ~70 parámetros.
+behavior: >
+  Si la vela 09:00-10:00 NY es alcista con cuerpo >= 50 % de su rango y cierra
+  por encima del máximo de las velas 06:00, 07:00 y 08:00, el precio tiende a
+  seguir subiendo hasta el cierre. Simétrico para el lado corto.
+
+# ------------------------------------------------------------------- mercado
+market:
+  source: dukascopy
+  asset_class: cfd
+  price_side: bid
+  timeframe: H1
+  session_tz: America/New_York
+  instruments:
+    - US100
+    - US500
+  excluded_instruments:
+    US30: "Sin datos de spread/comisión para CFD-001 y CFD-006 en la tabla X0; no se puede pasar el cost_gate sin inventar costes."
+  data_paths:
+    US100: data/cache/dukascopy/US100_M1.parquet
+    US500: data/cache/dukascopy/US500_M1.parquet
+  resample: "M1 -> H1 con tradinglab.discovery.resample.resample_session; rejilla anclada a 17:00 NY."
+
+# ------------------------------------------------------------------ ventanas
+windows:
+  in_sample:
+    start: "2011-09-19"
+    end: "2023-12-31"
+  oos_sealed:
+    start: "2024-01-01"
+    end: "2026-11-25"
+  warmup_bars: 20
+  seal_rule: "Ninguna fila con timestamp >= 2024-01-01T00:00:00Z se usa para señales, costes ni métricas."
+
+# -------------------------------------------------------------------- reglas
+rules:
+  signal_bar_local_hour: 9
+  prior_bars: 3
+  body_ratio_min: 0.50
+  long_entry:
+    all:
+      - "close > open (vela de impulso alcista)"
+      - "close > max(high de las 3 velas H1 anteriores)"
+      - "abs(close - open) / (high - low) >= 0.50"
+  short_entry:
+    all:
+      - "close < open (vela de impulso bajista)"
+      - "close < min(low de las 3 velas H1 anteriores)"
+      - "abs(close - open) / (high - low) >= 0.50"
+  entry: "open de la vela H1 de las 10:00 NY del mismo día"
+  stop:
+    type: atr
+    n: 14
+    mult: 2.0
+    reference: "ATR(14) H1 calculado de forma causal hasta la vela de señal inclusive"
+    long: "entry - 2.0 * ATR14"
+    short: "entry + 2.0 * ATR14"
+  target:
+    type: rr
+    rr: 2.0
+  exit:
+    time_exit_local: "16:00"
+    exit_bar_local_hour: 15
+    intrabar_priority: "Si stop y target se tocan en la misma vela H1, se asume stop primero (conservador)."
+    swap: 0
+  max_trades_per_instrument_day: 1
+  sides: both
+  calendar_exclusions:
+    - "Festivos NYSE (discovery.calendars.nyse_holidays)"
+    - "Cierres tempranos NYSE a las 13:00 (discovery.calendars.nyse_early_closes)"
+  coverage:
+    - "Deben existir las velas H1 de 06:00, 07:00, 08:00, 09:00, 10:00 y 15:00 NY; si falta alguna, el día no opera."
+    - "Si falta la vela de entrada o la de salida por tiempo, no se inventa: Sin datos para ese día."
+
+# ------------------------------------------------------------------- costes
+costs:
+  model: v2
+  module: tradinglab.tl3.costs
+  function: cost_r_v2
+  accounts:
+    - CFD-001
+    - CFD-006
+  mode: worst
+  cost_model_version: 2
+  components:
+    spread: "mediana horaria del bróker en la hora local de entrada (10:00 NY); peor cuenta"
+    slippage: "assumed_slippage de engine.yaml por lado, en precio; peor cuenta"
+    commission: "perfil de la cuenta por lado; peor cuenta"
+    swap: "0: la posición se cierra el mismo día"
+  total_formula: "spread_bps + 2 * slippage_bps + 2 * commission_bps + swap_bps"
+  cost_r_formula: "(total_bps / 10000) * entry_price / stop_distance"
+  max_cost_r: 0.10
+  missing_component_rule: "Si falta spread, slippage o comisión, ese trade es Sin datos y el cost_gate falla; no se rellena con 0."
+
+# ------------------------------------------------------------------- puertas
+gates:
+  power:
+    min_trades: 40
+    source: "engine.yaml validation.by_timeframe.H1.min_trades_is"
+  cost:
+    metric: median_cost_r
+    max_cost_r: 0.10
+    source: "engine.yaml fitness.cost_r_max"
+  order: "Primero power_gate; después cost_gate. El DSR no se calcula si falla cualquiera de las dos."
+  dsr_min: 0.90
+
+# ------------------------------------------------------------------ métricas
+metrics:
+  primary: net_expectancy_r
+  secondary:
+    - gross_expectancy_r
+    - median_cost_r
+    - p90_cost_r
+    - win_rate
+    - profit_factor
+    - lcb95_net_r
+    - mde_r
+  lcb95:
+    method: "bootstrap por fecha de trading (cluster), 10 000 remuestreos, semilla 42"
+    note: "Agrupa US100 y US500 del mismo día para no fingir independencia."
+  mde_rule: 2.49
+  dsr:
+    method: "tradinglab.stats.dsr_from_returns sobre R neto diario agregado por fecha"
+    convention: "K=1: PSR frente a SR 0 (misma convención que discovery/levels.py cuando k=1)"
+    periods_per_year: 252.0
+    n_trials: 1
+    global_counter_reported: true
+
+# ------------------------------------------------------------- criterio final
+verdict_rules:
+  - "Si n_trades < 40: rejected: no_power. No se calcula el DSR."
+  - "Si median_cost_r > 0.10 o falta un componente de coste: rejected: cost_gate. No se calcula el DSR."
+  - "Con ambas puertas superadas: candidate_oos_sealed solo si net_expectancy_r > 0, lcb95_net_r > 0 y DSR >= 0.90."
+  - "En cualquier otro caso: rejected: no_edge o rejected: dsr, con el motivo literal."
+  - "Este backtest es IS. Ningún resultado de 2024-2026 se usa para el veredicto."

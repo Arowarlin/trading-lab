@@ -26,6 +26,36 @@ def cost_gate(gross_expected: float, cost_estimated: float) -> dict[str, Any]:
     return {"ok": ok, "reason": None if ok else "gross_lt_cost"}
 
 
+def min_trades_gate(n: int | float | None, min_trades: int = 40) -> dict[str, Any]:
+    """Puerta de potencia por muestra: al menos ``min_trades`` operaciones."""
+
+    if n is None or float(n) < 0:
+        return {"ok": False, "n": None, "min_trades": int(min_trades), "reason": "Sin datos: n"}
+    trades = int(n)
+    ok = trades >= int(min_trades)
+    return {
+        "ok": ok,
+        "n": trades,
+        "min_trades": int(min_trades),
+        "reason": None if ok else f"n_trades {trades} < {int(min_trades)}",
+    }
+
+
+def cost_r_gate(cost_r: float | None, max_cost_r: float = 0.10) -> dict[str, Any]:
+    """Puerta de coste: ``cost_r`` (coste / distancia del stop) <= máximo."""
+
+    if cost_r is None:
+        return {"ok": False, "cost_r": None, "max_cost_r": float(max_cost_r), "reason": "Sin datos: cost_r"}
+    value = float(cost_r)
+    ok = value <= float(max_cost_r)
+    return {
+        "ok": ok,
+        "cost_r": value,
+        "max_cost_r": float(max_cost_r),
+        "reason": None if ok else f"cost_r {value:.4f} > {float(max_cost_r):.4f}",
+    }
+
+
 def identity_gate(
     structural: str,
     *,
@@ -85,8 +115,10 @@ def experiment_valid(
 __all__ = [
     "MDE_RULE",
     "cost_gate",
+    "cost_r_gate",
     "experiment_valid",
     "holdout_gate",
     "identity_gate",
+    "min_trades_gate",
     "power_gate",
 ]
