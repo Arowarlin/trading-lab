@@ -44,6 +44,8 @@ Las filas de `informal_trials` con textos `TL3-T7` y `TL3-T8` **no existen**;
 no se ejecuta y se sigue. El operador puede registrarlas y relanzar solo
 esos bloques.
 
+**H-2026-009b invalidada** por error de unidades del swap (TL3-C H-a). La fila v?lida es H-2026-009c (C3), creada con hora actual.
+
 ## T9
 
 - **H1 corregida:** `swap_mode: 5` de CFD-006 = interés anual; 7,33 %/365 =
