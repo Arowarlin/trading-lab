@@ -6798,6 +6798,9 @@ function renderDiscCampaignDetail() {
   const kv = (label, value) => `<div><div class="k">${esc(label)}</div><div class="v">${value}</div></div>`;
   const header = `<div class="disc-kv">
     ${kv("Estado", discTag(c.status || "Sin datos", c.status === "done" ? "green" : (["rejected", "invalid"].includes(c.status) ? "red" : "blue")))}
+    ${kv("Activo", esc(c.instrument || "Sin datos"))}
+    ${kv("TF", esc(c.timeframe || "Sin datos"))}
+    ${kv("Plantilla", esc(c.template || "Sin datos"))}
     ${kv("Modo", esc(c.config?.mode || "Sin datos"))}
     ${kv("Fuente", esc(c.config?.data_source || "Sin datos"))}
     ${kv("Coste", esc(c.config?.cost?.mode || "Sin datos"))}
@@ -6806,6 +6809,13 @@ function renderDiscCampaignDetail() {
     ${kv("Finalistas", discMissing(diag.n_finalists, (v) => num(v, 0)))}
     ${kv("Dataset", esc(String(c.dataset_hash || "Sin datos").slice(0, 16)))}
   </div>`;
+  const campaignCostRows = (data.costs_by_account || []).map((item) =>
+    `<tr><td class="mono"><b>${esc(item.account)}</b></td><td>${esc(item.firm)}</td>
+      <td class="num">${discMissing(item.spread_price, (v) => num(v, 5))}</td><td class="num">${discMissing(item.spread_p75_price, (v) => num(v, 5))}</td>
+      <td class="tiny">${esc(item.commission_type || "Sin datos")} ${item.commission_value === null || item.commission_value === undefined ? "" : num(item.commission_value, 4)}</td>
+      <td class="num">${discMissing(item.swap_long, (v) => num(v, 4))}</td><td class="num">${discMissing(item.swap_short, (v) => num(v, 4))}</td>
+      <td class="num">${discMissing(item.slippage_price, (v) => num(v, 5))}</td><td>${item.verified ? discTag("verificado", "green") : discTag("sin verificar", "yellow")}</td></tr>`);
+  const campaignCosts = discTable(["Cuenta", "Firma", { t: "Spread", num: 1 }, { t: "Spread p75", num: 1 }, "Comisión", { t: "Swap long", num: 1 }, { t: "Swap short", num: 1 }, { t: "Slippage", num: 1 }, "Verificado"], campaignCostRows, "Sin datos de coste");
   const generations = discTable(
     ["Generación", { t: "Estrategias", num: 1 }, { t: "Mejor IS R", num: 1 }, { t: "Frontera", num: 1 }],
     (data.generations || []).map((g) => `<tr><td class="mono">${num(g.generation, 0)}</td><td class="num">${num(g.strategies, 0)}</td><td class="num">${discMissing(g.best_is_expectancy_r, (v) => num(v, 4))}</td><td class="num">${num(g.frontier, 0)}</td></tr>`),
@@ -6823,7 +6833,7 @@ function renderDiscCampaignDetail() {
     <div class="chips">${Object.entries(diag.origin_counts || {}).map(([key, value]) => `<span class="chip">${esc(key)} ${num(value, 0)}</span>`).join("")}</div>
     ${diag.last_error ? `<div class="alert red">${esc(diag.last_error)}</div>` : ""}
     ${diag.reject_reason ? `<div class="alert">${esc(diag.reject_reason)}</div>` : ""}`;
-  setHTML("#disc-campaign-detail", `${header}<h3 class="muted tiny">Evolución por generación</h3>${generations}
+    setHTML("#disc-campaign-detail", `${header}<h3 class="muted tiny">Coste por cuenta (spread, comision, swap, slippage)</h3>${campaignCosts}<h3 class="muted tiny">Evolución por generación</h3>${generations}
     <h3 class="muted tiny" style="margin-top:12px">Frontera</h3>${frontier}
     <h3 class="muted tiny" style="margin-top:12px">Diagnóstico</h3>${diagHtml}
     <h3 class="muted tiny" style="margin-top:12px">Genealogía (últimas 14)</h3>${lineage}`);
@@ -6962,7 +6972,7 @@ function renderDiscStrategy() {
     ${kv("WF folds", discMissing(wf.n_folds, (v) => num(v, 0)))}
   </div>`;
   const stress = d.cost_stress || {};
-  const stressRows = ["base", "cost_x1_5", "cost_x2", "slippage_plus_1", "slippage_plus_2"].map((key) => {
+  const stressRows = ["base", "cost_x1_5", "cost_x2", "slippage_plus_1", "slippage_plus_2", "spread_p75"].map((key) => {
     const item = stress[key] || {};
     return `<tr><td class="mono">${esc(key)}</td><td class="num">${discMissing(item.expectancy_r, (v) => num(v, 4))}</td><td class="num">${discMissing(item.profit_factor, (v) => num(v, 2))}</td><td class="num">${discMissing(item.max_dd_r, (v) => num(v, 2))}</td><td class="num">${discMissing(item.trades, (v) => num(v, 0))}</td></tr>`;
   });
@@ -6981,6 +6991,7 @@ function renderDiscStrategy() {
     `<tr><td class="mono"><b>${esc(item.account)}</b></td><td>${esc(item.firm)}</td><td>${discTag(item.connected ? "conectada" : "sin conectar", item.connected ? "green" : "yellow")}</td>
       <td class="num">${discMissing(item.spread_price, (v) => num(v, 5))}</td><td class="num">${discMissing(item.spread_p75_price, (v) => num(v, 5))}</td>
       <td class="tiny">${esc(item.commission_type || "Sin datos")} ${item.commission_value === null || item.commission_value === undefined ? "" : num(item.commission_value, 4)}</td>
+      <td class="num">${discMissing(item.swap_long, (v) => num(v, 4))}</td><td class="num">${discMissing(item.swap_short, (v) => num(v, 4))}</td>
       <td class="num">${discMissing(item.slippage_price, (v) => num(v, 5))}</td><td class="tiny">${esc(item.source || "Sin datos")}</td><td>${item.verified ? discTag("verificado", "green") : discTag("sin verificar", "yellow")}</td></tr>`);
   const streaks = d.streaks || {};
   setHTML("#disc-strategy", `${header}
@@ -6991,7 +7002,7 @@ function renderDiscStrategy() {
     <h3 class="muted tiny" style="margin-top:12px">Estrés de costes</h3>${discTable(["Escenario", { t: "Exp R", num: 1 }, { t: "PF", num: 1 }, { t: "Max DD", num: 1 }, { t: "Ops", num: 1 }], stressRows)}${stressFlags}
     <h3 class="muted tiny" style="margin-top:12px">Perturbaciones</h3>${discTable(["Prueba", "Pasa", { t: "Ratio", num: 1 }, { t: "p10", num: 1 }, { t: "Positivas", num: 1 }], perturbRows)}
     <h3 class="muted tiny" style="margin-top:12px">Monte Carlo del challenge por cuenta</h3>${discTable(["Cuenta", "Firma", { t: "P(pasar)", num: 1 }, { t: "P(breach)", num: 1 }, { t: "Días mediana", num: 1 }, { t: "Días p90", num: 1 }, { t: "Paths", num: 1 }, "Reglas"], challengeRows, "Sin datos de challenge")}
-    <h3 class="muted tiny" style="margin-top:12px">Coste por cuenta</h3>${discTable(["Cuenta", "Firma", "Estado", { t: "Spread", num: 1 }, { t: "Spread p75", num: 1 }, "Comisión", { t: "Slippage", num: 1 }, "Fuente", "Verificado"], costRows, "Sin datos de coste")}
+    <h3 class="muted tiny" style="margin-top:12px">Coste por cuenta</h3>${discTable(["Cuenta", "Firma", "Estado", { t: "Spread", num: 1 }, { t: "Spread p75", num: 1 }, "Comisión", { t: "Swap long", num: 1 }, { t: "Swap short", num: 1 }, { t: "Slippage", num: 1 }, "Fuente", "Verificado"], costRows, "Sin datos de coste")}
     <h3 class="muted tiny" style="margin-top:12px">Rachas</h3><div class="disc-kv">
       ${kv("Racha ganadora máxima", discMissing(streaks.max_winning_streak, (v) => num(v, 0)))}
       ${kv("Racha perdedora máxima", discMissing(streaks.max_losing_streak, (v) => num(v, 0)))}

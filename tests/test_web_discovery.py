@@ -308,6 +308,10 @@ def test_api_discovery_solo_lectura(tmp_path: Path, monkeypatch) -> None:
 
         _, campaign = _get(base, "/api/discovery/campaign/camp-1")
         assert campaign["campaign"]["id"] == "camp-1"
+        assert campaign["campaign"]["timeframe"] == "M5"
+        assert campaign["campaign"]["instrument"] == "US100.CASH"
+        assert campaign["costs_by_account"]
+        assert "swap_long" in campaign["costs_by_account"][0]
         assert campaign["diagnostics"]["n_finalists"] == 1
         assert campaign["generations"][0]["generation"] == 2
         assert campaign["frontier"][0]["id"] == 5
@@ -322,6 +326,7 @@ def test_api_discovery_solo_lectura(tmp_path: Path, monkeypatch) -> None:
         ]
         assert strategy["cost_stress"]["cost_x1_5"]["expectancy_r"] == 0.01
         assert "returns" not in strategy["cost_stress"]
+        assert "swap_long" in strategy["costs_by_account"][0]
         assert strategy["challenge_accounts"]["CFD-001"]["rules"] == "FTMO"
         assert strategy["plateau"]["parameters"][0]["name"].startswith("long_entry")
         assert "oos2" not in json.dumps(strategy)

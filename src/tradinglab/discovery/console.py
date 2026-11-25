@@ -257,6 +257,13 @@ def _costs_by_account(instrument: str) -> list[dict[str, Any]]:
                 "commission_type": profile.commission_type,
                 "commission_value": profile.commission_value,
                 "slippage_price": profile.slippage_price,
+                "swap_long": profile.swap_long,
+                "swap_short": profile.swap_short,
+                "swap_long_per_lot": profile.swap_long_per_lot,
+                "swap_short_per_lot": profile.swap_short_per_lot,
+                "swap_mode": profile.swap_mode,
+                "swap_rollover3days": profile.swap_rollover3days,
+                "swap_source": profile.swap_source or "Sin datos",
                 "source": profile.source or "Sin datos",
                 "verified": profile.verified,
             }
@@ -443,6 +450,7 @@ def _campaign_payload(con: sqlite3.Connection, campaign_id: str) -> dict[str, An
     return {
         "campaign": campaign,
         "strategies": strategies,
+        "costs_by_account": _costs_by_account(str(campaign.get("instrument") or "")),
         "frontier": frontier,
         "generations": generation_rows,
         "lineage": lineage[-500:],
