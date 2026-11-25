@@ -1,5 +1,5 @@
 {
- "generated": "2026-11-25T21:28:04.343296+00:00",
+ "generated": "2026-11-25T21:28:54.238713+00:00",
  "start": "2026-11-30",
  "commission_side_usd": 0.75,
  "variants": {
@@ -192,7 +192,7 @@
      "stop_median_pt": 24.53
     }
    },
-   "estimate_n200_signals": {
+   "estimate_n200_operations": {
     "signals_per_session": 0.937,
     "sessions_needed": 214,
     "weeks_needed": 42.8,
@@ -388,7 +388,7 @@
      "stop_median_pt": 11.52
     }
    },
-   "estimate_n200_signals": {
+   "estimate_n200_operations": {
     "signals_per_session": 0.198,
     "sessions_needed": 1013,
     "weeks_needed": 202.6,
@@ -584,7 +584,7 @@
      "stop_median_pt": 13.82
     }
    },
-   "estimate_n200_signals": {
+   "estimate_n200_operations": {
     "signals_per_session": 1.118,
     "sessions_needed": 179,
     "weeks_needed": 35.8,

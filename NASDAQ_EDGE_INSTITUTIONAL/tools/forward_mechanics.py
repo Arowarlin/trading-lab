@@ -164,7 +164,7 @@ def main() -> None:
     }
     for v in fm.VARIANTS:
         res = summarise(all_rows, v, fomc, tier1)
-        res["estimate_n200_signals"] = _estimate(res)
+        res["estimate_n200_operations"] = _estimate(res)
         out["variants"][v] = res
         print(v, res["counts"], "senales/dia", round(res["counts"]["after_cap"] / res["sessions"], 3))
     (PROJ / "04_FORWARD").mkdir(exist_ok=True)
@@ -233,9 +233,9 @@ def write_report(out: dict, fomc, tier1) -> None:
             f"- NO TRADE (comision 0,75): {c['no_trade']} "
             f"({_pct(c['no_trade'], c['after_news'])} % de las senales tras noticias).",
             f"- Estimacion de fecha para n=200 operaciones (tras NO TRADE; sin el corte por perdidas): "
-            f"{res['estimate_n200_signals']['sessions_needed']} sesiones, "
-            f"~{res['estimate_n200_signals']['weeks_needed']} semanas, "
-            f"{res['estimate_n200_signals']['estimated_date']}, desde {START}.",
+            f"{res['estimate_n200_operations']['sessions_needed']} sesiones, "
+            f"~{res['estimate_n200_operations']['weeks_needed']} semanas, "
+            f"{res['estimate_n200_operations']['estimated_date']}, desde {START}.",
             "",
             "| Ano | Sesiones | Dias con senal | % dias | Brutas | FOMC | Tier1 | Tras noticias | Tras 3/dia | NO TRADE | <1R | Stop invalido | Stop mediana pt |",
             "|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
