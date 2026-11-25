@@ -195,4 +195,18 @@ Los cierres están en `.orquestador/RESULTADO-*.md` y los informes en
   +29 de `informal_trials` 6 (n=7) y 7 (n=22) de NASDAQ EDGE, ajenas a TL3-D;
   `bloqueado: contador cambiado`. Tag `tl3-ciclo1e`.
 
+### Cierre 1f · TL3-E (2026-11-25)
+
+- E1: `orq_lock` con `acquire`/`release`/`status`/`held`; CLI `scripts/orq_lock.py`;
+  sección de coordinación en `AGENTS.md` y plantilla `.orquestador/PLANTILLA-COLA.md`.
+- E2: `docs/VERIFICACION.md` y `tl3/verify.py`; tabla `verifications` y
+  `registry.require_verified`; verificación NQF-A/B/C **Conforma** (29 comprobaciones,
+  0 defectos, 1 aviso documental), hash `cb7ee5a9…`.
+- E3: tabla `warnings`, `add_warning`/`warnings_for`/`render`, CLI
+  `scripts/tl3_warnings.py`, 12 avisos sembrados (ea 4, ai_trader 4, CFD-006 1,
+  prop.simulator 2, nqedge 1) y columna «Avisos» en `status_table`.
+- E4: `ruff` limpio; **pytest 2017 passed + 1 skipped**; `lab propfund verify` OK;
+  `lab doctor` con Frescura/IA sesiones como avisos de entorno; `count_tests` **1926**
+  (sin cambios desde el arranque); tag `tl3-ciclo1f`.
+
 
