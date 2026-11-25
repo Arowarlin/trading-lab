@@ -684,8 +684,15 @@ class MT5Broker:
         run_id: int | None = None,
         risk_usd: float | None = None,
         stop_price: float | None = None,
+        signal_price: float | None = None,
     ) -> dict:
-        """Envía una orden a mercado. `volume` positivo = compra, negativo = venta."""
+        """Envía una orden a mercado. `volume` positivo = compra, negativo = venta.
+
+        `signal_price` es el bid/ask en el instante en que se disparó la señal o
+        el webhook. Si no se pasa, se usa el tick capturado al entrar aquí. El
+        precio de envío se vuelve a leer justo antes de `order_send`, y el de
+        fill es el que devuelve el bróker.
+        """
         if volume == 0:
             raise ValueError("volume no puede ser 0")
 
@@ -709,6 +716,11 @@ class MT5Broker:
 
         tick = self.tick(symbol)
         price = tick["ask"] if volume > 0 else tick["bid"]
+        signal_px = (
+            float(signal_price)
+            if signal_price is not None and float(signal_price) > 0
+            else float(price)
+        )
         digits = spec["digits"]
         effective_magic = self.magic if magic is None else int(magic)
 
@@ -758,9 +770,29 @@ class MT5Broker:
             }
 
         last_error: str | None = None
+        # El precio de la señal no es el de envío: se relee el tick justo antes
+        # de llamar a order_send para separar señal -> envío -> fill.
+        submit_tick = self.tick(symbol)
+        submit_px = (
+            float(submit_tick["ask"]) if volume > 0 else float(submit_tick["bid"])
+        )
+        request["price"] = submit_px
+        if sl is not None and abs(submit_px - sl) < stop_distance:
+            raise MT5Error(
+                f"SL a {abs(submit_px - sl):.5f} del precio de envío; el bróker exige "
+                f"al menos {stop_distance:.5f}"
+            )
+        if tp is not None and abs(tp - submit_px) < stop_distance:
+            raise MT5Error(
+                f"TP a {abs(tp - submit_px):.5f} del precio de envío; el bróker exige "
+                f"al menos {stop_distance:.5f}"
+            )
+
         for filling in self._filling_candidates(spec["filling_mode"], mt5):
             request["type_filling"] = filling
+            submit_started = time.perf_counter()
             result = mt5.order_send(request)
+            latency_ms = (time.perf_counter() - submit_started) * 1000.0
             if result is None:
                 last_error = f"order_send=None ({mt5.last_error()})"
                 continue
@@ -769,21 +801,30 @@ class MT5Broker:
                     from ..tca import record_fill as tca_record
                     from ..tca import slippage_bps as tca_slip
 
-                    fill_px = float(result.price or price)
+                    fill_raw = getattr(result, "price", None)
+                    fill_px = float(fill_raw) if fill_raw not in (None, "") else None
+                    if fill_px is not None and fill_px <= 0:
+                        fill_px = None
                     tca_record(
                         self.db_path,
                         bot=bot,
                         symbol=spec["symbol"],
                         side=side,
-                        signal_px=price,
-                        order_px=price,
+                        signal_px=signal_px,
+                        order_px=submit_px,
                         fill_px=fill_px,
-                        slippage_bps=tca_slip(price, fill_px, side),
+                        slippage_bps=tca_slip(signal_px, fill_px, side),
+                        # order_send -> respuesta; no es decisión -> fill.
+                        latency_ms=latency_ms,
                         expected_cost_bps=float(getattr(self, "slippage_bps", 0.0) or 0.0),
-                        realized_cost_bps=abs(fill_px - price) / price * 10_000.0,
+                        realized_cost_bps=(
+                            abs(fill_px - submit_px) / submit_px * 10_000.0
+                            if fill_px and submit_px
+                            else None
+                        ),
                         bid=float(tick["bid"]),
                         ask=float(tick["ask"]),
-                        requested_price=float(price),
+                        requested_price=float(submit_px),
                         order_type="market",
                         origin=str(bot),
                     )

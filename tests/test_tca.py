@@ -40,6 +40,27 @@ def test_slippage_con_signo_de_la_operacion():
     assert slippage_bps(100.0, 99.9, "sell") == pytest.approx(10.0)
 
 
+@pytest.mark.parametrize(
+    ("side", "signal_px", "fill_px", "expected_bps"),
+    [
+        ("buy", 100.0, 100.10, 10.0),  # adverso: compró más caro
+        ("buy", 100.0, 99.90, -10.0),  # favorable: compró más barato
+        ("buy", 100.0, 100.00, 0.0),  # sin deslizamiento
+        ("sell", 100.0, 99.90, 10.0),  # adverso: vendió más barato
+        ("sell", 100.0, 100.10, -10.0),  # favorable: vendió más caro
+        ("sell", 100.0, 100.00, 0.0),  # sin deslizamiento
+    ],
+)
+def test_slippage_adverso_positivo_negativo_y_cero(side, signal_px, fill_px, expected_bps):
+    assert slippage_bps(signal_px, fill_px, side) == pytest.approx(expected_bps)
+
+
+def test_slippage_sin_precios_devuelve_none():
+    assert slippage_bps(None, 100.0, "buy") is None
+    assert slippage_bps(100.0, None, "buy") is None
+    assert slippage_bps(0.0, 100.0, "buy") is None
+
+
 def test_estados_con_los_umbrales_de_drift():
     assert classify(2, 3.0, 4.0, expected_bps=6.0)[0] == "sin datos"
     assert classify(5, 3.0, 4.0, expected_bps=2.0)[0] == "ok"

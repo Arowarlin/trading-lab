@@ -180,7 +180,7 @@ def test_submit_market_guarda_bid_ask_y_solicitado(monkeypatch, tmp_path):
         def order_send(self, request):
             return SimpleNamespace(
                 retcode=self.TRADE_RETCODE_DONE,
-                price=100.02,
+                price=100.12,
                 order=123,
                 deal=456,
                 comment="ok",
@@ -208,15 +208,24 @@ def test_submit_market_guarda_bid_ask_y_solicitado(monkeypatch, tmp_path):
             "stops_level": 0,
         },
     )
-    monkeypatch.setattr(
-        broker, "tick", lambda symbol: {"bid": 100.0, "ask": 100.02}
+    # Primer tick = instante de la señal; segundo tick = instante del envío.
+    ticks = iter(
+        [
+            {"bid": 100.00, "ask": 100.02},
+            {"bid": 100.05, "ask": 100.07},
+        ]
     )
+    monkeypatch.setattr(broker, "tick", lambda symbol: next(ticks))
     monkeypatch.setattr(broker, "_record", lambda **kwargs: {"ok": True})
 
     result = broker.submit_market("XAUUSD", 0.01, bot="bot", dry_run=False)
     assert result["ok"] is True
-    assert captured["bid"] == pytest.approx(100.0)
+    assert captured["bid"] == pytest.approx(100.00)
     assert captured["ask"] == pytest.approx(100.02)
-    assert captured["requested_price"] == pytest.approx(100.02)
+    assert captured["signal_px"] == pytest.approx(100.02)
+    assert captured["order_px"] == pytest.approx(100.07)
+    assert captured["fill_px"] == pytest.approx(100.12)
+    assert captured["slippage_bps"] == pytest.approx(9.998, abs=0.001)
+    assert captured["requested_price"] == pytest.approx(100.07)
     assert captured["order_type"] == "market"
     assert captured["origin"] == "bot"
