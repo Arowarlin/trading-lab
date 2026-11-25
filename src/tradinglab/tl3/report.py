@@ -53,4 +53,29 @@ def ladder(
     return {"steps": rows, "net": rows[-1]}
 
 
-__all__ = ["STEPS", "ladder"]
+def status_table(db_path=None) -> str:
+    """Último estado por hipótesis, en Markdown (append-only por rowid)."""
+
+    from .registry import connect
+
+    with connect(db_path) as con:
+        rows = con.execute(
+            "SELECT h.hypothesis_id, h.parent_id, h.status, h.rejection_reason, h.created_at"
+            " FROM hypotheses h"
+            " JOIN (SELECT hypothesis_id, MAX(rowid) AS last FROM hypotheses GROUP BY hypothesis_id) x"
+            " ON h.rowid = x.last"
+            " ORDER BY h.rowid"
+        ).fetchall()
+    lines = [
+        "| ID | Padre | Estado | Motivo | Creado |",
+        "|---|---|---|---|---|",
+    ]
+    for row in rows:
+        lines.append(
+            f"| {row['hypothesis_id']} | {row['parent_id'] or ''} | "
+            f"{row['status']} | {row['rejection_reason'] or ''} | {row['created_at']} |"
+        )
+    return "\n".join(lines)
+
+
+__all__ = ["STEPS", "ladder", "status_table"]

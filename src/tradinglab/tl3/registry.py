@@ -180,6 +180,47 @@ def add_hypothesis(
         con.commit()
 
 
+def add_status(
+    hypothesis_id: str,
+    parent_id: str,
+    status: str,
+    reason: str | None = None,
+    *,
+    note: str | None = None,
+    db_path: str | Path = DB,
+) -> None:
+    """Inserta una fila de estado hija con created_at actual."""
+
+    with connect(db_path) as con:
+        row = con.execute(
+            "SELECT * FROM hypotheses WHERE hypothesis_id=?", (parent_id,)
+        ).fetchone()
+        if row is None:
+            raise ValueError(f"Sin datos: hipótesis padre {parent_id}")
+        cols = [
+            column
+            for column in row.keys()
+            if column
+            not in ("hypothesis_id", "parent_id", "status", "rejection_reason", "created_at")
+        ]
+        values = [row[column] for column in cols]
+        if note:
+            values[cols.index("behavior")] = f"{values[cols.index('behavior')]} | {note}"
+        con.execute(
+            f"INSERT INTO hypotheses (hypothesis_id,parent_id,{','.join(cols)},status,rejection_reason,created_at)"
+            f" VALUES (?,?,{','.join('?' for _ in cols)},?,?,?)",
+            [
+                hypothesis_id,
+                parent_id,
+                *values,
+                status,
+                reason,
+                _now(),
+            ],
+        )
+        con.commit()
+
+
 def add_experiment(
     experiment_id: str,
     hypothesis_id: str,
@@ -296,6 +337,7 @@ __all__ = [
     "add_experiment",
     "add_hypothesis",
     "add_sample",
+    "add_status",
     "connect",
     "init_db",
     "load_thresholds",
