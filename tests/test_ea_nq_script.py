@@ -112,3 +112,17 @@ def test_exclusion_de_rolls_en_ambos_lados():
     assert nq_counts == {2026: 1}
     assert ref_counts == {2026: 1}
     assert nq.iloc[0]["t"] == pd.Timestamp("2026-01-16 10:00")
+
+
+def test_festivos_y_cierres_especiales_se_excluyen():
+    spec = importlib.util.spec_from_file_location("nq_script", SCRIPT)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+
+    sessions = module.holiday_sessions(2012, 2012)
+
+    assert pd.Timestamp("2012-07-04") in sessions
+    assert pd.Timestamp("2012-11-23") in sessions
+    assert pd.Timestamp("2012-10-29") in sessions
+

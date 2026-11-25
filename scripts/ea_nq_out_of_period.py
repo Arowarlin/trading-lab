@@ -15,6 +15,11 @@ import numpy as np
 import pandas as pd
 
 from tradinglab.config import ROOT
+from tradinglab.discovery.calendars import (
+    NYSE_SPECIAL_CLOSURES,
+    nyse_early_closes,
+    nyse_holidays,
+)
 from tradinglab.ea_lab.nq_adapter import (
     apply_spread,
     atr_ratio,
@@ -89,18 +94,36 @@ def _first_session_after(day: pd.Timestamp) -> pd.Timestamp:
     return pd.bdate_range(day + pd.Timedelta(days=1), periods=1)[0].normalize()
 
 
+def holiday_sessions(start_year: int, end_year: int) -> list[pd.Timestamp]:
+    """Festivos NYSE, cierres especiales y cierres tempranos del rango."""
+
+    values = set(nyse_holidays(start_year, end_year))
+    values.update(nyse_early_closes(start_year, end_year))
+    values.update(
+        item
+        for item in NYSE_SPECIAL_CLOSURES
+        if start_year <= item // 10000 <= end_year
+    )
+    return sorted({pd.Timestamp(str(item)) for item in values})
+
+
 def load_roll_sessions(path: Path | None) -> tuple[list[pd.Timestamp], str]:
     if path is None or not path.exists():
         return [], "Sin datos: sin --roll-dates"
     payload = json.loads(path.read_text(encoding="utf-8"))
     if isinstance(payload, dict):
         raw = payload.get("rolls") or payload.get("dates") or []
+        explicit = payload.get("excluded_sessions") or []
         source = str(payload.get("source") or "")
     else:
         raw = payload
+        explicit = []
         source = ""
-    rolls = [pd.Timestamp(item).normalize() for item in raw]
-    sessions = [_first_session_after(item) for item in rolls]
+    if explicit:
+        sessions = [pd.Timestamp(item).normalize() for item in explicit]
+    else:
+        rolls = [pd.Timestamp(item).normalize() for item in raw]
+        sessions = [_first_session_after(item) for item in rolls]
     return sorted(set(sessions)), source
 
 
@@ -184,6 +207,7 @@ def _slippage(
     setfile: Path,
     k: float,
     sessions: list[pd.Timestamp],
+    holidays: list[pd.Timestamp],
     start: pd.Timestamp,
     end: pd.Timestamp,
 ):
@@ -191,6 +215,7 @@ def _slippage(
     for slip in SLIPS:
         trades = _run(bars, _params(setfile, k, slip))
         trades, _ = exclude_roll_sessions(trades, sessions)
+        trades, _ = exclude_roll_sessions(trades, holidays)
         window = _within(trades, start, end)
         stats = _stats(window)
         rows.append({"slip": slip, **stats})
@@ -339,8 +364,11 @@ def main(argv=None) -> int:
 
     nq_all = _run(nq_bars, _params(args.setfile, k))
     ref_all = _run(reference_bars, _params(args.setfile, 1.0))
-    nq_all, nq_excluded = exclude_roll_sessions(nq_all, sessions)
-    ref_all, ref_excluded = exclude_roll_sessions(ref_all, sessions)
+    holidays = holiday_sessions(2010, 2018)
+    nq_all, nq_roll_excluded = exclude_roll_sessions(nq_all, sessions)
+    ref_all, ref_roll_excluded = exclude_roll_sessions(ref_all, sessions)
+    nq_all, nq_holiday_excluded = exclude_roll_sessions(nq_all, holidays)
+    ref_all, ref_holiday_excluded = exclude_roll_sessions(ref_all, holidays)
     nq_all, crossed = filter_crossing_rolls(nq_all, [])
 
     nq_valid = _within(nq_all, valid_start, valid_end)
@@ -391,7 +419,7 @@ def main(argv=None) -> int:
     stats = _stats(nq_test)
     lcb = weekly_lcb(nq_test)
     slip_rows = _slippage(
-        nq_bars, args.setfile, k, sessions, test_start, test_end
+        nq_bars, args.setfile, k, sessions, holidays, test_start, test_end
     )
     verdict = (
         "confirma"
@@ -441,11 +469,15 @@ def main(argv=None) -> int:
         "",
         f"`slip_eq` ≈ **{_fmt(_slip_eq(slip_rows), 2)} puntos/lado**.",
         "",
-        "### Operaciones excluidas por roll",
+        "### Operaciones excluidas",
         "",
-        f"- NQ: {sum(nq_excluded.values())} operaciones; por año: {nq_excluded}",
-        f"- Referencia: {sum(ref_excluded.values())} operaciones; por año: {ref_excluded}",
+        f"- Rolls NQ: {sum(nq_roll_excluded.values())}; por año: {nq_roll_excluded}",
+        f"- Rolls referencia: {sum(ref_roll_excluded.values())}; por año: {ref_roll_excluded}",
+        f"- Festivos/cierres NQ: {sum(nq_holiday_excluded.values())}; por año: {nq_holiday_excluded}",
+        f"- Festivos/cierres referencia: {sum(ref_holiday_excluded.values())}; por año: {ref_holiday_excluded}",
         f"- Cruces de roll: {crossed} (debería ser 0).",
+        "- El filtro de noticias (`InpNewsFilter`) no está modelado en el motor,",
+        "  igual que en las 478 operaciones del backtest.",
         "",
         "A-1 y A-2 son controles de paridad; no suman pruebas.",
         "",
