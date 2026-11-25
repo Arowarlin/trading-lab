@@ -36,3 +36,7 @@ reglas de `AGENTS.md` aplican.
 - Dukascopy solo sirve como proxy de precio: no tiene ask ni volumen útil.
 - Descriptivas DEV en `01_RESEARCH/Nasdaq_Intraday_Research.md` §5 y `Economic_News_Research.md` §4.
 - Ninguna es un resultado de estrategia; el edge sigue en **Sin datos**.
+
+## Forward (2026-11-25)
+
+- NQF-A/B/C congeladas en `04_FORWARD/prerregistro.md`; inicio nominal 2026-11-30, **bloqueado** hasta que el operador fije la comisión MNQ; sin resultados hasta n = 200 por variante.
