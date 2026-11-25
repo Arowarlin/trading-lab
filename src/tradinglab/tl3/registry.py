@@ -21,6 +21,10 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+class VerificationRequired(RuntimeError):
+    """Falta una verificación 'Conforma' para el hash de código."""
+
+
 def _json(value: Any) -> str:
     return json.dumps(value, sort_keys=True, ensure_ascii=False)
 
@@ -111,6 +115,15 @@ def init_db(path: str | Path = DB) -> None:
                 window_end TEXT NOT NULL,
                 hypothesis_id TEXT NOT NULL,
                 kind TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS verifications (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                hypothesis_id TEXT NOT NULL,
+                code_hash TEXT NOT NULL,
+                verifier TEXT NOT NULL,
+                verdict TEXT NOT NULL,
+                report TEXT NOT NULL,
                 created_at TEXT NOT NULL
             );
             """
@@ -219,6 +232,57 @@ def add_status(
             ],
         )
         con.commit()
+
+
+def add_verification(
+    hypothesis_id: str,
+    code_hash: str,
+    verifier: str,
+    verdict: str,
+    report: str,
+    *,
+    db_path: str | Path = DB,
+) -> None:
+    """Registra una verificación; solo añade filas."""
+
+    init_db(db_path)
+    with connect(db_path) as con:
+        con.execute(
+            "INSERT INTO verifications"
+            "(hypothesis_id, code_hash, verifier, verdict, report, created_at)"
+            " VALUES(?,?,?,?,?,?)",
+            (
+                str(hypothesis_id),
+                str(code_hash),
+                str(verifier),
+                str(verdict),
+                str(report),
+                _now(),
+            ),
+        )
+        con.commit()
+
+
+def require_verified(
+    hypothesis_id: str,
+    code_hash: str,
+    *,
+    db_path: str | Path = DB,
+) -> None:
+    """Lanza VerificationRequired si no hay un 'Conforma' para ese hash."""
+
+    init_db(db_path)
+    with connect(db_path) as con:
+        row = con.execute(
+            "SELECT 1 FROM verifications"
+            " WHERE hypothesis_id=? AND code_hash=? AND verdict='Conforma'"
+            " ORDER BY id DESC LIMIT 1",
+            (str(hypothesis_id), str(code_hash)),
+        ).fetchone()
+    if row is None:
+        raise VerificationRequired(
+            f"Sin verificación 'Conforma' para {hypothesis_id} y hash {code_hash}"
+        )
 
 
 def add_experiment(
@@ -334,13 +398,16 @@ def seed_hypotheses(db_path: str | Path = DB) -> int:
 __all__ = [
     "DB",
     "THRESHOLDS",
+    "VerificationRequired",
     "add_experiment",
     "add_hypothesis",
     "add_sample",
     "add_status",
+    "add_verification",
     "connect",
     "init_db",
     "load_thresholds",
+    "require_verified",
     "seed_hypotheses",
     "structural_hash",
     "thresholds_hash",
