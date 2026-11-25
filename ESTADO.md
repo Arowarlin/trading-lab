@@ -4,7 +4,7 @@
 > actualiza al cerrar cada cola. Las colas antiguas de `.orquestador/` son historia; la vigente es la
 > que aparece aquí.
 >
-> **Actualizado:** 2026-11-25 · `count_tests` **1926**
+> **Actualizado:** 2026-11-25 17:40 · `count_tests` **1926**
 
 ## 1. Objetivo
 Encontrar una ventaja **real y neta de costes** y operarla en demo o en retos de prop firm (solo
@@ -16,18 +16,23 @@ paper/demo), sin engañarse: prerregistro, contador de pruebas (DSR) y holdout s
 |---|---|---|---|
 | **EA `us100-ftmo1`** | +0,31 R/op en su periodo de diseño (réplica T6, 479 ops). Fuera de periodo (T7, 2013-14 y 2018-21): −0,03 R, **no confirma** | **Incierto**. Es el único que opera (forward FTMO demo: 3 cerradas) | n = 30 → 2027-03-16 · n = 60 → 2027-07-13 · final n = 515 → 2032-06-14 |
 | **`ai_trader`** | No supera a la regla de tendencia (Δ −0,02 R, IC95 [−0,18; +0,12]). Real **+0,05 R** frente a +0,30 R simulado; la diferencia está en la salida | **No concluyente** | Evaluación única a n = 180 → **2027-01-04** |
-| **NQF-A / NQF-B / NQF-C** (NASDAQ_EDGE) | Historia contaminada por el EA; solo vale el forward. Prerregistrado y congelado | **Bloqueado: falta la comisión MNQ** (no ha arrancado) | n = 200: C → 2027-08-08 · A → 2027-09-26 · **B → 2030-10-18** (fechas optimistas) |
+| **NQF-A / NQF-B / NQF-C** (NASDAQ_EDGE) | Historia contaminada por el EA; solo vale el forward. Prerregistrado y congelado (tag `nqedge-forward-start`), comisión MNQ 0,75 USD/lado | **Forward desde el 2026-11-30** | n = 200: C → 2027-08-08 · A → 2027-09-26 · **B → 2030-10-18** (fechas optimistas) |
 
 Cerradas: H1 nocturna (`cost_gate`), H2 FOMC (no confirma), H3 rango de apertura (`no_power`),
 Fix FX y Asia USDJPY (rechazadas), cambio de mes / rebote D1 / Donchian / momentum / NY open GA
 (`inconclusive`). La fase C histórica de NASDAQ_EDGE se ejecutó y está registrada (22 + 7 pruebas).
 
 ## 3. En marcha
-- **Cola activa:** `.orquestador/COLA-TL3-E.md` (locks entre sesiones, verificación previa de NQF y
-  avisos por estrategia). No suma al contador. Tras ella, **no se abren frentes de investigación
-  nuevos** hasta los controles de §5.
-- **Rutina:** el forward del EA y de `ai_trader` corre en el sistema existente. El de NQF
-  (`NASDAQ_EDGE_INSTITUTIONAL/tools/forward_daily.py`, a mano una vez al día) espera la comisión.
+- **Colas:**
+  - `.orquestador/COLA-TL3-E.md`: locks entre sesiones, verificación previa de NQF y avisos por
+    estrategia. Solo está hecho E0.
+  - `.orquestador/COLA-EDGE-1.md`: fábrica de estrategias en M15/M30/H1/H4 con 7 activos y el motor
+    `lab discovery`. Decidida por el operador el 2026-11-25; **pendiente de lanzar**; suma al contador.
+  - Cerradas hoy: TL3-B, C y D (`tl3-ciclo1e`), TL2-DIARIO y NQEDGE-FORWARD (`nqedge-forward-start`).
+- **Rutina diaria desde el 2026-11-30**, después del cierre de NY, con MT5 abierto:
+  `E:\trading-lab\.venv\Scripts\python.exe E:\trading-lab\NASDAQ_EDGE_INSTITUTIONAL\tools\forward_daily.py --commission-side-usd 0.75`
+  (la ayuda del script usa 1,25 como ejemplo: **no** es la comisión). El forward del EA y el de
+  `ai_trader` corren en el sistema existente.
 - **Producción cambiada hoy:** TL2-DIARIO (suelo diario de FundingPips en `prop/simulator.py` y
   `prop/guard.py`; vuelta atrás en `tl2-diario-pre`).
 
@@ -35,7 +40,7 @@ Fix FX y Asia USDJPY (rechazadas), cambio de mes / rebote D1 / Donchian / moment
 
 | # | Decisión | Qué desbloquea |
 |---|---|---|
-| 1 | **Comisión MNQ** por contrato y lado | Arranca el forward NQF |
+| 1 | ~~Comisión MNQ~~ **Hecho:** 0,75 USD/lado (2026-11-25) | Forward NQF desde el 2026-11-30 |
 | 2 | ¿Mantener **NQF-B**? Llegaría a n = 200 hacia 2030 | Foco del forward |
 | 3 | Arreglar la **TCA** (slippage siempre 0; `execution/mt5.py:772-783`), cola de producción | Costes reales medidos para todas las estrategias |
 | 4 | **E-3**: la protección diaria de FundingPips solo usa la equidad, cola de producción | Riesgo correcto en la cuenta CFD-006 |
