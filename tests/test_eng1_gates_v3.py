@@ -68,8 +68,12 @@ def _patch(monkeypatch, fake, version):
     monkeypatch.setattr(robustness, "load_engine_config", lambda: _config(version))
 
 
-def test_v2_por_defecto_usa_el_frontier(monkeypatch):
-    assert load_engine_config().robustness.gates_version == 2
+def test_engine_yaml_activa_v3():
+    # Activado por el operador el 2026-11-26 (docs/engineering/DECISIONS.md).
+    assert load_engine_config().robustness.gates_version == 3
+
+
+def test_v2_usa_el_frontier(monkeypatch):
     _patch(monkeypatch, _FakeEvaluations(60), 2)
     pbo, wf = robustness._pbo_wf("camp", None)
     assert pbo["gates_version"] == 2 and pbo["matrix"] == "frontier"
@@ -130,6 +134,20 @@ def test_d06_potencia_con_v3_cuenta_solo_el_oos2(monkeypatch):
     counts = power.counts_from_is(150, segments)
     assert counts["trades_holdout"] == pytest.approx(180, abs=2)  # OOS-1 + OOS-2: 6 años
     assert counts["trades_oos2"] == pytest.approx(90, abs=2)  # solo OOS-2: 3 años
-    assert power.power_count_key() == "trades_holdout"  # v2 por defecto
-    monkeypatch.setattr("tradinglab.discovery.config.load_engine_config", lambda: _config(3))
-    assert power.power_count_key() == "trades_oos2"
+    assert power.power_count_key() == "trades_oos2"  # engine.yaml usa v3
+    monkeypatch.setattr("tradinglab.discovery.config.load_engine_config", lambda: _config(2))
+    assert power.power_count_key() == "trades_holdout"
+
+
+def test_v3_conserva_los_metadatos_de_la_confirmacion(tmp_path):
+    # Regresión: el PSR se calcula con n_trials = 1 y pisaba el n_trials real.
+    rng = np.random.default_rng(5)
+    out = levels._psr_bonferroni_v3(
+        rng.normal(0.05, 1.0, 400),
+        base={"n_trials": 4, "k_finalists": 2, "n_accounts": 2, "dsr": 0.4},
+        n_trials=4,
+        alpha=0.05,
+        db_path=tmp_path / "vacia.db",
+    )
+    assert out["n_trials"] == 4 and out["k_finalists"] == 2 and out["n_accounts"] == 2
+    assert out["psr_n_trials"] == 1

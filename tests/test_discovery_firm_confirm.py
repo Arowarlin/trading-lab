@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pandas as pd
+import pytest
 
 from tradinglab.discovery import databank, engine, levels
 from tradinglab.propfund.costs import CostProfile
@@ -14,6 +15,23 @@ SEGMENTS = {
     "oos1": ["2023-03-01", "2023-03-31"],
     "oos2": ["2023-04-01", None],
 }
+
+
+@pytest.fixture(autouse=True)
+def _puertas_v2(monkeypatch):
+    """Estos tests fijan la confirmación de las puertas v2 (ENG-1).
+
+    engine.yaml usa v3 desde el 2026-11-26; la confirmación v3 se prueba en
+    tests/test_eng1_gates_v3.py.
+    """
+
+    from tradinglab.discovery import levels
+    from tradinglab.discovery.config import load_engine_config
+
+    base = load_engine_config()
+    v2 = base.model_copy(update={"robustness": base.robustness.model_copy(update={"gates_version": 2})})
+    monkeypatch.setattr(levels, "load_engine_config", lambda: v2)
+
 
 
 def _strategy() -> dict:

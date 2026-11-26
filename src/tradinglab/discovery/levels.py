@@ -516,10 +516,13 @@ def _psr_bonferroni_v3(
         psr = dsr_from_returns(daily_r, [], n_trials=1, periods_per_year=252.0, benchmark_sr=0.0)
     except Exception as exc:  # noqa: BLE001 - Sin datos, no se aprueba
         psr = {"status": "Sin datos", "dsr": None, "reason": f"{type(exc).__name__}: {exc}"}
+    # Los metadatos de la confirmación (n_trials, k_finalists, n_accounts...)
+    # mandan sobre los del PSR, que se calcula con n_trials = 1 por diseño.
     keep = {key: base[key] for key in base if key not in {"dsr", "kind", "status", "note"}}
     return {
-        **keep,
         **psr,
+        **keep,
+        "psr_n_trials": psr.get("n_trials"),
         "kind": "psr_bonferroni_v3",
         "gates_version": 3,
         "threshold": threshold,

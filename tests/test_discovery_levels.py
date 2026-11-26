@@ -410,7 +410,16 @@ def test_confirmation_dsr_is_order_independent(tmp_path) -> None:
     assert results[0] == results[1]
 
 
-def test_confirm_single_finalist_uses_psr_vs_zero(tmp_path) -> None:
+def test_confirm_single_finalist_uses_psr_vs_zero(tmp_path, monkeypatch) -> None:
+    # Comportamiento de las puertas v2 (ENG-1: engine.yaml ya usa v3; la
+    # confirmación v3 se prueba en tests/test_eng1_gates_v3.py).
+    from tradinglab.discovery.config import load_engine_config
+
+    base = load_engine_config()
+    v2 = base.model_copy(
+        update={"robustness": base.robustness.model_copy(update={"gates_version": 2})}
+    )
+    monkeypatch.setattr(levels, "load_engine_config", lambda: v2)
     db, frame, _campaign_id, ids = _confirm_db(tmp_path, "single", count=1)
     result = levels.confirm(
         ids[0],
