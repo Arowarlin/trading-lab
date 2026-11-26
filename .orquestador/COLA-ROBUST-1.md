@@ -101,6 +101,18 @@ lanzado ninguna campaña). Lock `proyecto-robust`.
   - EDGE-1: 0 robustas, con el motivo;
   - EDGE-2: lista para Y2;
   - **"reinicio pendiente de `ai_trader`/forward para TL2-TCA y TCA2"**.
+- **Pendiente de TL2-TCA2** (enmienda de Claude, 2026-11-26): TCA2 cerró sin escribir README/PLAN/ESTADO
+  porque creyó "huérfano" el lock `readme-plan` (ver `reports/tl3/tca2_cierre.md`). Con el mismo lock
+  `readme-plan`, añade su línea:
+  - `signal_price` desde `ai_trader` y forward;
+  - `tca_version` (68 filas v1, 0 v2);
+  - lectores solo v2;
+  - tolerancia 1e-9 en la frontera del SL;
+  - tags `tl2-tca2-pre`/`post`;
+  - reinicio pendiente.
+- **Nota en `.orquestador/PLANTILLA-COLA.md` (coordinación):** el `pid` de `owner.json` es el del
+  comando `scripts/orq_lock.py`, que termina al instante. **Nunca** se usa para declarar un lock
+  huérfano: solo cuenta la antigüedad (> 2 h), y lo decide el operador.
 - Commit por ruta, tag `robust-1` y liberación de locks.
 
 ### R7 · Aviso
