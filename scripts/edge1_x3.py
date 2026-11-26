@@ -5,11 +5,21 @@ Solo lee OOS-1/IS. No lee OOS-2. Escribe TL3_REPORTS/edge1_finalistas.md/.json.
 
 from __future__ import annotations
 
+import argparse
 import json
 from datetime import datetime, timezone
 from pathlib import Path
 
-from tradinglab.discovery import databank, levels, perturb, power, robustness
+from tradinglab.discovery import (
+    campaigns,
+    databank,
+    dsl,
+    levels,
+    perturb,
+    power,
+    retester,
+    robustness,
+)
 from tradinglab.discovery.config import load_engine_config
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -205,7 +215,98 @@ def _gate1(strategy: dict, campaign: dict, metrics: dict) -> tuple[bool, dict]:
     return passed, checks
 
 
+def _refresh_inputs(campaign_id: str) -> dict:
+    """Carga y cachea IS/OOS-1, setup y coste de una campaña (sin OOS-2)."""
+
+    frame, campaign, setup, cost = perturb.load_campaign_inputs(campaign_id)
+    is_frame = campaigns.load_segment(campaign_id, "is")
+    oos1_frame = campaigns.load_segment(campaign_id, "oos1")
+    times = robustness.variant_trade_times(
+        campaign_id, frame=is_frame, setup=setup, cost=cost
+    )
+    pbo, wf = robustness._pbo_wf(
+        campaign_id, None, trade_times_by_strategy=times
+    )
+    return {
+        "campaign": campaign,
+        "setup": setup,
+        "cost": cost,
+        "is_frame": is_frame,
+        "oos1_frame": oos1_frame,
+        "pbo": pbo,
+        "wf": wf,
+    }
+
+
+def _refresh_strategy(strategy_id: int, cache: dict) -> None:
+    """Recalcula retest, PBO y WF con point y matriz corregidos (R4)."""
+
+    strategy = databank.get_strategy(strategy_id)
+    if strategy is None:
+        raise ValueError(f"estrategia no encontrada: {strategy_id}")
+    campaign_id = str(strategy["campaign_id"])
+    if campaign_id not in cache:
+        cache[campaign_id] = _refresh_inputs(campaign_id)
+    data = cache[campaign_id]
+    model = dsl.Strategy.model_validate(strategy["dsl"])
+    retest = retester.retest(
+        model,
+        data["is_frame"],
+        data["oos1_frame"],
+        data["cost"],
+        data["setup"],
+    )
+    databank.add_validation(
+        strategy_id,
+        "retest",
+        retest,
+        bool(
+            retest.get("stress_cost_x1_5_ok")
+            and retest.get("slippage_plus_2_ok")
+        ),
+        replace=True,
+    )
+    pbo = data["pbo"]
+    databank.add_validation(
+        strategy_id,
+        "pbo",
+        pbo,
+        bool(pbo.get("pbo") is not None and float(pbo["pbo"]) <= 0.30),
+        replace=True,
+    )
+    wf = data["wf"]
+    databank.add_validation(
+        strategy_id,
+        "wf",
+        wf,
+        bool(wf.get("ok")),
+        replace=True,
+    )
+
+
+def _append_repetition(lines: list[str]) -> None:
+    """Conserva la tabla original y añade/reemplaza la sección de repetición."""
+
+    previous = OUT_MD.read_text(encoding="utf-8") if OUT_MD.exists() else ""
+    marker = "\n## Repetición tras ROBUST-1"
+    base = previous.split(marker)[0].rstrip()
+    section = "\n".join(lines).strip()
+    OUT_MD.write_text(f"{base}\n\n{section}\n", encoding="utf-8")
+
+
 def main() -> None:
+    parser = argparse.ArgumentParser(description="EDGE-1 X3")
+    parser.add_argument(
+        "--refresh",
+        action="store_true",
+        help="recalcula retest/PBO/WF con point y matriz corregidos",
+    )
+    parser.add_argument(
+        "--append-section",
+        action="store_true",
+        help="añade la repetición a edge1_finalistas.md sin borrar la tabla original",
+    )
+    args = parser.parse_args()
     import sqlite3
     con = sqlite3.connect(ROOT / "data" / "discovery.db")
     con.row_factory = sqlite3.Row
@@ -214,10 +315,13 @@ def main() -> None:
         "and status = 'finalist' order by campaign_id, id"
     ).fetchall()
     results = []
+    cache: dict = {}
     for strategy in rows:
         strategy_id = int(strategy["id"])
         campaign = databank.get_campaign(str(strategy["campaign_id"]))
         print(f"[X3] {strategy_id} {strategy['campaign_id']}", flush=True)
+        if args.refresh:
+            _refresh_strategy(strategy_id, cache)
         metrics = _evaluation(strategy_id, "fitness_is") or {}
         gate1, gate1_detail = _gate1(dict(strategy), campaign, metrics)
         if not gate1:
@@ -301,6 +405,8 @@ def main() -> None:
                 "gate3": gate3,
                 "x3_pass": passed_x3,
                 "wf_efficiency": wf_eff,
+                "wf_label": wf.get("wf_label"),
+                "wf_informative": wf.get("wf_informative"),
                 "pbo": pbo_value,
                 "noise_ratio": noise_ratio,
                 "exec_ratio": exec_ratio,
@@ -348,6 +454,55 @@ def main() -> None:
     if not eligible:
         lines.append("- Ninguna: X4 = `sin pasada 2`.")
     lines.append("")
+    if args.append_section:
+        section = [
+            "## Repetición tras ROBUST-1",
+            "",
+            f"**Generado:** {datetime.now(timezone.utc).isoformat()}",
+            f"**Finalistas:** {len(results)} · **pasan X3 completo:** "
+            f"{sum(1 for r in results if r['x3_pass'])}",
+            "",
+            "Herramientas: `point` por instrumento (R1), matriz diaria ordenada "
+            "para PBO/WF (R2) y WF etiquetado por frecuencia (R3). Mismos "
+            "umbrales: WF ≥ 0,3 · PBO ≤ 0,30 · slippage +2 > 0.",
+            "",
+            "| Estrategia | Campaña | Activo | TF | Gate 1 | WF eff | WF etiqueta | PBO | Ruido | Ejec | Spread p75 R | Slip x2 R | Gate 2 | Gate 3 | X3 |",
+            "|---:|---|---|---|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|---|",
+        ]
+        for row in results:
+            def fmt2(value, digits=3):
+                return "Sin datos" if value is None else f"{value:.{digits}f}"
+            label = row.get("wf_label") or (
+                "Sin datos" if row.get("wf_informative") is None else "informativo"
+            )
+            section.append(
+                f"| {row['strategy_id']} | `{row['campaign_id']}` | {row['instrument']} | "
+                f"{row['timeframe']} | {'si' if row['gate1'] else 'no'} | "
+                f"{fmt2(row['wf_efficiency'])} | {label} | {fmt2(row['pbo'])} | "
+                f"{fmt2(row['noise_ratio'])} | {fmt2(row['exec_ratio'])} | "
+                f"{fmt2(row['spread_p75_expectancy_r'])} | "
+                f"{fmt2(row['slippage_plus_2_expectancy_r'])} | "
+                f"{'si' if row['gate2'] else 'no'} | {'si' if row['gate3'] else 'no'} | "
+                f"{'SI' if row['x3_pass'] else 'NO'} |"
+            )
+        section.append("")
+        section.append("### Candidatas a la pasada 2 (X4), repetición")
+        section.append("")
+        if eligible:
+            for campaign_id, count in sorted(
+                eligible.items(), key=lambda item: (-item[1], item[0])
+            ):
+                section.append(
+                    f"- `{campaign_id}`: {count} finalista(s) pasaron X3"
+                )
+        else:
+            section.append("- Ninguna: X4 = `sin pasada 2`.")
+        _append_repetition(section)
+        print(
+            f"Escrito {OUT_MD}: sección de repetición, {len(results)} finalistas, "
+            f"{len(eligible)} campanas elegibles"
+        )
+        return
     OUT_MD.write_text("\n".join(lines), encoding="utf-8")
     print(f"Escrito {OUT_MD}: {len(results)} finalistas, {len(eligible)} campanas elegibles")
 

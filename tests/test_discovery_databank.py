@@ -172,6 +172,21 @@ def test_validation_status_and_lineage(tmp_path: Path) -> None:
     assert lineage[0]["param_diff"] == {"stop": 1.0}
 
 
+def test_validation_replace_upserts(tmp_path: Path) -> None:
+    db = tmp_path / "discovery.db"
+    strategy_id = databank.add_strategy("camp", _strategy(), db_path=db)
+    databank.add_validation(
+        strategy_id, "retest", {"version": 1}, False, db_path=db
+    )
+    databank.add_validation(
+        strategy_id, "retest", {"version": 2}, True, replace=True, db_path=db
+    )
+    rows = databank.list_validations(strategy_id, db_path=db)
+    assert len(rows) == 1
+    assert rows[0]["result"] == {"version": 2}
+    assert rows[0]["passed"] == 1
+
+
 def test_campaign_is_inserted_once(tmp_path: Path) -> None:
     db = tmp_path / "discovery.db"
     config = {"instrument": "US100", "timeframe": "M5", "n_total": 10}

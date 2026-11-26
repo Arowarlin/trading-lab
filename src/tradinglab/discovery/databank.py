@@ -727,6 +727,7 @@ def add_validation(
     passed: bool | None,
     *,
     computed_at: str | None = None,
+    replace: bool = False,
     db_path: str | Path | None = None,
     con: sqlite3.Connection | None = None,
 ) -> int:
@@ -738,19 +739,32 @@ def add_validation(
         else json.dumps(result, sort_keys=True, ensure_ascii=False, allow_nan=True)
     )
     target = _resolve_target(db_path, con)
+    values = (
+        int(strategy_id),
+        str(test),
+        payload,
+        None if passed is None else int(bool(passed)),
+        computed_at or _now(),
+    )
     with _connection(target, con) as opened:
-        opened.execute(
-            "INSERT OR IGNORE INTO disc_validations"
-            "(strategy_id, test, result_json, passed, computed_at) "
-            "VALUES(?,?,?,?,?)",
-            (
-                int(strategy_id),
-                str(test),
-                payload,
-                None if passed is None else int(bool(passed)),
-                computed_at or _now(),
-            ),
-        )
+        if replace:
+            opened.execute(
+                "INSERT INTO disc_validations"
+                "(strategy_id, test, result_json, passed, computed_at) "
+                "VALUES(?,?,?,?,?) "
+                "ON CONFLICT(strategy_id, test) DO UPDATE SET "
+                "result_json = excluded.result_json, "
+                "passed = excluded.passed, "
+                "computed_at = excluded.computed_at",
+                values,
+            )
+        else:
+            opened.execute(
+                "INSERT OR IGNORE INTO disc_validations"
+                "(strategy_id, test, result_json, passed, computed_at) "
+                "VALUES(?,?,?,?,?)",
+                values,
+            )
         row = opened.execute(
             "SELECT id FROM disc_validations WHERE strategy_id = ? AND test = ?",
             (int(strategy_id), str(test)),
