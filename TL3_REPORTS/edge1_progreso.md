@@ -34,3 +34,12 @@ Plan: `8026de6dc2407ff8f56a6ebb09078be8e547dc0649f0e33346c29371abc5c509` · inic
 | 26 | `edge1-26-asia-range-reversi-usdjpy-m15` | USDJPY | M15 | asia_range_reversion | 437 | 79 | 0 | done | 23.3 min |
 | 27 | `edge1-27-trend-pullback-mtf-usdjpy-m15` | USDJPY | M15 | trend_pullback_mtf | 438 | 92 | 0 | done | 47.7 min |
 | 28 | `edge1-28-vol-squeeze-breako-usdjpy-m15` | USDJPY | M15 | vol_squeeze_breakout | 396 | 133 | 0 | done | 48.3 min |
+
+## Cierre X8
+
+- X2: 28/28 campañas done; 12.320 pruebas registradas; 22 finalistas.
+- X3: 22 finalistas, 0 pasan las 4 puertas (WF eficiencia <0,3 y PBO >0,30).
+- X4: sin pasada 2; X5: 0 confirmadas (OOS-2 no leído); X6: 0 EAs.
+- count_tests: 1.926 → 12.694.
+- uff OK; pytest 2.050 passed, 1 skipped; lab doctor y lab propfund verify exit 0 (aviso de frescura de datos).
+- EDGE-2: Y0-Y1 hechos; Y2 **no** iniciado en esta sesión.

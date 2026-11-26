@@ -63,11 +63,13 @@ def _ensure_robustness(strategy_id: int) -> dict:
         # No forma parte de las 4 puertas; se omite el plateau y se conserva el resto.
         from tradinglab.discovery import optimizer
 
+        reason = f"plateau omitido: {type(exc).__name__}: {exc}"
         original = optimizer.plateau
-        optimizer.plateau = lambda *args, **kwargs: {
-            "status": "Sin datos",
-            "reason": f"plateau omitido: {type(exc).__name__}: {exc}",
-        }
+
+        def _skip_plateau(*args, **kwargs):
+            return {"status": "Sin datos", "reason": reason}
+
+        optimizer.plateau = _skip_plateau
         try:
             return robustness.run(strategy_id)
         finally:

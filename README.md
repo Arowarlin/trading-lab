@@ -233,3 +233,5 @@ Los cierres están en `.orquestador/RESULTADO-*.md` y los informes en
   campañas ajenas a `edge1-`/`edge2-`; tag `tl3-ciclo1g`.
 
 
+
+- 2026-11-26: EDGE-1 cerrado (28 campanas, 22 finalistas, 0 confirmadas, 0 EAs; tag `edge1`).
