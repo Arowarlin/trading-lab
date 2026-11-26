@@ -29,8 +29,10 @@ class FakeMT5:
 
     def __init__(self, fill_price: float) -> None:
         self.fill_price = fill_price
+        self.requests: list[dict] = []
 
     def order_send(self, request):
+        self.requests.append(dict(request))
         return SimpleNamespace(
             retcode=self.TRADE_RETCODE_DONE,
             price=self.fill_price,
@@ -40,7 +42,7 @@ class FakeMT5:
         )
 
 
-def _broker(monkeypatch, tmp_path, *, ticks, fill_price, captured):
+def _broker(monkeypatch, tmp_path, *, ticks, fill_price, captured, stops_level=0):
     def fake_record(db_path, **kwargs):
         captured.update(kwargs)
         return 1
@@ -54,6 +56,7 @@ def _broker(monkeypatch, tmp_path, *, ticks, fill_price, captured):
         db_path=tmp_path / "lab.db",
     )
     fake = FakeMT5(fill_price)
+    broker._test_fake = fake
     monkeypatch.setattr(broker, "_require", lambda: fake)
     monkeypatch.setattr(broker, "_assert_can_trade", lambda mt5: None)
     monkeypatch.setattr(broker, "_require_identity", lambda: None)
@@ -68,7 +71,7 @@ def _broker(monkeypatch, tmp_path, *, ticks, fill_price, captured):
             "volume_max": 100.0,
             "volume_step": 0.01,
             "filling_mode": 1,
-            "stops_level": 0,
+            "stops_level": int(stops_level),
         },
     )
     iterator = iter(ticks)
@@ -198,3 +201,83 @@ def test_firmas_de_slippage_en_el_registro(
     assert captured["signal_px"] == pytest.approx(signal_px)
     assert captured["fill_px"] == pytest.approx(fill_px)
     assert captured["slippage_bps"] == pytest.approx(expected_bps)
+
+
+def test_orden_usa_el_tick_releido(monkeypatch, tmp_path):
+    captured: dict = {}
+    broker = _broker(
+        monkeypatch,
+        tmp_path,
+        ticks=[
+            {"bid": 100.00, "ask": 100.02},
+            {"bid": 100.05, "ask": 100.07},
+        ],
+        fill_price=100.12,
+        captured=captured,
+    )
+
+    broker.submit_market("XAUUSD", 0.01, bot="bot", dry_run=False)
+
+    assert broker._test_fake.requests[-1]["price"] == pytest.approx(100.07)
+
+
+def test_sl_exactamente_en_stop_distance_pasa(monkeypatch, tmp_path):
+    captured: dict = {}
+    broker = _broker(
+        monkeypatch,
+        tmp_path,
+        ticks=[
+            {"bid": 100.18, "ask": 100.20},
+            {"bid": 100.05, "ask": 100.07},
+        ],
+        fill_price=100.12,
+        captured=captured,
+        stops_level=10,  # 10 puntos * 0.01 = 0.10
+    )
+
+    broker.submit_market("XAUUSD", 0.01, sl=99.97, bot="bot", dry_run=False)
+
+    assert broker._test_fake.requests[-1]["sl"] == pytest.approx(99.97)
+    assert captured["fill_px"] == pytest.approx(100.12)
+
+
+def test_sl_a_un_punto_menos_del_stop_distance_se_rechaza(monkeypatch, tmp_path):
+    captured: dict = {}
+    broker = _broker(
+        monkeypatch,
+        tmp_path,
+        ticks=[
+            {"bid": 100.18, "ask": 100.20},
+            {"bid": 100.05, "ask": 100.07},
+        ],
+        fill_price=100.12,
+        captured=captured,
+        stops_level=10,
+    )
+
+    with pytest.raises(Exception, match="SL a"):
+        broker.submit_market("XAUUSD", 0.01, sl=99.98, bot="bot", dry_run=False)
+
+    assert broker._test_fake.requests == []
+
+
+def test_mismo_tick_que_tl2_tca_pre(monkeypatch, tmp_path):
+    captured: dict = {}
+    broker = _broker(
+        monkeypatch,
+        tmp_path,
+        ticks=[
+            {"bid": 100.00, "ask": 100.02},
+            {"bid": 100.00, "ask": 100.02},
+        ],
+        fill_price=100.12,
+        captured=captured,
+    )
+
+    broker.submit_market("XAUUSD", 0.01, bot="bot", dry_run=False)
+
+    assert captured["signal_px"] == pytest.approx(100.02)
+    assert captured["order_px"] == pytest.approx(100.02)
+    assert captured["fill_px"] == pytest.approx(100.12)
+    assert captured["slippage_bps"] == pytest.approx(9.998, abs=0.001)
+    assert captured["requested_price"] == pytest.approx(100.02)

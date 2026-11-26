@@ -727,14 +727,14 @@ class MT5Broker:
         stop_distance = spec["stops_level"] * spec["point"]
         if sl is not None:
             sl = self._round_price(sl, digits)
-            if abs(price - sl) < stop_distance:
+            if abs(price - sl) + 1e-9 < stop_distance:
                 raise MT5Error(
                     f"SL a {abs(price - sl):.5f} del precio; el bróker exige "
                     f"al menos {stop_distance:.5f}"
                 )
         if tp is not None:
             tp = self._round_price(tp, digits)
-            if abs(tp - price) < stop_distance:
+            if abs(tp - price) + 1e-9 < stop_distance:
                 raise MT5Error(
                     f"TP a {abs(tp - price):.5f} del precio; el bróker exige "
                     f"al menos {stop_distance:.5f}"
@@ -777,12 +777,12 @@ class MT5Broker:
             float(submit_tick["ask"]) if volume > 0 else float(submit_tick["bid"])
         )
         request["price"] = submit_px
-        if sl is not None and abs(submit_px - sl) < stop_distance:
+        if sl is not None and abs(submit_px - sl) + 1e-9 < stop_distance:
             raise MT5Error(
                 f"SL a {abs(submit_px - sl):.5f} del precio de envío; el bróker exige "
                 f"al menos {stop_distance:.5f}"
             )
-        if tp is not None and abs(tp - submit_px) < stop_distance:
+        if tp is not None and abs(tp - submit_px) + 1e-9 < stop_distance:
             raise MT5Error(
                 f"TP a {abs(tp - submit_px):.5f} del precio de envío; el bróker exige "
                 f"al menos {stop_distance:.5f}"
