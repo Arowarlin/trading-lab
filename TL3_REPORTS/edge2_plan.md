@@ -55,3 +55,19 @@ Maximo 4 campanas con al menos 1 finalista que pase Y3 completo; perfil `medium`
 _total = **7.920**; 12 nuevas y 6 reutilizadas del primer intento (mismos activo/TF/segmentos/coste/semilla).
 - edge2-13 a edge2-18 (US100 M15/M30) ya estaban registradas con el mismo dataset; el resto se registro con el frame recortado al IS para que data-check no contara 2012-2018 fuera de tramo.
 - US500 usa solo CFD-006: CFD-001 no lo permite.
+
+## Coherencia Y0 → Y1 (ROBUST-1 R5)
+
+Comparados `edge2_costes.md` / `edge2_data.json` de `49551da` (plan Y1) y
+`768e572` (corrección de huecos Y0):
+
+- **No cambia** `cost_r`, `viable`, `useful_start`, `is_start_effective` ni el
+  inicio de desarrollo de ninguna de las 18 campañas.
+- Solo cambia la **clasificación de huecos** (`non_scheduled_gaps_full`):
+  los huecos nocturnos pre-2018 y los huecos de historia >1 día se separan.
+- Por tanto, el plan Y1 **sigue congelado y válido**. No hay Y1b, no se
+  cancelan ni registran borradores y las 18 campañas siguen en `draft`.
+- H1/H4 mantienen IS 2019-01-02:2020-12-31: 2018 sigue sin ser válido según
+  `is_start_effective` (los huecos nuevos son de historia/cierre, no una
+  corrección que habilite 2018).
+
