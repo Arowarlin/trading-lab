@@ -27,7 +27,7 @@ paridad con el EA exportado (`export_mql5`). Queda como decisión separada.
 |---|---|
 | `tests/test_eng1_regressions.py` (A-01, A-02, A-04, B-01, D-07) | Con el motor anterior: **5 fallan**; con el nuevo: **5 pasan** |
 | Paridad Python/Numba (script del Worker A, 300 casos `_core` + 100 `_calendar_core`) | **0 discrepancias** |
-| Suite completa | Ver `TASK_STATUS.md` |
+| Suite completa (Linux, marcadores de CI) | 38 failed (todos de entorno, ya conocidos) / 2072 passed; **ningún fallo nuevo** respecto a antes del cambio |
 
 ## 3. Qué hay que saber al integrarlo
 
