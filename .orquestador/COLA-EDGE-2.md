@@ -85,7 +85,10 @@ se cambia aquí.
 5. `register` con `--dry-run` y después real. Plan, `n_total` y hash en `TL3_REPORTS/edge2_plan.md`.
    Commit `edge2: Y1 - plan congelado`. La matriz no cambia después.
 
-### Y2 · Pasada 1 (suma). **Espera al tag `edge1`.**
+### Y2 · Pasada 1 (suma). **Espera al tag `edge1` y al tag `robust-1`.**
+Enmienda de Claude (2026-11-26): `COLA-ROBUST-1.md` corrige el `point` del retester (estrés de
+slippage), revisa el PBO y comprueba la coherencia del plan. Si `robust-1` recongela el plan (Y1b),
+se usa ese plan.
 - Igual que EDGE-1 X2: `approve` y `run --approved-by-operator --time-limit <45 min>`, una campaña tras
   otra.
 - Progreso en `TL3_REPORTS/edge2_progreso.md`. Commit cada 4 campañas.
