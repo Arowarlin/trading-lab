@@ -90,6 +90,36 @@ def windows_for(timeframe: str) -> tuple[int, int]:
     return WINDOWS[key]
 
 
+def install_assumed_slippage() -> None:
+    """Completa un perfil sin slippage con el asumido de ``engine.yaml``.
+
+    CFD-006 (US500) no publica ``slippage_price``; sus campanas ya usaron el
+    slippage asumido del motor (US500 = 0,5). Se parchea solo la carga del
+    perfil en este proceso, igual que ``edge2_x3.py``; no se toca el motor ni
+    ningun umbral. Si el perfil ya trae slippage, no cambia nada.
+    """
+
+    from dataclasses import replace
+
+    from tradinglab.discovery.costs import assumed_slippage_for
+    from tradinglab.propfund import costs as profile_module
+
+    original = profile_module.load_profile
+    if getattr(original, "_wf_tf_assumed_slippage", False):
+        return
+
+    def load_profile(account_id, instrument, **kwargs):
+        profile = original(account_id, instrument, **kwargs)
+        if getattr(profile, "slippage_price", None) is None:
+            value, _source = assumed_slippage_for(instrument)
+            profile = replace(profile, slippage_price=float(value))
+        return profile
+
+    load_profile._wf_tf_assumed_slippage = True  # type: ignore[attr-defined]
+    profile_module.load_profile = load_profile
+    perturb.load_profile = load_profile
+
+
 def _sin_datos(reason: str, **extra: Any) -> dict[str, Any]:
     return {
         "status": "Sin datos",
@@ -234,15 +264,16 @@ def evaluate_campaign(
         return result
 
 
-def _edge1_finalists(db_path: str | Path) -> list[dict[str, Any]]:
+def _finalists(prefix: str, db_path: str | Path) -> list[dict[str, Any]]:
     target = Path(db_path).resolve()
     con = sqlite3.connect(f"{target.as_uri()}?mode=ro", uri=True, timeout=30)
     con.row_factory = sqlite3.Row
     try:
         rows = con.execute(
             "select id, campaign_id, timeframe, instrument from disc_strategies "
-            "where campaign_id like 'edge1-%' and status = 'finalist' "
-            "order by campaign_id, id"
+            "where campaign_id like ? and status = 'finalist' "
+            "order by campaign_id, id",
+            (f"{prefix}-%",),
         ).fetchall()
     finally:
         con.close()
@@ -296,7 +327,12 @@ def main() -> None:
     parser.add_argument(
         "--all-edge1-finalists",
         action="store_true",
-        help="evalua las campanas de los 22 finalistas de EDGE-1",
+        help="atajo de --finalists-prefix edge1",
+    )
+    parser.add_argument(
+        "--finalists-prefix",
+        default=None,
+        help="prefijo de campana para los finalistas (edge1, edge2, ...)",
     )
     parser.add_argument(
         "--strategy",
@@ -334,11 +370,13 @@ def main() -> None:
     parser.add_argument("--train-len", type=int, default=None)
     parser.add_argument("--test-len", type=int, default=None)
     args = parser.parse_args()
+    install_assumed_slippage()
 
     db_path = Path(args.db)
     rows: list[dict[str, Any]] = []
-    if args.all_edge1_finalists:
-        rows.extend(_edge1_finalists(db_path))
+    prefix = "edge1" if args.all_edge1_finalists else args.finalists_prefix
+    if prefix:
+        rows.extend(_finalists(prefix, db_path))
     rows.extend(_strategy_rows(args.strategy, db_path))
     seen: set[int] = set()
     unique_rows = []

@@ -88,6 +88,18 @@ def _evals_by_campaign(path: Path) -> dict[str, dict[str, Any]]:
     }
 
 
+def _old_wf_label(row: dict[str, Any]) -> str:
+    """Etiqueta WF antigua: null = informativo; ausente/vacia = Sin datos."""
+
+    if "wf_label" not in row:
+        return "Sin datos"
+    value = row.get("wf_label")
+    if value is None:
+        return "informativo"
+    text = str(value).strip()
+    return text or "Sin datos"
+
+
 def _verdict_reason(result: dict[str, Any]) -> str:
     if not result:
         return "Sin datos"
@@ -254,7 +266,7 @@ def build_queue(queue: str, db_path: Path) -> dict[str, Any]:
                 "wf_tf_median_rank_pct": _num(result.get("median_rank_pct")),
                 "wf_tf_stability": _num(result.get("stability")),
                 "old_wf_efficiency": _num(row.get("wf_efficiency")),
-                "old_wf_label": row.get("wf_label") or "informativo",
+                "old_wf_label": _old_wf_label(row),
                 "gate1": gate1,
                 "pbo": pbo,
                 "noise_ratio": noise,
@@ -363,21 +375,39 @@ def render_section(payload: dict[str, Any]) -> str:
         f"**Pasan las 4 puertas con WF-TF:** {payload['pass_four']} de "
         f"{payload['finalists']}.",
         "",
-        "### WF antiguo (60/20) frente a WF-TF",
-        "",
-        *_table_wf(items),
-        "",
-        "### Las 4 puertas",
-        "",
-        "Gate 1 y Gate 3 salen de la tabla ya calculada; PBO, ruido y ejecución "
-        "no se recalculan. Gate 2 exige además WF-TF `ok` (eficiencia ≥ 0,3, "
-        "`stitched_sharpe` > 0, ≥ 3 pliegues y el resto del veredicto).",
-        "",
-        *_table_gates(items),
-        "",
-        "### Puerta 4 — grupos de correlación",
-        "",
     ]
+    if payload["queue"] == "edge2":
+        lines.extend(
+            [
+                "**EDGE-2:** misma declaración, ventanas y umbrales que EDGE-1; "
+                "una sola pasada sobre sus finalistas, sin tocar la cola de "
+                "EDGE-2. OOS-2 sin leer.",
+                "",
+            ]
+        )
+    lines.extend(
+        [
+            "Las columnas de eficiencia y `stitched_sharpe` se muestran aunque "
+            "el veredicto sea `Sin datos` (menos de 3 pliegues); en ese caso no "
+            "aprueban nada.",
+            "",
+            "### WF antiguo (60/20) frente a WF-TF",
+            "",
+            *_table_wf(items),
+            "",
+            "### Las 4 puertas",
+            "",
+            "Gate 1 y Gate 3 salen de la tabla ya calculada; PBO, ruido y "
+            "ejecución no se recalculan. Gate 2 exige además WF-TF `ok` "
+            "(eficiencia ≥ 0,3, `stitched_sharpe` > 0, ≥ 3 pliegues y el resto "
+            "del veredicto).",
+            "",
+            *_table_gates(items),
+            "",
+            "### Puerta 4 — grupos de correlación",
+            "",
+        ]
+    )
     if not payload["groups"]:
         lines.append(
             "- Sin candidatos que pasen las puertas 1 a 3 con WF-TF: "

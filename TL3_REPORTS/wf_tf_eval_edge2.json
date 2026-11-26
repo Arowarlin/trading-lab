@@ -1,0 +1,461 @@
+{
+  "generated": "2026-11-26T16:32:44.353135+00:00",
+  "windows": {
+    "M5": [
+      60,
+      20
+    ],
+    "M15": [
+      60,
+      20
+    ],
+    "M30": [
+      120,
+      40
+    ],
+    "H1": [
+      180,
+      60
+    ],
+    "H4": [
+      360,
+      120
+    ],
+    "D1": [
+      504,
+      126
+    ]
+  },
+  "min_folds": 3,
+  "results": [
+    {
+      "timeframe": "H4",
+      "train_len": 360,
+      "test_len": 120,
+      "n_variants": 40,
+      "rows": 491,
+      "first_date": "2019-02-13",
+      "last_date": "2020-12-30",
+      "thresholds": {
+        "min_oos_sharpe": 0.0,
+        "min_efficiency": 0.3,
+        "min_folds": 3
+      },
+      "stitched_sharpe": 3.5402566719117594,
+      "frac_positive": 1.0,
+      "efficiency": 5.870802716163809,
+      "median_rank_pct": 1.0,
+      "stability": 1.0,
+      "n_folds": 1,
+      "verdict": "Sin datos",
+      "ok": false,
+      "status": "Sin datos",
+      "fold_details": [
+        {
+          "fold": 1,
+          "train_start": 0,
+          "test_start": 360,
+          "test_end": 480,
+          "selected": 28,
+          "is_sharpe": 0.6030277021853476,
+          "oos_sharpe": 3.5402566719117594,
+          "efficiency": 5.870802716163809,
+          "rank_pct": 1.0
+        }
+      ],
+      "reason": "folds insuficientes (1 < 3)",
+      "test_trades_per_fold": [
+        10
+      ],
+      "test_trades_median": 10.0,
+      "wf_informative": true,
+      "wf_label": null,
+      "campaign_id": "edge2-02-trend-pullback-mtf-us100-h4",
+      "finalist_ids": [
+        12719,
+        12864,
+        12892,
+        12911,
+        12992
+      ]
+    },
+    {
+      "timeframe": "H4",
+      "train_len": 360,
+      "test_len": 120,
+      "n_variants": 40,
+      "rows": 509,
+      "first_date": "2019-01-21",
+      "last_date": "2020-12-31",
+      "thresholds": {
+        "min_oos_sharpe": 0.0,
+        "min_efficiency": 0.3,
+        "min_folds": 3
+      },
+      "stitched_sharpe": 0.3891265629227113,
+      "frac_positive": 1.0,
+      "efficiency": 0.40694036424925967,
+      "median_rank_pct": 0.23076923076923078,
+      "stability": 1.0,
+      "n_folds": 1,
+      "verdict": "Sin datos",
+      "ok": false,
+      "status": "Sin datos",
+      "fold_details": [
+        {
+          "fold": 1,
+          "train_start": 0,
+          "test_start": 360,
+          "test_end": 480,
+          "selected": 26,
+          "is_sharpe": 0.9562250322368193,
+          "oos_sharpe": 0.3891265629227113,
+          "efficiency": 0.40694036424925967,
+          "rank_pct": 0.23076923076923078
+        }
+      ],
+      "reason": "folds insuficientes (1 < 3)",
+      "test_trades_per_fold": [
+        32
+      ],
+      "test_trades_median": 32.0,
+      "wf_informative": true,
+      "wf_label": null,
+      "campaign_id": "edge2-03-vol-squeeze-breako-us100-h4",
+      "finalist_ids": [
+        13484
+      ]
+    },
+    {
+      "timeframe": "H1",
+      "train_len": 180,
+      "test_len": 60,
+      "n_variants": 40,
+      "rows": 493,
+      "first_date": "2019-02-12",
+      "last_date": "2020-12-31",
+      "thresholds": {
+        "min_oos_sharpe": 0.0,
+        "min_efficiency": 0.3,
+        "min_folds": 3
+      },
+      "stitched_sharpe": -0.8404377917777205,
+      "frac_positive": 0.2,
+      "efficiency": -1.181037984610572,
+      "median_rank_pct": 0.358974358974359,
+      "stability": 0.0,
+      "n_folds": 5,
+      "verdict": "fallido",
+      "ok": false,
+      "status": "ok",
+      "fold_details": [
+        {
+          "fold": 1,
+          "train_start": 0,
+          "test_start": 180,
+          "test_end": 240,
+          "selected": 17,
+          "is_sharpe": 0.5867091500591974,
+          "oos_sharpe": -0.24450739775947497,
+          "efficiency": -0.41674379500439834,
+          "rank_pct": 0.7692307692307693
+        },
+        {
+          "fold": 2,
+          "train_start": 60,
+          "test_start": 240,
+          "test_end": 300,
+          "selected": 30,
+          "is_sharpe": 0.7126657683728529,
+          "oos_sharpe": -1.346309833999883,
+          "efficiency": -1.8891181445037777,
+          "rank_pct": 0.358974358974359
+        },
+        {
+          "fold": 3,
+          "train_start": 120,
+          "test_start": 300,
+          "test_end": 360,
+          "selected": 18,
+          "is_sharpe": 1.048837792767209,
+          "oos_sharpe": 1.298527150382718,
+          "efficiency": 1.238062891456971,
+          "rank_pct": 0.717948717948718
+        },
+        {
+          "fold": 4,
+          "train_start": 180,
+          "test_start": 360,
+          "test_end": 420,
+          "selected": 34,
+          "is_sharpe": 1.4828153438989435,
+          "oos_sharpe": -1.7512612453080405,
+          "efficiency": -1.181037984610572,
+          "rank_pct": 0.02564102564102564
+        },
+        {
+          "fold": 5,
+          "train_start": 240,
+          "test_start": 420,
+          "test_end": 480,
+          "selected": 19,
+          "is_sharpe": 1.9260757710904115,
+          "oos_sharpe": -3.940602574672413,
+          "efficiency": -2.045922924642531,
+          "rank_pct": 0.02564102564102564
+        }
+      ],
+      "test_trades_per_fold": [
+        64,
+        120,
+        103,
+        82,
+        20
+      ],
+      "test_trades_median": 82.0,
+      "wf_informative": true,
+      "wf_label": null,
+      "campaign_id": "edge2-05-trend-pullback-mtf-us100-h1",
+      "finalist_ids": [
+        14046,
+        14325
+      ]
+    },
+    {
+      "timeframe": "H1",
+      "train_len": 180,
+      "test_len": 60,
+      "n_variants": 40,
+      "rows": 512,
+      "first_date": "2019-01-16",
+      "last_date": "2020-12-31",
+      "thresholds": {
+        "min_oos_sharpe": 0.0,
+        "min_efficiency": 0.3,
+        "min_folds": 3
+      },
+      "stitched_sharpe": 0.6471208119648907,
+      "frac_positive": 0.6,
+      "efficiency": 0.6935499442324562,
+      "median_rank_pct": 0.5128205128205128,
+      "stability": 0.0,
+      "n_folds": 5,
+      "verdict": "fallido",
+      "ok": false,
+      "status": "ok",
+      "fold_details": [
+        {
+          "fold": 1,
+          "train_start": 0,
+          "test_start": 180,
+          "test_end": 240,
+          "selected": 3,
+          "is_sharpe": 1.8575882126658108,
+          "oos_sharpe": -0.3180099610725869,
+          "efficiency": -0.17119507913770254,
+          "rank_pct": 0.4358974358974359
+        },
+        {
+          "fold": 2,
+          "train_start": 60,
+          "test_start": 240,
+          "test_end": 300,
+          "selected": 19,
+          "is_sharpe": 0.7982388981329519,
+          "oos_sharpe": 1.894654552188905,
+          "efficiency": 2.373543254557532,
+          "rank_pct": 0.9487179487179487
+        },
+        {
+          "fold": 3,
+          "train_start": 120,
+          "test_start": 300,
+          "test_end": 360,
+          "selected": 35,
+          "is_sharpe": 2.1569729407167944,
+          "oos_sharpe": -0.8310608248084599,
+          "efficiency": -0.3852903340235163,
+          "rank_pct": 0.5128205128205128
+        },
+        {
+          "fold": 4,
+          "train_start": 180,
+          "test_start": 360,
+          "test_end": 420,
+          "selected": 19,
+          "is_sharpe": 1.2845143799534822,
+          "oos_sharpe": 0.8908748765825256,
+          "efficiency": 0.6935499442324562,
+          "rank_pct": 0.5641025641025641
+        },
+        {
+          "fold": 5,
+          "train_start": 240,
+          "test_start": 420,
+          "test_end": 480,
+          "selected": 37,
+          "is_sharpe": 1.3290332851733793,
+          "oos_sharpe": 1.0727758467320179,
+          "efficiency": 0.8071850861072066,
+          "rank_pct": 0.3333333333333333
+        }
+      ],
+      "test_trades_per_fold": [
+        11,
+        12,
+        37,
+        12,
+        100
+      ],
+      "test_trades_median": 12.0,
+      "wf_informative": true,
+      "wf_label": null,
+      "campaign_id": "edge2-06-vol-squeeze-breako-us100-h1",
+      "finalist_ids": [
+        14736
+      ]
+    },
+    {
+      "timeframe": "H4",
+      "train_len": 360,
+      "test_len": 120,
+      "n_variants": 40,
+      "rows": 501,
+      "first_date": "2019-01-30",
+      "last_date": "2020-12-30",
+      "thresholds": {
+        "min_oos_sharpe": 0.0,
+        "min_efficiency": 0.3,
+        "min_folds": 3
+      },
+      "stitched_sharpe": 1.3342385195807698,
+      "frac_positive": 1.0,
+      "efficiency": 0.9717070238344202,
+      "median_rank_pct": 0.5128205128205128,
+      "stability": 1.0,
+      "n_folds": 1,
+      "verdict": "Sin datos",
+      "ok": false,
+      "status": "Sin datos",
+      "fold_details": [
+        {
+          "fold": 1,
+          "train_start": 0,
+          "test_start": 360,
+          "test_end": 480,
+          "selected": 4,
+          "is_sharpe": 1.3730872442557596,
+          "oos_sharpe": 1.3342385195807698,
+          "efficiency": 0.9717070238344202,
+          "rank_pct": 0.5128205128205128
+        }
+      ],
+      "reason": "folds insuficientes (1 < 3)",
+      "test_trades_per_fold": [
+        4
+      ],
+      "test_trades_median": 4.0,
+      "wf_informative": true,
+      "wf_label": null,
+      "campaign_id": "edge2-08-trend-pullback-mtf-us500-h4",
+      "finalist_ids": [
+        15371,
+        15631
+      ]
+    },
+    {
+      "timeframe": "H1",
+      "train_len": 180,
+      "test_len": 60,
+      "n_variants": 40,
+      "rows": 493,
+      "first_date": "2019-02-12",
+      "last_date": "2020-12-31",
+      "thresholds": {
+        "min_oos_sharpe": 0.0,
+        "min_efficiency": 0.3,
+        "min_folds": 3
+      },
+      "stitched_sharpe": -2.405571140364588,
+      "frac_positive": 0.2,
+      "efficiency": -1.9707063811492151,
+      "median_rank_pct": 0.1794871794871795,
+      "stability": 0.25,
+      "n_folds": 5,
+      "verdict": "fallido",
+      "ok": false,
+      "status": "ok",
+      "fold_details": [
+        {
+          "fold": 1,
+          "train_start": 0,
+          "test_start": 180,
+          "test_end": 240,
+          "selected": 38,
+          "is_sharpe": 0.7259508418101385,
+          "oos_sharpe": -4.132676727930537,
+          "efficiency": -5.692777650929947,
+          "rank_pct": 0.28205128205128205
+        },
+        {
+          "fold": 2,
+          "train_start": 60,
+          "test_start": 240,
+          "test_end": 300,
+          "selected": 30,
+          "is_sharpe": 0.9413890996976075,
+          "oos_sharpe": -1.8533415447320232,
+          "efficiency": -1.9687306187498372,
+          "rank_pct": 0.1794871794871795
+        },
+        {
+          "fold": 3,
+          "train_start": 120,
+          "test_start": 300,
+          "test_end": 360,
+          "selected": 18,
+          "is_sharpe": 0.8529094637510234,
+          "oos_sharpe": -1.680834122756697,
+          "efficiency": -1.9707063811492151,
+          "rank_pct": 0.07692307692307693
+        },
+        {
+          "fold": 4,
+          "train_start": 180,
+          "test_start": 360,
+          "test_end": 420,
+          "selected": 18,
+          "is_sharpe": 0.515845880653418,
+          "oos_sharpe": 0.38871521079819793,
+          "efficiency": 0.7535491226678314,
+          "rank_pct": 0.6923076923076923
+        },
+        {
+          "fold": 5,
+          "train_start": 240,
+          "test_start": 420,
+          "test_end": 480,
+          "selected": 15,
+          "is_sharpe": 0.9388586432054143,
+          "oos_sharpe": -5.6003104560689465,
+          "efficiency": -5.965019863851481,
+          "rank_pct": 0.0
+        }
+      ],
+      "test_trades_per_fold": [
+        26,
+        10,
+        2,
+        13,
+        17
+      ],
+      "test_trades_median": 13.0,
+      "wf_informative": true,
+      "wf_label": null,
+      "campaign_id": "edge2-11-trend-pullback-mtf-us500-h1",
+      "finalist_ids": [
+        16545
+      ]
+    }
+  ]
+}

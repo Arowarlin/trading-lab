@@ -11,8 +11,10 @@ Una sola pasada por finalista, los mismos umbrales y ninguna lectura del OOS-2 n
 <!-- WF-TF:EDGE-1:START -->
 ## EDGE-1 — 22 finalistas, 11 campañas
 
-**Generado:** 2026-11-26T14:28:04.238178+00:00
+**Generado:** 2026-11-26T16:33:19.906736+00:00
 **Pasan las 4 puertas con WF-TF:** 0 de 22.
+
+Las columnas de eficiencia y `stitched_sharpe` se muestran aunque el veredicto sea `Sin datos` (menos de 3 pliegues); en ese caso no aprueban nada.
 
 ### WF antiguo (60/20) frente a WF-TF
 
@@ -75,3 +77,55 @@ Gate 1 y Gate 3 salen de la tabla ya calculada; PBO, ruido y ejecución no se re
 - Sin candidatos que pasen las puertas 1 a 3 con WF-TF: no hay grupos de correlación.
 
 <!-- WF-TF:EDGE-1:END -->
+
+<!-- WF-TF:EDGE-2:START -->
+## EDGE-2 — 12 finalistas, 6 campañas
+
+**Generado:** 2026-11-26T16:33:20.966816+00:00
+**Pasan las 4 puertas con WF-TF:** 0 de 12.
+
+**EDGE-2:** misma declaración, ventanas y umbrales que EDGE-1; una sola pasada sobre sus finalistas, sin tocar la cola de EDGE-2. OOS-2 sin leer.
+
+Las columnas de eficiencia y `stitched_sharpe` se muestran aunque el veredicto sea `Sin datos` (menos de 3 pliegues); en ese caso no aprueban nada.
+
+### WF antiguo (60/20) frente a WF-TF
+
+| Estrategia | Campaña | Activo | TF | Pliegues | Mediana ops/ventana | WF-TF eff | WF-TF stitched | WF-TF veredicto | Motivo | WF viejo eff | WF viejo etiqueta |
+|---:|---|---|---|---:|---:|---:|---:|---|---|---:|---|
+| 12719 | `edge2-02-trend-pullback-mtf-us100-h4` | US100 | H4 | 1 | 10.0 | 5.871 | 3.540 | Sin datos | folds insuficientes (1 < 3) | 0.000 | Sin datos |
+| 12864 | `edge2-02-trend-pullback-mtf-us100-h4` | US100 | H4 | 1 | 10.0 | 5.871 | 3.540 | Sin datos | folds insuficientes (1 < 3) | 0.000 | Sin datos |
+| 12892 | `edge2-02-trend-pullback-mtf-us100-h4` | US100 | H4 | 1 | 10.0 | 5.871 | 3.540 | Sin datos | folds insuficientes (1 < 3) | 0.000 | Sin datos |
+| 12911 | `edge2-02-trend-pullback-mtf-us100-h4` | US100 | H4 | 1 | 10.0 | 5.871 | 3.540 | Sin datos | folds insuficientes (1 < 3) | 0.000 | Sin datos |
+| 12992 | `edge2-02-trend-pullback-mtf-us100-h4` | US100 | H4 | 1 | 10.0 | 5.871 | 3.540 | Sin datos | folds insuficientes (1 < 3) | 0.000 | Sin datos |
+| 13484 | `edge2-03-vol-squeeze-breako-us100-h4` | US100 | H4 | 1 | 32.0 | 0.407 | 0.389 | Sin datos | folds insuficientes (1 < 3) | 0.000 | Sin datos |
+| 14046 | `edge2-05-trend-pullback-mtf-us100-h1` | US100 | H1 | 5 | 82.0 | -1.181 | -0.840 | fallido | stitched -0.840 <= 0.00 | 0.000 | Sin datos |
+| 14325 | `edge2-05-trend-pullback-mtf-us100-h1` | US100 | H1 | 5 | 82.0 | -1.181 | -0.840 | fallido | stitched -0.840 <= 0.00 | 0.000 | Sin datos |
+| 14736 | `edge2-06-vol-squeeze-breako-us100-h1` | US100 | H1 | 5 | 12.0 | 0.694 | 0.647 | fallido | estabilidad 0.000 < 0,300 | 0.028 | Sin datos |
+| 15371 | `edge2-08-trend-pullback-mtf-us500-h4` | US500 | H4 | 1 | 4.0 | 0.972 | 1.334 | Sin datos | folds insuficientes (1 < 3) | 0.000 | Sin datos |
+| 15631 | `edge2-08-trend-pullback-mtf-us500-h4` | US500 | H4 | 1 | 4.0 | 0.972 | 1.334 | Sin datos | folds insuficientes (1 < 3) | 0.000 | Sin datos |
+| 16545 | `edge2-11-trend-pullback-mtf-us500-h1` | US500 | H1 | 5 | 13.0 | -1.971 | -2.406 | fallido | stitched -2.406 <= 0.00 | 0.000 | Sin datos |
+
+### Las 4 puertas
+
+Gate 1 y Gate 3 salen de la tabla ya calculada; PBO, ruido y ejecución no se recalculan. Gate 2 exige además WF-TF `ok` (eficiencia ≥ 0,3, `stitched_sharpe` > 0, ≥ 3 pliegues y el resto del veredicto).
+
+| Estrategia | Campaña | TF | Gate 1 | PBO | Ruido | Ejec | WF-TF | Gate 2 | Gate 3 | Puerta 4 | 4 puertas |
+|---:|---|---|---:|---:|---:|---:|---|---|---|---|---|
+| 12719 | `edge2-02-trend-pullback-mtf-us100-h4` | H4 | si | 0.526 | 0.708 | 0.959 | no | no | si | no | NO |
+| 12864 | `edge2-02-trend-pullback-mtf-us100-h4` | H4 | si | 0.526 | 0.401 | 0.934 | no | no | si | no | NO |
+| 12892 | `edge2-02-trend-pullback-mtf-us100-h4` | H4 | si | 0.526 | 0.727 | 0.969 | no | no | si | no | NO |
+| 12911 | `edge2-02-trend-pullback-mtf-us100-h4` | H4 | si | 0.526 | 0.268 | 0.845 | no | no | si | no | NO |
+| 12992 | `edge2-02-trend-pullback-mtf-us100-h4` | H4 | si | 0.526 | 0.755 | 0.991 | no | no | si | no | NO |
+| 13484 | `edge2-03-vol-squeeze-breako-us100-h4` | H4 | si | 0.863 | 0.576 | 0.930 | no | no | si | no | NO |
+| 14046 | `edge2-05-trend-pullback-mtf-us100-h1` | H1 | si | 0.499 | 0.808 | 0.929 | no | no | si | no | NO |
+| 14325 | `edge2-05-trend-pullback-mtf-us100-h1` | H1 | si | 0.499 | 0.986 | 0.947 | no | no | si | no | NO |
+| 14736 | `edge2-06-vol-squeeze-breako-us100-h1` | H1 | si | 0.543 | 0.617 | 0.830 | no | no | si | no | NO |
+| 15371 | `edge2-08-trend-pullback-mtf-us500-h4` | H4 | si | 0.314 | 0.923 | 0.966 | no | no | si | no | NO |
+| 15631 | `edge2-08-trend-pullback-mtf-us500-h4` | H4 | si | 0.314 | -0.721 | 0.544 | no | no | si | no | NO |
+| 16545 | `edge2-11-trend-pullback-mtf-us500-h1` | H1 | si | 0.560 | 0.972 | 0.798 | no | no | si | no | NO |
+
+### Puerta 4 — grupos de correlación
+
+- Sin candidatos que pasen las puertas 1 a 3 con WF-TF: no hay grupos de correlación.
+
+<!-- WF-TF:EDGE-2:END -->

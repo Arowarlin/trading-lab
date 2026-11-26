@@ -109,3 +109,28 @@ def test_matriz_diaria_ordenada() -> None:
     expected = pd.bdate_range(frame.index.min(), frame.index.max())
     assert frame.index.equals(expected)
     assert not frame.isna().any().any()
+
+
+def test_fallback_de_slippage_idempotente(monkeypatch) -> None:
+    from tradinglab.discovery import perturb
+    from tradinglab.propfund import costs as profile_module
+
+    monkeypatch.setattr(profile_module, "load_profile", profile_module.load_profile)
+    monkeypatch.setattr(perturb, "load_profile", profile_module.load_profile)
+    wf_tf_eval.install_assumed_slippage()
+    first = profile_module.load_profile
+    assert getattr(first, "_wf_tf_assumed_slippage", False)
+    wf_tf_eval.install_assumed_slippage()
+    assert profile_module.load_profile is first
+
+
+def test_etiqueta_wf_antigua() -> None:
+    import wf_tf_report
+
+    assert wf_tf_report._old_wf_label({}) == "Sin datos"
+    assert wf_tf_report._old_wf_label({"wf_label": None}) == "informativo"
+    assert wf_tf_report._old_wf_label({"wf_label": ""}) == "Sin datos"
+    assert (
+        wf_tf_report._old_wf_label({"wf_label": "WF no informativo"})
+        == "WF no informativo"
+    )
