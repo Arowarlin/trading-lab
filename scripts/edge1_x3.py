@@ -56,7 +56,22 @@ def _ensure_robustness(strategy_id: int) -> dict:
             "pbo": _validation(strategy_id, "pbo"),
             "wf": _validation(strategy_id, "wf"),
         }
-    return robustness.run(strategy_id)
+    try:
+        return robustness.run(strategy_id)
+    except KeyError as exc:
+        # Bug de plateau en optimizer._parameters para AST con `n` implicito.
+        # No forma parte de las 4 puertas; se omite el plateau y se conserva el resto.
+        from tradinglab.discovery import optimizer
+
+        original = optimizer.plateau
+        optimizer.plateau = lambda *args, **kwargs: {
+            "status": "Sin datos",
+            "reason": f"plateau omitido: {type(exc).__name__}: {exc}",
+        }
+        try:
+            return robustness.run(strategy_id)
+        finally:
+            optimizer.plateau = original
 
 
 def _ensure_perturb(strategy_id: int, campaign: dict) -> dict:
@@ -71,7 +86,7 @@ def _ensure_perturb(strategy_id: int, campaign: dict) -> dict:
         }
     config = load_engine_config().perturb
     frame, campaign, setup, cost = perturb.load_campaign_inputs(
-        str(campaign["campaign_id"])
+        str(campaign.get("campaign_id") or campaign["id"])
     )
     from tradinglab.discovery import dsl
 
@@ -203,6 +218,35 @@ def main() -> None:
         print(f"[X3] {strategy_id} {strategy['campaign_id']}", flush=True)
         metrics = _evaluation(strategy_id, "fitness_is") or {}
         gate1, gate1_detail = _gate1(dict(strategy), campaign, metrics)
+        if not gate1:
+            results.append(
+                {
+                    "strategy_id": strategy_id,
+                    "campaign_id": str(strategy["campaign_id"]),
+                    "template": campaign.get("template"),
+                    "instrument": str(strategy["instrument"]),
+                    "timeframe": str(strategy["timeframe"]),
+                    "status": str(strategy["status"]),
+                    "level": int(strategy["level"] or 0),
+                    "gate1": False,
+                    "gate1_detail": gate1_detail,
+                    "gate2": False,
+                    "gate3": False,
+                    "x3_pass": False,
+                    "wf_efficiency": None,
+                    "pbo": None,
+                    "noise_ratio": None,
+                    "exec_ratio": None,
+                    "delay_ratio": None,
+                    "spread_p75_expectancy_r": None,
+                    "slippage_plus_2_expectancy_r": None,
+                    "oos1_expectancy_r": None,
+                    "oos1_trades": 0,
+                    "mde_oos1": None,
+                    "skipped": "gate1",
+                }
+            )
+            continue
         robustness_result = _ensure_robustness(strategy_id)
         perturb_result = _ensure_perturb(strategy_id, campaign)
         levels.evaluate(strategy_id)
