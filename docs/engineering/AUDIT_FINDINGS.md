@@ -134,3 +134,23 @@ dice nada de 0,05-0,15 R.**
   de finalistas por OOS-1 sin n mínimo) y de por qué el OOS-1 no puede ser el juez.
 - Con spreads irrealmente bajos (0,3/0,5 bps) la media de los candidatos salía +0,006 R: el test depende
   del nivel de coste y su margen es moderado. Se deja con valores realistas, no ajustados para que pase.
+
+## 9. EDGE-1 y EDGE-2 con puertas v3 (informe L4, `WORKER_REPORTS/V3-gate2.md`)
+
+Puerta 2 recalculada sobre una copia de discovery.db (sin campañas, sin contador, sin OOS-2).
+
+- **38 de 39 campañas no pasan con v3.** En FX y oro (14-101 pliegues, 200 estrategias de la población),
+  el `stitched_sharpe` de "elegir la mejor del pasado" es **negativo** en casi todas. A diferencia del
+  rechazo de v2, este es **informativo**: con esas plantillas, la selección no funciona fuera de muestra.
+- **PBO bajo con WF negativo** (p. ej. `edge1-10` PBO 0,03; `edge1-14` 0,00; `edge1-17` 0,00): el orden
+  relativo se mantiene, pero **todas pierden después de costes**. El problema es el nivel, no el
+  sobreajuste.
+- **Única que pasa: `edge2-04-st-reversal-idx-us100-h1`** (PBO 0,241; WF eficiencia 0,608, `stitched`
+  1,611; **5 pliegues**). Cautelas: no dejó finalistas en EDGE-2; 1 de 39 es compatible con el azar de
+  la puerta; su OOS coincide con el periodo de diseño del EA (contaminación declarada). **No es
+  evidencia de ventaja**; como mucho, una hipótesis para un prerregistro nuevo con forward.
+- **EDGE-2 H4: 1 pliegue** en todas (H4 de índices desde 2019): sin información con v2 ni con v3.
+
+**Veredicto:** con herramientas corregidas, las plantillas de EDGE-1 (FX/oro, M15-H4) no muestran una
+ventaja seleccionable después de costes. Para seguir, hacen falta hipótesis nuevas con más operaciones
+o cestas (STATS_REDESIGN §4, EDGE_RESEARCH_PLAN), no más barridos de estas plantillas.
