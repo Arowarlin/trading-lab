@@ -1,0 +1,4 @@
+2026-11-26 14:04:46Z edge2-01-donchian-vol-h4-us100-h4 status=done eval=434 eff=22 finalists=0 console=si elapsed=383.7s
+2026-11-26 14:11:28Z edge2-02-trend-pullback-mtf-us100-h4 status=done eval=435 eff=53 finalists=5 console=si elapsed=402.1s
+2026-11-26 14:18:12Z edge2-03-vol-squeeze-breako-us100-h4 status=done eval=432 eff=39 finalists=1 console=si elapsed=403.9s
+2026-11-26 14:24:53Z edge2-04-st-reversal-idx-us100-h1 status=done eval=440 eff=30 finalists=0 console=si elapsed=401.4s
