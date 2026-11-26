@@ -197,7 +197,7 @@ def test_sesion_que_cruza_medianoche() -> None:
 
 def test_plantillas_cargan_y_validan() -> None:
     paths = sorted(TEMPLATES.glob("*.yaml"))
-    assert len(paths) == 18
+    assert len(paths) == 19
     names = set()
     for path in paths:
         payload = yaml.safe_load(path.read_text(encoding="utf-8"))
@@ -222,6 +222,7 @@ def test_plantillas_cargan_y_validan() -> None:
         "trend_pullback_mtf",
         "vol_squeeze_breakout",
         "h1_sma50_session_long",
+        "h1_sma50_session_long_v2",
     }
 
 

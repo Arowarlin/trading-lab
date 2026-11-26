@@ -1,0 +1,62 @@
+name: h1_sma50_session_long_v2
+symmetric: false
+timeframes: [H1]
+valid_timeframes: [H1]
+description: >
+  Largo intradía en US100 H1 cuando el cierre D1 está por encima de su SMA(50).
+  Entrada en la vela H1 siguiente a la señal de las 09:00 NY; salida por tiempo
+  a las 15:00 NY. Sin overnight: nights == 0 y no hay swap.
+hypothesis: >
+  v2 (no_overnight): misma hipótesis que v1, con cierre en la última vela
+  disponible de la sesión para cubrir festivos y cierres tempranos de NYSE.
+  En un régimen alcista diario, la sesión de Nueva York continúa al alza porque
+  el flujo institucional y los rebalanceos se alinean con la tendencia. La
+  prima intradía debe superar el coste de ida y vuelta (cost_r <= 0.10) sin
+  depender del swap, porque la posición se cierra antes de la noche.
+invalidation: >
+  Se invalida si, con cobertura continua 2019-2026, la expectativa neta no es
+  positiva, si el coste mediano supera 0.10 R o si el filtro D1 deja menos de
+  40 operaciones en IS.
+parameter_space:
+  stop_mult: [2.0]
+grid:
+  dimensions:
+    - name: stop_mult
+      kind: path
+      path: exit.stop.mult
+      values: [2.0]
+strategy:
+  dsl_version: "1"
+  instrument: US100
+  market: cfd
+  timeframe: H1
+  warmup_minutes: 129600
+  session:
+    start: "09:00"
+    end: "10:00"
+    flat_at: "15:00"
+    flat_mode: no_overnight
+    or_minutes: 15
+  long_entry:
+    kind: and
+    args:
+      - kind: htf
+        tf: D1
+        expr:
+          kind: gt
+          left: {kind: price, price: close}
+          right: {kind: indicator, ind: sma, src: close, n: 50}
+      - kind: time_between
+        start: "09:00"
+        end: "09:05"
+  short_entry: null
+  exit:
+    stop: {type: atr, mult: 2.0, n: 14}
+    target: {type: rr, rr: 2.0}
+    time_exit_minutes: 360
+    opposite_signal: false
+  sizing:
+    risk_per_trade_r: 1.0
+  limits:
+    max_trades_per_day: 1
+    cooldown_minutes: 0

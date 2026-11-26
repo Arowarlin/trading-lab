@@ -424,9 +424,10 @@ def _mirror_flat_at(bars: pd.DataFrame, index: int, constants: dict) -> bool:
         "intraday_momentum_close_v3",
         "session_breakout_htf_v3",
         "st_reversal_idx_v3",
+        "h1_sma50_session_long_v2",
     ],
 )
-def test_plantillas_v3_usan_no_overnight(name: str) -> None:
+def test_plantillas_nuevas_usan_no_overnight(name: str) -> None:
     payload = yaml.safe_load(
         (TEMPLATES / f"{name}.yaml").read_text(encoding="utf-8")
     ) or {}
@@ -438,6 +439,7 @@ def test_plantillas_v3_usan_no_overnight(name: str) -> None:
         "intraday_momentum_close_v3": "intraday_momentum_close_v2",
         "session_breakout_htf_v3": "session_breakout_htf",
         "st_reversal_idx_v3": "st_reversal_idx",
+        "h1_sma50_session_long_v2": "h1_sma50_session_long",
     }[name]
     old = yaml.safe_load(
         (TEMPLATES / f"{previous}.yaml").read_text(encoding="utf-8")
