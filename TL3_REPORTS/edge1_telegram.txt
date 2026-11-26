@@ -1,0 +1,11 @@
+﻿Hecho: EDGE-1 X0-X8 cerrado y tag `edge1` creado.
+
+1. 28 campanas de la pasada 1, 12.320 pruebas registradas; 22 finalistas.
+2. X3: 0 finalistas pasan las 4 puertas (WF eficiencia <0,3 y PBO >0,30 en todos).
+3. X4: sin pasada 2. X5: 0 confirmadas, OOS-2 no leido. X6: 0 EAs exportados.
+4. count_tests: 1.926 -> 12.694.
+5. EDGE-2 Y0-Y1 hechos: 18 campanas congeladas, 7.920 pruebas; Y2 NO iniciado.
+
+Aviso: US100 aceptado con la cota enmendada de swap (6,24 bps/noche); H1/H4 empiezan 2019-01-02 por huecos reales de 2018; US30 fuera por spread Sin datos; `intraday_momentum_close_v2` excluida por Y1.1; `lab doctor` avisa de frescura de datos. Sin produccion, sin ordenes, sin push.
+
+Siguiente: operador revisa; EDGE-2 Y2 lo lanza otra sesion.
