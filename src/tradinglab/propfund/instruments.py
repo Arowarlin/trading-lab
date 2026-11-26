@@ -24,6 +24,10 @@ from .models import CfdCategory, FuturesCategory, Market
 ACCEPTED_SOURCE_FUTURES = "CME Group · especificaciones de contrato (catálogo tradinglab.instruments)"
 
 
+class InstrumentPointError(ValueError):
+    """El instrumento no declara un ``point`` utilizable."""
+
+
 @dataclass(frozen=True)
 class CanonicalInstrument:
     id: str
@@ -39,6 +43,8 @@ class CanonicalInstrument:
     exchange: str | None = None
     # CFD: tamaño de contrato si el catálogo existente lo tiene; si no, None.
     contract_size: float | None = None
+    # Unidad de precio del bróker (no el tick del feed Dukascopy). None = Sin datos.
+    point: float | None = None
     spec_source: str = ""
     currencies: tuple[str, ...] = field(default=())
 
@@ -55,16 +61,19 @@ class CanonicalInstrument:
             "tick_value": self.tick_value,
             "exchange": self.exchange,
             "contract_size": self.contract_size,
+            "point": self.point,
             "spec_source": self.spec_source or "Sin datos: leer del bróker (MT5 symbol_info)",
         }
 
 
 def _fx(pair: str, *aliases: str) -> CanonicalInstrument:
-    contract = None
+    spec = None
     try:
-        contract = get_instrument(pair).contract_size
+        spec = get_instrument(pair)
     except InstrumentError:
-        contract = None
+        spec = None
+    contract = spec.contract_size if spec is not None else None
+    point = float(spec.tick_size) if spec is not None else None
     return CanonicalInstrument(
         id=pair,
         market=Market.CFD,
@@ -73,12 +82,15 @@ def _fx(pair: str, *aliases: str) -> CanonicalInstrument:
         description=f"Forex {pair[:3]}/{pair[3:]}",
         aliases=(pair, *aliases),
         contract_size=contract,
+        point=point,
         spec_source="catálogo tradinglab.instruments; confirmar con MT5" if contract else "",
         currencies=(pair[:3], pair[3:]),
     )
 
 
-def _cfd_index(cid: str, underlying: str, desc: str, *aliases: str) -> CanonicalInstrument:
+def _cfd_index(
+    cid: str, underlying: str, desc: str, *aliases: str, point: float
+) -> CanonicalInstrument:
     return CanonicalInstrument(
         id=cid,
         market=Market.CFD,
@@ -86,6 +98,7 @@ def _cfd_index(cid: str, underlying: str, desc: str, *aliases: str) -> Canonical
         underlying=underlying,
         description=desc,
         aliases=(cid, *aliases),
+        point=point,
     )
 
 
@@ -106,6 +119,7 @@ def _future(sym: str, underlying: str, desc: str, category: FuturesCategory, exc
         tick_size=tick,
         tick_value=tick_value,
         exchange=exchange,
+        point=tick,
         spec_source=ACCEPTED_SOURCE_FUTURES,
     )
 
@@ -115,24 +129,26 @@ _CATALOG: list[CanonicalInstrument] = [
     _fx("EURUSD"), _fx("GBPUSD"), _fx("USDJPY"), _fx("AUDUSD"), _fx("USDCAD"),
     _fx("USDCHF"), _fx("NZDUSD"), _fx("EURJPY"), _fx("GBPJPY"),
     # --- CFD Índices
-    _cfd_index("US100", "NASDAQ100", "Nasdaq 100 CFD", "US100.cash", "NAS100", "USTEC", "NDX100", "NAS100.cash"),
-    _cfd_index("US500", "SP500", "S&P 500 CFD", "US500.cash", "SPX500", "SP500", "US500"),
-    _cfd_index("US30", "DOW30", "Dow Jones 30 CFD", "US30.cash", "DJ30", "WS30", "DOW30"),
-    _cfd_index("US2000", "RUSSELL2000", "Russell 2000 CFD", "US2000.cash", "RUSSELL2000", "US2000"),
-    _cfd_index("GER40", "DAX40", "DAX 40 CFD", "GER40.cash", "DAX40", "DE40", "GER30"),
-    _cfd_index("UK100", "FTSE100", "FTSE 100 CFD", "UK100.cash", "FTSE100"),
-    _cfd_index("JP225", "NIKKEI225", "Nikkei 225 CFD", "JP225.cash", "JPN225", "NIKKEI225"),
+    _cfd_index("US100", "NASDAQ100", "Nasdaq 100 CFD", "US100.cash", "NAS100", "USTEC", "NDX100", "NAS100.cash", point=0.01),
+    _cfd_index("US500", "SP500", "S&P 500 CFD", "US500.cash", "SPX500", "SP500", "US500", point=0.01),
+    _cfd_index("US30", "DOW30", "Dow Jones 30 CFD", "US30.cash", "DJ30", "WS30", "DOW30", point=0.01),
+    _cfd_index("US2000", "RUSSELL2000", "Russell 2000 CFD", "US2000.cash", "RUSSELL2000", "US2000", point=0.01),
+    _cfd_index("GER40", "DAX40", "DAX 40 CFD", "GER40.cash", "DAX40", "DE40", "GER30", point=0.01),
+    _cfd_index("UK100", "FTSE100", "FTSE 100 CFD", "UK100.cash", "FTSE100", point=0.01),
+    _cfd_index("JP225", "NIKKEI225", "Nikkei 225 CFD", "JP225.cash", "JPN225", "NIKKEI225", point=0.01),
     # --- CFD Metales
     CanonicalInstrument(
         id="XAUUSD", market=Market.CFD, category=CfdCategory.METAL.value, underlying="GOLD",
         description="Oro spot CFD", aliases=("XAUUSD", "GOLD", "XAUUSD.a"),
         contract_size=get_instrument("XAUUSD").contract_size,
+        point=float(get_instrument("XAUUSD").tick_size),
         spec_source="catálogo tradinglab.instruments; confirmar con MT5", currencies=("XAU", "USD"),
     ),
     CanonicalInstrument(
         id="XAGUSD", market=Market.CFD, category=CfdCategory.METAL.value, underlying="SILVER",
         description="Plata spot CFD", aliases=("XAGUSD", "SILVER"),
         contract_size=get_instrument("XAGUSD").contract_size,
+        point=float(get_instrument("XAGUSD").tick_size),
         spec_source="catálogo tradinglab.instruments; confirmar con MT5", currencies=("XAG", "USD"),
     ),
     # --- Futuros índices (CME / CBOT)
@@ -176,6 +192,29 @@ def resolve(symbol: str) -> CanonicalInstrument:
             if rest and rest[0] in "FGHJKMNQUVXZ" and rest[1:].isdigit():
                 return item
     raise KeyError(f"{symbol}: fuera del universo Prop Fund (CFD Forex/Índices/Metales o Futures)")
+
+
+def point_size(symbol: str) -> float:
+    """Unidad de precio (``point``) declarada por el instrumento.
+
+    No hay valor por defecto: si el instrumento no la declara, se lanza
+    ``InstrumentPointError("Sin datos: point")`` para no inventar 0,01.
+    """
+
+    try:
+        item = resolve(symbol)
+    except KeyError as exc:
+        raise InstrumentPointError(f"Sin datos: point ({symbol})") from exc
+    value = item.point
+    if value is None:
+        raise InstrumentPointError(f"Sin datos: point ({item.id})")
+    try:
+        number = float(value)
+    except (TypeError, ValueError) as exc:  # pragma: no cover - catálogo corrupto
+        raise InstrumentPointError(f"Sin datos: point ({item.id})") from exc
+    if not (number > 0.0):
+        raise InstrumentPointError(f"Sin datos: point ({item.id})")
+    return number
 
 
 def is_in_universe(symbol: str) -> bool:
@@ -238,9 +277,11 @@ __all__ = [
     "CATALOG",
     "CanonicalInstrument",
     "EXCLUDED_ASSET_CLASSES",
+    "InstrumentPointError",
     "is_in_universe",
     "micro_equivalent",
     "notional_usd",
+    "point_size",
     "resolve",
     "same_underlying",
     "universe",

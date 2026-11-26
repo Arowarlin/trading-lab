@@ -593,7 +593,7 @@ def test_metrics_summary() -> None:
         SimpleNamespace(r_net=2.0, risk_price=1.0),
     ]
     daily = pd.Series([1.0, -0.5, 2.0], index=pd.date_range("2024-01-10", periods=3))
-    metrics = summarize(trades, daily)
+    metrics = summarize(trades, daily, point=0.01)
     assert metrics["trades"] == 3
     assert metrics["expectancy_r"] == pytest.approx(2.5 / 3.0)
     assert metrics["profit_factor"] == pytest.approx(6.0)

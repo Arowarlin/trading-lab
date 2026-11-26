@@ -122,7 +122,7 @@ def test_apply_result_guarda_neto_de_ambas_y_la_mas_barata() -> None:
         metrics={},
     )
     _applied, metrics = costs.apply_result(
-        book, result, session_tz="UTC", max_cost_r=0.10
+        book, result, session_tz="UTC", point=0.01, max_cost_r=0.10
     )
     assert metrics["cost_by_account"]["A"] == pytest.approx(0.20)
     assert metrics["cost_by_account"]["B"] == pytest.approx(0.02)

@@ -35,6 +35,7 @@ import yaml
 
 from ..config import ROOT
 from ..db import connect
+from ..propfund.instruments import InstrumentPointError, point_size
 from . import __version__, databank, genetic, grid, snapshots
 from .config import load_engine_config
 from .data_quality import check_dataset, dataset_hash
@@ -296,6 +297,10 @@ def register(
     if not instrument:
         raise CampaignError("instrument es obligatorio")
     try:
+        instrument_point = point_size(instrument)
+    except (KeyError, InstrumentPointError) as exc:
+        raise CampaignError(f"Sin datos: point ({instrument})") from exc
+    try:
         timeframe = normalize_timeframe(timeframe)
         data_source = normalize_source(data_source)
     except (TimeframeError, DataSourceError) as exc:
@@ -436,7 +441,7 @@ def register(
             },
         },
         "session": session,
-        "point": 0.01,
+        "point": instrument_point,
         "limits": {
             "weekdays": [0, 1, 2, 3, 4],
             "stop_n": 14,

@@ -1211,7 +1211,7 @@ def _base_viability(
         prepared=prepared,
         collect_metrics=False,
     )
-    applied = book.apply(result.trades, session_tz=limits.session_tz, point=0.01)
+    applied = book.apply(result.trades, session_tz=limits.session_tz, point=setup.point)
     cost_r = _trade_cost_r(applied.trades)
     screening = template_cost_r(
         account.id,

@@ -26,6 +26,7 @@ import numpy as np
 import pandas as pd
 import yaml
 
+from ..propfund.instruments import point_size
 from ..propfund.registry import load_registry
 from . import (
     __version__,
@@ -55,6 +56,22 @@ class BasketError(ValueError):
 def _symbols_from(data: dict[str, Any]) -> list[Any]:
     raw = data.get("family_symbols") or data.get("basket")
     return raw if isinstance(raw, list) else []
+
+
+def _basket_point(symbols: list[str]) -> float:
+    """Punto común de la cesta; sin especificación no se asume 0,01."""
+
+    try:
+        values = {str(symbol): point_size(str(symbol)) for symbol in symbols}
+    except (KeyError, ValueError) as exc:
+        raise BasketError("Sin datos: point") from exc
+    unique = set(values.values())
+    if len(unique) != 1:
+        raise BasketError(
+            "Sin datos: point único para la cesta "
+            f"({', '.join(f'{k}={v:g}' for k, v in values.items())})"
+        )
+    return float(next(iter(unique)))
 
 
 def is_basket_spec(path: str | Path) -> bool:
@@ -416,7 +433,7 @@ def _fold_rows(
     calendar: pd.DatetimeIndex,
     folds: int,
     *,
-    point: float = 0.01,
+    point: float,
 ) -> list[dict[str, Any]]:
     config = load_engine_config()
     rows: list[dict[str, Any]] = []
@@ -483,7 +500,7 @@ def _basket_metrics(
     config = load_engine_config()
     validation = config.validation.for_timeframe(campaign_or_spec["timeframe"])
     folds = int(validation.folds)
-    point = float(campaign_or_spec.get("point", 0.01))
+    point = float(campaign_or_spec["point"])
     calendar = _calendar(frames)
     fold_rows = _fold_rows(trades, calendar, folds, point=point)
     fold_expectancy = [row["expectancy_r"] for row in fold_rows]
@@ -806,7 +823,7 @@ def register(
             },
         },
         "session": session,
-        "point": 0.01,
+        "point": _basket_point(symbols),
         "limits": {"weekdays": [0, 1, 2, 3, 4], "stop_n": 14, "trail_n": 14},
         "quality": {
             "status": quality_status,
@@ -921,7 +938,7 @@ def _campaign_spec(campaign: dict[str, Any]) -> dict[str, Any]:
         "cost": basket.get("cost") or {},
         "snapshots": basket.get("snapshots") or {},
         "session": config.get("session"),
-        "point": float(config.get("point", 0.01)),
+        "point": _basket_point(symbols),
     }
 
 

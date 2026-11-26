@@ -32,6 +32,7 @@ import pandas as pd
 
 from ..db import connect
 from ..propfund.costs import load_profile
+from ..propfund.instruments import point_size
 from . import campaigns, databank, dsl, fastbt
 from .compiler import compile as compile_strategy
 from .config import load_engine_config
@@ -78,7 +79,7 @@ class QueueSetup:
     trail_n: int = 14
     template: str | None = None
     seed: int = 0
-    point: float = 0.01
+    point: float | None = None
     data_source: str = "broker"
     cache_limit_bytes: int = 0
     campaign_id: str = ""
@@ -86,6 +87,16 @@ class QueueSetup:
     drift_percentile_min: float = 0.0
     approved: bool = False
     bars: pd.DataFrame | None = None  # solo tests/benchmark sintéticos
+
+    def __post_init__(self) -> None:
+        """``point`` siempre sale de la especificación del instrumento.
+
+        Se ignora cualquier valor guardado (campañas antiguas con 0,01): el
+        punto no es configurable. Si el instrumento no lo declara, falla con
+        ``Sin datos: point`` en vez de asumir 0,01.
+        """
+
+        object.__setattr__(self, "point", point_size(self.instrument))
 
     def as_dict(self, *, include_bars: bool = False) -> dict[str, Any]:
         data = {item.name: getattr(self, item.name) for item in fields(self)}
@@ -146,7 +157,6 @@ class QueueSetup:
             trail_n=int(limits.get("trail_n", 14)),
             template=campaign.get("template") or config.get("template"),
             seed=int(config.get("seed", 0)),
-            point=float(config.get("point", 0.01)),
             data_source=str(config.get("data_source") or "broker"),
             cache_limit_bytes=int(config.get("cache_limit_bytes", 0)),
             campaign_id=str(campaign.get("id") or ""),

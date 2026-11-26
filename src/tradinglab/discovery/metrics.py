@@ -93,13 +93,18 @@ def concentration(trades: Iterable[Any]) -> float | None:
     return float(positive.max() / positive.sum())
 
 
-def cost_sensitivity(trades: Iterable[Any], point: float = 0.01) -> tuple[float | None, float | None]:
+def cost_sensitivity(
+    trades: Iterable[Any], point: float | None = None
+) -> tuple[float | None, float | None]:
     """Expectativa con +1 punto por lado y su caída frente a la base.
 
     Un "punto" es una unidad de precio (p. ej. 0.01 en US100). El coste extra
-    se convierte a R con la distancia de stop de cada operación.
+    se convierte a R con la distancia de stop de cada operación. Sin ``point``
+    explícito no se calcula: nunca se asume 0,01.
     """
 
+    if point is None:
+        return None, None
     values = _net_rs(trades)
     if not values:
         return None, None
@@ -120,7 +125,11 @@ def cost_sensitivity(trades: Iterable[Any], point: float = 0.01) -> tuple[float 
     return plus, plus - base
 
 
-def summarize(trades: Iterable[Any], daily_r: pd.Series | None, point: float = 0.01) -> dict[str, Any]:
+def summarize(
+    trades: Iterable[Any],
+    daily_r: pd.Series | None,
+    point: float | None = None,
+) -> dict[str, Any]:
     trades = list(trades)
     values = np.asarray(_net_rs(trades), dtype=float)
     gross = np.asarray(_gross_rs(trades), dtype=float)

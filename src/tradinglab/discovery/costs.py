@@ -495,8 +495,10 @@ class CostBook:
         trades: Iterable[fastbt.Trade],
         *,
         session_tz: str | None = None,
-        point: float = 0.01,
+        point: float | None = None,
     ) -> CostApplication:
+        """Aplica coste por operación. ``point`` se conserva por compatibilidad
+        y no se usa aquí; el slippage del escenario vive en ``retester``."""
         if self._panels is None:
             raise ValueError("CostBook.apply necesita panel(bars) antes")
         tz = str(session_tz or self.session_tz)
@@ -733,7 +735,7 @@ def apply_result(
     result: fastbt.FastResult,
     *,
     session_tz: str,
-    point: float = 0.01,
+    point: float,
     max_cost_r: float | None = None,
 ) -> tuple[CostApplication, dict[str, Any]]:
     """Aplica el coste del modo y devuelve métricas con metadatos."""

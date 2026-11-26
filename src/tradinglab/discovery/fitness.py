@@ -165,7 +165,7 @@ def evaluate(
             cost_book,
             full,
             session_tz=base_limits.session_tz,
-            point=float(getattr(setup, "point", 0.01)),
+            point=float(setup.point),
             max_cost_r=max_cost_r,
         )
         full_daily = applied.daily_r
@@ -209,7 +209,7 @@ def evaluate(
                 cost_book,
                 fold_result,
                 session_tz=fold_limits.session_tz,
-                point=float(getattr(setup, "point", 0.01)),
+                point=float(setup.point),
             )
             fold_rows.append(
                 _fold_row(fold_result, start, end, bars, metrics=fold_metrics)
@@ -238,7 +238,7 @@ def evaluate(
     )
     base_expectancy = full_metrics.get("expectancy_r")
     plus, _delta = metrics.cost_sensitivity(
-        trades, float(getattr(setup, "point", 0.01))
+        trades, float(setup.point)
     )
     cost_drop = (
         max(0.0, float(base_expectancy) - float(plus))

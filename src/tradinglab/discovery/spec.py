@@ -12,6 +12,10 @@ from typing import Any
 import pandas as pd
 import yaml
 
+from ..propfund.instruments import (
+    InstrumentPointError,
+    point_size,
+)
 from ..propfund.registry import load_registry
 from . import campaigns, genetic, grid
 from .config import load_engine_config
@@ -36,6 +40,23 @@ def load_spec(path: str | Path) -> dict[str, Any]:
     instrument = str(data.get("instrument") or "").strip().upper()
     if not instrument:
         raise SpecError("la especificación no declara instrument")
+    try:
+        instrument_point = point_size(instrument)
+    except (KeyError, InstrumentPointError) as exc:
+        raise SpecError(f"Sin datos: point ({instrument})") from exc
+    declared_point = data.get("point")
+    if declared_point is not None:
+        try:
+            declared = float(declared_point)
+        except (TypeError, ValueError) as exc:
+            raise SpecError(
+                f"point inválido: {declared_point!r}"
+            ) from exc
+        if abs(declared - instrument_point) > 1e-12:
+            raise SpecError(
+                f"point {declared:g} != especificación {instrument_point:g} "
+                f"de {instrument}"
+            )
     try:
         timeframe = normalize_timeframe(
             str(data.get("timeframe") or "M5")
@@ -160,7 +181,7 @@ def load_spec(path: str | Path) -> dict[str, Any]:
         "segments": segments,
         "cost": cost,
         "session": session,
-        "point": float(data.get("point", 0.01)),
+        "point": instrument_point,
         "limits": {
             "weekdays": [0, 1, 2, 3, 4],
             "stop_n": 14,
