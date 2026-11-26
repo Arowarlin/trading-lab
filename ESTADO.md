@@ -4,7 +4,7 @@
 > actualiza al cerrar cada cola. Las colas antiguas de `.orquestador/` son historia; la vigente es la
 > que aparece aquí.
 >
-> **Actualizado:** 2026-11-26 16:25 · `count_tests` **17.974** · EDGE-2 Y2-Y7 cerrados
+> **Actualizado:** 2026-11-26 17:26 · `count_tests` **17.974** · WF-TF cerrado (0/34)
 
 ## 1. Objetivo
 Encontrar una ventaja **real y neta de costes** y operarla en demo o en retos de prop firm (solo
@@ -133,4 +133,11 @@ OOS-2. count_tests pasó de 1.926 a 12.694. Tag edge1 al cerrar X8.
 Y3 falló por puerta 2: WF ≈0 y PBO >0,30 en los 12; la puerta 3 (spread p75 y slippage ×2) pasó en
 todos. Bloqueadas: `edge2-10`, `13`, `15`, `16`, `17` y `18` (US100 M15/M30 y US500 H1
 `st_reversal_idx`). `count_tests` pasó de 12.694 a **17.974**. Tag `edge2` al cerrar Y8.
+
+## 11. WF-TF (2026-11-26)
+
+- **0 de 34 finalistas** (22 EDGE-1 + 12 EDGE-2) pasan las 4 puertas con las ventanas por TF; sin
+  candidato a `confirm` y OOS-2 sin leer. `count_tests` 14.014 al empezar → 17.974 (solo por EDGE-2);
+  `ruff` limpio, pytest **2081 passed + 1 skipped** (31:53), `lab doctor` Frescura FAIL 1/17. Tag
+  `wf-tf-1`.
 
