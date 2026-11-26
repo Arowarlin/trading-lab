@@ -1,0 +1,7 @@
+Hecho: EDGE-2 cerrado (Y2-Y8), tag `edge2`. Plan Y1 sin Y1b (ROBUST-1 R5 confirmo que no cambiaba nada).
+
+1. Campanas: 12/18 `done` (5.280 pruebas). 6 bloqueadas en `approve` por feasibility <50 %: edge2-10, 13, 15, 16, 17 y 18 (US100 M15/M30 y US500 H1 st_reversal); siguen en `draft` y no suman.
+2. Finalistas: 12. **0 pasan Y3** (WF ~0 y PBO >0,30; la puerta 3 de costes si pasa). Y4 sin pasada 2; Y5 0 confirmadas (OOS-2 no leido); Y6 0 EAs.
+3. `count_tests` 12.694 -> 17.974. Diagnostico: H1/H4 empiezan 2019-01-02 (2018 tiene huecos reales); US30 fuera por spread Sin datos; US100 con swap 6,24 bps/noche pasa la cota enmendada 0,8-7,3.
+Aviso: CFD-006 (US500) no tiene slippage medido; campanas y Y3 usan el asumido 0,5 de `engine.yaml`; la consola muestra Sin datos en el perfil. Sin ordenes, sin push, sin `record-informal`; produccion, `engine.yaml` y `fastbt.py` intactos.
+Siguiente: EDGE-2 sin pendientes; el OOS-2 sigue sellado.

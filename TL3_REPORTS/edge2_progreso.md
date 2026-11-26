@@ -79,3 +79,11 @@ Las 6 no aprobadas siguen en `draft` y **no** cuentan en el DSR. Motivo literal 
 - `lab propfund verify`: exit 0; 4 OK.
 - `pytest -q`: en ejecucion (log `TL3_REPORTS/edge2_pytest.log`).
 - Pendiente: README/PLAN (lock `readme-plan` tomado), tag `edge2`, Telegram y liberar locks.
+
+## Y8 cierre
+
+- `pytest -q`: **2079 passed + 1 skipped** (31:39). `ruff check .` limpio. `lab doctor` exit 0 (Frescura WARN 0/17; Reglas fondeo WARN de entorno). `lab propfund verify` 4 OK.
+- README y PLAN actualizados bajo lock `readme-plan`; tag `edge2`.
+- Telegram enviado (`TL3_REPORTS/edge2_telegram.txt`).
+- `count_tests` 12.694 -> 17.974; OOS-2 no leido; sin ordenes, sin push y sin `record-informal`.
+- Produccion, `engine.yaml` y `fastbt.py` intactos. Locks liberados.
