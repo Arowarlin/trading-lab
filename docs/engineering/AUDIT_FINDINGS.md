@@ -101,3 +101,14 @@ dice nada de 0,05-0,15 R.**
 | 5 | ENG-C2: datos (C-01, C-02, C-04) | `data_quality.py`, `fetch_dukascopy.py`, `register` | C-02 y C-04 ya en rama; C-01 tras `edge2` |
 | 6 | Costes (B-02, B-03) | `levels.py`, `robustness.py`, `perturb.py` | Tras `edge2` |
 | 7 | Producción (B-04, C-07, B-14) | `propfund/costs.py`, `nyse_calendar.py`, `execution/mt5.py` | Cola de producción de AGENTS.md (baseline, tag `-pre`, CHANGELOG) |
+
+## 6. Cifras reales del equipo del operador (informes L, 2026-11-26)
+
+| Hallazgo | Resultado real | Fuente |
+|---|---|---|
+| **F0-08** | **1.210 alertas de test enviadas de verdad por ntfy** (`ok = 1`) entre el 2026-11-09 y el 2026-11-26 17:44 UTC; 130 intentos fallidos. Incluyen `missing_sl … BTCUSD` (crítica). Ritmo ≈ 16 ejecuciones al día: cada `pytest` que lanzan las sesiones de agentes. La tabla `data_freshness` tiene filas de test intercaladas con las reales (EURUSD M15 `last_bar` 2025-01-03 y 2025-03-14). El `learning_holdout` es el real (sellado el 2026-11-07): el `INSERT OR IGNORE` de los tests no lo pisó | `WORKER_REPORTS/L1a-alertas.md` |
+| **C-01** | US100 y US500: **650 y 655 huecos ≥ 4 h entre semana dentro del IS 2015-2019** de EDGE-2 M15/M30; casi todos nocturnos 16:00→02:00 NY (10 h), sobre todo en 2015-2017 (~200 al año). `data-check` los dio por buenos en M15/M30. Las campañas `edge2-13` a `edge2-18` (US100 M15/M30) se evaluaron sin la sesión nocturna en cientos de noches. FX: 7 huecos en el IS; XAUUSD: 44 | `WORKER_REPORTS/L1b-datos.md` |
+| **C-02** | Meses truncados reales: US100 y US500 **2013-02** (faltan del 25 al 28) y 2011-09 (inicio de la serie). Ninguno dentro de los IS de EDGE-1/EDGE-2. FX y oro: ninguno | `L1b-datos.md` |
+| **E-04** | 440 de las pruebas que faltan son `edge1-13-fix-reversal-xauusd-h1`, que quedó en `draft` (no cuenta). EDGE-1 suma 11.880, no 12.320. El resto de la diferencia con el +10.768 de ESTADO (1.112) **no se explica** con este dato: el 1.926 inicial pudo incluir otras fuentes. Sin impacto en el DSR (cuenta de más, no de menos) | `L1d-contador.md` |
+| **C1 (prep.)** | **La caché USDJPY no tiene ASK** en 2003-2022 (`ask_open` vacío en las 10.234 velas de la ventana). C1, tal como está prerregistrado (entrada al ASK), **no se puede ejecutar**: Sin datos. Festivos JP descargados (1955-2027, 1.067 fechas) | `L2-c1-prep.md` |
+| Estado | En el equipo del operador ya existen los tags `edge2` y `motor-flat`: EDGE-2 y MOTOR-FLAT están cerradas. **No** hay ningún `lab discovery run` vivo. Esos commits no están en `origin/master` | `L0-estado.md` |

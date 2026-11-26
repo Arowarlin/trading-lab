@@ -25,3 +25,6 @@
 - 2026-11-26 · Suite completa con F5: 43 failed / 2035 passed / 3 xfailed, mismo conjunto de fallos; `data/` sin `lab.db` ni `telegram_state.json` al terminar; sin AVISO.
 - 2026-11-26 · Con el lock nuevo (`uv sync --frozen --extra dev --extra discovery`), los 2 tests SPA de `test_discovery_family` pasan: CI esperado = 41 fallos, todos de entorno (F2a/F2b).
 - 2026-11-26 · ENG-C2b REVIEW: C-04 corregido en la rama (register exige cuentas futures con databento y cfd con el resto). F2b simplificado gracias a F5 (sigue BLOCKED hasta edge2: toca costs.py).
+- 2026-11-26 · L0, L1a, L1b, L1d y L2 COMPLETED en el equipo del operador (commit 9c32476). Cifras en AUDIT_FINDINGS §6.
+- 2026-11-26 · URGENTE: F0-08 real, 1.210 alertas de test enviadas por ntfy desde el 9-nov. La integración de F4/F5 pasa a prioridad 1.
+- 2026-11-26 · ENG-L3 (C1) BLOCKED por datos: la caché USDJPY no tiene ASK. Decisión del operador: descargar el ASK o enmendar el prerregistro antes de ver resultados.
