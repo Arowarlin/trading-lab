@@ -25,7 +25,9 @@ from tradinglab.lifecycle import (
     start_external_forward,
 )
 
-FROZEN_HASH = "f490642ba7a1f71b"
+# Hash normalizado a LF (ENG-1 F0-09). El anterior, f490642ba7a1f71b, es el
+# mismo contenido con CRLF en la copia del operador: ver tests/test_eng1_ea_hash.py.
+FROZEN_HASH = "71ee2cabe6aa9aef"
 
 
 def test_criterios_del_ea_congelados_con_hash():
