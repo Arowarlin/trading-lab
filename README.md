@@ -264,6 +264,9 @@ Los cierres están en `.orquestador/RESULTADO-*.md` y los informes en
 - `count_tests` **12.694 → 12.694** (sin cambios). Tags `robust-pre` y
   `robust-1`. **TCA v2 activa (tareas programadas); 0 filas v2 hasta el primer
   fill** (TL2-TCA y TCA2).
+- EDGE-2 (2026-11-26): 12/18 campanas `done` (6 bloqueadas por feasibility < 50 %), 12 finalistas,
+  **0 pasan Y3** (WF ≈0 y PBO >0,30; puerta 3 OK); Y4 sin pasada 2, Y5 0 confirmadas (OOS-2 no
+  leido), Y6 0 EAs. `count_tests` 12.694 → 17.974. Tag `edge2`.
 
 
 
