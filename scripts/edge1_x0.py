@@ -7,7 +7,6 @@ No registra campanas, no ejecuta backtests y no toca engine.yaml.
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -20,7 +19,6 @@ from tradinglab.discovery.fetch_dukascopy import load_cache
 from tradinglab.discovery.resample import resample_session
 from tradinglab.discovery.source_quality import missing_weekdays, quality_config
 from tradinglab.indicators import atr
-from tradinglab.propfund.costs import load_profile
 from tradinglab.propfund.instruments import resolve
 
 SYMBOLS = ["US100", "US500", "US30", "XAUUSD", "EURUSD", "GBPUSD", "USDJPY"]
@@ -186,8 +184,6 @@ def main() -> None:
             atr_values = atr(is_frame, 14) * stop_mult if len(is_frame) else pd.Series(dtype=float)
             median_atr = float(atr_values.median()) if len(atr_values.dropna()) else None
             median_price = float(is_frame["close"].median()) if len(is_frame) else None
-            cost = {"stop_mult": stop_mult, "median_atr_stop": median_atr,
-                    "median_price": median_price}
             for account in ACCOUNTS:
                 try:
                     account_cost = discovery_costs.build_account_cost(

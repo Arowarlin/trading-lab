@@ -16,12 +16,27 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-from tradinglab.discovery import campaigns, databank, engine
+from tradinglab.discovery import databank, engine
 
 ROOT = Path(__file__).resolve().parents[1]
 PLAN = ROOT / "TL3_REPORTS" / "edge1_plan.json"
 PROGRESS = ROOT / "TL3_REPORTS" / "edge1_progreso.md"
 LOG = ROOT / "TL3_REPORTS" / "edge1_pass1.log"
+
+
+def _approve(campaign_id: str) -> None:
+    """La aprobación solo entra por el CLI, con su flag explícito."""
+    subprocess.run(
+        [
+            str(ROOT / ".venv" / "Scripts" / "lab.exe"),
+            "discovery",
+            "approve",
+            campaign_id,
+            "--approved-by-operator",
+        ],
+        cwd=ROOT,
+        check=True,
+    )
 
 
 def _now() -> str:
@@ -75,7 +90,7 @@ def main() -> None:
             if current is None:
                 raise RuntimeError("campana no registrada")
             if current["status"] == "draft":
-                campaigns.approve(campaign_id)
+                _approve(campaign_id)
                 current = databank.get_campaign(campaign_id)
             if current["status"] in {"done", "rejected", "invalid"}:
                 status = str(current["status"])

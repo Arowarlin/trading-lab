@@ -23,6 +23,21 @@ def _now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%SZ")
 
 
+def _approve(campaign_id: str) -> None:
+    """La aprobación solo entra por el CLI, con su flag explícito."""
+    subprocess.run(
+        [
+            str(ROOT / ".venv" / "Scripts" / "lab.exe"),
+            "discovery",
+            "approve",
+            campaign_id,
+            "--approved-by-operator",
+        ],
+        cwd=ROOT,
+        check=True,
+    )
+
+
 def _append(path: Path, text: str) -> None:
     with path.open("a", encoding="utf-8") as handle:
         handle.write(text + "\n")
@@ -80,7 +95,7 @@ def main() -> None:
                 cost_mode=original["cost_mode"],
                 dry_run=False,
             )
-            campaigns.approve(new_id)
+            _approve(new_id)
             started = time.monotonic()
             engine.run_campaign(new_id, time_limit=45)
             current = databank.get_campaign(new_id)

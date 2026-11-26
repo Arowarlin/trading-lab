@@ -197,7 +197,7 @@ def test_sesion_que_cruza_medianoche() -> None:
 
 def test_plantillas_cargan_y_validan() -> None:
     paths = sorted(TEMPLATES.glob("*.yaml"))
-    assert len(paths) == 10
+    assert len(paths) == 14
     names = set()
     for path in paths:
         payload = yaml.safe_load(path.read_text(encoding="utf-8"))
@@ -214,6 +214,10 @@ def test_plantillas_cargan_y_validan() -> None:
         "d1_extension_reversion",
         "turn_of_month",
         "fix_reversal",
+        "london_breakout",
+        "st_reversal_idx",
+        "trend_pullback_mtf",
+        "vol_squeeze_breakout",
     }
 
 

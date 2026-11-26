@@ -1,4 +1,4 @@
-﻿"""EDGE-1 X3: robustez, perturbacion y costes de los finalistas de la pasada 1.
+"""EDGE-1 X3: robustez, perturbacion y costes de los finalistas de la pasada 1.
 
 Solo lee OOS-1/IS. No lee OOS-2. Escribe TL3_REPORTS/edge1_finalistas.md/.json.
 """
