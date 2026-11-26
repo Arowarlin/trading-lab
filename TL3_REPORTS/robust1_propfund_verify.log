@@ -1,0 +1,9 @@
+﻿OK ai_trader À 17 archivos À sin cambios À Carril IA discrecional ai_trader 
+(solo demo, cuenta ftmo_demo).
+OK ea_us100_ftmo1 À 18 archivos À sin cambios À EA externo us100-ftmo1 
+(US100.cash, magics 93010001/93020001).
+OK ftmo_forward À 8 archivos À sin cambios À Las dos estrategias forward fijas 
+del carril FTMO (eurusd-london-pullback-forward, usdjpy-tokyo-breakout-forward)
+y la incubaci¾n us100-trend-d1.
+OK ftmo_risk À 14 archivos À sin cambios À Reglas de fondeo, guard, defensa, 
+guardißn MT5 y stop diario de cuenta.

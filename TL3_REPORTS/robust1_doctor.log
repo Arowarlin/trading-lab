@@ -1,0 +1,59 @@
+﻿                            Diagn¾stico del entorno                            
++-----------------------------------------------------------------------------+
+| Componente        | Estado | Detalle                                        |
+|-------------------+--------+------------------------------------------------|
+| Python            | OK     | 3.13.17 (>=3.12)                               |
+| Config            | OK     | modo=paper À broker=paper                      |
+| Reloj             | OK     | reloj sincronizado (0.14 s) À desviaci¾n 0.1 s |
+| Frescura          | FAIL   | 5/17 fallan ? US100.CASH M1 (2026-11-25),      |
+|                   |        | US100.CASH M15 (2026-11-25), US100.CASH M5     |
+|                   |        | (2026-11-26), XAUUSD M1 (2026-11-26) ? 2       |
+|                   |        | avisos                                         |
+| Secretos          | OK     | keyring 8 À .env presente (fallback) À faltan  |
+|                   |        | 8                                              |
+| FRED              | OK     | API key presente                               |
+| Finnhub           | OK     | API key presente                               |
+| Alertas           | OK     | canal=ntfy À configurado                       |
+| Telegram remoto   | OK     | modo=agent À remoto=on À chat=1364122708       |
+| ProjectX          | n/a    | desactivada en config/ops.yaml                 |
+| SQLite            | OK     | E:\trading-lab\data\lab.db                     |
+| Carpeta data      | OK     | E:\trading-lab\data                            |
+| Carpeta logs      | OK     | E:\trading-lab\logs                            |
+| Carpeta reports   | OK     | E:\trading-lab\reports                         |
+| Carpeta config    | OK     | E:\trading-lab\config                          |
+| TradingAgents     | OK     | E:\trading-lab\vendor\TradingAgents            |
+| Trading-R1        | OK     | E:\trading-lab\vendor\Trading-R1               |
+| bun               | OK     | C:\Users\PC\AppData\Roaming\npm\bun.CMD        |
+| LM Studio         | OK     | http://127.0.0.1:1234/v1 À modelos:            |
+|                   |        | qwen/qwen3-30b-a3b, qwen/qwen3.8-27b,          |
+|                   |        | text-embedding-nomic-embed-text-v1.5 À ctx     |
+|                   |        | 32,768                                         |
+| Deep LLM          | OK     | https://opencode.ai/inference/go/openai/v1 À   |
+|                   |        | HTTP 200                                       |
+| MetaTrader 5      | OK     | FTMO-Demo À demo À equity=98,997.59 À algo=on  |
+|                   |        | À GMT+2                                        |
+| Riesgo abierto    | OK     | EURUSD 575/1,976 (accounts.yaml 2.00% +        |
+|                   |        | ai_trader.yaml 2.00%); GBPUSD 644/1,976        |
+|                   |        | (accounts.yaml 2.00% + ai_trader.yaml 2.00%);  |
+|                   |        | usd 1,219/2,963 (accounts.yaml 3.00%); total   |
+|                   |        | 1,219/1,9                                      |
+| Fondeo            | OK     | FTMO 2-step À challenge À $100,000 À objetivo  |
+|                   |        | 10.0% À diario 5.0% À mßximo 10.0% (static) À  |
+|                   |        | colch¾n 10%                                    |
+| Reglas fondeo     | WARN   | plantilla FTMO en config/prop.yaml: lÝmites    |
+|                   |        | contrastados con el directorio p·blico         |
+|                   |        | (verified_source), no con tu contrato; aviso   |
+|                   |        | aceptable hasta verificarlo: el guard usa el   |
+|                   |        | lado conservador (equity + colch¾n)            |
+| IA discrecional   | OK     | suma de estilos 3.00% vs cuenta 4.00% (3       |
+|                   |        | estilos)                                       |
+| Latidos           | OK     | todos los checks configurados                  |
+| Vector            | OK     | proceso activo; ·ltimo all-*.jsonl hace 0 min  |
+| EA externos       | OK     | 1 registrados À us100-ftmo1                    |
+| IA sesiones       | OK     | Londres=ok À NY=sin filas À daily=sin filas À  |
+|                   |        | tareas=2                                       |
+| IA tareas         | OK     | tareas al dÝa                                  |
+| Tareas perdidas   | OK     | sin ejecuciones perdidas nuevas                |
+| Horario desfasado | OK     | 8 tareas ancladas alineadas                    |
+| Tareas de energÝa | OK     | sin tareas de energÝa habilitadas en la semana |
++-----------------------------------------------------------------------------+

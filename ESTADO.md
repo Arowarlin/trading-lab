@@ -4,7 +4,7 @@
 > actualiza al cerrar cada cola. Las colas antiguas de `.orquestador/` son historia; la vigente es la
 > que aparece aquí.
 >
-> **Actualizado:** 2026-11-26 02:50 · `count_tests` **12.694**
+> **Actualizado:** 2026-11-26 13:20 · `count_tests` **12.694** · cierre ROBUST-1
 
 ## 1. Objetivo
 Encontrar una ventaja **real y neta de costes** y operarla en demo o en retos de prop firm (solo
@@ -41,7 +41,8 @@ Fix FX y Asia USDJPY (rechazadas), cambio de mes / rebote D1 / Donchian / moment
   `prop/guard.py`; vuelta atrás en `tl2-diario-pre`).
 - **TCA v2 aplicada (TL2-TCA2):** `signal_price` desde `ai_trader` y forward, `tca_version`
   (**68 filas v1, 0 v2**), lectores solo v2 y tolerancia `1e-9` en la frontera del SL; tags
-  `tl2-tca2-pre`/`tl2-tca2-post`. **Reinicio pendiente** de `ai_trader`/forward.
+  `tl2-tca2-pre`/`tl2-tca2-post`. **TCA v2 activa (tareas programadas); 0 filas v2 hasta el
+  primer fill**.
 
 ## 4. Decisiones del operador pendientes
 
@@ -98,3 +99,20 @@ Antes de cada fecha **no se mira** el rendimiento; solo se cuentan operaciones.
 
 X3 falló por puerta 2: WF con eficiencia < 0,3 y PBO > 0,30 en todos los finalistas. No se leyó
 OOS-2. count_tests pasó de 1.926 a 12.694. Tag edge1 al cerrar X8.
+
+## 9. ROBUST-1 (2026-11-26)
+
+- **EDGE-1: 0 robustas.** Motivo: la repetición de X3 con las herramientas
+  corregidas deja 0/22 finalistas con las 4 puertas. El fallo ya no es el
+  `point` (gate 3 pasa en la mayoría): sigue la puerta 2, con WF < 0,3
+  (14/22 “WF no informativo” por baja frecuencia) y PBO > 0,30 en la mayoría.
+  `edge1-01` PBO 0,743; `edge1-11` PBO 0,198 pero WF 0,000.
+- **EDGE-2: lista para Y2.** El plan Y1 sigue intacto: la corrección de huecos
+  de Y0 no cambió `cost_r`, elegibilidad ni inicio; las 18 campañas siguen en
+  `draft` (7.920 pruebas sin contar).
+- **TCA v2 activa (tareas programadas); 0 filas v2 hasta el primer fill**
+  (TL2-TCA y TCA2; el `pid` de `owner.json` no declara locks huérfanos).
+- Cierre: `ruff check .` limpio; `pytest -q` **2073 passed + 1 skipped**
+  (34:40); `lab doctor` Frescura FAIL 7/17 y Reglas fondeo WARN (entorno);
+  `lab propfund verify` **4 OK**.
+- `count_tests` **12.694 → 12.694**; tags `robust-pre` y `robust-1`.

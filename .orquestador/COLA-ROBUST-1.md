@@ -100,7 +100,12 @@ lanzado ninguna campaña). Lock `proyecto-robust`.
 - `ESTADO.md`:
   - EDGE-1: 0 robustas, con el motivo;
   - EDGE-2: lista para Y2;
-  - **"reinicio pendiente de `ai_trader`/forward para TL2-TCA y TCA2"**.
+  - **Corrección (Claude, 2026-11-26 09:20): no hace falta reiniciar.** `ai_trader` y el forward
+    corren como tareas programadas que arrancan un proceso nuevo en cada ejecución
+    (`TradingLab-AI-Manage` cada 15 min, `TradingLab-IntradayForward` cada ~5 min, `AI-NY`,
+    `AI-Scalp`, `AI-London`, `AI-Daily`). Desde su primera ejecución tras `e6c7759` ya usan el código
+    TCA v2. `lab web` se reinició el 26-11 a las 09:17. Donde ponga "reinicio pendiente", sustitúyelo
+    por "TCA v2 activa; 0 filas v2 hasta el primer fill".
 - **Pendiente de TL2-TCA2** (enmienda de Claude, 2026-11-26): TCA2 cerró sin escribir README/PLAN/ESTADO
   porque creyó "huérfano" el lock `readme-plan` (ver `reports/tl3/tca2_cierre.md`). Con el mismo lock
   `readme-plan`, añade su línea:

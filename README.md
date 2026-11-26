@@ -237,8 +237,33 @@ Los cierres están en `.orquestador/RESULTADO-*.md` y los informes en
 - TCA v2: `signal_price` desde `ai_trader` (precio de la propuesta) y forward
   (precio de la decisión); `tca_version` en filas nuevas (**68 v1, 0 v2**);
   lectores de TCA solo v2; tolerancia `1e-9` en la frontera del SL; tags
-  `tl2-tca2-pre`/`tl2-tca2-post`. **Reinicio pendiente** de `ai_trader`/forward
-  para que el cambio surta efecto.
+  `tl2-tca2-pre`/`tl2-tca2-post`. **TCA v2 activa (tareas programadas); 0 filas
+  v2 hasta el primer fill**.
+
+### Cierre 1i — ROBUST-1 (2026-11-26)
+
+- R1: `point` sale del instrumento (`EURUSD`/`GBPUSD` 0,00001, `USDJPY`
+  0,001, `XAUUSD`/índices 0,01); se elimina el 0,01 por defecto y las
+  campañas antiguas se corrigen al cargar. El estrés `slippage +2` de EURUSD
+  pasa de ~182 bps a **0,18 bps**.
+- R2: el PBO/WF usaba una unión desordenada de días con operación. Ahora es
+  una serie diaria de días hábiles con ceros; `edge1-01` PBO **0,743** y
+  `edge1-11` **0,198** (antes ambos 0,634 por el redondeo de una matriz
+  defectuosa).
+- R3: 14 de 22 finalistas quedan con **“WF no informativo (baja frecuencia)”**
+  (mediana < 2 operaciones por pliegue). La puerta WF sigue en ≥ 0,3; no se
+  tocaron ventanas ni umbrales. Propuesta por TF en
+  `TL3_REPORTS/robust1_wf_windows.md`.
+- R4: repetición de X3 sobre los 22 finalistas: **0 pasan las 4 puertas**;
+  gate 3 ya pasa en la mayoría, gate 2 sigue fallando por WF/PBO/ruido.
+- R5: EDGE-2 intacto; solo cambió la clasificación de huecos, sin cambios de
+  `cost_r`, elegibilidad ni inicio. Las 18 campañas siguen en `draft`.
+- Cierre: `ruff check .` limpio; `pytest -q` **2073 passed + 1 skipped**
+  (34:40); `lab doctor` Frescura FAIL 7/17 y Reglas fondeo WARN (entorno);
+  `lab propfund verify` **4 OK**.
+- `count_tests` **12.694 → 12.694** (sin cambios). Tags `robust-pre` y
+  `robust-1`. **TCA v2 activa (tareas programadas); 0 filas v2 hasta el primer
+  fill** (TL2-TCA y TCA2).
 
 
 
