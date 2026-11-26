@@ -26,3 +26,7 @@ Plan: `8026de6dc2407ff8f56a6ebb09078be8e547dc0649f0e33346c29371abc5c509` · inic
 | 18 | `edge1-18-trend-pullback-mtf-gbpusd-h1` | GBPUSD | H1 | trend_pullback_mtf | 439 | 161 | 3 | done | 16.9 min |
 | 19 | `edge1-19-vol-squeeze-breako-gbpusd-h1` | GBPUSD | H1 | vol_squeeze_breakout | 439 | 79 | 0 | done | 18.5 min |
 | 20 | `edge1-20-london-breakout-eurusd-h1` | EURUSD | H1 | london_breakout | 223 | 3 | 0 | done | 7.6 min |
+| 21 | `edge1-21-asia-range-reversi-usdjpy-m30` | USDJPY | M30 | asia_range_reversion | 436 | 130 | 1 | done | 14.0 min |
+| 22 | `edge1-22-trend-pullback-mtf-usdjpy-m30` | USDJPY | M30 | trend_pullback_mtf | 440 | 119 | 1 | done | 23.1 min |
+| 23 | `edge1-23-vol-squeeze-breako-usdjpy-m30` | USDJPY | M30 | vol_squeeze_breakout | 433 | 93 | 0 | done | 27.3 min |
+| 24 | `edge1-24-asia-range-reversi-xauusd-h1` | XAUUSD | H1 | asia_range_reversion | 434 | 78 | 0 | done | 9.3 min |
