@@ -56,3 +56,18 @@ Las 6 no aprobadas siguen en `draft` y **no** cuentan en el DSR. Motivo literal 
 ## Y3 - robustez
 
 - Inicio: 2026-11-26 11:47 -04:00. 12 finalistas, script `scripts/edge2_x3.py` (solo IS+OOS-1).
+
+## Y3 resultado
+
+- 12 finalistas; **0 pasan Y3**. Puerta 2: WF 0,000-0,028 y PBO 0,314-0,863 en todos. Puerta 3 (spread p75 y slippage x2) pasa en los 12.
+- Incidencia resuelta: el perfil CFD-006 (US500) no trae slippage; `edge2_x3.py` usa el asumido de `engine.yaml` (0,5), el mismo de la campana. No se toco el motor ni `fastbt.py`.
+
+## Y4-Y6
+
+- Y4 = **sin pasada 2** (0 finalistas pasaron Y3). Y5 = **0 confirmadas** (OOS-2 no leido). Y6 = **0 EAs**.
+
+## Y7 - consola y ESTADO
+
+- Consola: 18 campanas `edge2-` visibles (12 `done`); `/api/discovery/campaign/edge2-02-...` devuelve `costs_by_account` con spread, spread p75, comision, swap long/short y slippage.
+- US500: el perfil muestra slippage Sin datos; las campanas usaron el asumido 0,5 de `engine.yaml`.
+- `ESTADO.md`: seccion 10 "Campanas EDGE-2"; `count_tests` 12.694 -> 17.974.
