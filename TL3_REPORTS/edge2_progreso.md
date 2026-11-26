@@ -9,3 +9,5 @@ Y1b, se usa el plan recongelado. Comprobacion cada 10 min; sin lanzar campanas h
 ## Espera
 
 - 2026-11-26 08:30 -04:00: `edge1` = si, `robust-1` = no. 18 borradores `edge2-*` en `draft`, ninguno ejecutado.
+- 2026-11-26 08:33 -04:00: ROBUST-1 arranco en paralelo (`robust1: cola`, tag `robust-pre`, lock
+  `proyecto-robust`). `count_tests` antes de EDGE-2 = **12.694**.
