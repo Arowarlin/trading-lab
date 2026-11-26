@@ -17,3 +17,4 @@
 - 2026-11-26 · ENG-M1a COMPLETED: 3 regresiones xfail estrictas (A-01: end_of_data en vez de stop; B-01: 0,00167 frente a 0,25 bps; D-07: Sharpe −5,12 frente a −1,67).
 - 2026-11-26 · ENG-S1 REVIEW: `STATS_REDESIGN.md` (diseño; aplicar requiere aprobación y tag edge2).
 - 2026-11-26 · ENG-C2a REVIEW: C-02 corregido en la rama (el último mes en caché solo cuenta como completo si llega a su último día laborable).
+- 2026-11-26 · ENG-F4 COMPLETED: suite completa con el fixture = 43 failed / 2030 passed, el mismo conjunto de fallos; el aviso F0-08 aparece (data/lab.db, telegram_state.json).
