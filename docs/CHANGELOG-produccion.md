@@ -7,6 +7,58 @@ comprueba. El baseline de hashes vive en
 `config/propfund/protected_manifest.json` y se consulta con
 `lab propfund verify`; se reescribe con `lab propfund baseline --reason "..."`.
 
+## 2026-11-26 · TCA v2: señal real, versión y lectores (TL2-TCA2)
+
+- **Autorización del operador (literal):** «Lee AGENTS.md y
+  .orquestador/COLA-TL2-TCA2.md completa y síguela SIN PARAR NI PEDIRME
+  CONFIRMACIÓN de T0 a T7. Antes haz commit de ese archivo con git add -f.
+  APRUEBO CAMBIO DE PRODUCCIÓN TL2-TCA2: signal_price desde ai_trader y
+  forward_intraday, columna tca_version (filas antiguas intactas), lectores solo
+  v2 y tests del cambio de ejecución de e02ad7e. Tag tl2-tca2-pre ANTES de tocar
+  código, baseline, tests de regresión y CHANGELOG. No reinicies ni actives
+  ningún proceso, sin órdenes ni push. Commits por ruta y PARA al final.»
+- **P-1 · `ai_trader`:** `execute()` pasa `signal_price=float(row["entry"])`,
+  el precio de la propuesta, no el tick de envío. Añade `age_ms` al `reason` de
+  la orden cuando `ai_trades.ts` existe.
+- **P-2 · forward:** `forward_intraday.run_forward_bot()` pasa
+  `signal_price=entry`, el precio de la decisión (`ForwardDecision.price`).
+- **P-3 · lectores:** `ai_trader._slippage_avg`, `ai_distill`
+  (`scalping_tick_confirmation`), `tca.build_tca` (web y `lab tca`) y
+  `discovery/slippage_measured.py` filtran `tca_version >= 2`. `drift.py` queda
+  cubierto por `attach_to_drift` → `build_tca`. Con solo filas v1 devuelven
+  **sin datos**, nunca 0.
+- **P-4 · ejecución de `e02ad7e`:** tests propios: la orden usa el tick
+  releído; un SL exactamente en `stop_distance` pasa; uno a un punto menos se
+  rechaza con `MT5Error`; con el mismo tick de señal y envío el resultado
+  coincide con `tl2-tca-pre`.
+- **Riesgo de frontera corregido:** la comparación de distancia usaba `<`
+  estricto y la coma flotante rechazaba un SL exactamente en `stop_distance`
+  (0,1000000000000085 frente a 0,1). Se añadió una tolerancia de `1e-9`; la
+  regla del bróker no cambia, solo deja de rechazar el caso legítimo de igualdad.
+- **TCA v2:** `db.py::_migrate_tca` añade `tca_version INTEGER` de forma
+  idempotente y **sin actualizar filas**; las antiguas quedan `NULL` (= v1).
+  `tca.record_fill` escribe `tca_version = 2` en toda fila nueva, desde MT5 y
+  desde paper. `execution/paper.py` acepta `signal_price` opcional y mide el
+  slippage contra la señal.
+- **Qué no cambia:** las filas antiguas de `tca` (mismo contenido, mismo
+  `slippage_bps`), `operator.py`/`cli.py` (órdenes manuales siguen usando el
+  tick de envío), `slippage_probe.py`, EA, riesgo FTMO, `prop/`, `config/` y
+  `.env`. No se reinicia ni se activa ningún proceso y no se envía ninguna
+  orden.
+- **Nota de reinicio:** los procesos de demo en marcha (`ai_trader`, forward)
+  cargaron el código antiguo; este cambio no les afecta hasta que el operador
+  los reinicie.
+- **Tests:** `tests/test_tca_v2.py` (migración idempotente, filas antiguas
+  intactas, filas nuevas v2), `tests/test_tca_v2_readers.py` (66 filas v1 a 0 +
+  6 v2 a 2,0 → media 2,0; solo v1 → sin datos), `tests/test_tca2_callers.py`
+  (`signal_price` en ai_trader y paper), `tests/test_mt5_tca.py` (P-4) y
+  `tests/test_forward_intraday.py` (signal_price en forward).
+- **Verificación:** `ruff check`, `pytest -q`, `lab doctor`,
+  `lab propfund verify` y contador. El detalle y los hashes quedan en
+  `.orquestador/BASELINE-prod-tca2.md`.
+- **Vuelta atrás:** `git checkout tl2-tca2-pre -- <ruta>`; el tag
+  `tl2-tca2-pre` es `6fa4d2f`.
+
 ## 2026-11-25 · TCA MT5 separa señal, envío y fill (prod-tca)
 
 - **Autorización del operador (literal):** «Lee AGENTS.md y ejecuta el parche de

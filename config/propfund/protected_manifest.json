@@ -48,6 +48,21 @@
       ],
       "date": "2026-11-25",
       "reason": "prod-tca: TCA MT5 separa signal_price, submit_price y fill_price; autorizado por el operador en la sesion 2026-11-25"
+    },
+    {
+      "changes": [],
+      "date": "2026-11-26",
+      "reason": "TL2-TCA2: signal_price desde ai_trader y forward; lectores de TCA solo v2; autorizado por el operador 2026-11-25"
+    },
+    {
+      "changes": [
+        "ai_trader: src/tradinglab/ai_distill.py (changed)",
+        "ai_trader: src/tradinglab/ai_trader.py (changed)",
+        "ftmo_forward: src/tradinglab/forward_intraday.py (changed)",
+        "ftmo_risk: src/tradinglab/execution/mt5.py (changed)"
+      ],
+      "date": "2026-11-26",
+      "reason": "TL2-TCA2: aplicado; ver CHANGELOG 2026-11-25"
     }
   ],
   "groups": {
@@ -65,12 +80,12 @@
         "scripts/ai_trader_session.ps1": "b23f1cab51ecc2738f2d2cd414be2d242f65b0b617e2604bbd8ba504576231bd",
         "scripts/ai_trader_task_common.ps1": "192a59612b0a218c52fa819cdabad3cf819b753c8a7cc6110b96d8762794b6b4",
         "scripts/register_ai_trader_tasks.ps1": "5658e2e2bcc038d689b90b1cc78e67f014d4aefa109158ed09add7b0256e7535",
-        "src/tradinglab/ai_distill.py": "77ba06c941f8e4835ad6efa3130d270b21f0fd8308212132a18f31b330b8a54d",
+        "src/tradinglab/ai_distill.py": "687af0732dcd890c3d0f7bf463300c8bbaba7ebed4aea7edc68a86b004f5d18f",
         "src/tradinglab/ai_learn.py": "86a4c5ed852bb2a92b134358db8e84b2787bce4f4a2f1dc700ef3d3c2b427b0d",
         "src/tradinglab/ai_replay.py": "64d6794b413cb62779b66aff3d8d0e4fbcd49466e5908c5ca5ca013f49615eb0",
         "src/tradinglab/ai_session.py": "9797ee0b4ca51b66d8d8f8312fa64d8a7a6d80832a2831ab17968f4aab894ab0",
         "src/tradinglab/ai_setups.py": "686890c02e79d534d5b28ddb6b31b4e48099a90ed88a6ec7d898c575a3c3b6c1",
-        "src/tradinglab/ai_trader.py": "8883a2a4b3f9eb56102a3bb1d3e27d1ce74d1ac32dcc1175e65d5b4c3b21f801"
+        "src/tradinglab/ai_trader.py": "824d57ffe5f60307bab9aed5313aca45d79440bedd0ab720221f0c2cc3298dad"
       }
     },
     "ea_us100_ftmo1": {
@@ -103,7 +118,7 @@
         "scripts/intraday_forward_execute.ps1": "270c1d5fd49d48aa4464305cffa25a58a67e7edd34577aa8742322e2880046d8",
         "scripts/intraday_forward_signal.ps1": "c131bf8ab83768c547aef62a9a00e1d4a70702bb53edf736ce482bea96a4634b",
         "src/tradinglab/asset_aliases.py": "103577641e38714d117730bc4b7e2d274bbebd134fb19d6f9bb5a84095ae5f8f",
-        "src/tradinglab/forward_intraday.py": "b14dee974a8d3f28c8f572aa55858278eab4849fc6a9e36d4722be357c1bb719",
+        "src/tradinglab/forward_intraday.py": "fca1edcc4d66e5c55e715ea14dde4acc112f282f47302ba523cc5991862747de",
         "src/tradinglab/intraday.py": "22c10f1b490d396f5229b669631191a96843985b5176b9750bfac7f9d3705db0",
         "src/tradinglab/strategies/swing.py": "cfcede9e47d2752bd8d8c079a7a341dd28fc19708f2eb6edf55ab16c2afdb47f",
         "src/tradinglab/swing.py": "361afbd268f151e9c755f58a0bf22cc0a5b0976185919177a897a06106dfba34"
@@ -116,7 +131,7 @@
         "config/prop_templates.yaml": "e4c8be816420dd337b580583a1ed9a2e542461290e052cc80bba9ec4e391f9dc",
         "mql5/TradingLabGuardian.mq5": "bdd94e1c060a1996713ca98d780b1d5e8f45f9ad6b06c1b4dc7d104c054705d0",
         "src/tradinglab/account_daily.py": "217e2eb4ee60709d6956ad9bd02c2424357d13d827e3d6ffb06319fda1036c72",
-        "src/tradinglab/execution/mt5.py": "ce86e40b76d09776c729c9fefc03ccf0ca8e0800ec69d6b84567c670de55a564",
+        "src/tradinglab/execution/mt5.py": "4c50c9530cfe351b75aae86aaa9d6a042818a0b36e5de8ae00fad315ba4afbc6",
         "src/tradinglab/execution/mt5_offsets.py": "9535fbfe22242c002dd122a2a386be67d42a82f096b678a13f6b5bf3f2557dd5",
         "src/tradinglab/guardian.py": "a9bbeda2b6dce38e97de3d780a7361d828632ab7ba89ee08329bc829c3637559",
         "src/tradinglab/prop/__init__.py": "2b5f0229b536875861f8c5a94b0b7ccec5b2474ee14c6950be58e6461f0da816",
