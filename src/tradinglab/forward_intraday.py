@@ -1546,6 +1546,7 @@ def run_forward_bot(
             stop_price=stop,
             magic=bot.magic,
             dry_run=False,
+            signal_price=entry,
         )
     except Exception as exc:
         _record_signal(

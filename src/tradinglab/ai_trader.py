@@ -2228,6 +2228,23 @@ def _twin_levels(entry: float, sl: float, tp: float | None, *,
     }
 
 
+def _proposal_age_ms(row) -> int | None:
+    """Antigüedad de la propuesta en ms, si la fila trae su timestamp."""
+
+    raw = row["ts"] if "ts" in row.keys() else None
+    if not raw:
+        return None
+    try:
+        stamp = pd.Timestamp(raw)
+        if stamp.tzinfo is None:
+            stamp = stamp.tz_localize("UTC")
+        else:
+            stamp = stamp.tz_convert("UTC")
+        return max(0, int((datetime.now(timezone.utc) - stamp.to_pydatetime()).total_seconds() * 1000))
+    except Exception:  # noqa: BLE001 - dato opcional
+        return None
+
+
 def execute(proposal_id: str, *, broker, config: dict | None = None,
             db_path: str | Path = DEFAULT_DB) -> dict:
     cfg = config or load_config()
@@ -2274,11 +2291,16 @@ def execute(proposal_id: str, *, broker, config: dict | None = None,
     if stop > 0 and abs(current - float(row["entry"])) > 0.25 * stop:
         raise AiTraderError("el precio se movió > 0,25R desde la propuesta; vuelve a proponer")
     signed = float(row["volume"]) if side == "buy" else -float(row["volume"])
+    age_ms = _proposal_age_ms(row)
+    reason = str(row["thesis"])[:380]
+    if age_ms is not None:
+        reason = f"{reason} | age_ms={age_ms}"[:400]
     order = broker.submit_market(
         row["symbol"], signed, sl=float(row["sl"]),
         tp=float(row["tp"]) if row["tp"] is not None else None,
-        bot=f"ai:{style_name}", reason=str(row["thesis"])[:400],
+        bot=f"ai:{style_name}", reason=reason,
         magic=style["magic"], dry_run=False,
+        signal_price=float(row["entry"]),
     )
     now = utcnow()
     seed = int(hashlib.sha256(proposal_id.encode()).hexdigest()[:8], 16)

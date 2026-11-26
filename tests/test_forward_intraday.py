@@ -542,6 +542,7 @@ def test_execute_envia_minimo_y_stop(tmp_path, guards) -> None:
     assert call["magic"] == bot.magic
     assert call["bot"] == bot.signal_bot
     assert call["dry_run"] is False
+    assert call["signal_price"] == pytest.approx(decision.price)
 
 
 def test_execute_sin_armar_no_envia(tmp_path, guards) -> None:

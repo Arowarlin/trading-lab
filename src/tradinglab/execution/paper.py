@@ -83,6 +83,7 @@ class PaperBroker:
         run_id: int | None = None,
         risk_usd: float | None = None,
         stop_price: float | None = None,
+        signal_price: float | None = None,
     ) -> dict:
         if qty == 0:
             raise ValueError("qty no puede ser 0")
@@ -91,6 +92,11 @@ class PaperBroker:
 
         ticker = ticker.upper()
         side = "buy" if qty > 0 else "sell"
+        signal_px = (
+            float(signal_price)
+            if signal_price is not None and float(signal_price) > 0
+            else float(price)
+        )
         fill_px = price * (1 + self.slippage_bps / 10_000) if qty > 0 else price * (1 - self.slippage_bps / 10_000)
         notional = abs(qty) * fill_px
         fee = notional * self.commission_bps / 10_000
@@ -136,25 +142,6 @@ class PaperBroker:
                 "VALUES(?,?,?)",
                 (order_id, self.account_id, utcnow()),
             )
-            try:
-                from ..tca import record_fill as tca_record
-
-                realized_bps = (abs(fill_px - price) / price) * 10_000.0
-                tca_record(
-                    self.db_path,
-                    fill_id=order_id,
-                    bot=bot,
-                    symbol=ticker,
-                    side=side,
-                    signal_px=price,
-                    order_px=price,
-                    fill_px=fill_px,
-                    slippage_bps=self.slippage_bps,
-                    expected_cost_bps=self.slippage_bps + self.commission_bps,
-                    realized_cost_bps=realized_bps + self.commission_bps,
-                )
-            except Exception:
-                pass
 
             new_qty = held_qty + qty
             if new_qty <= 1e-9:
@@ -180,6 +167,27 @@ class PaperBroker:
                 "INSERT INTO equity(ts, cash, positions_value, equity) VALUES(?,?,?,?)",
                 (utcnow(), new_cash, positions_value, new_cash + positions_value),
             )
+
+        try:
+            from ..tca import record_fill as tca_record
+            from ..tca import slippage_bps as tca_slip
+
+            realized_bps = (abs(fill_px - price) / price) * 10_000.0
+            tca_record(
+                self.db_path,
+                fill_id=order_id,
+                bot=bot,
+                symbol=ticker,
+                side=side,
+                signal_px=signal_px,
+                order_px=price,
+                fill_px=fill_px,
+                slippage_bps=tca_slip(signal_px, fill_px, side),
+                expected_cost_bps=self.slippage_bps + self.commission_bps,
+                realized_cost_bps=realized_bps + self.commission_bps,
+            )
+        except Exception:
+            pass
 
         return {
             "order_id": order_id,
