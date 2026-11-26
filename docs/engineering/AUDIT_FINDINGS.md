@@ -112,3 +112,15 @@ dice nada de 0,05-0,15 R.**
 | **E-04** | 440 de las pruebas que faltan son `edge1-13-fix-reversal-xauusd-h1`, que quedó en `draft` (no cuenta). EDGE-1 suma 11.880, no 12.320. El resto de la diferencia con el +10.768 de ESTADO (1.112) **no se explica** con este dato: el 1.926 inicial pudo incluir otras fuentes. Sin impacto en el DSR (cuenta de más, no de menos) | `L1d-contador.md` |
 | **C1 (prep.)** | **La caché USDJPY no tiene ASK** en 2003-2022 (`ask_open` vacío en las 10.234 velas de la ventana). C1, tal como está prerregistrado (entrada al ASK), **no se puede ejecutar**: Sin datos. Festivos JP descargados (1955-2027, 1.067 fechas) | `L2-c1-prep.md` |
 | Estado | En el equipo del operador ya existen los tags `edge2` y `motor-flat`: EDGE-2 y MOTOR-FLAT están cerradas. **No** hay ningún `lab discovery run` vivo. Esos commits no están en `origin/master` | `L0-estado.md` |
+
+## 7. EDGE-2 y WF-TF a la luz de la auditoría (2026-11-26, tras `edge2` y `wf-tf-1`)
+
+- **EDGE-2:** 12/18 campañas ejecutadas (6 bloqueadas por `feasibility < 50 %`), 12 finalistas,
+  **0 pasan Y3**; con WF-TF también 0 de 12. Todos fallan la puerta 2: PBO 0,31-0,86 y WF sin pliegues
+  suficientes (1 pliegue en H4: el IS H1/H4 empieza en 2019).
+- **Mismas limitaciones que EDGE-1:** el WF corre sobre el IS del frontier (D-01) y el PBO sobre el
+  frontier (D-02). Con 1 pliegue en H4 no hay walk-forward posible. **EDGE-2 no aporta evidencia ni a
+  favor ni en contra** de una ventaja de tamaño realista en índices.
+- **C-01 casi no afectó a EDGE-2:** de las 6 campañas US100 M15/M30 (las de las ~650 noches sin datos),
+  5 quedaron bloqueadas por `feasibility` y la única ejecutada (`edge2-14`) no dejó finalistas.
+- El OOS-2 sigue **sin leer** en EDGE-1 y en EDGE-2.

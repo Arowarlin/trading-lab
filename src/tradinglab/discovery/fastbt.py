@@ -278,6 +278,13 @@ class CfdBpsCosts:
         )
 
 
+def _usd_is_base(symbol: str) -> bool:
+    """Par FX con el USD como divisa base (USDJPY, USDCAD, USDCHF…)."""
+
+    letters = "".join(ch for ch in str(symbol).upper() if ch.isalpha())[:6]
+    return len(letters) == 6 and letters.startswith("USD") and letters[3:] != "USD"
+
+
 class CfdProfileCosts:
     """Costes CFD desde un ``CostProfile`` de ``propfund.costs``."""
 
@@ -354,6 +361,12 @@ class CfdProfileCosts:
                 prices, float(profile.commission_value or 0.0) * 100.0 * side_factor
             )
         per_lot = float(profile.commission_value or 0.0) * side_factor
+        if _usd_is_base(profile.symbol):
+            # USDJPY/USDCAD/USDCHF: el nocional de un lote en USD es el contrato,
+            # no precio × contrato (que está en la divisa cotizada) (ENG-1 B-01).
+            return np.full_like(
+                prices, per_lot / float(self.contract_size) * 10_000.0, dtype=float
+            )
         return per_lot / (prices * float(self.contract_size)) * 10_000.0
 
     def _panel_with_spread(
@@ -992,7 +1005,10 @@ def _core(
                 pending = 0
 
         # 3) Stop -> objetivo -> salida forzada -> tiempo.
-        if pos != 0 and allowed[i]:
+        # El stop y el objetivo se evalúan en TODAS las velas con posición
+        # abierta, como el SL/TP del EA en el servidor (ENG-1 A-01/A-02).
+        # La salida forzada y la de tiempo siguen limitadas a la sesión.
+        if pos != 0:
             hit_stop = False
             hit_tgt = False
             if pos == 1:
@@ -1040,7 +1056,7 @@ def _core(
                 ex_b = comm_bps[i] if cost_model_version >= 2 else target_bps[i]
                 reason = 2
                 exit_now = True
-            elif flat_flag[i]:
+            elif allowed[i] and flat_flag[i]:
                 px = close[i]
                 if cost_model_version >= 2:
                     ex_b = (
@@ -1052,7 +1068,7 @@ def _core(
                     ex_b = stop_bps[i]
                 reason = 3
                 exit_now = True
-            elif time_exit_bars > 0 and (i - entry_i) >= time_exit_bars:
+            elif allowed[i] and time_exit_bars > 0 and (i - entry_i) >= time_exit_bars:
                 px = close[i]
                 if cost_model_version >= 2:
                     ex_b = (
@@ -1292,7 +1308,48 @@ def _calendar_core(
         price = 0.0
         exit_bps = 0.0
         reason = 0
-        if exit_target >= 0 and i >= exit_target:
+        # Stop y objetivo primero y en todas las velas con posición (ENG-1 A-04):
+        # tocan dentro de la vela, antes del cierre en el que sale el calendario.
+        hit_stop = False
+        hit_target = False
+        if pos == 1:
+            hit_stop = low[i] <= stop_p
+        else:
+            if cost_model_version >= 2:
+                hit_stop = (
+                    high[i] + high[i] * spread_bps[i] / 10_000.0 >= stop_p
+                )
+            else:
+                hit_stop = high[i] >= stop_p
+        if target_kind != 3:
+            if pos == 1:
+                hit_target = high[i] >= tgt_p
+            else:
+                hit_target = low[i] <= tgt_p
+        if hit_stop:
+            if pos == 1:
+                price = stop_p if stop_p < open_[i] else open_[i]
+            else:
+                if cost_model_version >= 2:
+                    open_ask = open_[i] + open_[i] * spread_bps[i] / 10_000.0
+                    price = stop_p if stop_p > open_ask else open_ask
+                else:
+                    price = stop_p if stop_p > open_[i] else open_[i]
+            if cost_model_version >= 2:
+                exit_bps = comm_bps[i] + slip_bps[i]
+            else:
+                exit_bps = stop_bps[i]
+            reason = 1
+            exit_now = True
+        elif hit_target:
+            if pos == 1:
+                price = tgt_p if tgt_p < high[i] else high[i]
+            else:
+                price = tgt_p if tgt_p > low[i] else low[i]
+            exit_bps = comm_bps[i] if cost_model_version >= 2 else target_bps[i]
+            reason = 2
+            exit_now = True
+        if not exit_now and exit_target >= 0 and i >= exit_target:
             price = close[i]
             if cost_model_version >= 2:
                 exit_bps = (
@@ -1304,46 +1361,6 @@ def _calendar_core(
                 exit_bps = stop_bps[i]
             reason = 8
             exit_now = True
-        elif allowed[i]:
-            hit_stop = False
-            hit_target = False
-            if pos == 1:
-                hit_stop = low[i] <= stop_p
-            else:
-                if cost_model_version >= 2:
-                    hit_stop = (
-                        high[i] + high[i] * spread_bps[i] / 10_000.0 >= stop_p
-                    )
-                else:
-                    hit_stop = high[i] >= stop_p
-            if target_kind != 3:
-                if pos == 1:
-                    hit_target = high[i] >= tgt_p
-                else:
-                    hit_target = low[i] <= tgt_p
-            if hit_stop:
-                if pos == 1:
-                    price = stop_p if stop_p < open_[i] else open_[i]
-                else:
-                    if cost_model_version >= 2:
-                        open_ask = open_[i] + open_[i] * spread_bps[i] / 10_000.0
-                        price = stop_p if stop_p > open_ask else open_ask
-                    else:
-                        price = stop_p if stop_p > open_[i] else open_[i]
-                if cost_model_version >= 2:
-                    exit_bps = comm_bps[i] + slip_bps[i]
-                else:
-                    exit_bps = stop_bps[i]
-                reason = 1
-                exit_now = True
-            elif hit_target:
-                if pos == 1:
-                    price = tgt_p if tgt_p < high[i] else high[i]
-                else:
-                    price = tgt_p if tgt_p > low[i] else low[i]
-                exit_bps = comm_bps[i] if cost_model_version >= 2 else target_bps[i]
-                reason = 2
-                exit_now = True
         if not exit_now and close_at_end and i == end_idx:
             price = close[i]
             if cost_model_version >= 2:
@@ -1827,6 +1844,24 @@ def _prepare(
     return payload, n, 1 if limits.execution == "close_signal" else 0
 
 
+def _with_business_days(
+    daily_r: pd.Series, index: pd.Index, start: int, end: int, tz: str
+) -> pd.Series:
+    """Reindexa la serie diaria a los días hábiles del tramo, más los días con salida."""
+
+    if len(index) == 0 or end < start or start >= len(index):
+        return daily_r.astype(float)
+    stamps = pd.DatetimeIndex(index)
+    if stamps.tz is None:
+        stamps = stamps.tz_localize("UTC")
+    first = stamps[max(int(start), 0)].tz_convert(tz).date()
+    last = stamps[min(int(end), len(stamps) - 1)].tz_convert(tz).date()
+    calendar = pd.bdate_range(first, last)
+    if len(daily_r):
+        calendar = calendar.union(pd.DatetimeIndex(daily_r.index))
+    return daily_r.reindex(calendar, fill_value=0.0).astype(float)
+
+
 def run(
     signals: Signals,
     bars: pd.DataFrame,
@@ -2084,6 +2119,11 @@ def run(
     daily_r = pd.Series(daily, dtype=float).sort_index()
     if len(daily_r):
         daily_r.index = pd.to_datetime(daily_r.index)
+    # Días hábiles del tramo evaluado con 0 si no hubo salida (ENG-1 D-07): sin
+    # ellos, ``sharpe_daily`` (×√252) y el DSR inflaban la baja frecuencia.
+    daily_r = _with_business_days(
+        daily_r, bars.index, payload["start_idx"], payload["end_idx"], limits.session_tz
+    )
     daily_r.name = "r"
 
     ledger = None

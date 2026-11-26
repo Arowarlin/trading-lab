@@ -1,11 +1,9 @@
-"""Regresiones del programa ENG-1 para defectos del motor aún sin corregir.
+"""Regresiones del programa ENG-1 para defectos del motor (ENG-M1).
 
-Cada test describe el comportamiento **correcto** y está marcado
-``xfail(strict=True)``: hoy falla porque el defecto existe. Cuando se corrija
-el motor (tras el tag ``edge2``; ver docs/engineering/AUDIT_FINDINGS.md), el
-test pasará, ``strict`` hará fallar la suite y habrá que quitar la marca. Así
-queda la prueba de "falla antes / pasa después" sin tocar ``fastbt.py``
-mientras EDGE-2 lo usa.
+Los tests de A-01, B-01 y D-07 se escribieron como ``xfail(strict=True)``
+mientras EDGE-2 usaba el motor (commit 1c40a0c): fallaban por el defecto. Con
+la corrección (``discovery`` 0.3.0) pasan y se quitó la marca. Ver
+docs/engineering/AUDIT_FINDINGS.md.
 
 Todo es sintético: no hay precios, spreads ni swaps de mercado.
 """
@@ -32,7 +30,6 @@ def _signals(n: int, long_pos: tuple[int, ...]) -> Signals:
     return Signals(longs, np.zeros(n, dtype=bool), 0)
 
 
-@pytest.mark.xfail(strict=True, reason="A-01: weekdays filtra por el día civil de la etiqueta D1")
 def test_a01_stop_d1_se_evalua_en_la_sesion_del_lunes():
     # Sesiones D1 de lunes a viernes, etiquetadas a las 17:00 NY del día anterior
     # (como resample_session): la del lunes lleva etiqueta de domingo.
@@ -63,7 +60,6 @@ def test_a01_stop_d1_se_evalua_en_la_sesion_del_lunes():
     assert trade.exit_index == monday
 
 
-@pytest.mark.xfail(strict=True, reason="B-01: comisión USD dividida por un nocional en JPY")
 def test_b01_comision_usdjpy_en_bps_del_nocional_en_usd():
     from tradinglab.propfund.costs import load_profile
 
@@ -78,7 +74,6 @@ def test_b01_comision_usdjpy_en_bps_del_nocional_en_usd():
     assert got_bps == pytest.approx(expected_bps, rel=1e-9)
 
 
-@pytest.mark.xfail(strict=True, reason="D-07: daily_r solo tiene los días con salida (Sharpe inflado)")
 def test_d07_sharpe_diario_incluye_los_dias_sin_operacion():
     # 60 días hábiles de velas H1 (10:00-15:00 NY) y señales cada 10 días.
     days = pd.bdate_range("2024-01-08", periods=60)
@@ -112,3 +107,40 @@ def test_d07_sharpe_diario_incluye_los_dias_sin_operacion():
     full = daily.reindex(calendar, fill_value=0.0)
     expected = float(full.mean() / full.std(ddof=1) * math.sqrt(252))
     assert result.metrics["sharpe_daily"] == pytest.approx(expected, rel=1e-9)
+
+
+def test_a02_stop_de_una_posicion_fuera_de_sesion():
+    # Sesión 10:00-15:00 NY con flat_at 15:00 en H1 (legacy): la posición duerme.
+    # Una vela nocturna fuera de la sesión perfora el stop: debe cerrarse ahí.
+    day1 = [pd.Timestamp(f"2024-03-05 {h:02d}:00").tz_localize(NY) for h in range(10, 24)]
+    day2 = [pd.Timestamp(f"2024-03-06 {h:02d}:00").tz_localize(NY) for h in range(0, 16)]
+    index = pd.DatetimeIndex(day1 + day2).tz_convert("UTC")
+    bars = pd.DataFrame({"open": 100.0, "high": 100.5, "low": 99.5, "close": 100.0}, index=index)
+    night = len(day1) + 2  # 02:00 NY del día 2, fuera de la sesión
+    bars.iloc[night, bars.columns.get_loc("low")] = 90.0
+    limits = RunLimits(session_tz=NY, session_start="10:00", session_end="15:00", flat_at="15:30")
+    spec = ExitSpec(stop="pct", stop_mult=2.0, target=None)
+    result = run(_signals(len(bars), (0,)), bars, spec, ZERO, limits)
+    assert len(result.trades) == 1
+    assert result.trades[0].reason == "stop"
+    assert result.trades[0].exit_index == night
+
+
+def test_a04_calendario_el_stop_va_antes_que_la_salida_de_calendario():
+    n = 6
+    index = pd.date_range("2024-01-01", periods=n, freq="1D", tz="UTC")
+    bars = pd.DataFrame({"open": 100.0, "high": 100.5, "low": 99.5, "close": 100.0}, index=index)
+    bars.iloc[3, bars.columns.get_loc("low")] = 90.0  # perfora el stop (98) y cierra en 100
+    longs = np.zeros(n, dtype=bool)
+    longs[1] = True
+    exits = np.full(n, -1, dtype=np.int64)
+    exits[1] = 3
+    limits = RunLimits(
+        session_tz="UTC", session_start="00:00", session_end="23:59", flat_at="23:59",
+        weekdays=tuple(range(7)), close_at_end=True, allow_next_day_entry=True,
+    )
+    signals = Signals(longs, np.zeros(n, dtype=bool), 0, exits)
+    result = run(signals, bars, ExitSpec(stop="pct", stop_mult=2.0, target=None), ZERO, limits)
+    assert len(result.trades) == 1
+    assert result.trades[0].reason == "stop"
+    assert result.trades[0].exit_price == pytest.approx(98.0)
