@@ -4,7 +4,7 @@
 > actualiza al cerrar cada cola. Las colas antiguas de `.orquestador/` son historia; la vigente es la
 > que aparece aquí.
 >
-> **Actualizado:** 2026-11-26 13:20 · `count_tests` **12.694** · cierre ROBUST-1
+> **Actualizado:** 2026-11-26 16:25 · `count_tests` **17.974** · EDGE-2 Y2-Y7 cerrados
 
 ## 1. Objetivo
 Encontrar una ventaja **real y neta de costes** y operarla en demo o en retos de prop firm (solo
@@ -29,9 +29,10 @@ Fix FX y Asia USDJPY (rechazadas), cambio de mes / rebote D1 / Donchian / moment
   - `.orquestador/COLA-EDGE-1.md`: fábrica de estrategias en M15/M30/H1/H4 con 7 activos y el motor
     `lab discovery`. **Pasada 1 cerrada** (28 campañas, 22 finalistas); X3 no dejó ningún finalista
     con las 4 puertas: X4 = sin pasada 2, X5 = 0 confirmadas, X6 = 0 EAs. Cierre X7-X8 en curso.
-  - `.orquestador/COLA-EDGE-2.md`: índices US100/US500/US30. Y0-Y1 hechos (18 campañas congeladas,
-    7.920 pruebas); **Y2 no se lanza en esta sesión**. Diagnóstico: H1/H4 empiezan 2019-01-02; US30
-    fuera por spread Sin datos; `intraday_momentum_close_v2` excluida (fallo de `_session_mask`).
+  - `.orquestador/COLA-EDGE-2.md`: índices US100/US500/US30. Y0-Y7 cerrados: 12/18 campañas `done`
+    (6 bloqueadas por feasibility), 12 finalistas, 0 pasan Y3; Y4 = sin pasada 2, Y5 = 0 confirmadas
+    (OOS-2 no leído), Y6 = 0 EAs. Y8 en cierre. Diagnóstico: H1/H4 empiezan 2019-01-02; US30 fuera
+    por spread Sin datos; `intraday_momentum_close_v2` excluida (fallo de `_session_mask`).
   - Cerradas hoy: TL3-B, C y D (`tl3-ciclo1e`), TL2-DIARIO y NQEDGE-FORWARD (`nqedge-forward-start`).
 - **Rutina diaria desde el 2026-11-30**, después del cierre de NY, con MT5 abierto:
   `E:\trading-lab\.venv\Scripts\python.exe E:\trading-lab\NASDAQ_EDGE_INSTITUTIONAL\tools\forward_daily.py --commission-side-usd 0.75`
@@ -116,3 +117,20 @@ OOS-2. count_tests pasó de 1.926 a 12.694. Tag edge1 al cerrar X8.
   (34:40); `lab doctor` Frescura FAIL 7/17 y Reglas fondeo WARN (entorno);
   `lab propfund verify` **4 OK**.
 - `count_tests` **12.694 → 12.694**; tags `robust-pre` y `robust-1`.
+
+## 10. Campañas EDGE-2 (2026-11-26)
+
+| Métrica | Valor |
+|---|---:|
+| Campañas pasada 1 | 12 `done` de 18 (5.280 pruebas) |
+| Bloqueadas en `approve` | 6 por feasibility < 50 % (siguen en `draft`, no suman) |
+| Finalistas | 12 |
+| Pasaron Y3 completo | 0 |
+| Pasada 2 (Y4) | sin pasada 2 |
+| Confirmadas OOS-2 (Y5) | 0 (OOS-2 no leído) |
+| EAs exportados (Y6) | 0 |
+
+Y3 falló por puerta 2: WF ≈0 y PBO >0,30 en los 12; la puerta 3 (spread p75 y slippage ×2) pasó en
+todos. Bloqueadas: `edge2-10`, `13`, `15`, `16`, `17` y `18` (US100 M15/M30 y US500 H1
+`st_reversal_idx`). `count_tests` pasó de 12.694 a **17.974**. Tag `edge2` al cerrar Y8.
+
