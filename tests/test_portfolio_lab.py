@@ -209,6 +209,7 @@ def test_carga_discovery_solo_tramos_permitidos(tmp_path):
     assert db.read_bytes() == before
 
 
+@pytest.mark.requires_local("data/discovery.db")
 def test_discovery_sin_operaciones_marca_breach_sin_datos(tmp_path):
     discovery = pl.load_discovery(94)
     synthetic = pl.synthetic_preset(0.0, days=300, seed=7)[0]

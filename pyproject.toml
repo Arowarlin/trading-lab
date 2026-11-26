@@ -60,4 +60,5 @@ markers = [
     "alpaca: requiere credenciales o red de Alpaca",
     "credentials: requiere Windows Credential Manager real",
     "slow: prueba lenta (ruido sintético); corre en pytest -q",
+    "requires_local(*rutas): necesita ficheros reales del equipo del operador; se salta si falta alguno",
 ]

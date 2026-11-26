@@ -68,6 +68,7 @@ def test_ventanas_del_tf_se_aplican() -> None:
     assert h1["test_len"] == 60
 
 
+@pytest.mark.requires_local("data/discovery.db")
 def test_identidad_60_20_con_robustness() -> None:
     campaign = "edge1-11-trend-pullback-mtf-usdjpy-h1"
     real_db = ROOT / "data" / "discovery.db"
@@ -97,6 +98,7 @@ def test_lectura_sin_escritura() -> None:
         assert databank.init_databank() == databank.DEFAULT_DISCOVERY_DB
 
 
+@pytest.mark.requires_local("data/discovery.db")
 def test_matriz_diaria_ordenada() -> None:
     real_db = ROOT / "data" / "discovery.db"
     with wf_tf_eval.readonly_databank(real_db):

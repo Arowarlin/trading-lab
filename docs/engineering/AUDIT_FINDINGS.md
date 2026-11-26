@@ -134,3 +134,38 @@ dice nada de 0,05-0,15 R.**
   de finalistas por OOS-1 sin n mínimo) y de por qué el OOS-1 no puede ser el juez.
 - Con spreads irrealmente bajos (0,3/0,5 bps) la media de los candidatos salía +0,006 R: el test depende
   del nivel de coste y su margen es moderado. Se deja con valores realistas, no ajustados para que pase.
+
+## 9. EDGE-1 y EDGE-2 con puertas v3 (informe L4, `WORKER_REPORTS/V3-gate2.md`)
+
+Puerta 2 recalculada sobre una copia de discovery.db (sin campañas, sin contador, sin OOS-2).
+
+- **38 de 39 campañas no pasan con v3.** En FX y oro (14-101 pliegues, 200 estrategias de la población),
+  el `stitched_sharpe` de "elegir la mejor del pasado" es **negativo** en casi todas. A diferencia del
+  rechazo de v2, este es **informativo**: con esas plantillas, la selección no funciona fuera de muestra.
+- **PBO bajo con WF negativo** (p. ej. `edge1-10` PBO 0,03; `edge1-14` 0,00; `edge1-17` 0,00): el orden
+  relativo se mantiene, pero **todas pierden después de costes**. El problema es el nivel, no el
+  sobreajuste.
+- **Única que pasa: `edge2-04-st-reversal-idx-us100-h1`** (PBO 0,241; WF eficiencia 0,608, `stitched`
+  1,611; **5 pliegues**). Cautelas: no dejó finalistas en EDGE-2; 1 de 39 es compatible con el azar de
+  la puerta; su OOS coincide con el periodo de diseño del EA (contaminación declarada). **No es
+  evidencia de ventaja**; como mucho, una hipótesis para un prerregistro nuevo con forward.
+- **EDGE-2 H4: 1 pliegue** en todas (H4 de índices desde 2019): sin información con v2 ni con v3.
+
+**Veredicto:** con herramientas corregidas, las plantillas de EDGE-1 (FX/oro, M15-H4) no muestran una
+ventaja seleccionable después de costes. Para seguir, hacen falta hipótesis nuevas con más operaciones
+o cestas (STATS_REDESIGN §4, EDGE_RESEARCH_PLAN), no más barridos de estas plantillas.
+
+## 10. F0-09 (HIGH, producción) · El hash congelado del forward del EA depende de los finales de línea del disco
+
+- `ea_forward.EA_CRITERIA` incluye `sha256` de los bytes crudos de `US100_EA.mq5`, los `.mqh`, el `.set`,
+  `ea_us100_engine.py` y `nyse_calendar.py` (`ea_forward.py:31-40`). El hash congelado
+  `f490642ba7a1f71b` (`tests/test_ea_forward.py:28`) **solo se reproduce** si en la copia del operador
+  `US100_EA.mq5`, `US100_ExitManager.mqh`, `US100_RiskManager.mqh` y `ea_us100_engine.py` tienen **CRLF**
+  y el resto LF (comprobado por fuerza bruta sobre las 2.048 combinaciones). En git todos están en LF
+  (`.gitattributes`: `* text=auto eol=lf`), así que CI y cualquier checkout limpio dan `71ee2cabe6aa9aef`.
+- **Riesgo:** el día que git reescriba uno de esos 4 ficheros (checkout, reset, merge que los toque), el
+  hash cambia aunque el EA sea idéntico, y las comprobaciones de criterios congelados del forward pueden
+  fallar ("congelados").
+- **Corrección propuesta (requiere la cola de producción de AGENTS.md):** normalizar `\r\n` → `\n` antes
+  de calcular el hash y migrar el hash congelado (con baseline, tag `-pre` y CHANGELOG). Mientras tanto,
+  los 5 tests de `test_ea_forward` siguen fallando en CI **a propósito**: avisan de este problema.

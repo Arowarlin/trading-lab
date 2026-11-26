@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 import yaml
 
 from tradinglab.ea_registry import as_bot_row, ea_magic_map, get_ea, load_eas
@@ -9,6 +10,7 @@ from tradinglab.ea_us100 import load_setfile, params_from_set
 from tradinglab.mt5_fills import lab_magic_map
 
 
+@pytest.mark.requires_local("C:/Users/PC/AppData/Roaming/MetaQuotes/Terminal/81A933A9AFC5DE3C23B15CAB19C63850/MQL5/Experts/TradingLab/US100_FTMO1/US100_FTMO_v3_challenge.set")
 def test_ea_registrado_y_mapeado():
     eas = load_eas()
     assert [ea.id for ea in eas] == ["us100-ftmo1"]
@@ -41,6 +43,7 @@ def test_fila_de_consola_es_solo_lectura():
     assert row["enabled"] is True
 
 
+@pytest.mark.requires_local("C:/Users/PC/AppData/Roaming/MetaQuotes/Terminal/81A933A9AFC5DE3C23B15CAB19C63850/MQL5/Experts/TradingLab/US100_FTMO1/US100_FTMO_v3_challenge.set")
 def test_setfile_v3_se_traduce_al_motor():
     ea = get_ea("us100-ftmo1")
     assert ea is not None

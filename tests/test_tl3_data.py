@@ -29,6 +29,7 @@ def test_manifest_clasifica_cfd_y_futuros(manifest):
     assert future["instrument_real"] == "NQ.c.0"
 
 
+@pytest.mark.requires_local("data/cache/ea/US100_CASH_M5_NY.parquet")
 def test_load_m5_2018_falla_por_granularidad(manifest):
     with pytest.raises(data.TL3DataError, match="granularidad"):
         data.load(
@@ -58,6 +59,7 @@ def test_dukascopy_sin_ask(manifest):
     assert duka["has_ask"] == 0.0
 
 
+@pytest.mark.requires_local("data/cache/ea/US100_CASH_M5_NY.parquet")
 def test_load_m5_2022_ok(manifest):
     frame = data.load(
         "data/cache/ea/US100_CASH_M5_NY.parquet",

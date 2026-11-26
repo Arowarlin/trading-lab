@@ -416,6 +416,7 @@ def test_el_terminal_del_guardian_viene_de_su_config(tmp_path: Path) -> None:
     assert guardian_terminal_path(tmp_path / "no-existe.yaml") is None
 
 
+@pytest.mark.requires_local("C:/Users/PC/AppData/Roaming/MetaQuotes/Terminal/81A933A9AFC5DE3C23B15CAB19C63850")
 def test_la_configuracion_real_apunta_a_un_terminal():
     path = guardian_terminal_path()
     assert path is not None
