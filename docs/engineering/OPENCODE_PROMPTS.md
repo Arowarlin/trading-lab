@@ -106,6 +106,23 @@ Prohibido: leer datos de 2023 en adelante, editar código, ejecutar lab, pytest 
 Ejecutar C1 suma +1 al contador de pruebas. Requiere que el operador escriba literalmente
 `APRUEBO C1` en una sesión de Claude Code, después de revisar L2.
 
+## L4 · Puerta 2 de EDGE-1 y EDGE-2 con puertas v2 y v3 (sin campañas, sin OOS-2)
+
+```text
+Eres un trabajador de TradingLab. No ejecutas campañas ni lees el OOS-2.
+Carpeta de trabajo: E:\trading-lab
+
+0. Comprueba que no hay ningún proceso "discovery run" vivo:
+   Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match "discovery run" }
+   Si sale alguno, escribe "bloqueado: campaña en marcha" en docs\engineering\WORKER_REPORTS\V3-gate2.md y PARA.
+1. Ejecuta exactamente (trabaja sobre una COPIA de discovery.db en una carpeta temporal):
+   .\.venv\Scripts\python.exe docs\engineering\tools\v3_gate2_reeval.py --db E:\trading-lab\data\discovery.db --prefix edge1- --prefix edge2- --out docs\engineering\WORKER_REPORTS\V3-gate2.md
+2. Copia la última línea que imprime al final de V3-gate2.md, bajo un título "Salida".
+3. PARA. No hagas commit.
+
+Prohibido: editar código o configuración, ejecutar lab, pytest, campañas o git push.
+```
+
 ## L1c · Suite completa con el fixture nuevo · **BLOCKED**
 
 No se lanza todavía. Con el `.venv` de `E:\trading-lab`, los tests importan `E:\trading-lab\src`, así
