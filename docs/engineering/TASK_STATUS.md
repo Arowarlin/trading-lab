@@ -31,3 +31,4 @@
 - 2026-11-26 · Merge de ENG-1 en el master del operador (sin conflictos), baseline y tag `tl2-eng1-f5-pre`; `propfund verify` 4 OK. `pytest` allí: 2 failed (test_research), 2110 passed, 3 xfailed.
 - 2026-11-26 · Los 2 fallos eran la fuga F0-07 destapada por F5: dependían de la lab.db real. Corregido (DB propia con 40 pruebas sintéticas); también test_optimize. En la nube: 41 failed (entorno) / 2044 passed.
 - 2026-11-26 · El AVISO del operador era un falso positivo: comparaba la fecha de data/lab.db, que las tareas programadas tocan cada 15 min. Con una lab.db centinela la suite no cambió ninguna fila. El detector ahora cuenta solo alertas con firma de test.
+- 2026-11-26 · ENG-I1 COMPLETED: master d3c87e7 en origin con tags edge2, motor-flat, wf-tf-1, tl2-eng1-f5-pre. EDGE-2: 0/12 (AUDIT_FINDINGS §7). M1 y F2b pasan a READY.
