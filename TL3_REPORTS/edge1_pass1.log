@@ -10,3 +10,7 @@
 2026-11-26 00:43:37Z edge1-10-vol-squeeze-breako-xauusd-h4 status=done eval=437 eff=35 finalists=0 elapsed=524.7s
 2026-11-26 00:59:52Z edge1-11-trend-pullback-mtf-usdjpy-h1 status=done eval=440 eff=117 finalists=3 elapsed=975.0s
 2026-11-26 01:22:29Z edge1-12-vol-squeeze-breako-usdjpy-h1 status=done eval=432 eff=83 finalists=3 elapsed=1357.1s
+2026-11-26 01:23:26Z edge1-13-fix-reversal-xauusd-h1 status=bloqueado: CampaignError: feasibility: 12/40 factibles (30.0 %) < 50 % eval=Sin datos eff=Sin datos finalists=Sin datos elapsed=56.1s
+2026-11-26 01:36:36Z edge1-14-asia-range-reversi-eurusd-h1 status=done eval=435 eff=58 finalists=0 elapsed=790.0s
+2026-11-26 01:52:40Z edge1-15-trend-pullback-mtf-eurusd-h1 status=done eval=438 eff=109 finalists=0 elapsed=964.7s
+2026-11-26 02:11:46Z edge1-16-vol-squeeze-breako-eurusd-h1 status=done eval=435 eff=97 finalists=0 elapsed=1145.3s

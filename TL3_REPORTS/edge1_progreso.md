@@ -16,3 +16,7 @@ Plan: `8026de6dc2407ff8f56a6ebb09078be8e547dc0649f0e33346c29371abc5c509` · inic
 | 10 | `edge1-10-vol-squeeze-breako-xauusd-h4` | XAUUSD | H4 | vol_squeeze_breakout | 437 | 35 | 0 | done | 8.7 min |
 | 11 | `edge1-11-trend-pullback-mtf-usdjpy-h1` | USDJPY | H1 | trend_pullback_mtf | 440 | 117 | 3 | done | 16.3 min |
 | 12 | `edge1-12-vol-squeeze-breako-usdjpy-h1` | USDJPY | H1 | vol_squeeze_breakout | 432 | 83 | 3 | done | 22.6 min |
+| 13 | `edge1-13-fix-reversal-xauusd-h1` | XAUUSD | H1 | fix_reversal | Sin datos | Sin datos | Sin datos | bloqueado: CampaignError: feasibility: 12/40 factibles (30.0 %) < 50 % | 0.9 min |
+| 14 | `edge1-14-asia-range-reversi-eurusd-h1` | EURUSD | H1 | asia_range_reversion | 435 | 58 | 0 | done | 13.2 min |
+| 15 | `edge1-15-trend-pullback-mtf-eurusd-h1` | EURUSD | H1 | trend_pullback_mtf | 438 | 109 | 0 | done | 16.1 min |
+| 16 | `edge1-16-vol-squeeze-breako-eurusd-h1` | EURUSD | H1 | vol_squeeze_breakout | 435 | 97 | 0 | done | 19.1 min |
