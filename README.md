@@ -232,6 +232,14 @@ Los cierres están en `.orquestador/RESULTADO-*.md` y los informes en
   `edge2-` no cuentan); sin filas nuevas en `informal_trials` (7, id 7) ni
   campañas ajenas a `edge1-`/`edge2-`; tag `tl3-ciclo1g`.
 
+### Cierre 1h — TL2-TCA2 (2026-11-26)
+
+- TCA v2: `signal_price` desde `ai_trader` (precio de la propuesta) y forward
+  (precio de la decisión); `tca_version` en filas nuevas (**68 v1, 0 v2**);
+  lectores de TCA solo v2; tolerancia `1e-9` en la frontera del SL; tags
+  `tl2-tca2-pre`/`tl2-tca2-post`. **Reinicio pendiente** de `ai_trader`/forward
+  para que el cambio surta efecto.
+
 
 
 - 2026-11-26: EDGE-1 cerrado (28 campanas, 22 finalistas, 0 confirmadas, 0 EAs; tag `edge1`).

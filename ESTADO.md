@@ -39,6 +39,9 @@ Fix FX y Asia USDJPY (rechazadas), cambio de mes / rebote D1 / Donchian / moment
   `ai_trader` corren en el sistema existente.
 - **Producción cambiada hoy:** TL2-DIARIO (suelo diario de FundingPips en `prop/simulator.py` y
   `prop/guard.py`; vuelta atrás en `tl2-diario-pre`).
+- **TCA v2 aplicada (TL2-TCA2):** `signal_price` desde `ai_trader` y forward, `tca_version`
+  (**68 filas v1, 0 v2**), lectores solo v2 y tolerancia `1e-9` en la frontera del SL; tags
+  `tl2-tca2-pre`/`tl2-tca2-post`. **Reinicio pendiente** de `ai_trader`/forward.
 
 ## 4. Decisiones del operador pendientes
 

@@ -101,14 +101,14 @@ La condición de §2 se cumple: ni `informal_trials` ni las campañas no
 `edge1-`/`edge2-` cambian por esta cola. El aumento de campañas es de EDGE-2,
 que corre en paralelo.
 
-## 7. Bloqueo de documentación
+## 7. Documentación (enmienda del operador)
 
-`readme-plan` está en manos de `opencode-tl3-f3` desde 01:24. A las 02:35 el
-PID 15896 ya no existe: el lock está **huérfano** (el resto de locks de esa
-sesión, `proyecto-tl3-f`, `pytest-full` y `tl3-registry`, también). Tiene menos
-de 2 h, así que **no se roba**. README/PLAN/ESTADO no se editan; el cierre se
-registra con `bloqueado: readme-plan huérfano (<2 h)` y el operador decide
-liberarlo y añadir la línea.
+El cierre anterior declaró `readme-plan` «huérfano» porque el PID 15896 ya no
+existía. La enmienda de `COLA-ROBUST-1.md §R6` aclara que el `pid` de
+`owner.json` es el del comando `scripts/orq_lock.py`, que termina al instante:
+**no** es evidencia de orfandad. Solo cuenta la antigüedad (> 2 h) y lo decide
+el operador. El lock se liberó y la línea de TL2-TCA2 se añadió a
+README/PLAN/ESTADO en el bloque de enmienda.
 
 ## 8. Reinicio y rollback
 

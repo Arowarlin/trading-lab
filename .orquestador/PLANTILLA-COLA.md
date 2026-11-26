@@ -12,6 +12,9 @@
 - Locks: `readme-plan` antes de README/PLAN, `changelog-produccion` antes del CHANGELOG de
   producción, `protected-manifest` antes del manifiesto protegido, `tl3-registry` antes del
   registro TL3 y `proyecto-<nombre>` para la cola activa.
+- El `pid` de `owner.json` es el del comando `scripts/orq_lock.py`, que termina al instante.
+  **Nunca** se usa para declarar un lock huérfano: solo cuenta la antigüedad (> 2 h), y lo decide
+  el operador.
 - Prohibido: producción (EA, `ai_trader`, forward, `prop/`, riesgo FTMO, `execution/`,
   `config/propfund/`, `schedule.yaml`, `.env`); `record-informal`; órdenes; campañas; `push`;
   borrar ficheros.
