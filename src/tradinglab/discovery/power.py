@@ -83,7 +83,19 @@ def counts_from_is(
     ratio = years["is"] / years["holdout"] if years["holdout"] > 0 else 0.0
     is_count = int(round(float(trades_is or 0)))
     holdout = int(round(is_count / ratio)) if ratio > 0 else 0
-    return {"trades_is": is_count, "trades_holdout": holdout}
+    # ENG-1 D-06: la confirmación solo usa el OOS-2. ``trades_oos2`` es el conteo
+    # que importa para la potencia con las puertas v3 (con v2 se sigue usando
+    # ``trades_holdout`` = OOS-1 + OOS-2, sin cambios).
+    oos2 = int(round(is_count * years["oos2"] / years["is"])) if years["is"] > 0 else 0
+    return {"trades_is": is_count, "trades_holdout": holdout, "trades_oos2": oos2}
+
+
+def power_count_key() -> str:
+    """Conteo que decide la potencia: OOS-2 con puertas v3, OOS-1+OOS-2 con v2."""
+
+    from .config import load_engine_config
+
+    return "trades_oos2" if int(load_engine_config().robustness.gates_version) == 3 else "trades_holdout"
 
 
 __all__ = [

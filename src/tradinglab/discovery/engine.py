@@ -259,9 +259,10 @@ def _power_payload(
             )
         except Exception:  # noqa: BLE001 - sin datos no bloquea
             pass
-    payload = power.power_check(
-        resolved.get("trades_holdout", 0), delta, sigma_r=sigma
-    )
+    key = power.power_count_key()
+    payload = power.power_check(resolved.get(key, resolved.get("trades_holdout", 0)), delta, sigma_r=sigma)
+    if key != "trades_holdout":
+        payload["power_count"] = key
     payload["expected_trades_is"] = int(resolved.get("trades_is") or 0)
     payload["expected_trades_holdout"] = int(
         resolved.get("trades_holdout") or 0

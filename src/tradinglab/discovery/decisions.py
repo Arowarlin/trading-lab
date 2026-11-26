@@ -93,14 +93,18 @@ def level4_ok(
     slip2: Any,
     challenge_ok: Any,
     random_oos2: Any,
+    dsr_threshold: float | None = None,
 ) -> bool:
+    # ENG-1 S1: con puertas v3 el umbral viaja con el resultado (1 - alpha/m);
+    # sin él, el de siempre.
+    threshold = DSR_CONFIRM_MIN if dsr_threshold is None else float(dsr_threshold)
     return bool(
         level3
         and enough_oos2
         and oos2 is not None
         and float(oos2) > 0.0
         and dsr_confirm is not None
-        and float(dsr_confirm) >= DSR_CONFIRM_MIN
+        and float(dsr_confirm) >= threshold
         and pbo is not None
         and float(pbo) <= PBO_MAX
         and wf_ok is True

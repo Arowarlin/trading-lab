@@ -1,0 +1,70 @@
+{
+  "args": {
+    "reps": 200,
+    "seed": 2026,
+    "n_min": 30,
+    "p": 0.4,
+    "cost": 0.05,
+    "wf_train": 252,
+    "wf_test": 63,
+    "out": "/tmp/claude-0/-home-user-trading-lab/89310f7f-0a4e-5602-b5a9-56cac624406b/scratchpad/s2_p040.json"
+  },
+  "table": {
+    "ruido": {
+      "actual": {
+        "any": 0.0,
+        "true": 0.0
+      },
+      "propuesta": {
+        "any": 0.0,
+        "true": 0.0
+      },
+      "propuesta_m100": {
+        "any": 0.0,
+        "true": 0.0
+      }
+    },
+    "ventaja 0.1 R": {
+      "actual": {
+        "any": 0.015,
+        "true": 0.015
+      },
+      "propuesta": {
+        "any": 0.045,
+        "true": 0.045
+      },
+      "propuesta_m100": {
+        "any": 0.01,
+        "true": 0.01
+      }
+    },
+    "ventaja 0.2 R": {
+      "actual": {
+        "any": 0.18,
+        "true": 0.18
+      },
+      "propuesta": {
+        "any": 0.555,
+        "true": 0.555
+      },
+      "propuesta_m100": {
+        "any": 0.555,
+        "true": 0.555
+      }
+    },
+    "ventaja 0.3 R": {
+      "actual": {
+        "any": 0.63,
+        "true": 0.63
+      },
+      "propuesta": {
+        "any": 0.92,
+        "true": 0.92
+      },
+      "propuesta_m100": {
+        "any": 0.92,
+        "true": 0.92
+      }
+    }
+  }
+}
