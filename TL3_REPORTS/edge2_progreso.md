@@ -34,3 +34,21 @@ Y1b, se usa el plan recongelado. Comprobacion cada 10 min; sin lanzar campanas h
 | 16 | `edge2-16-st-reversal-idx-us100-m15` | US100 | M15 | st_reversal_idx | Sin datos | Sin datos | Sin datos | bloqueado: CalledProcessError: Command '['E:\\trading-lab\\.venv\\Scripts\\lab.exe', 'discovery', 'approve', 'edge2-16-st-reversal-idx-us100-m15', '--approved-by-operator']' returned non-zero exit status 1. | si | 0.8 min |
 | 17 | `edge2-17-trend-pullback-mtf-us100-m15` | US100 | M15 | trend_pullback_mtf | Sin datos | Sin datos | Sin datos | bloqueado: CalledProcessError: Command '['E:\\trading-lab\\.venv\\Scripts\\lab.exe', 'discovery', 'approve', 'edge2-17-trend-pullback-mtf-us100-m15', '--approved-by-operator']' returned non-zero exit status 1. | si | 0.6 min |
 | 18 | `edge2-18-vol-squeeze-breako-us100-m15` | US100 | M15 | vol_squeeze_breakout | Sin datos | Sin datos | Sin datos | bloqueado: CalledProcessError: Command '['E:\\trading-lab\\.venv\\Scripts\\lab.exe', 'discovery', 'approve', 'edge2-18-vol-squeeze-breako-us100-m15', '--approved-by-operator']' returned non-zero exit status 1. | si | 0.6 min |
+
+## Bloqueos Y2 (approve)
+
+Las 6 no aprobadas siguen en `draft` y **no** cuentan en el DSR. Motivo literal de feasibility:
+
+| # | Campana | Factibles | Motivo |
+|---:|---|---:|---|
+| 10 | `edge2-10-st-reversal-idx-us500-h1` | 14/40 (35,0 %) | feasibility < 50 % |
+| 13 | `edge2-13-st-reversal-idx-us100-m30` | 14/40 (35,0 %) | feasibility < 50 % |
+| 15 | `edge2-15-vol-squeeze-breako-us100-m30` | 18/40 (45,0 %) | feasibility < 50 % |
+| 16 | `edge2-16-st-reversal-idx-us100-m15` | 17/40 (42,5 %) | feasibility < 50 % |
+| 17 | `edge2-17-trend-pullback-mtf-us100-m15` | 14/40 (35,0 %) | feasibility < 50 % |
+| 18 | `edge2-18-vol-squeeze-breako-us100-m15` | 3/40 (7,5 %) | feasibility < 50 % |
+
+## Y2 cierre
+
+- 12/18 `done`; 6 bloqueadas en `approve` por feasibility (no suman). 12 finalistas.
+- `count_tests` 12.694 → esperado 17.974 (12 x 440 tras comprobar).
