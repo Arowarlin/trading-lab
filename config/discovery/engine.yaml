@@ -55,6 +55,9 @@ validation:
   folds: 4
   finalists_max: 5
   corr_cluster: 0.7
+  # ENG-1 E-02 (aprobado por el operador el 2026-11-26): mínimo de operaciones
+  # en OOS-1 para ser finalista. Valor del banco S2 (STATS_REDESIGN §4).
+  min_trades_oos1: 30
   # Congelados el 2026-11-21 ANTES de ejecutar campañas multi-TF. No se
   # cambian tras ver resultados. H4/D1 exigen fuente Dukascopy.
   by_timeframe:
@@ -97,6 +100,10 @@ robustness:
   bootstrap_paths: 5000
   challenge_paths: 5000
   challenge_accounts: [CFD-001, CFD-006]
+  # ENG-1 S1 (aprobado por el operador el 2026-11-26): puertas v3. WF y PBO
+  # sobre una muestra de 200 de la población, ventanas WF por TF (WF-TF) y
+  # confirmación OOS-2 con PSR >= 1 - 0,05/m. Volver a 2 restaura las de antes.
+  gates_version: 3
 
 perturb:
   # Pruebas de falsificación: no son hipótesis nuevas y no suman al DSR.
