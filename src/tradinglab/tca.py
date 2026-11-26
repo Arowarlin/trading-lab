@@ -28,6 +28,7 @@ HALFLIFE = 20
 MIN_FILLS = 5
 MAX_P50_BPS = 10.0
 MAX_P95_BPS = 25.0
+TCA_VERSION = 2
 STATUS_ORDER = {"sin datos": 0, "ok": 1, "vigilar": 2, "deriva": 3}
 
 
@@ -60,8 +61,8 @@ def record_fill(
                 "INSERT INTO tca"
                 "(fill_id, bot, account, symbol, side, signal_px, order_px, fill_px, "
                 "slippage_bps, latency_ms, expected_cost_bps, realized_cost_bps, "
-                "bid, ask, requested_price, order_type, origin, ts_utc) "
-                "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "bid, ask, requested_price, order_type, origin, tca_version, ts_utc) "
+                "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     None if fill_id is None else int(fill_id),
                     None if bot is None else str(bot),
@@ -80,6 +81,7 @@ def record_fill(
                     None if requested_price is None else float(requested_price),
                     None if order_type is None else str(order_type),
                     None if origin is None else str(origin),
+                    int(TCA_VERSION),
                     datetime.now(timezone.utc).isoformat(timespec="seconds"),
                 ),
             )
@@ -316,6 +318,7 @@ __all__ = [
     "HALFLIFE",
     "MIN_FILLS",
     "STATUS_ORDER",
+    "TCA_VERSION",
     "attach_to_drift",
     "build_tca",
     "classify",
