@@ -41,3 +41,4 @@
 - 2026-11-26 · ENG-B03 PENDING: no es un arreglo pequeño (robustez lee result.metrics en ~12 sitios); se agrupa con S1 y se aprobará con el banco S2.
 - 2026-11-26 · ENG-S2 COMPLETED: banco de puertas (STATS_REDESIGN §4). Falsos positivos ≤ 0,5 % en ambas cadenas; potencia con 0,3 R: 6,5 % actual → 48,5 % propuesta (p = 0,10) y 63 % → 92 % (p = 0,40). Propuesta corregida: Bonferroni sobre lecturas del OOS-2, no DSR con N = población.
 - 2026-11-26 · ENG-S3 COMPLETED: puertas v3 + D-06 integradas en master 2ae3d3f (apagadas). Siguiente: L4 en el equipo del operador.
+- 2026-11-26 · ENG-L4 COMPLETED: 1 de 39 campañas pasa la puerta 2 con v3 (edge2-04, 5 pliegues; no es evidencia). 38/39 con WF negativo sobre la población: rechazo informativo (AUDIT_FINDINGS §9).
