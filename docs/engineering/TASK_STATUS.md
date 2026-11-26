@@ -1,0 +1,30 @@
+# TASK_STATUS · registro de transiciones (lo más nuevo, abajo)
+
+- 2026-11-26 · ENG-00 COMPLETED. SHA `adc0eec`. EDGE-2 Y2 en marcha (4/18): motor congelado.
+- 2026-11-26 · ENG-A1, B1, C1, D1 RUNNING (subagentes de solo lectura en la nube).
+- 2026-11-26 · ENG-F1 RUNNING (`pytest` con los marcadores de CI en Linux).
+- 2026-11-26 · ENG-F1 COMPLETED: 43 failed / 2030 passed en Linux; 42 de entorno, 1 por `uv.lock` sin `arch`.
+- 2026-11-26 · ENG-A1 COMPLETED (10 hallazgos: 2 HIGH). Claude re-ejecutó A-01.
+- 2026-11-26 · ENG-C1 COMPLETED (14 hallazgos: 3 HIGH). Claude re-ejecutó C-01 y C-02.
+- 2026-11-26 · ENG-B1 y ENG-D1 interrumpidos por el límite de uso de la API; reanudados desde su punto de corte.
+- 2026-11-26 · ENG-B1 COMPLETED (14 hallazgos: 3 HIGH). Claude verificó B-01 en el código.
+- 2026-11-26 · ENG-D1 COMPLETED (12 hallazgos: 3 HIGH). Claude verificó D-01, D-03 y D-07 en el código.
+- 2026-11-26 · ENG-G1 COMPLETED: `AUDIT_FINDINGS.md`. Los 43 fallos de CI son de entorno (F0-07: fuga por `reports/research`).
+- 2026-11-26 · ENG-E1 RUNNING. Nuevas: F2a READY, F2b BLOCKED, M1 READY (solo rama), S1 READY (diseño), C2, L1.
+- 2026-11-26 · ENG-E1 COMPLETED. E-01 (`mutate_session` fijo a 09:30-15:00) verificado. Potencia: 619-2.233 operaciones para 0,1 R.
+- 2026-11-26 · ENG-F4 REVIEW (fixture de secretos; suite de comprobación en marcha). ENG-P1 COMPLETED (L0, L1a, L1b, L1d).
+- 2026-11-26 · ENG-R1 REVIEW: `EDGE_RESEARCH_PLAN.md`. Propuesta: pruebas únicas prerregistradas en lugar de barridos GA.
+- 2026-11-26 · ENG-M1a COMPLETED: 3 regresiones xfail estrictas (A-01: end_of_data en vez de stop; B-01: 0,00167 frente a 0,25 bps; D-07: Sharpe −5,12 frente a −1,67).
+- 2026-11-26 · ENG-S1 REVIEW: `STATS_REDESIGN.md` (diseño; aplicar requiere aprobación y tag edge2).
+- 2026-11-26 · ENG-C2a REVIEW: C-02 corregido en la rama (el último mes en caché solo cuenta como completo si llega a su último día laborable).
+- 2026-11-26 · ENG-F4 COMPLETED: suite completa con el fixture = 43 failed / 2030 passed, el mismo conjunto de fallos; el aviso F0-08 aparece (data/lab.db, telegram_state.json).
+- 2026-11-26 · Operador: "apruebo todo" (F5, F3, prompts L, método de pruebas únicas). No incluye registrar ni ejecutar C1.
+- 2026-11-26 · ENG-F3 COMPLETED: lock regenerado con uv 0.13.7, solo añade paquetes.
+- 2026-11-26 · ENG-F5 REVIEW: `TRADINGLAB_DB` (config, telegram, task_health) + conftest; pasos de integración en `INTEGRACION_PENDIENTE.md`.
+- 2026-11-26 · ENG-R1b COMPLETED: C1 no repite H-2026-002 ni FIX_FLOW. ENG-R3 COMPLETED: script C1 + 5 tests. L2 READY, L3 BLOCKED.
+- 2026-11-26 · Suite completa con F5: 43 failed / 2035 passed / 3 xfailed, mismo conjunto de fallos; `data/` sin `lab.db` ni `telegram_state.json` al terminar; sin AVISO.
+- 2026-11-26 · Con el lock nuevo (`uv sync --frozen --extra dev --extra discovery`), los 2 tests SPA de `test_discovery_family` pasan: CI esperado = 41 fallos, todos de entorno (F2a/F2b).
+- 2026-11-26 · ENG-C2b REVIEW: C-04 corregido en la rama (register exige cuentas futures con databento y cfd con el resto). F2b simplificado gracias a F5 (sigue BLOCKED hasta edge2: toca costs.py).
+- 2026-11-26 · L0, L1a, L1b, L1d y L2 COMPLETED en el equipo del operador (commit 9c32476). Cifras en AUDIT_FINDINGS §6.
+- 2026-11-26 · URGENTE: F0-08 real, 1.210 alertas de test enviadas por ntfy desde el 9-nov. La integración de F4/F5 pasa a prioridad 1.
+- 2026-11-26 · ENG-L3 (C1) BLOCKED por datos: la caché USDJPY no tiene ASK. Decisión del operador: descargar el ASK o enmendar el prerregistro antes de ver resultados.

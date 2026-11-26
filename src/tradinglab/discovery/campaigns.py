@@ -351,6 +351,20 @@ def register(
         selected_firm = registry.firm_of(selected_costs[0]).id
     except Exception as exc:  # noqa: BLE001
         raise CampaignError(str(exc)) from exc
+    # CFD y futuros nunca comparten modelo de coste (doc 06 §4; ENG-1 C-04):
+    # Databento trae precios de operación de futuros CME, no BID de un CFD.
+    expected_market = "futures" if data_source == "databento" else "cfd"
+    mismatched = []
+    for account_id in selected_costs:
+        account = registry.accounts.get(str(account_id).upper())
+        market = getattr(getattr(account, "market", None), "value", getattr(account, "market", None))
+        if str(market) != expected_market:
+            mismatched.append(f"{account_id} ({market})")
+    if mismatched:
+        raise CampaignError(
+            f"la fuente {data_source} es de {'futuros CME' if expected_market == 'futures' else 'CFD'}"
+            f" y exige cuentas de coste {expected_market}; no valen: {', '.join(mismatched)}"
+        )
     engine = load_engine_config()
     try:
         profile_config = engine.profile(profile)
