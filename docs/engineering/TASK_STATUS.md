@@ -22,3 +22,5 @@
 - 2026-11-26 · ENG-F3 COMPLETED: lock regenerado con uv 0.13.7, solo añade paquetes.
 - 2026-11-26 · ENG-F5 REVIEW: `TRADINGLAB_DB` (config, telegram, task_health) + conftest; pasos de integración en `INTEGRACION_PENDIENTE.md`.
 - 2026-11-26 · ENG-R1b COMPLETED: C1 no repite H-2026-002 ni FIX_FLOW. ENG-R3 COMPLETED: script C1 + 5 tests. L2 READY, L3 BLOCKED.
+- 2026-11-26 · Suite completa con F5: 43 failed / 2035 passed / 3 xfailed, mismo conjunto de fallos; `data/` sin `lab.db` ni `telegram_state.json` al terminar; sin AVISO.
+- 2026-11-26 · Con el lock nuevo (`uv sync --frozen --extra dev --extra discovery`), los 2 tests SPA de `test_discovery_family` pasan: CI esperado = 41 fallos, todos de entorno (F2a/F2b).
