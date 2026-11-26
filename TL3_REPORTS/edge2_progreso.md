@@ -52,3 +52,7 @@ Las 6 no aprobadas siguen en `draft` y **no** cuentan en el DSR. Motivo literal 
 
 - 12/18 `done`; 6 bloqueadas en `approve` por feasibility (no suman). 12 finalistas.
 - `count_tests` 12.694 → esperado 17.974 (12 x 440 tras comprobar).
+
+## Y3 - robustez
+
+- Inicio: 2026-11-26 11:47 -04:00. 12 finalistas, script `scripts/edge2_x3.py` (solo IS+OOS-1).
