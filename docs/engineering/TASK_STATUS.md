@@ -14,3 +14,4 @@
 - 2026-11-26 · ENG-E1 COMPLETED. E-01 (`mutate_session` fijo a 09:30-15:00) verificado. Potencia: 619-2.233 operaciones para 0,1 R.
 - 2026-11-26 · ENG-F4 REVIEW (fixture de secretos; suite de comprobación en marcha). ENG-P1 COMPLETED (L0, L1a, L1b, L1d).
 - 2026-11-26 · ENG-R1 REVIEW: `EDGE_RESEARCH_PLAN.md`. Propuesta: pruebas únicas prerregistradas en lugar de barridos GA.
+- 2026-11-26 · ENG-M1a COMPLETED: 3 regresiones xfail estrictas (A-01: end_of_data en vez de stop; B-01: 0,00167 frente a 0,25 bps; D-07: Sharpe −5,12 frente a −1,67).
