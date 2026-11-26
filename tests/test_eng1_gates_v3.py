@@ -120,3 +120,16 @@ def test_psr_bonferroni_v3(tmp_path):
     noise = rng.normal(0.0, 1.0, 756)
     weak = levels._psr_bonferroni_v3(noise, base={}, n_trials=4, alpha=0.05, db_path=tmp_path / "vacia.db")
     assert (weak["dsr"] or 0.0) < weak["threshold"]
+
+
+def test_d06_potencia_con_v3_cuenta_solo_el_oos2(monkeypatch):
+    from tradinglab.discovery import power
+
+    segments = {"is": ["2015-01-01", "2019-12-31"], "oos1": ["2020-01-01", "2022-12-31"],
+                "oos2": ["2023-01-01", "2025-12-31"]}
+    counts = power.counts_from_is(150, segments)
+    assert counts["trades_holdout"] == pytest.approx(180, abs=2)  # OOS-1 + OOS-2: 6 años
+    assert counts["trades_oos2"] == pytest.approx(90, abs=2)  # solo OOS-2: 3 años
+    assert power.power_count_key() == "trades_holdout"  # v2 por defecto
+    monkeypatch.setattr("tradinglab.discovery.config.load_engine_config", lambda: _config(3))
+    assert power.power_count_key() == "trades_oos2"

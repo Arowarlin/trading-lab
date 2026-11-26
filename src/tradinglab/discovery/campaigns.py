@@ -717,15 +717,16 @@ def approve(
             counts = power.counts_from_is(
                 report.get("trades_is") or 0, config.get("segments") or {}
             )
+            key = power.power_count_key()
             verdict = power.power_check(
-                counts["trades_holdout"],
+                counts[key],
                 delta,
                 sigma_r=float(config.get("sigma_r") or 1.0),
             )
             if not verdict["potencia_ok"]:
                 raise CampaignError(
                     f"preflight sin potencia: {verdict['potencia_status']} "
-                    f"(n_holdout={counts['trades_holdout']}, "
+                    f"(n_holdout={counts[key]}, "
                     f"MDE={verdict['mde_holdout']})"
                 )
     result = databank.approve_campaign(
