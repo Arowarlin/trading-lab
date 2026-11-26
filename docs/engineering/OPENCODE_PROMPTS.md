@@ -123,6 +123,39 @@ Carpeta de trabajo: E:\trading-lab
 Prohibido: editar código o configuración, ejecutar lab, pytest, campañas o git push.
 ```
 
+## L5 · ¿Qué noche cobra el triple swap tu bróker? (B-04, solo lectura)
+
+```text
+Eres un trabajador de TradingLab. Solo lees; no cambias nada.
+Carpeta de trabajo: E:\trading-lab
+
+1. Ejecuta exactamente (abre lab.db en modo SOLO LECTURA):
+   .\.venv\Scripts\python.exe docs\engineering\tools\b04_swap_nights.py --db E:\trading-lab\data\lab.db --out docs\engineering\WORKER_REPORTS\B04-swap.md
+2. Copia la línea que imprime al final de B04-swap.md, bajo un título "Salida".
+3. PARA. No interpretes la tabla. No hagas commit.
+
+Prohibido: editar código, abrir lab.db en modo escritura, ejecutar lab, pytest o git push.
+```
+
+## L6 · Descargar el ASK de USDJPY para C1 (2003-2022; no toca el OOS-2)
+
+```text
+Eres un trabajador de TradingLab. Solo descargas datos; no calculas rendimiento.
+Carpeta de trabajo: E:\trading-lab
+
+0. Comprueba que no hay ningún proceso "discovery run" ni "fetch-dukascopy" vivo:
+   Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match "discovery run|fetch-dukascopy" }
+   Si sale alguno, escribe "bloqueado" en docs\engineering\WORKER_REPORTS\L6-ask.md y PARA.
+1. Ejecuta exactamente (tarda; puede ser más de una hora; si se corta, vuelve a ejecutarlo: reanuda):
+   .\.venv\Scripts\lab.exe discovery fetch-dukascopy USDJPY --from 2003-05-04 --to 2022-12-31 --workers 4 --rate 5
+2. Cuando termine, ejecuta (solo cuenta velas con ASK; no mira precios):
+   .\.venv\Scripts\python.exe -c "import pandas as pd;f=pd.read_parquet(r'E:\trading-lab\data\cache\dukascopy\USDJPY_M1.parquet',columns=['ask_open']);i=pd.DatetimeIndex(pd.to_datetime(f.index));i=i.tz_localize('UTC') if i.tz is None else i.tz_convert('UTC');m=(i<'2023-01-01')&(i.hour==0)&(i.minute.isin([0,54]));s=f.loc[m,'ask_open'];print('velas',int(m.sum()),'con_ask',int(s.notna().sum()));print(s.notna().groupby(i[m].year).mean().round(3).to_string())"
+3. Escribe en docs\engineering\WORKER_REPORTS\L6-ask.md la última línea del paso 1 y la salida literal del paso 2.
+4. PARA. No ejecutes c1_tokyo_fix_gotobi.py. No hagas commit.
+
+Prohibido: --force, otras fechas, otros símbolos, editar código, ejecutar campañas, pytest o git push.
+```
+
 ## L1c · Suite completa con el fixture nuevo · **BLOCKED**
 
 No se lanza todavía. Con el `.venv` de `E:\trading-lab`, los tests importan `E:\trading-lab\src`, así
