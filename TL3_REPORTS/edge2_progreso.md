@@ -20,3 +20,7 @@ Y1b, se usa el plan recongelado. Comprobacion cada 10 min; sin lanzar campanas h
 | 2 | `edge2-02-trend-pullback-mtf-us100-h4` | US100 | H4 | trend_pullback_mtf | 435 | 53 | 5 | done | si | 6.7 min |
 | 3 | `edge2-03-vol-squeeze-breako-us100-h4` | US100 | H4 | vol_squeeze_breakout | 432 | 39 | 1 | done | si | 6.7 min |
 | 4 | `edge2-04-st-reversal-idx-us100-h1` | US100 | H1 | st_reversal_idx | 440 | 30 | 0 | done | si | 6.7 min |
+| 5 | `edge2-05-trend-pullback-mtf-us100-h1` | US100 | H1 | trend_pullback_mtf | 440 | 73 | 2 | done | si | 8.3 min |
+| 6 | `edge2-06-vol-squeeze-breako-us100-h1` | US100 | H1 | vol_squeeze_breakout | 438 | 75 | 1 | done | si | 8.0 min |
+| 7 | `edge2-07-donchian-vol-h4-us500-h4` | US500 | H4 | donchian_vol_h4 | 435 | 49 | 0 | done | si | 7.3 min |
+| 8 | `edge2-08-trend-pullback-mtf-us500-h4` | US500 | H4 | trend_pullback_mtf | 435 | 58 | 2 | done | si | 7.2 min |

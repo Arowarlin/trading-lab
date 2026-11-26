@@ -2,3 +2,7 @@
 2026-11-26 14:11:28Z edge2-02-trend-pullback-mtf-us100-h4 status=done eval=435 eff=53 finalists=5 console=si elapsed=402.1s
 2026-11-26 14:18:12Z edge2-03-vol-squeeze-breako-us100-h4 status=done eval=432 eff=39 finalists=1 console=si elapsed=403.9s
 2026-11-26 14:24:53Z edge2-04-st-reversal-idx-us100-h1 status=done eval=440 eff=30 finalists=0 console=si elapsed=401.4s
+2026-11-26 14:33:14Z edge2-05-trend-pullback-mtf-us100-h1 status=done eval=440 eff=73 finalists=2 console=si elapsed=500.4s
+2026-11-26 14:41:12Z edge2-06-vol-squeeze-breako-us100-h1 status=done eval=438 eff=75 finalists=1 console=si elapsed=478.1s
+2026-11-26 14:48:33Z edge2-07-donchian-vol-h4-us500-h4 status=done eval=435 eff=49 finalists=0 console=si elapsed=440.5s
+2026-11-26 14:55:46Z edge2-08-trend-pullback-mtf-us500-h4 status=done eval=435 eff=58 finalists=2 console=si elapsed=432.8s
