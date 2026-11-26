@@ -22,3 +22,7 @@
 2026-11-26 03:49:42Z edge1-22-trend-pullback-mtf-usdjpy-m30 status=done eval=440 eff=119 finalists=1 elapsed=1388.4s
 2026-11-26 04:17:01Z edge1-23-vol-squeeze-breako-usdjpy-m30 status=done eval=433 eff=93 finalists=0 elapsed=1639.1s
 2026-11-26 04:26:16Z edge1-24-asia-range-reversi-xauusd-h1 status=done eval=434 eff=78 finalists=0 elapsed=555.4s
+2026-11-26 04:41:18Z edge1-25-trend-pullback-mtf-xauusd-h1 status=done eval=439 eff=94 finalists=0 elapsed=901.9s
+2026-11-26 05:04:35Z edge1-26-asia-range-reversi-usdjpy-m15 status=done eval=437 eff=79 finalists=0 elapsed=1397.0s
+2026-11-26 05:52:17Z edge1-27-trend-pullback-mtf-usdjpy-m15 status=done eval=438 eff=92 finalists=0 elapsed=2861.5s
+2026-11-26 06:40:37Z edge1-28-vol-squeeze-breako-usdjpy-m15 status=done eval=396 eff=133 finalists=0 elapsed=2900.4s

@@ -30,3 +30,7 @@ Plan: `8026de6dc2407ff8f56a6ebb09078be8e547dc0649f0e33346c29371abc5c509` · inic
 | 22 | `edge1-22-trend-pullback-mtf-usdjpy-m30` | USDJPY | M30 | trend_pullback_mtf | 440 | 119 | 1 | done | 23.1 min |
 | 23 | `edge1-23-vol-squeeze-breako-usdjpy-m30` | USDJPY | M30 | vol_squeeze_breakout | 433 | 93 | 0 | done | 27.3 min |
 | 24 | `edge1-24-asia-range-reversi-xauusd-h1` | XAUUSD | H1 | asia_range_reversion | 434 | 78 | 0 | done | 9.3 min |
+| 25 | `edge1-25-trend-pullback-mtf-xauusd-h1` | XAUUSD | H1 | trend_pullback_mtf | 439 | 94 | 0 | done | 15.0 min |
+| 26 | `edge1-26-asia-range-reversi-usdjpy-m15` | USDJPY | M15 | asia_range_reversion | 437 | 79 | 0 | done | 23.3 min |
+| 27 | `edge1-27-trend-pullback-mtf-usdjpy-m15` | USDJPY | M15 | trend_pullback_mtf | 438 | 92 | 0 | done | 47.7 min |
+| 28 | `edge1-28-vol-squeeze-breako-usdjpy-m15` | USDJPY | M15 | vol_squeeze_breakout | 396 | 133 | 0 | done | 48.3 min |
