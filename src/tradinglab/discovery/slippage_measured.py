@@ -288,6 +288,7 @@ def measure_slippage(
             " t.ts_utc, t.fill_id, o.account_id"
             " FROM tca t LEFT JOIN order_accounts o ON o.order_id = t.fill_id"
             " WHERE t.order_px IS NOT NULL AND t.fill_px IS NOT NULL"
+            " AND t.tca_version >= 2"
         ).fetchall()
     except sqlite3.Error:
         return []
@@ -361,6 +362,7 @@ def fills_inventory(db_path: str | Path = DEFAULT_DB) -> dict[str, Any]:
             dict(row)
             for row in con.execute(
                 "SELECT bot, symbol, side, COUNT(*) AS n FROM tca"
+                " WHERE tca_version >= 2"
                 " GROUP BY bot, symbol, side ORDER BY n DESC"
             )
         ]

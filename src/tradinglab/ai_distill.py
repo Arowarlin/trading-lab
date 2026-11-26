@@ -1257,7 +1257,8 @@ def scalping_tick_confirmation(
     max_bps = float(criteria.get("max_slippage_bps") or 3.0)
     with connect(db_path) as con:
         tca = con.execute(
-            "SELECT AVG(slippage_bps) AS avg, COUNT(*) AS n FROM tca WHERE bot=?",
+            "SELECT AVG(slippage_bps) AS avg, COUNT(*) AS n FROM tca "
+            "WHERE bot=? AND tca_version >= 2",
             (bot,),
         ).fetchone()
     avg = _float(tca["avg"]) if tca else None

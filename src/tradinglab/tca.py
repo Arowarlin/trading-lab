@@ -163,7 +163,7 @@ def build_tca(
     init_db(db_path)
     with connect(db_path) as con:
         rows = con.execute(
-            "SELECT * FROM tca ORDER BY id"
+            "SELECT * FROM tca WHERE tca_version >= 2 ORDER BY id"
         ).fetchall()
         orders = con.execute(
             "SELECT bot, COUNT(*) AS n FROM orders WHERE status = 'filled' GROUP BY bot"

@@ -3229,7 +3229,8 @@ def _slippage_avg(db_path: str | Path, bot: str, symbol: str) -> tuple:
     with connect(db_path) as con:
         row = con.execute(
             "SELECT AVG(slippage_bps) AS avg, COUNT(*) AS n FROM tca "
-            "WHERE bot=? AND symbol=? AND slippage_bps IS NOT NULL",
+            "WHERE bot=? AND symbol=? AND slippage_bps IS NOT NULL "
+            "AND tca_version >= 2",
             (bot, symbol),
         ).fetchone()
     if row is None or row["avg"] is None:
