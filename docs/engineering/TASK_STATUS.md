@@ -37,3 +37,4 @@
 - 2026-11-26 · ENG-M1 COMPLETED: integrado en master c1da3f4 (motor 0.3.0), tag motor-eng1-pre, 64 tests del motor verdes en el equipo del operador. Siguiente: ENG-F2b.
 - 2026-11-26 · ENG-F2b REVIEW: suite 21 failed / 2089 passed (antes 38), ninguno nuevo; D-07 en CostBook. Test de ruido: candidatos −0,049 R, pero 7 finalistas de ruido con OOS-1 > 0 (AUDIT_FINDINGS §8).
 - 2026-11-26 · ENG-E02 REVIEW: mecanismo min_trades_oos1 (apagado por defecto). El valor se propondrá con el banco S2.
+- 2026-11-26 · ENG-B02 REVIEW: levels._account_confirmation pasa cost_model_version y spread_model de la campaña.
