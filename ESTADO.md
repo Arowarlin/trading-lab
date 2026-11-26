@@ -4,7 +4,7 @@
 > actualiza al cerrar cada cola. Las colas antiguas de `.orquestador/` son historia; la vigente es la
 > que aparece aquí.
 >
-> **Actualizado:** 2026-11-25 17:40 · `count_tests` **1926**
+> **Actualizado:** 2026-11-26 02:50 · `count_tests` **12.694**
 
 ## 1. Objetivo
 Encontrar una ventaja **real y neta de costes** y operarla en demo o en retos de prop firm (solo
@@ -27,7 +27,11 @@ Fix FX y Asia USDJPY (rechazadas), cambio de mes / rebote D1 / Donchian / moment
   - `.orquestador/COLA-TL3-E.md`: locks entre sesiones, verificación previa de NQF y avisos por
     estrategia. Solo está hecho E0.
   - `.orquestador/COLA-EDGE-1.md`: fábrica de estrategias en M15/M30/H1/H4 con 7 activos y el motor
-    `lab discovery`. Decidida por el operador el 2026-11-25; **pendiente de lanzar**; suma al contador.
+    `lab discovery`. **Pasada 1 cerrada** (28 campañas, 22 finalistas); X3 no dejó ningún finalista
+    con las 4 puertas: X4 = sin pasada 2, X5 = 0 confirmadas, X6 = 0 EAs. Cierre X7-X8 en curso.
+  - `.orquestador/COLA-EDGE-2.md`: índices US100/US500/US30. Y0-Y1 hechos (18 campañas congeladas,
+    7.920 pruebas); **Y2 no se lanza en esta sesión**. Diagnóstico: H1/H4 empiezan 2019-01-02; US30
+    fuera por spread Sin datos; `intraday_momentum_close_v2` excluida (fallo de `_session_mask`).
   - Cerradas hoy: TL3-B, C y D (`tl3-ciclo1e`), TL2-DIARIO y NQEDGE-FORWARD (`nqedge-forward-start`).
 - **Rutina diaria desde el 2026-11-30**, después del cierre de NY, con MT5 abierto:
   `E:\trading-lab\.venv\Scripts\python.exe E:\trading-lab\NASDAQ_EDGE_INSTITUTIONAL\tools\forward_daily.py --commission-side-usd 0.75`
@@ -77,3 +81,17 @@ Antes de cada fecha **no se mira** el rendimiento; solo se cuentan operaciones.
 - Lo actualiza **solo** el cierre de cada cola (con el lock `readme-plan` cuando exista), sin borrar
   nada: las cifras nuevas sustituyen a las viejas y la historia queda en git.
 - Una cola nueva solo se abre si responde a una fila de §4 o a una fecha de §5.
+
+## 8. Campañas EDGE-1 (2026-11-26)
+
+| Métrica | Valor |
+|---|---:|
+| Campañas pasada 1 | 28 (12.320 pruebas registradas) |
+| Finalistas | 22 |
+| Pasaron X3 completo | 0 |
+| Pasada 2 (X4) | sin pasada 2 |
+| Confirmadas OOS-2 (X5) | 0 |
+| EAs exportados (X6) | 0 |
+
+X3 falló por puerta 2: WF con eficiencia < 0,3 y PBO > 0,30 en todos los finalistas. No se leyó
+OOS-2. count_tests pasó de 1.926 a 12.694. Tag edge1 al cerrar X8.
