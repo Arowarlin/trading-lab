@@ -60,9 +60,18 @@ se cambia aquí.
 6. Informe `TL3_REPORTS/edge2_costes.md`. Commit `edge2: Y0 - diagnostico, costes y ensayo`.
 
 ### Y1 · Plan congelado (antes de ejecutar nada)
-1. **Plantillas:** `trend_pullback_mtf`, `vol_squeeze_breakout`, `donchian_vol_h4`,
-   `st_reversal_idx` e `intraday_momentum_close_v2` (momentum de la última media hora; no es la lógica
-   de apertura del EA), solo en las combinaciones que admite cada YAML.
+1. **Plantillas:** `trend_pullback_mtf`, `vol_squeeze_breakout`, `donchian_vol_h4` y
+   `st_reversal_idx`, solo en las combinaciones que admite cada YAML.
+   - **Excluida `intraday_momentum_close_v2`** (enmienda de Claude, 2026-11-25 21:20, escrita antes
+     de Y1). Su sesión termina a las 15:55 con `flat_at` 15:55. En `fastbt._session_mask`,
+     `flat_flag = (relative >= flat_relative) & (relative <= duration)`, así que en M15, M30 y H1
+     ninguna vela cae en esa franja y la posición **nunca se cierra en el día**: el mismo fallo que
+     encontró F2 en H-2026-013.
+   - El arreglo del motor se hará en otra cola, **después** del tag `edge1`. EDGE-1 lanza
+     `lab discovery run` en procesos nuevos, así que cambiar `fastbt.py` ahora alteraría sus
+     campañas restantes.
+   - Las plantillas de EDGE-1 no se ven afectadas: `asia_range_reversion` y `london_breakout` caen en
+     una vela con `relative == duration`, y las de sesión de 24 h son de varios días por diseño.
 2. **Activos y TF:** US100, US500 y US30 (si Y0 trajo coste) × M15/M30/H1/H4, solo con `cost_r` ≤ 0,10
    y `data-check` válido. Máximo **20 campañas**. Si salen más, se priorizan por menor `cost_r`.
 3. **Segmentos:**
