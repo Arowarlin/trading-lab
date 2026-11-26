@@ -277,6 +277,8 @@ comprueba. El baseline de hashes vive en
 - **Rollback:** tag `tl2-n1-pre`.
 
 ### 2026-11-26 · ENG-1 F5 · `DEFAULT_DB` configurable solo para la suite de tests
+- **Autorización del operador (literal):** «apruebo todo» (2026-11-26, sesión de Claude Code),
+  en respuesta a: aprobar ENG-F5 (`DEFAULT_DB` configurable; toca `config.py`) y ENG-F3 (`uv lock`).
 - **Qué:** `config.DEFAULT_DB` lee `TRADINGLAB_DB` si existe; `telegram.STATE_PATH` y
   `task_health.STATE_FILE` van junto a `DEFAULT_DB`. `tests/conftest.py` define la variable con una
   carpeta temporal y quita `.env`/keyring a los tests sin marcador de red/credenciales.
