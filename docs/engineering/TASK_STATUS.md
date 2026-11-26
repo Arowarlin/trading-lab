@@ -35,3 +35,4 @@
 - 2026-11-26 · ENG-M1 REVIEW: motor 0.3.0 (A-01/A-02, A-04, B-01, D-07) en la rama. Suite: 38 failed (entorno) / 2072 passed, sin fallos nuevos. Pendiente: aprobación para integrar.
 - 2026-11-26 · Operador aprueba integrar ENG-M1 («tienes mi aprobacion»). Tag de vuelta atrás propuesto: motor-eng1-pre.
 - 2026-11-26 · ENG-M1 COMPLETED: integrado en master c1da3f4 (motor 0.3.0), tag motor-eng1-pre, 64 tests del motor verdes en el equipo del operador. Siguiente: ENG-F2b.
+- 2026-11-26 · ENG-F2b REVIEW: suite 21 failed / 2089 passed (antes 38), ninguno nuevo; D-07 en CostBook. Test de ruido: candidatos −0,049 R, pero 7 finalistas de ruido con OOS-1 > 0 (AUDIT_FINDINGS §8).

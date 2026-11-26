@@ -124,3 +124,13 @@ dice nada de 0,05-0,15 R.**
 - **C-01 casi no afectó a EDGE-2:** de las 6 campañas US100 M15/M30 (las de las ~650 noches sin datos),
   5 quedaron bloqueadas por `feasibility` y la única ejecutada (`edge2-14`) no dejó finalistas.
 - El OOS-2 sigue **sin leer** en EDGE-1 y en EDGE-2.
+
+## 8. Evidencia del test de ruido (`test_discovery_noise::test_noise_five_campaigns`, motor 0.3.0)
+
+- 5 campañas GA sobre **ruido puro** con spreads sintéticos realistas (0,8-2,3 bps): la media OOS-1 de
+  los candidatos es **−0,049 R** (73 candidatos). Bien: el ruido no parece rentable después de costes.
+- Pero las 5 campañas dejan **7 finalistas con OOS-1 positivo** (+0,32, +0,17, +0,09 R… sobre 1-3
+  finalistas por campaña). Es ruido elegido por su OOS-1: la ilustración directa de **E-02** (selección
+  de finalistas por OOS-1 sin n mínimo) y de por qué el OOS-1 no puede ser el juez.
+- Con spreads irrealmente bajos (0,3/0,5 bps) la media de los candidatos salía +0,006 R: el test depende
+  del nivel de coste y su margen es moderado. Se deja con valores realistas, no ajustados para que pase.

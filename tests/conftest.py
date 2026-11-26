@@ -132,7 +132,7 @@ def _seed_synthetic_spreads() -> None:
             name = (account.broker_symbols or {}).get(canonical) or broker_symbol(canonical)
             index_like = canonical in {"US100", "US500", "US30", "GER40"}
             cheap = (account.id == "CFD-006") != index_like
-            median, p75 = (0.3, 0.5) if cheap else (0.9, 1.5)
+            median, p75 = (0.8, 1.3) if cheap else (1.4, 2.3)
             for hour in range(24):
                 rows.add((str(name).upper(), hour, median, p75, 1000, None, None, source))
     with sqlite3.connect(DEFAULT_DB) as con:
