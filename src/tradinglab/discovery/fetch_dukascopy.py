@@ -354,11 +354,21 @@ def download(
     existing = _read_existing(key, root)
     completed: set[str] = set()
     if len(existing):
+        last_cached_month = existing.index.max().strftime("%Y-%m")
         for month_key, group in existing.groupby(existing.index.strftime("%Y-%m")):
             # Un mes solo se salta si llegó a la segunda mitad: evita dar por
             # completo un mes cortado por un --to parcial o una caída.
-            if int(group.index.max().day) >= 20:
-                completed.add(str(month_key))
+            last_day = group.index.max()
+            if int(last_day.day) < 20:
+                continue
+            # El último mes de la caché es donde se cortó la ejecución anterior:
+            # solo está completo si llega a su último día laborable (ENG-1 C-02).
+            if str(month_key) == last_cached_month:
+                month_first = pd.Timestamp(last_day.year, last_day.month, 1)
+                last_weekday = pd.bdate_range(month_first, month_first + pd.offsets.MonthEnd(0))[-1]
+                if last_day.date() < last_weekday.date():
+                    continue
+            completed.add(str(month_key))
     current_month = (now or datetime.now(timezone.utc)).strftime("%Y-%m")
     ask_months: set[str] = set()
     if include_ask and len(existing) and "ask_close" in existing.columns:
