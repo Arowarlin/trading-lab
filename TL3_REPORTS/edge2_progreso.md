@@ -71,3 +71,11 @@ Las 6 no aprobadas siguen en `draft` y **no** cuentan en el DSR. Motivo literal 
 - Consola: 18 campanas `edge2-` visibles (12 `done`); `/api/discovery/campaign/edge2-02-...` devuelve `costs_by_account` con spread, spread p75, comision, swap long/short y slippage.
 - US500: el perfil muestra slippage Sin datos; las campanas usaron el asumido 0,5 de `engine.yaml`.
 - `ESTADO.md`: seccion 10 "Campanas EDGE-2"; `count_tests` 12.694 -> 17.974.
+
+## Y8 - cierre (en curso)
+
+- `ruff check .`: limpio.
+- `lab doctor`: exit 0; Frescura WARN 0/17; Reglas fondeo WARN (entorno).
+- `lab propfund verify`: exit 0; 4 OK.
+- `pytest -q`: en ejecucion (log `TL3_REPORTS/edge2_pytest.log`).
+- Pendiente: README/PLAN (lock `readme-plan` tomado), tag `edge2`, Telegram y liberar locks.
