@@ -22,6 +22,7 @@ import json
 import time
 import warnings
 from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures.process import BrokenProcessPool
 from dataclasses import dataclass, fields, replace
 from datetime import datetime, timezone
 from pathlib import Path
@@ -369,6 +370,26 @@ def _slice_bars(
     return sliced
 
 
+def _init_failure_reason(payload: dict[str, Any]) -> str | None:
+    """Motivo real cuando el pool cae al arrancar (ENG-1 F0-06).
+
+    Si ``_init_worker`` lanza en un proceso hijo, ``ProcessPoolExecutor`` solo
+    informa ``BrokenProcessPool`` y el mensaje ("Sin datos: ...") se pierde.
+    Aquí se repite el arranque una vez en este proceso para recuperarlo y se
+    restaura el estado global. Solo se llama cuando el pool ya falló.
+    """
+
+    global _WORKER
+    saved = dict(_WORKER)
+    try:
+        _init_worker(payload)
+    except Exception as exc:  # noqa: BLE001 - es justo lo que se busca
+        return f"{type(exc).__name__}: {exc}"
+    finally:
+        _WORKER = saved
+    return None
+
+
 def _init_worker(payload: dict[str, Any]) -> None:
     global _WORKER
     started = time.perf_counter()
@@ -657,9 +678,17 @@ class BatchEvaluator:
             try:
                 results[task_id] = future.result()
             except Exception as exc:  # noqa: BLE001
+                error = f"{type(exc).__name__}: {exc}"
+                if isinstance(exc, BrokenProcessPool):
+                    if not hasattr(self, "_init_reason"):
+                        self._init_reason = _init_failure_reason(
+                            self.setup.as_dict(include_bars=True)
+                        )
+                    if self._init_reason:
+                        error += f" (arranque del worker: {self._init_reason})"
                 results[task_id] = {
                     "job_id": task_id,
-                    "error": f"{type(exc).__name__}: {exc}",
+                    "error": error,
                     "metrics": None,
                     "trades": 0,
                     "returns": [],
@@ -820,7 +849,12 @@ def run_queue(
                         cache_bytes = max(cache_bytes, int(stats.get("bytes") or 0))
                     _flush(target, identifier, results, jobs, setup)
         except Exception as exc:  # noqa: BLE001 - pool caído: no perder estados
-            raise QueueError(f"cola abortada: {type(exc).__name__}: {exc}") from exc
+            message = f"cola abortada: {type(exc).__name__}: {exc}"
+            if isinstance(exc, BrokenProcessPool):
+                reason = _init_failure_reason(setup.as_dict(include_bars=True))
+                if reason:
+                    message += f" (arranque del worker: {reason})"
+            raise QueueError(message) from exc
 
     final = _counts(target, identifier)
     if final["queued"] == 0 and final["running"] == 0:
