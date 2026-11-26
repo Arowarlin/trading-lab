@@ -21,7 +21,8 @@ def _db(tmp_path: Path) -> Path:
             id INTEGER PRIMARY KEY, fill_id INTEGER, bot TEXT, account TEXT,
             symbol TEXT, side TEXT, signal_px REAL, order_px REAL,
             fill_px REAL, slippage_bps REAL, latency_ms REAL,
-            expected_cost_bps REAL, realized_cost_bps REAL, ts_utc TEXT
+            expected_cost_bps REAL, realized_cost_bps REAL, tca_version INTEGER,
+            ts_utc TEXT
         );
         CREATE TABLE orders(
             id INTEGER PRIMARY KEY, ts TEXT, ticker TEXT, order_type TEXT,
@@ -46,14 +47,14 @@ def _db(tmp_path: Path) -> Path:
     for index in range(40):
         con.execute(
             "INSERT INTO tca(fill_id, bot, account, symbol, side, order_px,"
-            " fill_px, ts_utc) VALUES(1, 'bot', NULL, 'XAUUSD', 'buy',"
-            " 2000.0, 2000.1, '2026-11-24T10:15:00+00:00')"
+            " fill_px, tca_version, ts_utc) VALUES(1, 'bot', NULL, 'XAUUSD', 'buy',"
+            " 2000.0, 2000.1, 2, '2026-11-24T10:15:00+00:00')"
         )
     for index in range(10):
         con.execute(
             "INSERT INTO tca(fill_id, bot, account, symbol, side, order_px,"
-            " fill_px, ts_utc) VALUES(NULL, 'bot', NULL, 'EURUSD', 'sell',"
-            " 1.1, 1.10002, '2026-11-24T10:20:00+00:00')"
+            " fill_px, tca_version, ts_utc) VALUES(NULL, 'bot', NULL, 'EURUSD', 'sell',"
+            " 1.1, 1.10002, 2, '2026-11-24T10:20:00+00:00')"
         )
     con.execute("INSERT INTO fills(account, symbol, side) VALUES('ftmo_demo','XAUUSD','buy')")
     con.commit()

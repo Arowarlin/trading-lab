@@ -128,8 +128,8 @@ def test_scoreboard_neutral_y_slippage(tmp_path):
     now = datetime.now(timezone.utc).isoformat()
     with connect(db) as con:
         con.execute(
-            "INSERT INTO tca(bot, symbol, slippage_bps, ts_utc) "
-            "VALUES('ai:scalping','US100.cash',2.0,?)",
+            "INSERT INTO tca(bot, symbol, slippage_bps, tca_version, ts_utc) "
+            "VALUES('ai:scalping','US100.cash',2.0,2,?)",
             (now,),
         )
     board = scoreboard(broker=_Broker(), db_path=db)
