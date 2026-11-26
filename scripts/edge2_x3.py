@@ -6,6 +6,7 @@ Solo lee OOS-1/IS. No lee OOS-2. Escribe TL3_REPORTS/edge2_finalistas.md/.json.
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -17,6 +18,33 @@ PLAN = ROOT / "TL3_REPORTS" / "edge2_plan.json"
 OUT_MD = ROOT / "TL3_REPORTS" / "edge2_finalistas.md"
 OUT_JSON = ROOT / "TL3_REPORTS" / "edge2_finalistas.json"
 PBO_MAX = 0.30
+
+
+def _install_slippage_fallback() -> None:
+    """Completa el slippage no medido con el asumido de ``engine.yaml``.
+
+    CFD-006 (US500) no publica slippage en ``load_profile``; las campanas ya
+    usan el asumido del motor (US500 = 0,5). ``robustness`` y ``perturb``
+    construyen el coste con ``load_profile`` y fallaban con
+    ``Sin datos: coste CFD incompleto: slippage``. No se toca el motor: se
+    parchea solo en este proceso la carga del perfil.
+    """
+
+    from tradinglab.discovery import perturb as perturb_module
+    from tradinglab.discovery.costs import assumed_slippage_for
+    from tradinglab.propfund import costs as profile_module
+
+    original = profile_module.load_profile
+
+    def load_profile(account_id, instrument, **kwargs):
+        profile = original(account_id, instrument, **kwargs)
+        if profile.slippage_price is None:
+            value, _source = assumed_slippage_for(instrument)
+            profile = replace(profile, slippage_price=float(value))
+        return profile
+
+    profile_module.load_profile = load_profile
+    perturb_module.load_profile = load_profile
 
 
 def _validation(strategy_id: int, test: str):
@@ -210,6 +238,7 @@ def _gate1(strategy: dict, campaign: dict, metrics: dict) -> tuple[bool, dict]:
 def main() -> None:
     import sqlite3
 
+    _install_slippage_fallback()
     plan = json.loads(PLAN.read_text(encoding="utf-8"))
     ids = [str(item["campaign_id"]) for item in plan["campaigns"]]
     marks = ",".join("?" for _ in ids)
