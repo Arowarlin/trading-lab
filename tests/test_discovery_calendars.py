@@ -19,7 +19,14 @@ NY = "America/New_York"
 
 
 def test_nyse_2021_2027_exacto() -> None:
-    assert calendars.nyse_holidays(2021, 2027) == FULL_HOLIDAYS
+    # Única diferencia documentada (ENG-1 C-07): el calendario del EA marca el
+    # 2021-12-31 como Año Nuevo observado, pero NYSE abrió ese día. No se
+    # corrige en nyse_calendar.py porque entra en el hash congelado del forward
+    # del EA y la fecha es histórica (no afecta a 2026-2027).
+    production = dict(FULL_HOLIDAYS)
+    assert 20211231 in production
+    production.pop(20211231)
+    assert calendars.nyse_holidays(2021, 2027) == production
     assert calendars.nyse_early_closes(2021, 2027) == EARLY_CLOSES
 
 

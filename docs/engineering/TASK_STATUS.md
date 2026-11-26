@@ -44,3 +44,4 @@
 - 2026-11-26 · ENG-L4 COMPLETED: 1 de 39 campañas pasa la puerta 2 con v3 (edge2-04, 5 pliegues; no es evidencia). 38/39 con WF negativo sobre la población: rechazo informativo (AUDIT_FINDINGS §9).
 - 2026-11-26 · ENG-F2a REVIEW: marcador requires_local en 15 tests de entorno (se saltan solo si falta el recurso). F0-09 registrado: hash del forward del EA depende de CRLF en disco (producción, decisión del operador).
 - 2026-11-26 · F0-09 REVIEW: ea_forward normaliza CRLF y acepta el hash antiguo como alias; tests rojos antes / verdes después; test_ea_forward pasa también en Linux/CI.
+- 2026-11-26 · C-07 REVIEW: corregido en discovery/calendars.py (investigación). nyse_calendar.py (EA) NO se toca: su único caso es 2021-12-31 histórico y está en el hash congelado del forward; documentado en test_discovery_calendars.
