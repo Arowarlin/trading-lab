@@ -50,6 +50,7 @@ LOW y latentes: A-05..A-10, B-05..B-09, B-11..B-14, C-07..C-14, D-08..D-12 (ver 
 
 | ID | Hallazgo | Verif. | Tarea |
 |---|---|---|---|
+| **F0-08 (HIGH)** | **La suite escribe en el laboratorio real y puede enviar alertas reales.** Los tests sin marcador (`test_freshness`, `test_intraday_bots`, entre otros) llaman a `orchestrator` y `alerts.send` con `DEFAULT_DB` = `data/lab.db`. Esto deja alertas falsas (incluida una **crítica**: "paper_main: posición BTCUSD sin SL"), filas de `data_freshness`, un `INSERT OR IGNORE` en `learning_holdout` y sobrescribe `data/telegram_state.json`. `AlertConfig.from_env()` carga `.env` y el keyring, así que en el equipo del operador esas alertas **pueden salir por ntfy/Telegram**. Probado aquí con `NTFY_TOPIC` en el entorno: **5 envíos intentados** sin el fixture, 0 con él. Que llegaran de verdad en el equipo del operador: **Sin datos** (no hay keyring aquí) | V1 | ENG-F4 (fixture `_no_real_secrets`, hecho en la rama); ENG-F5 (redirigir `DEFAULT_DB` en los tests; toca `config.py`, requiere aprobación) |
 | F0-01/05 | `uv.lock` desfasado: faltan `arch` y la extra `discovery` (numba). La prueba SPA no corre en una instalación limpia | V1 | ENG-F3 |
 | F0-03 | CI en rojo: 43 tests dependen del equipo del operador (`lab.db` con `broker_spreads`, terminal MT5, `data/cache`, `discovery.db`, `reports/research/*.json`) | V1 | ENG-F2 |
 | F0-06 | Un error en `_init_worker` aparece como `BrokenProcessPool` y se pierde el "Sin datos" real | V1 | Con ENG-F2b |
@@ -76,6 +77,7 @@ LOW y latentes: A-05..A-10, B-05..B-09, B-11..B-14, C-07..C-14, D-08..D-12 (ver 
 
 | Orden | Bloque | Archivos | Cuándo |
 |---|---|---|---|
+| 0 | ENG-F4: los tests no ven secretos reales ni envían alertas (hecho en la rama, `tests/conftest.py`). ENG-F5: `DEFAULT_DB` configurable para los tests | `tests/conftest.py`; F5: `config.py` | F4 ya; F5 con aprobación |
 | 1 | ENG-F2a: marcar `local` los tests que necesitan el equipo del operador (MT5, caché, `reports/`) | `tests/…`, `pyproject.toml`, `ci.yml` | Ya (solo tests) |
 | 2 | ENG-F3: `uv lock` con `arch` y numba | `uv.lock` | Decisión del operador |
 | 3 | ENG-M1: motor (A-01, A-02, B-01, D-07) como **tests rojos + parche en rama**, con modo `legacy` idéntico bit a bit | `fastbt.py`, `metrics.py` | Parche ya; integración tras el tag `edge2` |

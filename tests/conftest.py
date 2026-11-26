@@ -21,6 +21,77 @@ def _isolate_discovery_db(tmp_path, monkeypatch):
     monkeypatch.setattr(learning, "CANONICAL_DISCOVERY_DB", empty)
 
 
+# Marcadores cuyos tests necesitan, a propósito, las credenciales reales.
+_REAL_SECRET_MARKERS = ("network", "credentials", "mt5", "alpaca", "lmstudio")
+# Variables de canal que no están en SECRET_KEYS pero deciden adónde va una alerta.
+_CHANNEL_VARS = (
+    "ALERT_CHANNEL",
+    "ALERTS_ENABLED",
+    "NTFY_URL",
+    "HEALTHCHECKS_URL",
+    "TELEGRAM_BOT_TOKEN",
+    "TELEGRAM_CHAT_ID",
+)
+
+
+@pytest.fixture(autouse=True)
+def _no_real_secrets(request, monkeypatch):
+    """Ningún test sin marcador de red/credenciales ve los secretos reales.
+
+    Sin esto, ``alerts.AlertConfig.from_env`` llama a ``load_secrets``, que lee
+    ``.env`` y el keyring de Windows. En el equipo del operador, tests como los
+    de ``test_freshness`` o ``test_intraday_bots`` podían enviar alertas reales
+    por ntfy/Telegram (por ejemplo "posición BTCUSD sin SL"). Ver
+    docs/engineering/AUDIT_FINDINGS.md (F0-08).
+    """
+
+    if any(request.node.get_closest_marker(name) for name in _REAL_SECRET_MARKERS):
+        return
+    from tradinglab import config
+
+    monkeypatch.setattr(config, "load_dotenv", lambda *args, **kwargs: False)
+    try:
+        import keyring
+    except Exception:  # noqa: BLE001
+        keyring = None
+    if keyring is not None:
+        monkeypatch.setattr(keyring, "get_password", lambda *args, **kwargs: None)
+    for key in (*config.SECRET_KEYS, *_CHANNEL_VARS):
+        monkeypatch.delenv(key, raising=False)
+
+
+_WATCHED = ("data/lab.db", "data/telegram_state.json", "data/task_missed_seen.json")
+
+
+def _stat_watched():
+    from tradinglab.config import ROOT
+
+    out = {}
+    for rel in _WATCHED:
+        path = ROOT / rel
+        out[rel] = path.stat().st_mtime_ns if path.exists() else None
+    return out
+
+
+def pytest_sessionstart(session):
+    session.config._tl_watched = _stat_watched()
+
+
+def pytest_terminal_summary(terminalreporter, exitstatus, config):
+    before = getattr(config, "_tl_watched", None)
+    if before is None:
+        return
+    touched = [rel for rel, stamp in _stat_watched().items() if stamp != before.get(rel)]
+    if touched:
+        terminalreporter.write_sep(
+            "!",
+            "AVISO: la suite modificó ficheros reales del laboratorio: "
+            + ", ".join(touched)
+            + " (docs/engineering/AUDIT_FINDINGS.md, F0-08)",
+            yellow=True,
+        )
+
+
 @pytest.fixture(autouse=True)
 def _allow_unapproved_performance(monkeypatch):
     """Los tests calculan rendimiento con datos sintéticos por diseño."""
