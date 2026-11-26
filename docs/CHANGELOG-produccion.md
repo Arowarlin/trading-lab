@@ -275,3 +275,18 @@ comprueba. El baseline de hashes vive en
 - **Alcance:** `prop/rules.py`, `prop/simulator.py`, `discovery/robustness.py`, `propfund/models.py` y `config/propfund/firms.yaml`. El motor y el setfile del EA no se tocan.
 - **Verificacion:** tests de FundingPips max(balance, equity), verificacion desde balance inicial, dias minimos y 1-Step al 3 %; baseline de produccion actualizado; suite completa.
 - **Rollback:** tag `tl2-n1-pre`.
+
+### 2026-11-26 · ENG-1 F5 · `DEFAULT_DB` configurable solo para la suite de tests
+- **Qué:** `config.DEFAULT_DB` lee `TRADINGLAB_DB` si existe; `telegram.STATE_PATH` y
+  `task_health.STATE_FILE` van junto a `DEFAULT_DB`. `tests/conftest.py` define la variable con una
+  carpeta temporal y quita `.env`/keyring a los tests sin marcador de red/credenciales.
+- **Por qué:** cada `pytest` escribía alertas de test en `data/lab.db` real y las **enviaba por ntfy**
+  (1.210 envíos entre el 2026-11-09 y el 2026-11-26, incluida una crítica "missing_sl BTCUSD"),
+  además de filas de `data_freshness` y `telegram_state.json`
+  (docs/engineering/AUDIT_FINDINGS.md, F0-08 y §6).
+- **Sin cambio en producción:** sin la variable las rutas son idénticas
+  (`tests/test_eng1_default_db.py::test_sin_variable_las_rutas_son_las_de_siempre`).
+- **Mismo merge:** C-02 (reanudación de Dukascopy), C-04 (`register` no mezcla futuros y CFD),
+  `uv.lock` con `arch` y `numba`, y 3 regresiones `xfail` del motor.
+- **Baseline:** `lab propfund baseline --reason "ENG-1 F5 …"` antes del merge.
+- **Vuelta atrás:** tag `tl2-eng1-f5-pre`.
