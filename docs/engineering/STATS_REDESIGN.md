@@ -37,3 +37,38 @@ Un banco sintético (`docs/engineering/tools/`, sin datos ni contador). Se basa 
   la población necesitan las series de la muestra, que hoy no se guardan; para eso habría que
   re-evaluar la muestra (**no** suma: son las mismas estrategias ya contadas). Hay que confirmarlo
   con el operador.
+
+## 4. Resultados del banco sintético S2 (2026-11-26)
+
+`docs/engineering/tools/s2_gate_bench.py`, 200 campañas por escenario, semilla 2026. JSON en
+`docs/engineering/BENCH/`. Probabilidad de que **al menos un finalista pase todas las puertas** (con
+ventaja: y que sea uno de los que la tienen de verdad; en todas las filas coincide).
+
+| Escenario | p = 0,10 (~25 ops/año) actual | propuesta | propuesta m=100 | p = 0,40 (~100 ops/año) actual | propuesta | propuesta m=100 |
+|---|---:|---:|---:|---:|---:|---:|
+| Ruido (falsos positivos) | 0,0 % | 0,5 % | 0,0 % | 0,0 % | 0,0 % | 0,0 % |
+| Ventaja neta 0,1 R | 0,0 % | 0,5 %* | 0,0 % | 1,5 % | 4,5 % | 1,0 % |
+| Ventaja neta 0,2 R | 0,5 % | 11,0 % | 5,0 % | 18,0 % | 55,5 % | 55,5 % |
+| Ventaja neta 0,3 R | 6,5 % | 48,5 % | 39,0 % | 63,0 % | 92,0 % | 92,0 % |
+
+\* El 0,5 % de 0,1 R es un falso positivo (pasa una estrategia sin ventaja).
+
+**Lectura:**
+1. **Las puertas actuales casi nunca dejan pasar una ventaja real** con la frecuencia de EDGE-1:
+   6,5 % con 0,3 R, 0,5 % con 0,2 R. El cuello de botella es el WF 60/20, con unas 2 operaciones por
+   ventana de prueba. Esto explica "0 robustas" sin necesidad de que no haya ventaja.
+2. **La propuesta multiplica la potencia por 3 a 20 sin subir los falsos positivos** (≤ 0,5 %).
+3. **La frecuencia pesa más que cualquier puerta.** Con 4 veces más operaciones, 0,2 R pasa del
+   11 % al 55 %.
+4. **Una ventaja de 0,1 R no se puede confirmar en una sola campaña** con 3 años de OOS-2, a ninguna de
+   las dos frecuencias. Hacen falta cestas (varios activos con la misma regla) o más tiempo de forward.
+5. **Corrección de la propuesta original:** el DSR con N = 440 en el OOS-2 deflactaba de más (potencia
+   ~0 incluso con 0,3 R). Los finalistas se eligen antes de ver el OOS-2: se corrige por cuántos se leen
+   ahí (Bonferroni/Holm, `m`), no por la población.
+
+**Supuestos y límites del banco** (no medidos con datos reales):
+- Estrategias independientes, sin correlación entre ellas.
+- R normal con σ = 1 y coste de 0,05 R por operación.
+- "GA" modelado como top-40 por IS.
+- No incluye las puertas 1 y 3 ni el baseline aleatorio de `confirm`.
+- Ventanas WF de la propuesta: 504/126 con p = 0,10 y 252/63 con p = 0,40.
