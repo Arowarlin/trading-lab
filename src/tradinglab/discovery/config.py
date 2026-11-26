@@ -184,6 +184,24 @@ class RobustnessConfig(BaseModel):
     challenge_accounts: list[str] = Field(
         default_factory=lambda: ["CFD-001", "CFD-006"]
     )
+    # ENG-1 S1 (docs/engineering/STATS_REDESIGN.md). 2 = puertas de siempre.
+    # 3 = WF y PBO sobre una muestra fija de la población evaluada (no el
+    # frontier), ventanas WF por TF del prerregistro WF-TF y confirmación OOS-2
+    # con PSR contra 0 corregido por Bonferroni sobre las lecturas del OOS-2.
+    # Activar 3 es cambiar las puertas: lo decide el operador.
+    gates_version: Literal[2, 3] = 2
+    v3_population_sample: int = Field(default=200, ge=8, le=5_000)
+    v3_alpha: float = Field(default=0.05, gt=0.0, lt=0.5)
+    v3_wf_windows: dict[str, tuple[int, int]] = Field(
+        default_factory=lambda: {
+            "M5": (60, 20),
+            "M15": (60, 20),
+            "M30": (120, 40),
+            "H1": (180, 60),
+            "H4": (360, 120),
+            "D1": (504, 126),
+        }
+    )
 
 
 class PerturbConfig(BaseModel):

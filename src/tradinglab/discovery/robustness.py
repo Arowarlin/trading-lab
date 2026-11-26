@@ -8,6 +8,7 @@ nivel 4.
 
 from __future__ import annotations
 
+import hashlib
 import random
 from typing import Any
 
@@ -247,6 +248,39 @@ def _frontier_frame(
     for row in frontier:
         if row["dates"]:
             series[row["strategy_id"]] = _series(row["returns"], row["dates"])
+    return _business_day_frame(series)
+
+
+def _population_sample_frame(
+    campaign_id: str, db_path, size: int
+) -> tuple[pd.DataFrame | None, list[int]]:
+    """Muestra fija de la población evaluada en IS (ENG-1 S1, puertas v3).
+
+    El PBO y el WF del frontier miden estrategias ya elegidas por el GA con el
+    mismo IS (D-01, D-02). Una muestra aleatoria de todas las estrategias
+    evaluadas no está elegida, así que el WF mide si "elegir la mejor en el
+    pasado" funciona después. La semilla depende solo del id de campaña.
+    """
+
+    rows = databank.list_strategies(campaign_id=campaign_id, limit=None, db_path=db_path)
+    series = {}
+    for row in rows:
+        for item in databank.list_evaluations(row["id"], db_path=db_path):
+            if item["segment"] != "fitness_is":
+                continue
+            dates = (item.get("metrics") or {}).get("return_dates") or []
+            if dates:
+                series[int(row["id"])] = _series(item["returns"].tolist(), dates)
+            break
+    ids = sorted(series)
+    if len(ids) > size:
+        seed = int(hashlib.sha256(str(campaign_id).encode("utf-8")).hexdigest()[:8], 16)
+        rng = np.random.default_rng(seed)
+        ids = sorted(int(value) for value in rng.choice(ids, size=size, replace=False))
+    return _business_day_frame({key: series[key] for key in ids})
+
+
+def _business_day_frame(series: dict[int, pd.Series]) -> tuple[pd.DataFrame | None, list[int]]:
     if len(series) < 2:
         return None, []
     frame = pd.concat(series, axis=1, sort=True).fillna(0.0)
@@ -387,7 +421,18 @@ def _pbo_wf(
     trade_times_by_strategy: dict[int, list[Any]] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     config = load_engine_config().robustness
-    frame, strategy_ids = _frontier_frame(campaign_id, db_path)
+    gates_v3 = int(config.gates_version) == 3
+    train_days, test_days = int(config.wf_train_days), int(config.wf_test_days)
+    if gates_v3:
+        frame, strategy_ids = _population_sample_frame(
+            campaign_id, db_path, int(config.v3_population_sample)
+        )
+        campaign = databank.get_campaign(campaign_id, db_path=db_path) or {}
+        timeframe = str(campaign.get("timeframe") or "").upper()
+        if timeframe in config.v3_wf_windows:
+            train_days, test_days = (int(v) for v in config.v3_wf_windows[timeframe])
+    else:
+        frame, strategy_ids = _frontier_frame(campaign_id, db_path)
     if frame is None:
         return (
             {"status": "Sin datos", "pbo": None, "reason": "menos de 2 estrategias"},
@@ -421,8 +466,8 @@ def _pbo_wf(
     try:
         wf = walk_forward(
             matrix,
-            train_len=int(config.wf_train_days),
-            test_len=int(config.wf_test_days),
+            train_len=train_days,
+            test_len=test_days,
         )
         fold_details = list(wf.fold_details)
         verdict = wf.verdict(
@@ -457,7 +502,15 @@ def _pbo_wf(
             "verdict": "Sin datos",
             "reason": f"{type(exc).__name__}: {exc}",
         }
-    if trade_times_by_strategy is not None and fold_details:
+    gate_meta = {
+        "gates_version": 3 if gates_v3 else 2,
+        "matrix": "population_sample" if gates_v3 else "frontier",
+        "n_variants_matrix": int(matrix.shape[1]),
+        "wf_windows": [train_days, test_days],
+    }
+    pbo_result.update(gate_meta)
+    wf_result.update(gate_meta)
+    if trade_times_by_strategy is not None and fold_details and not gates_v3:
         wf_result.update(
             _wf_trade_frequency(
                 frame,

@@ -119,6 +119,7 @@ def evaluate(
     oos2 = (oos2_metrics or {}).get("expectancy_r")
     pbo_value = (tests.get("pbo") or {}).get("pbo")
     dsr_confirm = (tests.get("dsr_confirm") or {}).get("dsr")
+    dsr_threshold = (tests.get("dsr_confirm") or {}).get("threshold")
     challenge_ok = (tests.get("challenge") or {}).get("passed")
     wf_ok = (tests.get("wf") or {}).get("ok")
     regime_ok = (tests.get("regime") or {}).get("passed")
@@ -170,6 +171,7 @@ def evaluate(
         slip2=slip2,
         challenge_ok=challenge_ok,
         random_oos2=random_oos2,
+        dsr_threshold=dsr_threshold,
     )
     if level4:
         level = 4
@@ -496,6 +498,37 @@ def _account_confirmation(
     }
 
 
+def _psr_bonferroni_v3(
+    daily_r, *, base: dict[str, Any], n_trials: int, alpha: float, db_path
+) -> dict[str, Any]:
+    """Confirmación OOS-2 de las puertas v3 (ENG-1 S1, STATS_REDESIGN §4).
+
+    Los finalistas se eligen antes de leer el OOS-2, así que no se deflacta por
+    la población: se exige un PSR contra 0 por encima de ``1 - alpha/m``, con
+    ``m`` = lecturas del OOS-2 registradas en todo el laboratorio (como mínimo,
+    las de esta confirmación). Sin datos suficientes, no aprueba.
+    """
+
+    reads = int(campaigns.discovery_tests(db_path).get("holdout_reads") or 0)
+    m = max(reads, int(n_trials), 1)
+    threshold = 1.0 - float(alpha) / m
+    try:
+        psr = dsr_from_returns(daily_r, [], n_trials=1, periods_per_year=252.0, benchmark_sr=0.0)
+    except Exception as exc:  # noqa: BLE001 - Sin datos, no se aprueba
+        psr = {"status": "Sin datos", "dsr": None, "reason": f"{type(exc).__name__}: {exc}"}
+    keep = {key: base[key] for key in base if key not in {"dsr", "kind", "status", "note"}}
+    return {
+        **keep,
+        **psr,
+        "kind": "psr_bonferroni_v3",
+        "gates_version": 3,
+        "threshold": threshold,
+        "m_oos2_reads": m,
+        "alpha": float(alpha),
+        "dsr_v2_reference": base.get("dsr"),
+    }
+
+
 def confirm(
     strategy_id: int,
     *,
@@ -741,6 +774,15 @@ def confirm(
     dsr["trial_srs_available"] = len(trial_srs)
     dsr["trades_oos2"] = trades_oos2
     dsr["min_trades_oos2"] = min_trades
+    robustness_config = load_engine_config().robustness
+    if int(robustness_config.gates_version) == 3 and enough_trades:
+        dsr = _psr_bonferroni_v3(
+            result.daily_r.to_numpy(dtype=float),
+            base=dsr,
+            n_trials=n_trials,
+            alpha=float(robustness_config.v3_alpha),
+            db_path=db_path,
+        )
     firm_payloads: dict[str, dict[str, Any]] = {}
     if default_obj is not None:
         registry = load_registry()
@@ -833,7 +875,10 @@ def confirm(
         db_path=db_path,
     )
     databank.add_validation(
-        strategy_id, "dsr_confirm", dsr, float(dsr.get("dsr") or 0.0) >= 0.90,
+        strategy_id,
+        "dsr_confirm",
+        dsr,
+        float(dsr.get("dsr") or 0.0) >= float(dsr.get("threshold") or 0.90),
         db_path=db_path,
     )
     tests = load_tests(strategy_id, db_path=db_path)
