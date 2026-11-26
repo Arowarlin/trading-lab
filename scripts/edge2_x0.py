@@ -120,6 +120,8 @@ def _classify_gap(gap) -> str:
     year = int(gap["start_utc"].year)
     minutes = float(gap["minutes"])
     day = gap["start"].date()
+    if minutes >= 1440:
+        return "hueco de historia (>1 dia)"
     if year < 2018:
         return "noche Dukascopy pre-2018"
     if year == 2018:
@@ -181,7 +183,8 @@ def main() -> None:
             if tf in {"H1", "H4"}:
                 frame = frame[frame.index >= pd.Timestamp("2019-01-01", tz="UTC")]
             qconfig = quality_config(engine.data_quality, symbol, tf, "dukascopy")
-            gap_rows, n_gaps = _gap_table(full_frame, tf, qconfig, symbol)
+            gap_frame = full_frame[full_frame.index >= pd.Timestamp("2013-11-01", tz="UTC")]
+            gap_rows, n_gaps = _gap_table(gap_frame, tf, qconfig, symbol)
             for row in gap_rows:
                 gap_records.append({"symbol": symbol, "timeframe": tf, **row})
             missing, _ = missing_weekdays(frame, tf)

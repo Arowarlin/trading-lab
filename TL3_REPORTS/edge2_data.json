@@ -8,7 +8,7 @@
       "useful_start": "2013-11-01T00:00:00+00:00",
       "is_start_effective": "2015-01-02",
       "non_scheduled_gaps": 20,
-      "non_scheduled_gaps_full": 73,
+      "non_scheduled_gaps_full": 20,
       "missing_weekdays": 433,
       "issues": [
         "granularidad incorrecta en 16 meses; inicio útil 2013-11-01",
@@ -38,24 +38,6 @@
       "median_price_is": 6278.8150000000005,
       "account": "CFD-001",
       "gaps": [
-        {
-          "year": 2012,
-          "count": 41,
-          "median_minutes": 180.0,
-          "max_minutes": 225.0,
-          "classes": {
-            "noche Dukascopy pre-2018": 41
-          }
-        },
-        {
-          "year": 2013,
-          "count": 12,
-          "median_minutes": 150.0,
-          "max_minutes": 225.0,
-          "classes": {
-            "noche Dukascopy pre-2018": 12
-          }
-        },
         {
           "year": 2014,
           "count": 7,
@@ -187,7 +169,7 @@
       "useful_start": "2013-11-01T00:00:00+00:00",
       "is_start_effective": "2015-01-02",
       "non_scheduled_gaps": 20,
-      "non_scheduled_gaps_full": 73,
+      "non_scheduled_gaps_full": 20,
       "missing_weekdays": 433,
       "issues": [
         "granularidad incorrecta en 16 meses; inicio útil 2013-11-01",
@@ -217,24 +199,6 @@
       "median_price_is": 6278.8150000000005,
       "account": "CFD-006",
       "gaps": [
-        {
-          "year": 2012,
-          "count": 41,
-          "median_minutes": 180.0,
-          "max_minutes": 225.0,
-          "classes": {
-            "noche Dukascopy pre-2018": 41
-          }
-        },
-        {
-          "year": 2013,
-          "count": 12,
-          "median_minutes": 150.0,
-          "max_minutes": 225.0,
-          "classes": {
-            "noche Dukascopy pre-2018": 12
-          }
-        },
         {
           "year": 2014,
           "count": 7,
@@ -366,7 +330,7 @@
       "useful_start": "2013-11-01T00:00:00+00:00",
       "is_start_effective": "2015-01-02",
       "non_scheduled_gaps": 10,
-      "non_scheduled_gaps_full": 75,
+      "non_scheduled_gaps_full": 10,
       "missing_weekdays": 433,
       "issues": [
         "granularidad incorrecta en 16 meses; inicio útil 2013-11-01",
@@ -395,24 +359,6 @@
       "median_price_is": 6262.719,
       "account": "CFD-001",
       "gaps": [
-        {
-          "year": 2012,
-          "count": 53,
-          "median_minutes": 180.0,
-          "max_minutes": 210.0,
-          "classes": {
-            "noche Dukascopy pre-2018": 53
-          }
-        },
-        {
-          "year": 2013,
-          "count": 12,
-          "median_minutes": 150.0,
-          "max_minutes": 210.0,
-          "classes": {
-            "noche Dukascopy pre-2018": 12
-          }
-        },
         {
           "year": 2014,
           "count": 8,
@@ -526,7 +472,7 @@
       "useful_start": "2013-11-01T00:00:00+00:00",
       "is_start_effective": "2015-01-02",
       "non_scheduled_gaps": 10,
-      "non_scheduled_gaps_full": 75,
+      "non_scheduled_gaps_full": 10,
       "missing_weekdays": 433,
       "issues": [
         "granularidad incorrecta en 16 meses; inicio útil 2013-11-01",
@@ -555,24 +501,6 @@
       "median_price_is": 6262.719,
       "account": "CFD-006",
       "gaps": [
-        {
-          "year": 2012,
-          "count": 53,
-          "median_minutes": 180.0,
-          "max_minutes": 210.0,
-          "classes": {
-            "noche Dukascopy pre-2018": 53
-          }
-        },
-        {
-          "year": 2013,
-          "count": 12,
-          "median_minutes": 150.0,
-          "max_minutes": 210.0,
-          "classes": {
-            "noche Dukascopy pre-2018": 12
-          }
-        },
         {
           "year": 2014,
           "count": 8,
@@ -686,7 +614,7 @@
       "useful_start": "2019-01-01T23:00:00+00:00",
       "is_start_effective": "2019-01-02",
       "non_scheduled_gaps": 8,
-      "non_scheduled_gaps_full": 1227,
+      "non_scheduled_gaps_full": 812,
       "missing_weekdays": 13,
       "issues": [
         "huecos no programados: 8 (0.017% de 48412 velas esperadas)",
@@ -707,30 +635,13 @@
       "account": "CFD-001",
       "gaps": [
         {
-          "year": 2011,
-          "count": 6,
-          "median_minutes": 960.0,
-          "max_minutes": 170100.0,
-          "classes": {
-            "noche Dukascopy pre-2018": 6
-          }
-        },
-        {
-          "year": 2012,
-          "count": 325,
-          "median_minutes": 780.0,
-          "max_minutes": 5940.0,
-          "classes": {
-            "noche Dukascopy pre-2018": 325
-          }
-        },
-        {
           "year": 2013,
-          "count": 96,
-          "median_minutes": 870.0,
-          "max_minutes": 127740.0,
+          "count": 12,
+          "median_minutes": 3000.0,
+          "max_minutes": 3180.0,
           "classes": {
-            "noche Dukascopy pre-2018": 96
+            "hueco de historia (>1 dia)": 11,
+            "noche Dukascopy pre-2018": 1
           }
         },
         {
@@ -739,7 +650,8 @@
           "median_minutes": 2100.0,
           "max_minutes": 4440.0,
           "classes": {
-            "noche Dukascopy pre-2018": 38
+            "hueco de historia (>1 dia)": 21,
+            "noche Dukascopy pre-2018": 17
           }
         },
         {
@@ -748,7 +660,8 @@
           "median_minutes": 540.0,
           "max_minutes": 5040.0,
           "classes": {
-            "noche Dukascopy pre-2018": 182
+            "noche Dukascopy pre-2018": 145,
+            "hueco de historia (>1 dia)": 37
           }
         },
         {
@@ -757,7 +670,8 @@
           "median_minutes": 540.0,
           "max_minutes": 4860.0,
           "classes": {
-            "noche Dukascopy pre-2018": 252
+            "noche Dukascopy pre-2018": 205,
+            "hueco de historia (>1 dia)": 47
           }
         },
         {
@@ -766,7 +680,8 @@
           "median_minutes": 540.0,
           "max_minutes": 4920.0,
           "classes": {
-            "noche Dukascopy pre-2018": 251
+            "noche Dukascopy pre-2018": 203,
+            "hueco de historia (>1 dia)": 48
           }
         },
         {
@@ -775,7 +690,8 @@
           "median_minutes": 600.0,
           "max_minutes": 4920.0,
           "classes": {
-            "noche Dukascopy 2018": 69
+            "noche Dukascopy 2018": 57,
+            "hueco de historia (>1 dia)": 12
           }
         },
         {
@@ -892,7 +808,7 @@
       "useful_start": "2019-01-01T23:00:00+00:00",
       "is_start_effective": "2019-01-02",
       "non_scheduled_gaps": 8,
-      "non_scheduled_gaps_full": 1227,
+      "non_scheduled_gaps_full": 812,
       "missing_weekdays": 13,
       "issues": [
         "huecos no programados: 8 (0.017% de 48412 velas esperadas)",
@@ -913,30 +829,13 @@
       "account": "CFD-006",
       "gaps": [
         {
-          "year": 2011,
-          "count": 6,
-          "median_minutes": 960.0,
-          "max_minutes": 170100.0,
-          "classes": {
-            "noche Dukascopy pre-2018": 6
-          }
-        },
-        {
-          "year": 2012,
-          "count": 325,
-          "median_minutes": 780.0,
-          "max_minutes": 5940.0,
-          "classes": {
-            "noche Dukascopy pre-2018": 325
-          }
-        },
-        {
           "year": 2013,
-          "count": 96,
-          "median_minutes": 870.0,
-          "max_minutes": 127740.0,
+          "count": 12,
+          "median_minutes": 3000.0,
+          "max_minutes": 3180.0,
           "classes": {
-            "noche Dukascopy pre-2018": 96
+            "hueco de historia (>1 dia)": 11,
+            "noche Dukascopy pre-2018": 1
           }
         },
         {
@@ -945,7 +844,8 @@
           "median_minutes": 2100.0,
           "max_minutes": 4440.0,
           "classes": {
-            "noche Dukascopy pre-2018": 38
+            "hueco de historia (>1 dia)": 21,
+            "noche Dukascopy pre-2018": 17
           }
         },
         {
@@ -954,7 +854,8 @@
           "median_minutes": 540.0,
           "max_minutes": 5040.0,
           "classes": {
-            "noche Dukascopy pre-2018": 182
+            "noche Dukascopy pre-2018": 145,
+            "hueco de historia (>1 dia)": 37
           }
         },
         {
@@ -963,7 +864,8 @@
           "median_minutes": 540.0,
           "max_minutes": 4860.0,
           "classes": {
-            "noche Dukascopy pre-2018": 252
+            "noche Dukascopy pre-2018": 205,
+            "hueco de historia (>1 dia)": 47
           }
         },
         {
@@ -972,7 +874,8 @@
           "median_minutes": 540.0,
           "max_minutes": 4920.0,
           "classes": {
-            "noche Dukascopy pre-2018": 251
+            "noche Dukascopy pre-2018": 203,
+            "hueco de historia (>1 dia)": 48
           }
         },
         {
@@ -981,7 +884,8 @@
           "median_minutes": 600.0,
           "max_minutes": 4920.0,
           "classes": {
-            "noche Dukascopy 2018": 69
+            "noche Dukascopy 2018": 57,
+            "hueco de historia (>1 dia)": 12
           }
         },
         {
@@ -1098,7 +1002,7 @@
       "useful_start": "2019-01-01T22:00:00+00:00",
       "is_start_effective": "2019-01-02",
       "non_scheduled_gaps": 1,
-      "non_scheduled_gaps_full": 1070,
+      "non_scheduled_gaps_full": 771,
       "missing_weekdays": 13,
       "issues": [
         "huecos no programados: 1 (0.008% de 12218 velas esperadas)",
@@ -1119,30 +1023,12 @@
       "account": "CFD-001",
       "gaps": [
         {
-          "year": 2011,
-          "count": 6,
-          "median_minutes": 840.0,
-          "max_minutes": 169980.0,
-          "classes": {
-            "noche Dukascopy pre-2018": 6
-          }
-        },
-        {
-          "year": 2012,
-          "count": 236,
-          "median_minutes": 960.0,
-          "max_minutes": 5280.0,
-          "classes": {
-            "noche Dukascopy pre-2018": 236
-          }
-        },
-        {
           "year": 2013,
-          "count": 59,
-          "median_minutes": 960.0,
-          "max_minutes": 127620.0,
+          "count": 2,
+          "median_minutes": 2040.0,
+          "max_minutes": 2160.0,
           "classes": {
-            "noche Dukascopy pre-2018": 59
+            "hueco de historia (>1 dia)": 2
           }
         },
         {
@@ -1151,7 +1037,8 @@
           "median_minutes": 720.0,
           "max_minutes": 3840.0,
           "classes": {
-            "noche Dukascopy pre-2018": 14
+            "hueco de historia (>1 dia)": 5,
+            "noche Dukascopy pre-2018": 9
           }
         },
         {
@@ -1160,7 +1047,8 @@
           "median_minutes": 480.0,
           "max_minutes": 4800.0,
           "classes": {
-            "noche Dukascopy pre-2018": 182
+            "noche Dukascopy pre-2018": 145,
+            "hueco de historia (>1 dia)": 37
           }
         },
         {
@@ -1169,7 +1057,8 @@
           "median_minutes": 480.0,
           "max_minutes": 4800.0,
           "classes": {
-            "noche Dukascopy pre-2018": 252
+            "noche Dukascopy pre-2018": 205,
+            "hueco de historia (>1 dia)": 47
           }
         },
         {
@@ -1178,7 +1067,8 @@
           "median_minutes": 480.0,
           "max_minutes": 4800.0,
           "classes": {
-            "noche Dukascopy pre-2018": 251
+            "noche Dukascopy pre-2018": 203,
+            "hueco de historia (>1 dia)": 48
           }
         },
         {
@@ -1187,7 +1077,8 @@
           "median_minutes": 480.0,
           "max_minutes": 4800.0,
           "classes": {
-            "noche Dukascopy 2018": 69
+            "noche Dukascopy 2018": 57,
+            "hueco de historia (>1 dia)": 12
           }
         },
         {
@@ -1285,7 +1176,7 @@
       "useful_start": "2019-01-01T22:00:00+00:00",
       "is_start_effective": "2019-01-02",
       "non_scheduled_gaps": 1,
-      "non_scheduled_gaps_full": 1070,
+      "non_scheduled_gaps_full": 771,
       "missing_weekdays": 13,
       "issues": [
         "huecos no programados: 1 (0.008% de 12218 velas esperadas)",
@@ -1306,30 +1197,12 @@
       "account": "CFD-006",
       "gaps": [
         {
-          "year": 2011,
-          "count": 6,
-          "median_minutes": 840.0,
-          "max_minutes": 169980.0,
-          "classes": {
-            "noche Dukascopy pre-2018": 6
-          }
-        },
-        {
-          "year": 2012,
-          "count": 236,
-          "median_minutes": 960.0,
-          "max_minutes": 5280.0,
-          "classes": {
-            "noche Dukascopy pre-2018": 236
-          }
-        },
-        {
           "year": 2013,
-          "count": 59,
-          "median_minutes": 960.0,
-          "max_minutes": 127620.0,
+          "count": 2,
+          "median_minutes": 2040.0,
+          "max_minutes": 2160.0,
           "classes": {
-            "noche Dukascopy pre-2018": 59
+            "hueco de historia (>1 dia)": 2
           }
         },
         {
@@ -1338,7 +1211,8 @@
           "median_minutes": 720.0,
           "max_minutes": 3840.0,
           "classes": {
-            "noche Dukascopy pre-2018": 14
+            "hueco de historia (>1 dia)": 5,
+            "noche Dukascopy pre-2018": 9
           }
         },
         {
@@ -1347,7 +1221,8 @@
           "median_minutes": 480.0,
           "max_minutes": 4800.0,
           "classes": {
-            "noche Dukascopy pre-2018": 182
+            "noche Dukascopy pre-2018": 145,
+            "hueco de historia (>1 dia)": 37
           }
         },
         {
@@ -1356,7 +1231,8 @@
           "median_minutes": 480.0,
           "max_minutes": 4800.0,
           "classes": {
-            "noche Dukascopy pre-2018": 252
+            "noche Dukascopy pre-2018": 205,
+            "hueco de historia (>1 dia)": 47
           }
         },
         {
@@ -1365,7 +1241,8 @@
           "median_minutes": 480.0,
           "max_minutes": 4800.0,
           "classes": {
-            "noche Dukascopy pre-2018": 251
+            "noche Dukascopy pre-2018": 203,
+            "hueco de historia (>1 dia)": 48
           }
         },
         {
@@ -1374,7 +1251,8 @@
           "median_minutes": 480.0,
           "max_minutes": 4800.0,
           "classes": {
-            "noche Dukascopy 2018": 69
+            "noche Dukascopy 2018": 57,
+            "hueco de historia (>1 dia)": 12
           }
         },
         {
@@ -1472,7 +1350,7 @@
       "useful_start": "2013-11-01T00:00:00+00:00",
       "is_start_effective": "2015-01-02",
       "non_scheduled_gaps": 35,
-      "non_scheduled_gaps_full": 144,
+      "non_scheduled_gaps_full": 35,
       "missing_weekdays": 459,
       "issues": [
         "granularidad incorrecta en 16 meses; inicio útil 2013-11-01",
@@ -1502,33 +1380,6 @@
       "median_price_is": 2572.369,
       "account": "CFD-001",
       "gaps": [
-        {
-          "year": 2011,
-          "count": 1,
-          "median_minutes": 90.0,
-          "max_minutes": 90.0,
-          "classes": {
-            "noche Dukascopy pre-2018": 1
-          }
-        },
-        {
-          "year": 2012,
-          "count": 88,
-          "median_minutes": 120.0,
-          "max_minutes": 225.0,
-          "classes": {
-            "noche Dukascopy pre-2018": 88
-          }
-        },
-        {
-          "year": 2013,
-          "count": 20,
-          "median_minutes": 127.5,
-          "max_minutes": 225.0,
-          "classes": {
-            "noche Dukascopy pre-2018": 20
-          }
-        },
         {
           "year": 2014,
           "count": 26,
@@ -1660,7 +1511,7 @@
       "useful_start": "2013-11-01T00:00:00+00:00",
       "is_start_effective": "2015-01-02",
       "non_scheduled_gaps": 35,
-      "non_scheduled_gaps_full": 144,
+      "non_scheduled_gaps_full": 35,
       "missing_weekdays": 459,
       "issues": [
         "granularidad incorrecta en 16 meses; inicio útil 2013-11-01",
@@ -1690,33 +1541,6 @@
       "median_price_is": 2572.369,
       "account": "CFD-006",
       "gaps": [
-        {
-          "year": 2011,
-          "count": 1,
-          "median_minutes": 90.0,
-          "max_minutes": 90.0,
-          "classes": {
-            "noche Dukascopy pre-2018": 1
-          }
-        },
-        {
-          "year": 2012,
-          "count": 88,
-          "median_minutes": 120.0,
-          "max_minutes": 225.0,
-          "classes": {
-            "noche Dukascopy pre-2018": 88
-          }
-        },
-        {
-          "year": 2013,
-          "count": 20,
-          "median_minutes": 127.5,
-          "max_minutes": 225.0,
-          "classes": {
-            "noche Dukascopy pre-2018": 20
-          }
-        },
         {
           "year": 2014,
           "count": 26,
@@ -1848,7 +1672,7 @@
       "useful_start": "2013-11-01T00:00:00+00:00",
       "is_start_effective": "2015-01-02",
       "non_scheduled_gaps": 14,
-      "non_scheduled_gaps_full": 49,
+      "non_scheduled_gaps_full": 14,
       "missing_weekdays": 459,
       "issues": [
         "granularidad incorrecta en 16 meses; inicio útil 2013-11-01",
@@ -1877,24 +1701,6 @@
       "median_price_is": 2569.7799999999997,
       "account": "CFD-001",
       "gaps": [
-        {
-          "year": 2012,
-          "count": 24,
-          "median_minutes": 165.0,
-          "max_minutes": 210.0,
-          "classes": {
-            "noche Dukascopy pre-2018": 24
-          }
-        },
-        {
-          "year": 2013,
-          "count": 11,
-          "median_minutes": 150.0,
-          "max_minutes": 210.0,
-          "classes": {
-            "noche Dukascopy pre-2018": 11
-          }
-        },
         {
           "year": 2014,
           "count": 12,
@@ -2008,7 +1814,7 @@
       "useful_start": "2013-11-01T00:00:00+00:00",
       "is_start_effective": "2015-01-02",
       "non_scheduled_gaps": 14,
-      "non_scheduled_gaps_full": 49,
+      "non_scheduled_gaps_full": 14,
       "missing_weekdays": 459,
       "issues": [
         "granularidad incorrecta en 16 meses; inicio útil 2013-11-01",
@@ -2037,24 +1843,6 @@
       "median_price_is": 2569.7799999999997,
       "account": "CFD-006",
       "gaps": [
-        {
-          "year": 2012,
-          "count": 24,
-          "median_minutes": 165.0,
-          "max_minutes": 210.0,
-          "classes": {
-            "noche Dukascopy pre-2018": 24
-          }
-        },
-        {
-          "year": 2013,
-          "count": 11,
-          "median_minutes": 150.0,
-          "max_minutes": 210.0,
-          "classes": {
-            "noche Dukascopy pre-2018": 11
-          }
-        },
         {
           "year": 2014,
           "count": 12,
@@ -2168,7 +1956,7 @@
       "useful_start": "2019-01-01T23:00:00+00:00",
       "is_start_effective": "2019-01-02",
       "non_scheduled_gaps": 5,
-      "non_scheduled_gaps_full": 1273,
+      "non_scheduled_gaps_full": 813,
       "missing_weekdays": 13,
       "issues": [
         "huecos no programados: 5 (0.010% de 48412 velas esperadas)",
@@ -2189,30 +1977,13 @@
       "account": "CFD-001",
       "gaps": [
         {
-          "year": 2011,
-          "count": 8,
-          "median_minutes": 570.0,
-          "max_minutes": 170460.0,
-          "classes": {
-            "noche Dukascopy pre-2018": 8
-          }
-        },
-        {
-          "year": 2012,
-          "count": 376,
-          "median_minutes": 540.0,
-          "max_minutes": 6720.0,
-          "classes": {
-            "noche Dukascopy pre-2018": 376
-          }
-        },
-        {
           "year": 2013,
-          "count": 87,
-          "median_minutes": 840.0,
-          "max_minutes": 127740.0,
+          "count": 11,
+          "median_minutes": 3000.0,
+          "max_minutes": 3180.0,
           "classes": {
-            "noche Dukascopy pre-2018": 87
+            "hueco de historia (>1 dia)": 10,
+            "noche Dukascopy pre-2018": 1
           }
         },
         {
@@ -2221,7 +1992,8 @@
           "median_minutes": 3000.0,
           "max_minutes": 4440.0,
           "classes": {
-            "noche Dukascopy pre-2018": 38
+            "noche Dukascopy pre-2018": 15,
+            "hueco de historia (>1 dia)": 23
           }
         },
         {
@@ -2230,7 +2002,8 @@
           "median_minutes": 540.0,
           "max_minutes": 5100.0,
           "classes": {
-            "noche Dukascopy pre-2018": 192
+            "noche Dukascopy pre-2018": 152,
+            "hueco de historia (>1 dia)": 40
           }
         },
         {
@@ -2239,7 +2012,8 @@
           "median_minutes": 540.0,
           "max_minutes": 4860.0,
           "classes": {
-            "noche Dukascopy pre-2018": 249
+            "noche Dukascopy pre-2018": 199,
+            "hueco de historia (>1 dia)": 50
           }
         },
         {
@@ -2248,7 +2022,8 @@
           "median_minutes": 540.0,
           "max_minutes": 4920.0,
           "classes": {
-            "noche Dukascopy pre-2018": 249
+            "noche Dukascopy pre-2018": 199,
+            "hueco de historia (>1 dia)": 50
           }
         },
         {
@@ -2257,7 +2032,8 @@
           "median_minutes": 600.0,
           "max_minutes": 4920.0,
           "classes": {
-            "noche Dukascopy 2018": 69
+            "noche Dukascopy 2018": 57,
+            "hueco de historia (>1 dia)": 12
           }
         },
         {
@@ -2373,7 +2149,7 @@
       "useful_start": "2019-01-01T23:00:00+00:00",
       "is_start_effective": "2019-01-02",
       "non_scheduled_gaps": 5,
-      "non_scheduled_gaps_full": 1273,
+      "non_scheduled_gaps_full": 813,
       "missing_weekdays": 13,
       "issues": [
         "huecos no programados: 5 (0.010% de 48412 velas esperadas)",
@@ -2394,30 +2170,13 @@
       "account": "CFD-006",
       "gaps": [
         {
-          "year": 2011,
-          "count": 8,
-          "median_minutes": 570.0,
-          "max_minutes": 170460.0,
-          "classes": {
-            "noche Dukascopy pre-2018": 8
-          }
-        },
-        {
-          "year": 2012,
-          "count": 376,
-          "median_minutes": 540.0,
-          "max_minutes": 6720.0,
-          "classes": {
-            "noche Dukascopy pre-2018": 376
-          }
-        },
-        {
           "year": 2013,
-          "count": 87,
-          "median_minutes": 840.0,
-          "max_minutes": 127740.0,
+          "count": 11,
+          "median_minutes": 3000.0,
+          "max_minutes": 3180.0,
           "classes": {
-            "noche Dukascopy pre-2018": 87
+            "hueco de historia (>1 dia)": 10,
+            "noche Dukascopy pre-2018": 1
           }
         },
         {
@@ -2426,7 +2185,8 @@
           "median_minutes": 3000.0,
           "max_minutes": 4440.0,
           "classes": {
-            "noche Dukascopy pre-2018": 38
+            "noche Dukascopy pre-2018": 15,
+            "hueco de historia (>1 dia)": 23
           }
         },
         {
@@ -2435,7 +2195,8 @@
           "median_minutes": 540.0,
           "max_minutes": 5100.0,
           "classes": {
-            "noche Dukascopy pre-2018": 192
+            "noche Dukascopy pre-2018": 152,
+            "hueco de historia (>1 dia)": 40
           }
         },
         {
@@ -2444,7 +2205,8 @@
           "median_minutes": 540.0,
           "max_minutes": 4860.0,
           "classes": {
-            "noche Dukascopy pre-2018": 249
+            "noche Dukascopy pre-2018": 199,
+            "hueco de historia (>1 dia)": 50
           }
         },
         {
@@ -2453,7 +2215,8 @@
           "median_minutes": 540.0,
           "max_minutes": 4920.0,
           "classes": {
-            "noche Dukascopy pre-2018": 249
+            "noche Dukascopy pre-2018": 199,
+            "hueco de historia (>1 dia)": 50
           }
         },
         {
@@ -2462,7 +2225,8 @@
           "median_minutes": 600.0,
           "max_minutes": 4920.0,
           "classes": {
-            "noche Dukascopy 2018": 69
+            "noche Dukascopy 2018": 57,
+            "hueco de historia (>1 dia)": 12
           }
         },
         {
@@ -2578,7 +2342,7 @@
       "useful_start": "2019-01-01T22:00:00+00:00",
       "is_start_effective": "2019-01-02",
       "non_scheduled_gaps": 1,
-      "non_scheduled_gaps_full": 1039,
+      "non_scheduled_gaps_full": 776,
       "missing_weekdays": 13,
       "issues": [
         "huecos no programados: 1 (0.008% de 12218 velas esperadas)",
@@ -2599,30 +2363,12 @@
       "account": "CFD-001",
       "gaps": [
         {
-          "year": 2011,
-          "count": 5,
-          "median_minutes": 720.0,
-          "max_minutes": 170220.0,
-          "classes": {
-            "noche Dukascopy pre-2018": 5
-          }
-        },
-        {
-          "year": 2012,
-          "count": 208,
-          "median_minutes": 720.0,
-          "max_minutes": 6720.0,
-          "classes": {
-            "noche Dukascopy pre-2018": 208
-          }
-        },
-        {
           "year": 2013,
-          "count": 51,
-          "median_minutes": 960.0,
-          "max_minutes": 127620.0,
+          "count": 1,
+          "median_minutes": 1920.0,
+          "max_minutes": 1920.0,
           "classes": {
-            "noche Dukascopy pre-2018": 51
+            "hueco de historia (>1 dia)": 1
           }
         },
         {
@@ -2631,7 +2377,8 @@
           "median_minutes": 720.0,
           "max_minutes": 4080.0,
           "classes": {
-            "noche Dukascopy pre-2018": 16
+            "noche Dukascopy pre-2018": 10,
+            "hueco de historia (>1 dia)": 6
           }
         },
         {
@@ -2640,7 +2387,8 @@
           "median_minutes": 480.0,
           "max_minutes": 5040.0,
           "classes": {
-            "noche Dukascopy pre-2018": 192
+            "noche Dukascopy pre-2018": 153,
+            "hueco de historia (>1 dia)": 39
           }
         },
         {
@@ -2649,7 +2397,8 @@
           "median_minutes": 480.0,
           "max_minutes": 4800.0,
           "classes": {
-            "noche Dukascopy pre-2018": 249
+            "noche Dukascopy pre-2018": 199,
+            "hueco de historia (>1 dia)": 50
           }
         },
         {
@@ -2658,7 +2407,8 @@
           "median_minutes": 480.0,
           "max_minutes": 4800.0,
           "classes": {
-            "noche Dukascopy pre-2018": 248
+            "noche Dukascopy pre-2018": 198,
+            "hueco de historia (>1 dia)": 50
           }
         },
         {
@@ -2667,7 +2417,8 @@
           "median_minutes": 480.0,
           "max_minutes": 4800.0,
           "classes": {
-            "noche Dukascopy 2018": 69
+            "noche Dukascopy 2018": 57,
+            "hueco de historia (>1 dia)": 12
           }
         },
         {
@@ -2765,7 +2516,7 @@
       "useful_start": "2019-01-01T22:00:00+00:00",
       "is_start_effective": "2019-01-02",
       "non_scheduled_gaps": 1,
-      "non_scheduled_gaps_full": 1039,
+      "non_scheduled_gaps_full": 776,
       "missing_weekdays": 13,
       "issues": [
         "huecos no programados: 1 (0.008% de 12218 velas esperadas)",
@@ -2786,30 +2537,12 @@
       "account": "CFD-006",
       "gaps": [
         {
-          "year": 2011,
-          "count": 5,
-          "median_minutes": 720.0,
-          "max_minutes": 170220.0,
-          "classes": {
-            "noche Dukascopy pre-2018": 5
-          }
-        },
-        {
-          "year": 2012,
-          "count": 208,
-          "median_minutes": 720.0,
-          "max_minutes": 6720.0,
-          "classes": {
-            "noche Dukascopy pre-2018": 208
-          }
-        },
-        {
           "year": 2013,
-          "count": 51,
-          "median_minutes": 960.0,
-          "max_minutes": 127620.0,
+          "count": 1,
+          "median_minutes": 1920.0,
+          "max_minutes": 1920.0,
           "classes": {
-            "noche Dukascopy pre-2018": 51
+            "hueco de historia (>1 dia)": 1
           }
         },
         {
@@ -2818,7 +2551,8 @@
           "median_minutes": 720.0,
           "max_minutes": 4080.0,
           "classes": {
-            "noche Dukascopy pre-2018": 16
+            "noche Dukascopy pre-2018": 10,
+            "hueco de historia (>1 dia)": 6
           }
         },
         {
@@ -2827,7 +2561,8 @@
           "median_minutes": 480.0,
           "max_minutes": 5040.0,
           "classes": {
-            "noche Dukascopy pre-2018": 192
+            "noche Dukascopy pre-2018": 153,
+            "hueco de historia (>1 dia)": 39
           }
         },
         {
@@ -2836,7 +2571,8 @@
           "median_minutes": 480.0,
           "max_minutes": 4800.0,
           "classes": {
-            "noche Dukascopy pre-2018": 249
+            "noche Dukascopy pre-2018": 199,
+            "hueco de historia (>1 dia)": 50
           }
         },
         {
@@ -2845,7 +2581,8 @@
           "median_minutes": 480.0,
           "max_minutes": 4800.0,
           "classes": {
-            "noche Dukascopy pre-2018": 248
+            "noche Dukascopy pre-2018": 198,
+            "hueco de historia (>1 dia)": 50
           }
         },
         {
@@ -2854,7 +2591,8 @@
           "median_minutes": 480.0,
           "max_minutes": 4800.0,
           "classes": {
-            "noche Dukascopy 2018": 69
+            "noche Dukascopy 2018": 57,
+            "hueco de historia (>1 dia)": 12
           }
         },
         {
@@ -2952,7 +2690,7 @@
       "useful_start": "2013-11-01T00:00:00+00:00",
       "is_start_effective": "2015-01-02",
       "non_scheduled_gaps": 17,
-      "non_scheduled_gaps_full": 24,
+      "non_scheduled_gaps_full": 17,
       "missing_weekdays": 191,
       "issues": [
         "granularidad incorrecta en 1 meses; inicio útil 2013-11-01",
@@ -2980,15 +2718,6 @@
       "median_price_is": 23378.069,
       "account": "CFD-001",
       "gaps": [
-        {
-          "year": 2013,
-          "count": 7,
-          "median_minutes": 180.0,
-          "max_minutes": 225.0,
-          "classes": {
-            "noche Dukascopy pre-2018": 7
-          }
-        },
         {
           "year": 2014,
           "count": 8,
@@ -3059,7 +2788,7 @@
       "useful_start": "2013-11-01T00:00:00+00:00",
       "is_start_effective": "2015-01-02",
       "non_scheduled_gaps": 17,
-      "non_scheduled_gaps_full": 24,
+      "non_scheduled_gaps_full": 17,
       "missing_weekdays": 191,
       "issues": [
         "granularidad incorrecta en 1 meses; inicio útil 2013-11-01",
@@ -3087,15 +2816,6 @@
       "median_price_is": 23378.069,
       "account": "CFD-006",
       "gaps": [
-        {
-          "year": 2013,
-          "count": 7,
-          "median_minutes": 180.0,
-          "max_minutes": 225.0,
-          "classes": {
-            "noche Dukascopy pre-2018": 7
-          }
-        },
         {
           "year": 2014,
           "count": 8,
@@ -3166,7 +2886,7 @@
       "useful_start": "2013-11-01T00:00:00+00:00",
       "is_start_effective": "2015-01-02",
       "non_scheduled_gaps": 7,
-      "non_scheduled_gaps_full": 13,
+      "non_scheduled_gaps_full": 7,
       "missing_weekdays": 191,
       "issues": [
         "granularidad incorrecta en 1 meses; inicio útil 2013-11-01",
@@ -3193,15 +2913,6 @@
       "median_price_is": 23356.269,
       "account": "CFD-001",
       "gaps": [
-        {
-          "year": 2013,
-          "count": 6,
-          "median_minutes": 180.0,
-          "max_minutes": 210.0,
-          "classes": {
-            "noche Dukascopy pre-2018": 6
-          }
-        },
         {
           "year": 2014,
           "count": 2,
@@ -3272,7 +2983,7 @@
       "useful_start": "2013-11-01T00:00:00+00:00",
       "is_start_effective": "2015-01-02",
       "non_scheduled_gaps": 7,
-      "non_scheduled_gaps_full": 13,
+      "non_scheduled_gaps_full": 7,
       "missing_weekdays": 191,
       "issues": [
         "granularidad incorrecta en 1 meses; inicio útil 2013-11-01",
@@ -3299,15 +3010,6 @@
       "median_price_is": 23356.269,
       "account": "CFD-006",
       "gaps": [
-        {
-          "year": 2013,
-          "count": 6,
-          "median_minutes": 180.0,
-          "max_minutes": 210.0,
-          "classes": {
-            "noche Dukascopy pre-2018": 6
-          }
-        },
         {
           "year": 2014,
           "count": 2,
@@ -3378,7 +3080,7 @@
       "useful_start": "2019-01-01T23:00:00+00:00",
       "is_start_effective": "2019-01-02",
       "non_scheduled_gaps": 7,
-      "non_scheduled_gaps_full": 824,
+      "non_scheduled_gaps_full": 797,
       "missing_weekdays": 13,
       "issues": [
         "huecos no programados: 7 (0.014% de 48411 velas esperadas)",
@@ -3400,11 +3102,12 @@
       "gaps": [
         {
           "year": 2013,
-          "count": 30,
+          "count": 3,
           "median_minutes": 600.0,
-          "max_minutes": 6360.0,
+          "max_minutes": 2220.0,
           "classes": {
-            "noche Dukascopy pre-2018": 30
+            "noche Dukascopy pre-2018": 2,
+            "hueco de historia (>1 dia)": 1
           }
         },
         {
@@ -3413,7 +3116,8 @@
           "median_minutes": 3000.0,
           "max_minutes": 4440.0,
           "classes": {
-            "noche Dukascopy pre-2018": 33
+            "hueco de historia (>1 dia)": 21,
+            "noche Dukascopy pre-2018": 12
           }
         },
         {
@@ -3422,7 +3126,8 @@
           "median_minutes": 540.0,
           "max_minutes": 5100.0,
           "classes": {
-            "noche Dukascopy pre-2018": 182
+            "noche Dukascopy pre-2018": 145,
+            "hueco de historia (>1 dia)": 37
           }
         },
         {
@@ -3431,7 +3136,8 @@
           "median_minutes": 540.0,
           "max_minutes": 4860.0,
           "classes": {
-            "noche Dukascopy pre-2018": 252
+            "noche Dukascopy pre-2018": 205,
+            "hueco de historia (>1 dia)": 47
           }
         },
         {
@@ -3440,7 +3146,8 @@
           "median_minutes": 540.0,
           "max_minutes": 4920.0,
           "classes": {
-            "noche Dukascopy pre-2018": 251
+            "noche Dukascopy pre-2018": 203,
+            "hueco de historia (>1 dia)": 48
           }
         },
         {
@@ -3449,7 +3156,8 @@
           "median_minutes": 600.0,
           "max_minutes": 4920.0,
           "classes": {
-            "noche Dukascopy 2018": 69
+            "noche Dukascopy 2018": 57,
+            "hueco de historia (>1 dia)": 12
           }
         },
         {
@@ -3523,7 +3231,7 @@
       "useful_start": "2019-01-01T23:00:00+00:00",
       "is_start_effective": "2019-01-02",
       "non_scheduled_gaps": 7,
-      "non_scheduled_gaps_full": 824,
+      "non_scheduled_gaps_full": 797,
       "missing_weekdays": 13,
       "issues": [
         "huecos no programados: 7 (0.014% de 48411 velas esperadas)",
@@ -3545,11 +3253,12 @@
       "gaps": [
         {
           "year": 2013,
-          "count": 30,
+          "count": 3,
           "median_minutes": 600.0,
-          "max_minutes": 6360.0,
+          "max_minutes": 2220.0,
           "classes": {
-            "noche Dukascopy pre-2018": 30
+            "noche Dukascopy pre-2018": 2,
+            "hueco de historia (>1 dia)": 1
           }
         },
         {
@@ -3558,7 +3267,8 @@
           "median_minutes": 3000.0,
           "max_minutes": 4440.0,
           "classes": {
-            "noche Dukascopy pre-2018": 33
+            "hueco de historia (>1 dia)": 21,
+            "noche Dukascopy pre-2018": 12
           }
         },
         {
@@ -3567,7 +3277,8 @@
           "median_minutes": 540.0,
           "max_minutes": 5100.0,
           "classes": {
-            "noche Dukascopy pre-2018": 182
+            "noche Dukascopy pre-2018": 145,
+            "hueco de historia (>1 dia)": 37
           }
         },
         {
@@ -3576,7 +3287,8 @@
           "median_minutes": 540.0,
           "max_minutes": 4860.0,
           "classes": {
-            "noche Dukascopy pre-2018": 252
+            "noche Dukascopy pre-2018": 205,
+            "hueco de historia (>1 dia)": 47
           }
         },
         {
@@ -3585,7 +3297,8 @@
           "median_minutes": 540.0,
           "max_minutes": 4920.0,
           "classes": {
-            "noche Dukascopy pre-2018": 251
+            "noche Dukascopy pre-2018": 203,
+            "hueco de historia (>1 dia)": 48
           }
         },
         {
@@ -3594,7 +3307,8 @@
           "median_minutes": 600.0,
           "max_minutes": 4920.0,
           "classes": {
-            "noche Dukascopy 2018": 69
+            "noche Dukascopy 2018": 57,
+            "hueco de historia (>1 dia)": 12
           }
         },
         {
@@ -3668,7 +3382,7 @@
       "useful_start": "2019-01-01T22:00:00+00:00",
       "is_start_effective": "2019-01-02",
       "non_scheduled_gaps": 1,
-      "non_scheduled_gaps_full": 782,
+      "non_scheduled_gaps_full": 768,
       "missing_weekdays": 13,
       "issues": [
         "huecos no programados: 1 (0.008% de 12218 velas esperadas)",
@@ -3690,11 +3404,12 @@
       "gaps": [
         {
           "year": 2013,
-          "count": 16,
-          "median_minutes": 1200.0,
-          "max_minutes": 6240.0,
+          "count": 2,
+          "median_minutes": 1320.0,
+          "max_minutes": 2160.0,
           "classes": {
-            "noche Dukascopy pre-2018": 16
+            "noche Dukascopy pre-2018": 1,
+            "hueco de historia (>1 dia)": 1
           }
         },
         {
@@ -3703,7 +3418,8 @@
           "median_minutes": 720.0,
           "max_minutes": 3840.0,
           "classes": {
-            "noche Dukascopy pre-2018": 12
+            "hueco de historia (>1 dia)": 5,
+            "noche Dukascopy pre-2018": 7
           }
         },
         {
@@ -3712,7 +3428,8 @@
           "median_minutes": 480.0,
           "max_minutes": 5040.0,
           "classes": {
-            "noche Dukascopy pre-2018": 182
+            "noche Dukascopy pre-2018": 145,
+            "hueco de historia (>1 dia)": 37
           }
         },
         {
@@ -3721,7 +3438,8 @@
           "median_minutes": 480.0,
           "max_minutes": 4800.0,
           "classes": {
-            "noche Dukascopy pre-2018": 252
+            "noche Dukascopy pre-2018": 205,
+            "hueco de historia (>1 dia)": 47
           }
         },
         {
@@ -3730,7 +3448,8 @@
           "median_minutes": 480.0,
           "max_minutes": 4800.0,
           "classes": {
-            "noche Dukascopy pre-2018": 250
+            "noche Dukascopy pre-2018": 202,
+            "hueco de historia (>1 dia)": 48
           }
         },
         {
@@ -3739,7 +3458,8 @@
           "median_minutes": 480.0,
           "max_minutes": 4800.0,
           "classes": {
-            "noche Dukascopy 2018": 69
+            "noche Dukascopy 2018": 57,
+            "hueco de historia (>1 dia)": 12
           }
         },
         {
@@ -3785,7 +3505,7 @@
       "useful_start": "2019-01-01T22:00:00+00:00",
       "is_start_effective": "2019-01-02",
       "non_scheduled_gaps": 1,
-      "non_scheduled_gaps_full": 782,
+      "non_scheduled_gaps_full": 768,
       "missing_weekdays": 13,
       "issues": [
         "huecos no programados: 1 (0.008% de 12218 velas esperadas)",
@@ -3807,11 +3527,12 @@
       "gaps": [
         {
           "year": 2013,
-          "count": 16,
-          "median_minutes": 1200.0,
-          "max_minutes": 6240.0,
+          "count": 2,
+          "median_minutes": 1320.0,
+          "max_minutes": 2160.0,
           "classes": {
-            "noche Dukascopy pre-2018": 16
+            "noche Dukascopy pre-2018": 1,
+            "hueco de historia (>1 dia)": 1
           }
         },
         {
@@ -3820,7 +3541,8 @@
           "median_minutes": 720.0,
           "max_minutes": 3840.0,
           "classes": {
-            "noche Dukascopy pre-2018": 12
+            "hueco de historia (>1 dia)": 5,
+            "noche Dukascopy pre-2018": 7
           }
         },
         {
@@ -3829,7 +3551,8 @@
           "median_minutes": 480.0,
           "max_minutes": 5040.0,
           "classes": {
-            "noche Dukascopy pre-2018": 182
+            "noche Dukascopy pre-2018": 145,
+            "hueco de historia (>1 dia)": 37
           }
         },
         {
@@ -3838,7 +3561,8 @@
           "median_minutes": 480.0,
           "max_minutes": 4800.0,
           "classes": {
-            "noche Dukascopy pre-2018": 252
+            "noche Dukascopy pre-2018": 205,
+            "hueco de historia (>1 dia)": 47
           }
         },
         {
@@ -3847,7 +3571,8 @@
           "median_minutes": 480.0,
           "max_minutes": 4800.0,
           "classes": {
-            "noche Dukascopy pre-2018": 250
+            "noche Dukascopy pre-2018": 202,
+            "hueco de historia (>1 dia)": 48
           }
         },
         {
@@ -3856,7 +3581,8 @@
           "median_minutes": 480.0,
           "max_minutes": 4800.0,
           "classes": {
-            "noche Dukascopy 2018": 69
+            "noche Dukascopy 2018": 57,
+            "hueco de historia (>1 dia)": 12
           }
         },
         {
@@ -3896,28 +3622,6 @@
     }
   ],
   "gaps": [
-    {
-      "symbol": "US100",
-      "timeframe": "M15",
-      "year": 2012,
-      "count": 41,
-      "median_minutes": 180.0,
-      "max_minutes": 225.0,
-      "classes": {
-        "noche Dukascopy pre-2018": 41
-      }
-    },
-    {
-      "symbol": "US100",
-      "timeframe": "M15",
-      "year": 2013,
-      "count": 12,
-      "median_minutes": 150.0,
-      "max_minutes": 225.0,
-      "classes": {
-        "noche Dukascopy pre-2018": 12
-      }
-    },
     {
       "symbol": "US100",
       "timeframe": "M15",
@@ -3976,28 +3680,6 @@
     {
       "symbol": "US100",
       "timeframe": "M30",
-      "year": 2012,
-      "count": 53,
-      "median_minutes": 180.0,
-      "max_minutes": 210.0,
-      "classes": {
-        "noche Dukascopy pre-2018": 53
-      }
-    },
-    {
-      "symbol": "US100",
-      "timeframe": "M30",
-      "year": 2013,
-      "count": 12,
-      "median_minutes": 150.0,
-      "max_minutes": 210.0,
-      "classes": {
-        "noche Dukascopy pre-2018": 12
-      }
-    },
-    {
-      "symbol": "US100",
-      "timeframe": "M30",
       "year": 2014,
       "count": 8,
       "median_minutes": 210.0,
@@ -4031,34 +3713,13 @@
     {
       "symbol": "US100",
       "timeframe": "H1",
-      "year": 2011,
-      "count": 6,
-      "median_minutes": 960.0,
-      "max_minutes": 170100.0,
-      "classes": {
-        "noche Dukascopy pre-2018": 6
-      }
-    },
-    {
-      "symbol": "US100",
-      "timeframe": "H1",
-      "year": 2012,
-      "count": 325,
-      "median_minutes": 780.0,
-      "max_minutes": 5940.0,
-      "classes": {
-        "noche Dukascopy pre-2018": 325
-      }
-    },
-    {
-      "symbol": "US100",
-      "timeframe": "H1",
       "year": 2013,
-      "count": 96,
-      "median_minutes": 870.0,
-      "max_minutes": 127740.0,
+      "count": 12,
+      "median_minutes": 3000.0,
+      "max_minutes": 3180.0,
       "classes": {
-        "noche Dukascopy pre-2018": 96
+        "hueco de historia (>1 dia)": 11,
+        "noche Dukascopy pre-2018": 1
       }
     },
     {
@@ -4069,7 +3730,8 @@
       "median_minutes": 2100.0,
       "max_minutes": 4440.0,
       "classes": {
-        "noche Dukascopy pre-2018": 38
+        "hueco de historia (>1 dia)": 21,
+        "noche Dukascopy pre-2018": 17
       }
     },
     {
@@ -4080,7 +3742,8 @@
       "median_minutes": 540.0,
       "max_minutes": 5040.0,
       "classes": {
-        "noche Dukascopy pre-2018": 182
+        "noche Dukascopy pre-2018": 145,
+        "hueco de historia (>1 dia)": 37
       }
     },
     {
@@ -4091,7 +3754,8 @@
       "median_minutes": 540.0,
       "max_minutes": 4860.0,
       "classes": {
-        "noche Dukascopy pre-2018": 252
+        "noche Dukascopy pre-2018": 205,
+        "hueco de historia (>1 dia)": 47
       }
     },
     {
@@ -4102,7 +3766,8 @@
       "median_minutes": 540.0,
       "max_minutes": 4920.0,
       "classes": {
-        "noche Dukascopy pre-2018": 251
+        "noche Dukascopy pre-2018": 203,
+        "hueco de historia (>1 dia)": 48
       }
     },
     {
@@ -4113,7 +3778,8 @@
       "median_minutes": 600.0,
       "max_minutes": 4920.0,
       "classes": {
-        "noche Dukascopy 2018": 69
+        "noche Dukascopy 2018": 57,
+        "hueco de historia (>1 dia)": 12
       }
     },
     {
@@ -4153,34 +3819,12 @@
     {
       "symbol": "US100",
       "timeframe": "H4",
-      "year": 2011,
-      "count": 6,
-      "median_minutes": 840.0,
-      "max_minutes": 169980.0,
-      "classes": {
-        "noche Dukascopy pre-2018": 6
-      }
-    },
-    {
-      "symbol": "US100",
-      "timeframe": "H4",
-      "year": 2012,
-      "count": 236,
-      "median_minutes": 960.0,
-      "max_minutes": 5280.0,
-      "classes": {
-        "noche Dukascopy pre-2018": 236
-      }
-    },
-    {
-      "symbol": "US100",
-      "timeframe": "H4",
       "year": 2013,
-      "count": 59,
-      "median_minutes": 960.0,
-      "max_minutes": 127620.0,
+      "count": 2,
+      "median_minutes": 2040.0,
+      "max_minutes": 2160.0,
       "classes": {
-        "noche Dukascopy pre-2018": 59
+        "hueco de historia (>1 dia)": 2
       }
     },
     {
@@ -4191,7 +3835,8 @@
       "median_minutes": 720.0,
       "max_minutes": 3840.0,
       "classes": {
-        "noche Dukascopy pre-2018": 14
+        "hueco de historia (>1 dia)": 5,
+        "noche Dukascopy pre-2018": 9
       }
     },
     {
@@ -4202,7 +3847,8 @@
       "median_minutes": 480.0,
       "max_minutes": 4800.0,
       "classes": {
-        "noche Dukascopy pre-2018": 182
+        "noche Dukascopy pre-2018": 145,
+        "hueco de historia (>1 dia)": 37
       }
     },
     {
@@ -4213,7 +3859,8 @@
       "median_minutes": 480.0,
       "max_minutes": 4800.0,
       "classes": {
-        "noche Dukascopy pre-2018": 252
+        "noche Dukascopy pre-2018": 205,
+        "hueco de historia (>1 dia)": 47
       }
     },
     {
@@ -4224,7 +3871,8 @@
       "median_minutes": 480.0,
       "max_minutes": 4800.0,
       "classes": {
-        "noche Dukascopy pre-2018": 251
+        "noche Dukascopy pre-2018": 203,
+        "hueco de historia (>1 dia)": 48
       }
     },
     {
@@ -4235,7 +3883,8 @@
       "median_minutes": 480.0,
       "max_minutes": 4800.0,
       "classes": {
-        "noche Dukascopy 2018": 69
+        "noche Dukascopy 2018": 57,
+        "hueco de historia (>1 dia)": 12
       }
     },
     {
@@ -4247,39 +3896,6 @@
       "max_minutes": 720.0,
       "classes": {
         "hueco real": 1
-      }
-    },
-    {
-      "symbol": "US500",
-      "timeframe": "M15",
-      "year": 2011,
-      "count": 1,
-      "median_minutes": 90.0,
-      "max_minutes": 90.0,
-      "classes": {
-        "noche Dukascopy pre-2018": 1
-      }
-    },
-    {
-      "symbol": "US500",
-      "timeframe": "M15",
-      "year": 2012,
-      "count": 88,
-      "median_minutes": 120.0,
-      "max_minutes": 225.0,
-      "classes": {
-        "noche Dukascopy pre-2018": 88
-      }
-    },
-    {
-      "symbol": "US500",
-      "timeframe": "M15",
-      "year": 2013,
-      "count": 20,
-      "median_minutes": 127.5,
-      "max_minutes": 225.0,
-      "classes": {
-        "noche Dukascopy pre-2018": 20
       }
     },
     {
@@ -4340,28 +3956,6 @@
     {
       "symbol": "US500",
       "timeframe": "M30",
-      "year": 2012,
-      "count": 24,
-      "median_minutes": 165.0,
-      "max_minutes": 210.0,
-      "classes": {
-        "noche Dukascopy pre-2018": 24
-      }
-    },
-    {
-      "symbol": "US500",
-      "timeframe": "M30",
-      "year": 2013,
-      "count": 11,
-      "median_minutes": 150.0,
-      "max_minutes": 210.0,
-      "classes": {
-        "noche Dukascopy pre-2018": 11
-      }
-    },
-    {
-      "symbol": "US500",
-      "timeframe": "M30",
       "year": 2014,
       "count": 12,
       "median_minutes": 120.0,
@@ -4395,34 +3989,13 @@
     {
       "symbol": "US500",
       "timeframe": "H1",
-      "year": 2011,
-      "count": 8,
-      "median_minutes": 570.0,
-      "max_minutes": 170460.0,
-      "classes": {
-        "noche Dukascopy pre-2018": 8
-      }
-    },
-    {
-      "symbol": "US500",
-      "timeframe": "H1",
-      "year": 2012,
-      "count": 376,
-      "median_minutes": 540.0,
-      "max_minutes": 6720.0,
-      "classes": {
-        "noche Dukascopy pre-2018": 376
-      }
-    },
-    {
-      "symbol": "US500",
-      "timeframe": "H1",
       "year": 2013,
-      "count": 87,
-      "median_minutes": 840.0,
-      "max_minutes": 127740.0,
+      "count": 11,
+      "median_minutes": 3000.0,
+      "max_minutes": 3180.0,
       "classes": {
-        "noche Dukascopy pre-2018": 87
+        "hueco de historia (>1 dia)": 10,
+        "noche Dukascopy pre-2018": 1
       }
     },
     {
@@ -4433,7 +4006,8 @@
       "median_minutes": 3000.0,
       "max_minutes": 4440.0,
       "classes": {
-        "noche Dukascopy pre-2018": 38
+        "noche Dukascopy pre-2018": 15,
+        "hueco de historia (>1 dia)": 23
       }
     },
     {
@@ -4444,7 +4018,8 @@
       "median_minutes": 540.0,
       "max_minutes": 5100.0,
       "classes": {
-        "noche Dukascopy pre-2018": 192
+        "noche Dukascopy pre-2018": 152,
+        "hueco de historia (>1 dia)": 40
       }
     },
     {
@@ -4455,7 +4030,8 @@
       "median_minutes": 540.0,
       "max_minutes": 4860.0,
       "classes": {
-        "noche Dukascopy pre-2018": 249
+        "noche Dukascopy pre-2018": 199,
+        "hueco de historia (>1 dia)": 50
       }
     },
     {
@@ -4466,7 +4042,8 @@
       "median_minutes": 540.0,
       "max_minutes": 4920.0,
       "classes": {
-        "noche Dukascopy pre-2018": 249
+        "noche Dukascopy pre-2018": 199,
+        "hueco de historia (>1 dia)": 50
       }
     },
     {
@@ -4477,7 +4054,8 @@
       "median_minutes": 600.0,
       "max_minutes": 4920.0,
       "classes": {
-        "noche Dukascopy 2018": 69
+        "noche Dukascopy 2018": 57,
+        "hueco de historia (>1 dia)": 12
       }
     },
     {
@@ -4516,34 +4094,12 @@
     {
       "symbol": "US500",
       "timeframe": "H4",
-      "year": 2011,
-      "count": 5,
-      "median_minutes": 720.0,
-      "max_minutes": 170220.0,
-      "classes": {
-        "noche Dukascopy pre-2018": 5
-      }
-    },
-    {
-      "symbol": "US500",
-      "timeframe": "H4",
-      "year": 2012,
-      "count": 208,
-      "median_minutes": 720.0,
-      "max_minutes": 6720.0,
-      "classes": {
-        "noche Dukascopy pre-2018": 208
-      }
-    },
-    {
-      "symbol": "US500",
-      "timeframe": "H4",
       "year": 2013,
-      "count": 51,
-      "median_minutes": 960.0,
-      "max_minutes": 127620.0,
+      "count": 1,
+      "median_minutes": 1920.0,
+      "max_minutes": 1920.0,
       "classes": {
-        "noche Dukascopy pre-2018": 51
+        "hueco de historia (>1 dia)": 1
       }
     },
     {
@@ -4554,7 +4110,8 @@
       "median_minutes": 720.0,
       "max_minutes": 4080.0,
       "classes": {
-        "noche Dukascopy pre-2018": 16
+        "noche Dukascopy pre-2018": 10,
+        "hueco de historia (>1 dia)": 6
       }
     },
     {
@@ -4565,7 +4122,8 @@
       "median_minutes": 480.0,
       "max_minutes": 5040.0,
       "classes": {
-        "noche Dukascopy pre-2018": 192
+        "noche Dukascopy pre-2018": 153,
+        "hueco de historia (>1 dia)": 39
       }
     },
     {
@@ -4576,7 +4134,8 @@
       "median_minutes": 480.0,
       "max_minutes": 4800.0,
       "classes": {
-        "noche Dukascopy pre-2018": 249
+        "noche Dukascopy pre-2018": 199,
+        "hueco de historia (>1 dia)": 50
       }
     },
     {
@@ -4587,7 +4146,8 @@
       "median_minutes": 480.0,
       "max_minutes": 4800.0,
       "classes": {
-        "noche Dukascopy pre-2018": 248
+        "noche Dukascopy pre-2018": 198,
+        "hueco de historia (>1 dia)": 50
       }
     },
     {
@@ -4598,7 +4158,8 @@
       "median_minutes": 480.0,
       "max_minutes": 4800.0,
       "classes": {
-        "noche Dukascopy 2018": 69
+        "noche Dukascopy 2018": 57,
+        "hueco de historia (>1 dia)": 12
       }
     },
     {
@@ -4610,17 +4171,6 @@
       "max_minutes": 720.0,
       "classes": {
         "hueco real": 1
-      }
-    },
-    {
-      "symbol": "US30",
-      "timeframe": "M15",
-      "year": 2013,
-      "count": 7,
-      "median_minutes": 180.0,
-      "max_minutes": 225.0,
-      "classes": {
-        "noche Dukascopy pre-2018": 7
       }
     },
     {
@@ -4665,17 +4215,6 @@
       "max_minutes": 165.0,
       "classes": {
         "hueco real": 2
-      }
-    },
-    {
-      "symbol": "US30",
-      "timeframe": "M30",
-      "year": 2013,
-      "count": 6,
-      "median_minutes": 180.0,
-      "max_minutes": 210.0,
-      "classes": {
-        "noche Dukascopy pre-2018": 6
       }
     },
     {
@@ -4726,11 +4265,12 @@
       "symbol": "US30",
       "timeframe": "H1",
       "year": 2013,
-      "count": 30,
+      "count": 3,
       "median_minutes": 600.0,
-      "max_minutes": 6360.0,
+      "max_minutes": 2220.0,
       "classes": {
-        "noche Dukascopy pre-2018": 30
+        "noche Dukascopy pre-2018": 2,
+        "hueco de historia (>1 dia)": 1
       }
     },
     {
@@ -4741,7 +4281,8 @@
       "median_minutes": 3000.0,
       "max_minutes": 4440.0,
       "classes": {
-        "noche Dukascopy pre-2018": 33
+        "hueco de historia (>1 dia)": 21,
+        "noche Dukascopy pre-2018": 12
       }
     },
     {
@@ -4752,7 +4293,8 @@
       "median_minutes": 540.0,
       "max_minutes": 5100.0,
       "classes": {
-        "noche Dukascopy pre-2018": 182
+        "noche Dukascopy pre-2018": 145,
+        "hueco de historia (>1 dia)": 37
       }
     },
     {
@@ -4763,7 +4305,8 @@
       "median_minutes": 540.0,
       "max_minutes": 4860.0,
       "classes": {
-        "noche Dukascopy pre-2018": 252
+        "noche Dukascopy pre-2018": 205,
+        "hueco de historia (>1 dia)": 47
       }
     },
     {
@@ -4774,7 +4317,8 @@
       "median_minutes": 540.0,
       "max_minutes": 4920.0,
       "classes": {
-        "noche Dukascopy pre-2018": 251
+        "noche Dukascopy pre-2018": 203,
+        "hueco de historia (>1 dia)": 48
       }
     },
     {
@@ -4785,7 +4329,8 @@
       "median_minutes": 600.0,
       "max_minutes": 4920.0,
       "classes": {
-        "noche Dukascopy 2018": 69
+        "noche Dukascopy 2018": 57,
+        "hueco de historia (>1 dia)": 12
       }
     },
     {
@@ -4837,11 +4382,12 @@
       "symbol": "US30",
       "timeframe": "H4",
       "year": 2013,
-      "count": 16,
-      "median_minutes": 1200.0,
-      "max_minutes": 6240.0,
+      "count": 2,
+      "median_minutes": 1320.0,
+      "max_minutes": 2160.0,
       "classes": {
-        "noche Dukascopy pre-2018": 16
+        "noche Dukascopy pre-2018": 1,
+        "hueco de historia (>1 dia)": 1
       }
     },
     {
@@ -4852,7 +4398,8 @@
       "median_minutes": 720.0,
       "max_minutes": 3840.0,
       "classes": {
-        "noche Dukascopy pre-2018": 12
+        "hueco de historia (>1 dia)": 5,
+        "noche Dukascopy pre-2018": 7
       }
     },
     {
@@ -4863,7 +4410,8 @@
       "median_minutes": 480.0,
       "max_minutes": 5040.0,
       "classes": {
-        "noche Dukascopy pre-2018": 182
+        "noche Dukascopy pre-2018": 145,
+        "hueco de historia (>1 dia)": 37
       }
     },
     {
@@ -4874,7 +4422,8 @@
       "median_minutes": 480.0,
       "max_minutes": 4800.0,
       "classes": {
-        "noche Dukascopy pre-2018": 252
+        "noche Dukascopy pre-2018": 205,
+        "hueco de historia (>1 dia)": 47
       }
     },
     {
@@ -4885,7 +4434,8 @@
       "median_minutes": 480.0,
       "max_minutes": 4800.0,
       "classes": {
-        "noche Dukascopy pre-2018": 250
+        "noche Dukascopy pre-2018": 202,
+        "hueco de historia (>1 dia)": 48
       }
     },
     {
@@ -4896,7 +4446,8 @@
       "median_minutes": 480.0,
       "max_minutes": 4800.0,
       "classes": {
-        "noche Dukascopy 2018": 69
+        "noche Dukascopy 2018": 57,
+        "hueco de historia (>1 dia)": 12
       }
     },
     {
