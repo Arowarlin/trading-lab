@@ -1,0 +1,40 @@
+name: session_breakout_htf_v3
+symmetric: false
+timeframes: [M5, M15, M30]
+valid_timeframes: [M5, M15, M30]
+description: "Ruptura del rango de apertura con confirmación de la última vela H1 cerrada."
+strategy:
+  dsl_version: "1"
+  instrument: US100
+  market: cfd
+  timeframe: M5
+  warmup_minutes: 7200
+  session:
+    start: "09:35"
+    end: "11:30"
+    flat_at: "15:45"
+    flat_mode: no_overnight
+    or_minutes: 15
+  long_entry:
+    kind: and
+    args:
+      - kind: gt
+        left: {kind: price, price: close}
+        right: {kind: level, level: opening_range_high}
+      - kind: htf
+        tf: H1
+        expr:
+          kind: gt
+          left: {kind: price, price: close}
+          right: {kind: indicator, ind: ema, src: close, n: 20}
+  short_entry: null
+  exit:
+    stop: {type: atr, mult: 1.5, n: 14}
+    target: {type: rr, rr: 2.0}
+    time_exit_minutes: 240
+    opposite_signal: false
+  sizing:
+    risk_per_trade_r: 1.0
+  limits:
+    max_trades_per_day: 2
+    cooldown_minutes: 25

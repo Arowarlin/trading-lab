@@ -1,0 +1,86 @@
+name: intraday_momentum_close_v3
+symmetric: true
+timeframes: [M5, M15, M30, H1]
+valid_timeframes: [M5, M15, M30]
+description: >
+  Momentum intradía de cierre en US100, rejilla fijada antes de mirar
+  resultados: retorno de la mañana (09:30 -> 10:00/10:30) y entrada en la
+  última hora (15:00/15:30 -> 15:45), salida al cierre 15:55.
+hypothesis: >
+  Los rebalanceos y las órdenes al cierre de la sesión NY hacen que el impulso
+  de la mañana continúe en el tramo final. Se compra si el retorno de la mañana
+  supera +u; el corto es el espejo exacto (retorno < -u).
+invalidation: >
+  La hipótesis se invalida si, después de costes (spread p75 + slippage), la
+  expectativa no es positiva y estable en IS y en las pruebas de robustez.
+parameter_space:
+  threshold: [0.0, 0.001, 0.002, 0.003]
+  session_return_end: ["10:00", "10:30"]
+  entry_window_start: ["15:00", "15:30"]
+  stop_atr: [4.0, 6.0]
+grid:
+  dimensions:
+    - name: threshold
+      kind: path
+      path: long_entry.args[0].right.value
+      values: [0.0, 0.001, 0.002, 0.003]
+    - name: session_return_end
+      kind: path
+      path: long_entry.args[0].left.params.end
+      values: [600, 630]          # 10:00, 10:30 NY
+    - name: entry_start
+      kind: path
+      path: long_entry.args[1].start
+      values: ["15:00", "15:30"]
+    - name: exit_variant
+      kind: exit
+      values: ["A", "B"]
+  exit_variants:
+    # target_rr: null = sin target; la salida es stop, flat_at 15:55 o fin de datos.
+    A: {stop_mult: 4.0, target_rr: null, flat_at: "15:55"}
+    B: {stop_mult: 6.0, target_rr: null, flat_at: "15:55"}
+strategy:
+  dsl_version: "1"
+  instrument: US100
+  market: cfd
+  timeframe: M5
+  warmup_minutes: 7200
+  session:
+    start: "09:30"
+    end: "15:55"
+    flat_at: "15:55"
+    flat_mode: no_overnight
+    or_minutes: 15
+  long_entry:
+    kind: and
+    args:
+      - kind: gt
+        left:
+          kind: indicator
+          ind: session_return
+          params: {start: 570, end: 600}
+        right: {kind: const, value: 0.002}
+      - kind: time_between
+        start: "15:00"
+        end: "15:45"
+  short_entry:
+    kind: and
+    args:
+      - kind: lt
+        left:
+          kind: indicator
+          ind: session_return
+          params: {start: 570, end: 600}
+        right: {kind: const, value: -0.002}
+      - kind: time_between
+        start: "15:00"
+        end: "15:45"
+  exit:
+    stop: {type: atr, mult: 4.0, n: 14}
+    target: null
+    opposite_signal: false
+  sizing:
+    risk_per_trade_r: 1.0
+  limits:
+    max_trades_per_day: 1
+    cooldown_minutes: 0

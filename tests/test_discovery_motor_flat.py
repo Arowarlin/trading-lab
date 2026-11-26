@@ -13,7 +13,7 @@ import pandas as pd
 import pytest
 import yaml
 
-from tradinglab.discovery import fastbt, genetic
+from tradinglab.discovery import dsl, fastbt, genetic
 from tradinglab.discovery.export_samples import build_samples
 from tradinglab.discovery.fastbt import RunLimits, _session_mask
 from tradinglab.discovery.timeframes import timeframe_minutes
@@ -416,6 +416,33 @@ def _mirror_flat_at(bars: pd.DataFrame, index: int, constants: dict) -> bool:
         if _mirror_base(stamp, constants):
             return False
     return True
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "intraday_momentum_close_v3",
+        "session_breakout_htf_v3",
+        "st_reversal_idx_v3",
+    ],
+)
+def test_plantillas_v3_usan_no_overnight(name: str) -> None:
+    payload = yaml.safe_load(
+        (TEMPLATES / f"{name}.yaml").read_text(encoding="utf-8")
+    ) or {}
+    assert payload["name"] == name
+    assert payload["strategy"]["session"]["flat_mode"] == "no_overnight"
+    assert dsl.validate(payload["strategy"]) == []
+    # La versión anterior sigue en legacy y no se toca.
+    previous = {
+        "intraday_momentum_close_v3": "intraday_momentum_close_v2",
+        "session_breakout_htf_v3": "session_breakout_htf",
+        "st_reversal_idx_v3": "st_reversal_idx",
+    }[name]
+    old = yaml.safe_load(
+        (TEMPLATES / f"{previous}.yaml").read_text(encoding="utf-8")
+    ) or {}
+    assert old["strategy"]["session"].get("flat_mode", "legacy") == "legacy"
 
 
 def test_aviso_estatico_de_flat_at() -> None:

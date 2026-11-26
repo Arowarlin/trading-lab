@@ -197,7 +197,7 @@ def test_sesion_que_cruza_medianoche() -> None:
 
 def test_plantillas_cargan_y_validan() -> None:
     paths = sorted(TEMPLATES.glob("*.yaml"))
-    assert len(paths) == 15
+    assert len(paths) == 18
     names = set()
     for path in paths:
         payload = yaml.safe_load(path.read_text(encoding="utf-8"))
@@ -209,6 +209,9 @@ def test_plantillas_cargan_y_validan() -> None:
         "session_breakout_htf",
         "intraday_momentum_close",
         "intraday_momentum_close_v2",
+        "intraday_momentum_close_v3",
+        "session_breakout_htf_v3",
+        "st_reversal_idx_v3",
         "ts_momentum_d1",
         "donchian_vol_h4",
         "d1_extension_reversion",
