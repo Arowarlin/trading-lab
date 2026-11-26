@@ -20,7 +20,7 @@ from typing import Any, Iterable
 import numpy as np
 import pandas as pd
 
-from ..config import ROOT
+from ..config import DEFAULT_DB
 from ..propfund.costs import CostProfile, SwapSpec, broker_symbol, load_profile
 from ..propfund.instruments import resolve
 from ..propfund.models import ConnectionState, Market
@@ -28,7 +28,9 @@ from ..propfund.registry import load_registry
 from . import fastbt
 from .config import EngineConfig, load_engine_config
 
-LAB_DB = ROOT / "data" / "lab.db"
+# Misma ruta que config.DEFAULT_DB: ROOT/data/lab.db salvo en la suite de tests
+# (TRADINGLAB_DB), que los workers del pool heredan (ENG-1 F2b).
+LAB_DB = DEFAULT_DB
 ROUTABLE = {ConnectionState.DEMO, ConnectionState.PAPER}
 
 

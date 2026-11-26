@@ -25,12 +25,14 @@ from typing import Any, Iterator
 
 import numpy as np
 
-from ..config import ROOT
+from ..config import DEFAULT_DB, ROOT
 from ..db import connect
 from . import __version__, dsl
 
 DEFAULT_DISCOVERY_DB = ROOT / "data" / "discovery.db"
-LAB_DB = ROOT / "data" / "lab.db"
+# Misma ruta que config.DEFAULT_DB: ROOT/data/lab.db salvo en la suite de tests
+# (TRADINGLAB_DB), que los workers del pool heredan (ENG-1 F2b).
+LAB_DB = DEFAULT_DB
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS disc_campaigns (

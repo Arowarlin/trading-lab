@@ -99,8 +99,47 @@ def _real_test_alerts():
         return None
 
 
+def _seed_synthetic_spreads() -> None:
+    """Spreads horarios sintéticos en la lab.db temporal de la suite (ENG-1 F2b).
+
+    Los tests de Discovery leían ``broker_spreads`` de la lab.db real del
+    operador: en CI fallaban y en local dependían de lo medido ese día. Aquí se
+    siembra un perfil plano (0,6 bps mediana, 1,0 bps p75, 24 horas) para cada
+    cuenta CFD e instrumento permitido. No son datos de mercado.
+    """
+
+    import sqlite3
+
+    from tradinglab.config import DEFAULT_DB, ROOT
+    from tradinglab.db import init_db
+    from tradinglab.propfund.costs import broker_symbol
+    from tradinglab.propfund.models import Market
+    from tradinglab.propfund.registry import load_registry
+
+    if DEFAULT_DB == ROOT / "data" / "lab.db":
+        return  # nunca sembrar en la lab.db real
+    init_db(DEFAULT_DB)
+    rows = set()
+    for account in load_registry().accounts.values():
+        if account.market is not Market.CFD:
+            continue
+        source = str(account.spread_source or "broker")
+        for instrument in account.allowed_instruments or []:
+            canonical = str(instrument).upper()
+            name = (account.broker_symbols or {}).get(canonical) or broker_symbol(canonical)
+            for hour in range(24):
+                rows.add((str(name).upper(), hour, 0.6, 1.0, 1000, None, None, source))
+    with sqlite3.connect(DEFAULT_DB) as con:
+        con.executemany(
+            "INSERT OR IGNORE INTO broker_spreads (symbol, hour_utc, median_bps, p75_bps,"
+            " n_ticks, from_ts, to_ts, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            sorted(rows, key=str),
+        )
+
+
 def pytest_sessionstart(session):
     session.config._tl_test_alerts = _real_test_alerts()
+    _seed_synthetic_spreads()
 
 
 def pytest_terminal_summary(terminalreporter, exitstatus, config):
