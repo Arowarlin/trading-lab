@@ -1,0 +1,17 @@
+Hecho
+- WF-TF cerrado: 34 finalistas reevaluados una sola vez con las ventanas por TF del prerregistro (22 EDGE-1 + 12 EDGE-2).
+
+1. Prerregistro `TL3_REPORTS/robust1_wf_windows.md` verificado antes de empezar: commit `ccf27cb`, SHA-256 `f8ad4e9e30c2b4aa…`.
+2. EDGE-1: **0 de 22** pasan las 4 puertas con WF-TF (11 campanas).
+3. EDGE-2: **0 de 12** pasan las 4 puertas con WF-TF (6 campanas).
+4. Sin candidato a `confirm`.
+5. `count_tests` 14.014 -> 17.974 (el cambio es de EDGE-2; esta cola no suma).
+6. `ruff` limpio; pytest **2081 passed + 1 skipped** (31:53); `lab doctor` Frescura FAIL 1/17 y Reglas fondeo WARN (entorno).
+7. Tag `wf-tf-1`; locks liberados.
+
+Aviso
+- Ningun finalista pasa. La puerta 2 sigue siendo el bloqueo: PBO > 0,30 y WF-TF sin `ok` en todas las campanas. En EDGE-2, dos campanas H4 quedan en `Sin datos` por menos de 3 pliegues.
+- No se leyo el OOS-2 ni se llamo a `confirm`; no hubo campanas, `record-informal`, ordenes ni push.
+
+Siguiente
+- OOS-2 sin leer; decide el operador.
