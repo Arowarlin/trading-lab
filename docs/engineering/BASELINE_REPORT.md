@@ -70,5 +70,24 @@ tests. Tarea ENG-F2.
 | F0-03 | MEDIUM | CI en rojo desde el run 116: 43 tests dependen de ficheros locales del operador (§4) |
 | F0-04 | LOW | Los tags de control (`edge1`, `robust-1`, …) no están en `origin`: la condición de arranque de EDGE-2 Y2, WF-TF y MOTOR-FLAT no se puede verificar fuera del equipo del operador |
 
-## 6. Suite local en este contenedor
-Pendiente de que termine; se completa en `TASK_STATUS.md` (ENG-F1).
+## 6. Suite en este contenedor (ENG-F1)
+
+`pytest -q -m "not network and not mt5 and not lmstudio and not alpaca and not credentials"` en Linux:
+**43 failed, 2030 passed, 5 skipped, 2 deselected** (10:11). La misma cifra de fallos que el run 120
+de CI en Windows.
+
+| Causa (verificada) | Tests | Tipo |
+|---|---|---|
+| `lab.db` sin `broker_spreads` para US100.CASH / XAUUSD. En las colas con pool, el initializer falla y el error llega como `BrokenProcessPool` sin el mensaje real (probado ejecutando `_init_worker` en el mismo proceso) | `test_discovery_basket*`, `test_discovery_jobs`, `test_discovery_spec`, `test_discovery_segments`, `test_discovery_noise*`, `test_discovery_feasibility`, `test_discovery_engine` | Entorno |
+| Ficheros del terminal MT5 del operador (`C:/Users/PC/...`) y hash congelado del forward del EA, que incluye el `.set` del terminal | `test_ea_registry`, `test_guardian`, `test_ea_forward` (5) | Entorno |
+| `data/cache/ea/US100_CASH_M5_NY.parquet`, `data/discovery.db` | `test_tl3_data`, `test_ea_nq_script`, `test_portfolio_lab`, `test_wf_tf_eval` | Entorno |
+| Sin barras suficientes para el replay o la investigación | `test_ai_replay` (4), `test_research` (2), `test_optimize` | Entorno |
+| **`ModuleNotFoundError: arch`**: `pyproject.toml` fija `arch==9.0.0`, pero `uv.lock` no lo contiene y `uv sync --frozen` no lo instala | `test_discovery_family::test_spa_nulo_no_rechaza_en_la_mayoria_de_semillas` | **Defecto del lock** (amplía F0-01) |
+
+**Conclusión:** ninguno de los 43 fallos es una regresión del código. 42 dependen del equipo del
+operador y 1 de que `uv.lock` no está sincronizado con `pyproject.toml`.
+
+| ID | Severidad | Hallazgo adicional |
+|---|---|---|
+| F0-05 | MEDIUM | `uv.lock` desfasado respecto a `pyproject.toml`: le faltan `arch` (dependencia principal) y la extra `discovery` (numba). La prueba SPA de `family.py` no puede ejecutarse en una instalación limpia con `--frozen` |
+| F0-06 | LOW | `jobs.py:633,774`: una excepción en `_init_worker` aparece como `BrokenProcessPool` y el mensaje "Sin datos: …" no llega a la base de datos ni al log |

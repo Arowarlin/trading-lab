@@ -7,13 +7,13 @@ Un fichero de la columna *Archivos* tiene un solo dueño a la vez.
 | ID | Tarea | Dónde | Responsable | Archivos (escritura) | Depende de | Estado | Criterio de aceptación | Evidencia |
 |---|---|---|---|---|---|---|---|---|
 | ENG-00 | Baseline Fase 0 | N | Claude | `docs/engineering/BASELINE_REPORT.md` | — | COMPLETED | SHA, entorno, campañas y CI identificados | `BASELINE_REPORT.md` |
-| ENG-A1 | Auditoría motor `fastbt` (solo lectura) | N | Worker A | `WORKER_REPORTS/A-engine.md` | ENG-00 | RUNNING | Hallazgos con reproducción sintética, NUEVO/CONOCIDO | — |
+| ENG-A1 | Auditoría motor `fastbt` (solo lectura) | N | Worker A | `WORKER_REPORTS/A-engine.md` | ENG-00 | COMPLETED | Hallazgos con reproducción sintética, NUEVO/CONOCIDO | A-01 y paridad Python/Numba re-ejecutados por Claude |
 | ENG-B1 | Auditoría de costes y TCA (solo lectura) | N | Worker B | `WORKER_REPORTS/B-costs.md` | ENG-00 | RUNNING | Ídem + diseño de medición TCA | — |
-| ENG-C1 | Auditoría de datos (solo lectura) | N | Worker C | `WORKER_REPORTS/C-data.md` | ENG-00 | RUNNING | Ídem + qué falta para NQ/MNQ | — |
+| ENG-C1 | Auditoría de datos (solo lectura) | N | Worker C | `WORKER_REPORTS/C-data.md` | ENG-00 | COMPLETED | Ídem + qué falta para NQ/MNQ | C-01 y C-02 re-ejecutados y código leído por Claude |
 | ENG-D1 | Auditoría estadística (solo lectura) | N | Worker D | `WORKER_REPORTS/D-stats.md` | ENG-00 | RUNNING | Ídem + respuestas 1-8 con simulación | — |
-| ENG-F1 | Suite `pytest` en el contenedor (marcadores de CI) | N | Claude | `TASK_STATUS.md` | ENG-00 | RUNNING | Lista de fallos clasificada: entorno vs regresión | — |
+| ENG-F1 | Suite `pytest` en el contenedor (marcadores de CI) | N | Claude | `TASK_STATUS.md` | ENG-00 | COMPLETED | Lista de fallos clasificada: entorno vs regresión | `BASELINE_REPORT.md` §6: 42 entorno + 1 lock |
 | ENG-F2 | Aislar los 43 tests que dependen del equipo del operador (marcador `local_data` o `skipif` por recurso ausente), sin tocar su lógica | N→L | Claude propone, operador aprueba | `tests/test_ea_registry.py`, `test_guardian.py`, `test_tl3_data.py`, `test_ea_nq_script.py`, `test_portfolio_lab.py`, `test_wf_tf_eval.py`, `test_research.py`, `test_optimize.py`, `test_export_signals.py`, `pyproject.toml` (markers), `ci.yml` | ENG-F1 | PENDING | CI verde **sin** desactivar tests que sí pueden correr en CI; en local siguen pasando los 2073 | — |
-| ENG-F3 | Fijar numba en `uv.lock` (extra `discovery`) | L | operador | `uv.lock` | — | BLOCKED (operador: `uv lock` cambia el lock de producción) | `uv sync --frozen --extra discovery` funciona y la versión queda registrada | F0-01 |
+| ENG-F3 | Regenerar `uv.lock`: faltan `arch` y la extra `discovery` (numba) (F0-01, F0-05) | L | operador | `uv.lock` | — | BLOCKED (operador: `uv lock` cambia el lock de producción) | `uv sync --frozen --extra discovery` funciona y la versión queda registrada | F0-01 |
 | ENG-G1 | Consolidar `AUDIT_FINDINGS.md` | N | Claude | `docs/engineering/AUDIT_FINDINGS.md` | A1, B1, C1, D1 | PENDING | Cada hallazgo verificado por Claude (no solo copiado) | — |
 | ENG-E1 | Auditoría de discovery/edge research (`engine.py`, `edge_map.py`, EDGE-1/2) y lista de hipótesis ya rechazadas | N | Worker E | `WORKER_REPORTS/E-edge.md` | ENG-G1 | PENDING | Lista de "no repetir" con su motivo y documento | — |
 | ENG-P1 | Prompts de OpenCode para reproducir con datos los hallazgos HIGH+ | N | Claude | `docs/engineering/OPENCODE_PROMPTS.md` | ENG-G1 | PENDING | Un prompt por tarea L, con ficheros cerrados y PARA | — |
