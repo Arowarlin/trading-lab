@@ -34,3 +34,4 @@
 - 2026-11-26 · ENG-I1 COMPLETED: master d3c87e7 en origin con tags edge2, motor-flat, wf-tf-1, tl2-eng1-f5-pre. EDGE-2: 0/12 (AUDIT_FINDINGS §7). M1 y F2b pasan a READY.
 - 2026-11-26 · ENG-M1 REVIEW: motor 0.3.0 (A-01/A-02, A-04, B-01, D-07) en la rama. Suite: 38 failed (entorno) / 2072 passed, sin fallos nuevos. Pendiente: aprobación para integrar.
 - 2026-11-26 · Operador aprueba integrar ENG-M1 («tienes mi aprobacion»). Tag de vuelta atrás propuesto: motor-eng1-pre.
+- 2026-11-26 · ENG-M1 COMPLETED: integrado en master c1da3f4 (motor 0.3.0), tag motor-eng1-pre, 64 tests del motor verdes en el equipo del operador. Siguiente: ENG-F2b.
