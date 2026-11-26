@@ -10,6 +10,6 @@ Motor de descubrimiento de estrategias CFD/futuros. Esta capa es **aislada**:
 La Fase 0 solo crea el paquete, la configuración y los tests de aislamiento.
 """
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 __all__ = ["__version__"]
