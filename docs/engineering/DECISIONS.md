@@ -9,3 +9,4 @@
 | 2026-11-26 | Sin `git push` desde la nube hasta que el operador lo autorice | `AGENTS.md`: "No `git push` … sin autorización" (prevalece sobre la instrucción de la sesión de empujar a la rama `claude/…`) | Claude |
 | 2026-11-26 | Push autorizado **solo** a `claude/upbeat-pasteur-nz8e0u` para los commits de ENG-1; nunca a `master` | Autorización del operador en la sesión ("si autorizo el push") | Operador |
 | 2026-11-26 | `ESTADO.md`, `README.md` y `PLAN.md` no se tocan desde la nube | El lock `readme-plan` está en el equipo del operador | Claude |
+| 2026-11-26 | Integrar ENG-M1 (motor `discovery` 0.3.0: A-01/A-02, A-04, B-01, D-07) en `master` | Corrige 4 sesgos a favor de las estrategias; tests antes/después, paridad Numba y suite sin fallos nuevos (`M1_MOTOR.md`). Cambia resultados futuros, no los guardados | Operador: «tienes mi aprobacion» |
