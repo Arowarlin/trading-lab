@@ -338,6 +338,10 @@ def _account_confirmation(
             session_tz=setup.session_tz,
             db_path=costs_db,
             config=load_engine_config(),
+            # Mismo modelo de coste que la campaña (ENG-1 B-02): antes se usaba
+            # v1 (doble spread y p75) también en campañas v2.
+            cost_model_version=int(getattr(setup, "cost_model_version", 1) or 1),
+            spread_model=getattr(setup, "spread_model", None),
         )
         account_setup = replace(
             setup,

@@ -63,6 +63,10 @@ class ValidationConfig(BaseModel):
     folds: int = Field(ge=2, le=24)
     finalists_max: int = Field(ge=1, le=100)
     corr_cluster: float = Field(ge=-1.0, le=1.0)
+    # ENG-1 E-02: operaciones mínimas en OOS-1 para ser finalista. ``None`` (por
+    # defecto) = sin mínimo, el comportamiento de siempre. Activarlo es cambiar
+    # una puerta: lo decide el operador, con prerregistro.
+    min_trades_oos1: int | None = Field(default=None, ge=1, le=100_000)
     # Valores congelados por TF antes de ver resultados. Si falta una TF se
     # usan los tres campos de arriba (compatibilidad con tests y YAML viejos).
     by_timeframe: dict[str, TimeframeValidationConfig] = Field(default_factory=dict)

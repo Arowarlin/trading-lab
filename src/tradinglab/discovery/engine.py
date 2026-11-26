@@ -562,6 +562,7 @@ def _select_finalists(
     finalists_max: int,
     corr_cluster: float,
     primary_hash: str | None = None,
+    min_trades_oos1: int | None = None,
 ) -> tuple[list[Individual], list[tuple[Individual, str]]]:
     if primary_hash is not None:
         candidates = [
@@ -575,6 +576,17 @@ def _select_finalists(
             discarded.append((item, "descartado: OOS-1 con error"))
             continue
         metrics = result.get("metrics") or {}
+        if min_trades_oos1 is not None:
+            trades_oos1 = int(metrics.get("trades") or 0)
+            if trades_oos1 < int(min_trades_oos1):
+                discarded.append(
+                    (
+                        item,
+                        f"descartado: OOS-1 con {trades_oos1} operaciones"
+                        f" < {int(min_trades_oos1)} (E-02)",
+                    )
+                )
+                continue
         expectancy = metrics.get("expectancy_r")
         pf = metrics.get("profit_factor")
         passes, detail = decisions.oos1_check(expectancy, pf)
@@ -1098,6 +1110,7 @@ def run_campaign(
             finalists_max=int(config.validation.finalists_max),
             corr_cluster=float(config.validation.corr_cluster),
             primary_hash=primary_hash if protocol_version >= 2 else None,
+            min_trades_oos1=config.validation.min_trades_oos1,
         )
         discarded.extend(rejected)
 
