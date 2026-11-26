@@ -209,4 +209,27 @@ Los cierres están en `.orquestador/RESULTADO-*.md` y los informes en
   `lab doctor` con Frescura/IA sesiones como avisos de entorno; `count_tests` **1926**
   (sin cambios desde el arranque); tag `tl3-ciclo1f`.
 
+### Cierre 1g — TL3-F (2026-11-25/26)
+
+- F1: auditoría de `scripts/tl3_warnings.py` (12 avisos), huecos D3 de US100 y
+  `tl2-edge-map.patch` archivado en `legacy/`; `count_tests` **5446** al arrancar F1.
+- F2: H-2026-013 `draft` (US100 H1, cierre D1 > SMA50, entrada al open de la vela
+  siguiente a la señal de 09:00 NY, stop 2,0×ATR(14), target 2R, flat 15:00,
+  `nights == 0`). Plantilla `h1_sma50_session_long`; feasibility **799 ops** IS
+  2019-2023, pliegues 207/202/77/199, `cost_r` **0,05388**; **21/799 cruzan día**
+  en festivos/cierres NYSE.
+- F3: verificación independiente contra `c4ec579` → **Defectos** (35 comprobaciones,
+  3 defectos, 3 avisos): el spec conserva 15:55/415 frente a 15:00/360 de la
+  plantilla+fila (documental) y **21/799 (2,63 %) noches >0**; 2 señales de Viernes
+  Santo sin barra posterior. `H-2026-013` **no se aprueba**; informe
+  `TL3_REPORTS/verificacion_h-2026-013.md` y fila en `verifications` (hash
+  `9605ebc8…`, veredicto `Defectos`).
+- Cierre: `ruff` limpio en las rutas de F3 (`ruff check .` solo marca
+  `scripts/edge2_x0.py`, sin seguimiento y de la sesión EDGE2); pytest
+  **2050 passed + 1 skipped** (34:05); `lab doctor` Frescura FAIL 5/17 y Reglas
+  fondeo WARN (entorno); `lab propfund verify` OK; `count_tests` **7206 → 9846**
+  (+2640 por 6 campañas `edge1-` aprobadas en paralelo; los 18 borradores
+  `edge2-` no cuentan); sin filas nuevas en `informal_trials` (7, id 7) ni
+  campañas ajenas a `edge1-`/`edge2-`; tag `tl3-ciclo1g`.
+
 
