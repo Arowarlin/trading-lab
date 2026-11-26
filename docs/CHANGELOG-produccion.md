@@ -7,6 +7,44 @@ comprueba. El baseline de hashes vive en
 `config/propfund/protected_manifest.json` y se consulta con
 `lab propfund verify`; se reescribe con `lab propfund baseline --reason "..."`.
 
+## 2026-11-25 · TCA MT5 separa señal, envío y fill (prod-tca)
+
+- **Autorización del operador (literal):** «Lee AGENTS.md y ejecuta el parche de
+  producción para corregir el cálculo de slippage en
+  src/tradinglab/execution/mt5.py:772-783 (separando signal_price de submit_price
+  y fill_price). Cumple el protocolo completo: adquiere orq_lock
+  proyecto-prod-tca, guarda baseline en .orquestador/BASELINE-prod-tca.md, crea
+  el tag tl2-tca-pre, añade tests en tests/test_mt5_tca.py, documenta en
+  docs/CHANGELOG-produccion.md, corre ruff, pytest -q y lab doctor, confirma
+  count_tests == 1926, haz commit por ruta, etiqueta tl2-tca-post, libera locks y
+  PARA.»
+- **Qué cambia:** `MT5Broker.submit_market` acepta `signal_price`; captura el
+  tick de la señal, relee el tick justo antes de `order_send` y registra
+  `signal_px`, `order_px` y `fill_px` por separado. `slippage_bps` se mide como
+  diferencia adversa entre `signal_px` y `fill_px` (positivo = peor que la
+  señal). Si el bróker devuelve 0 o vacío, `fill_px` queda `None`; ya no se
+  sustituye por el precio pedido. `latency_ms` mide `order_send` → respuesta.
+- **Por qué:** el diagnóstico D5b mostró 66 de 68 filas con slippage 0 por
+  construcción: `signal_px` y `order_px` eran el mismo tick y `fill_px` caía al
+  precio pedido cuando MT5 devolvía 0.
+- **Alcance:** `src/tradinglab/execution/mt5.py` y tests. `signal_price` es
+  opcional; los llamadores existentes no cambian. No se tocan EA, `ai_trader`,
+  forward, riesgo FTMO, `paper.py`, base de datos ni configuración.
+- **Baseline/tag:** `tl2-tca-pre` → `b412853`; baseline en
+  `.orquestador/BASELINE-prod-tca.md`; `config/propfund/protected_manifest.json`
+  reescrito con `lab propfund baseline --reason "prod-tca: ..."`.
+- **Tests de regresión:** `tests/test_mt5_tca.py` (9 casos) compara el
+  comportamiento anterior y el nuevo, cubre fill 0, `signal_price` explícito y
+  slippage positivo/negativo/cero. Se mantienen `tests/test_tca.py` y
+  `tests/test_mt5.py`.
+- **Verificación:** `ruff check` limpio; `pytest -q` completa **2037 pasados,
+  1 skip**; `lab doctor` con un FAIL de frescura de datos (US100 M1/M5/M15 y
+  XAUUSD M1, ajeno a este parche) y el resto OK/WARN; `lab propfund verify`
+  4/4 OK. `count_tests` real: **5446** al empezar el protocolo y **7206** al
+  cerrar, por la pasada EDGE1 en curso; el **1926** de `ESTADO.md` está
+  desactualizado y este parche no añade ninguna prueba al contador.
+- **Rollback:** `git checkout tl2-tca-pre -- src/tradinglab/execution/mt5.py`.
+
 ## 2026-11-25 · Suelo diario `higher_of_balance_or_equity` (TL2-DIARIO)
 
 - **Autorización del operador (literal):** "APRUEBO CAMBIO DE PRODUCCIÓN

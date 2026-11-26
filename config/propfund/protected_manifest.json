@@ -41,6 +41,13 @@
       ],
       "date": "2026-11-25",
       "reason": "TL2-DIARIO: corregido suelo diario higher_of_balance_or_equity (simulator/guard); ver CHANGELOG 2026-11-25"
+    },
+    {
+      "changes": [
+        "ftmo_risk: src/tradinglab/execution/mt5.py (changed)"
+      ],
+      "date": "2026-11-25",
+      "reason": "prod-tca: TCA MT5 separa signal_price, submit_price y fill_price; autorizado por el operador en la sesion 2026-11-25"
     }
   ],
   "groups": {
@@ -109,7 +116,7 @@
         "config/prop_templates.yaml": "e4c8be816420dd337b580583a1ed9a2e542461290e052cc80bba9ec4e391f9dc",
         "mql5/TradingLabGuardian.mq5": "bdd94e1c060a1996713ca98d780b1d5e8f45f9ad6b06c1b4dc7d104c054705d0",
         "src/tradinglab/account_daily.py": "217e2eb4ee60709d6956ad9bd02c2424357d13d827e3d6ffb06319fda1036c72",
-        "src/tradinglab/execution/mt5.py": "45c1179b84c5a63d06d742915c02fd7d34be4929112d48e731ab142f9a51f61b",
+        "src/tradinglab/execution/mt5.py": "ce86e40b76d09776c729c9fefc03ccf0ca8e0800ec69d6b84567c670de55a564",
         "src/tradinglab/execution/mt5_offsets.py": "9535fbfe22242c002dd122a2a386be67d42a82f096b678a13f6b5bf3f2557dd5",
         "src/tradinglab/guardian.py": "a9bbeda2b6dce38e97de3d780a7361d828632ab7ba89ee08329bc829c3637559",
         "src/tradinglab/prop/__init__.py": "2b5f0229b536875861f8c5a94b0b7ccec5b2474ee14c6950be58e6461f0da816",
