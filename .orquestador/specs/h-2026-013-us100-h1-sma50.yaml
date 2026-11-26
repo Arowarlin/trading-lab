@@ -1,0 +1,38 @@
+# H-2026-013 · intradía H1 US100 con filtro D1 Close > SMA50 (Dukascopy).
+# Prerregistro escrito ANTES de ejecutar preflight/feasibility.
+#
+# Hipótesis: en un régimen alcista diario (cierre D1 por encima de su SMA50),
+# la sesión de Nueva York tiende a continuar al alza. La posición es intradía:
+# se cierra a las 15:55 NY, así que nights == 0 y no hay swap. El filtro D1
+# no añade parámetros libres; la entrada es una hora fija (09:00 NY) y la
+# salida es por tiempo/stops fijos.
+#
+# Cobertura: solo 2019-01-02 en adelante. D3 mostró 0 sesiones válidas en
+# 2012/2016/2017 y 72,1 % de noches en 2018; el detalle está en
+# reports/tl3/saneamiento-f1.md.
+
+campaign_id: h-2026-013-us100-h1
+instrument: US100
+timeframe: H1
+template: h1_sma50_session_long
+profile: small
+mode: grid
+seed: 13
+data_source: dukascopy
+account: CFD-001
+firm: ftmo
+cost_mode: worst
+cost_accounts: [CFD-001, CFD-006]
+side: long
+segments:
+  is: ["2019-01-02", "2023-12-31"]
+  oos1: ["2024-01-01", "2025-12-31"]
+  oos2: ["2026-01-01", null]
+# Una sola celda: no se optimiza nada. La rejilla existe solo porque el
+# validador de specs exige una rejilla en modo grid.
+grid:
+  dimensions:
+    - name: stop_mult
+      kind: path
+      path: exit.stop.mult
+      values: [2.0]
