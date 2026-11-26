@@ -81,7 +81,7 @@ de CI en Windows.
 | `lab.db` sin `broker_spreads` para US100.CASH / XAUUSD. En las colas con pool, el initializer falla y el error llega como `BrokenProcessPool` sin el mensaje real (probado ejecutando `_init_worker` en el mismo proceso) | `test_discovery_basket*`, `test_discovery_jobs`, `test_discovery_spec`, `test_discovery_segments`, `test_discovery_noise*`, `test_discovery_feasibility`, `test_discovery_engine` | Entorno |
 | Ficheros del terminal MT5 del operador (`C:/Users/PC/...`) y hash congelado del forward del EA, que incluye el `.set` del terminal | `test_ea_registry`, `test_guardian`, `test_ea_forward` (5) | Entorno |
 | `data/cache/ea/US100_CASH_M5_NY.parquet`, `data/discovery.db` | `test_tl3_data`, `test_ea_nq_script`, `test_portfolio_lab`, `test_wf_tf_eval` | Entorno |
-| Sin barras suficientes para el replay o la investigación | `test_ai_replay` (4), `test_research` (2), `test_optimize` | Entorno |
+| `test_ai_replay` (4) lee barras de la caché real (`ai_replay._load_bars`). `test_research` (2) y `test_optimize` usan datos falsos, pero el DSR global lee `reports/research/*.json` del disco (`global_dsr.py:188`): en el equipo del operador pasan **solo** porque esos informes existen (fuga de aislamiento, F0-07) | `test_ai_replay`, `test_research`, `test_optimize` | Entorno |
 | **`ModuleNotFoundError: arch`**: `pyproject.toml` fija `arch==9.0.0`, pero `uv.lock` no lo contiene y `uv sync --frozen` no lo instala | `test_discovery_family::test_spa_nulo_no_rechaza_en_la_mayoria_de_semillas` | **Defecto del lock** (amplía F0-01) |
 
 **Conclusión:** ninguno de los 43 fallos es una regresión del código. 42 dependen del equipo del
