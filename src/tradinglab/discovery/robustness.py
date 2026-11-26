@@ -229,20 +229,170 @@ def _bootstrap(daily: pd.Series, *, paths: int, seed: int) -> dict[str, Any]:
     }
 
 
-def _pbo_wf(campaign_id: str, db_path) -> tuple[dict[str, Any], dict[str, Any]]:
-    config = load_engine_config().robustness
+WF_INFORMATIVE_MIN_TEST_TRADES = 2
+
+
+def _normal_date(value: Any):
+    stamp = pd.Timestamp(value)
+    if stamp.tzinfo is not None:
+        stamp = stamp.tz_convert("UTC").tz_localize(None)
+    return stamp.date()
+
+
+def _frontier_frame(
+    campaign_id: str, db_path
+) -> tuple[pd.DataFrame | None, list[int]]:
     frontier = databank.frontier(campaign_id, db_path=db_path)
     series = {}
     for row in frontier:
-        if not row["dates"]:
-            continue
-        series[row["strategy_id"]] = _series(row["returns"], row["dates"])
+        if row["dates"]:
+            series[row["strategy_id"]] = _series(row["returns"], row["dates"])
     if len(series) < 2:
+        return None, []
+    frame = pd.concat(series, axis=1, sort=True).fillna(0.0)
+    index = pd.DatetimeIndex(pd.to_datetime(frame.index))
+    if index.tz is not None:
+        index = index.tz_convert("UTC").tz_localize(None)
+    frame.index = index.normalize()
+    frame = frame[~frame.index.duplicated(keep="last")]
+    # Serie diaria regular (lunes-viernes): los días sin operación son 0.
+    # Sin esto, los pliegues del WF y los bloques del PBO son "días con
+    # operación" y no días de calendario.
+    calendar = pd.bdate_range(frame.index.min(), frame.index.max())
+    frame = frame.reindex(calendar, fill_value=0.0)
+    return frame, list(series)
+
+
+def _wf_trade_frequency(
+    frame: pd.DataFrame,
+    fold_details: list[dict[str, Any]],
+    trade_times_by_strategy: dict[int, list[Any]] | None,
+    strategy_ids: list[int],
+) -> dict[str, Any]:
+    """Operaciones cerradas por ventana de prueba del WF.
+
+    Usa la variante elegida en cada pliegue (no la estrategia finalista), que
+    es la que el walk-forward evalúa. Cuenta cierres porque el R diario se
+    atribuye al día de salida.
+    """
+
+    if trade_times_by_strategy is None or not fold_details:
+        return {}
+    dates = [_normal_date(value) for value in pd.Index(frame.index).tolist()]
+    times = {
+        int(sid): [_normal_date(value) for value in values]
+        for sid, values in trade_times_by_strategy.items()
+    }
+    counts: list[int] = []
+    for fold in fold_details:
+        selected = int(fold.get("selected"))
+        if selected < 0 or selected >= len(strategy_ids):
+            continue
+        strategy_id = int(strategy_ids[selected])
+        start = int(fold.get("test_start"))
+        end = int(fold.get("test_end"))
+        if start < 0 or end > len(dates) or end <= start:
+            continue
+        first = dates[start]
+        last = dates[end - 1]
+        counts.append(
+            sum(1 for stamp in times.get(strategy_id, []) if first <= stamp <= last)
+        )
+    if not counts:
+        return {}
+    median = float(np.median(counts))
+    informative = median >= float(WF_INFORMATIVE_MIN_TEST_TRADES)
+    return {
+        "test_trades_per_fold": counts,
+        "test_trades_median": median,
+        "wf_informative": bool(informative),
+        "wf_label": (
+            None
+            if informative
+            else "WF no informativo (baja frecuencia)"
+        ),
+    }
+
+
+def variant_trade_times(
+    campaign_id: str,
+    *,
+    frame: pd.DataFrame | None = None,
+    setup=None,
+    cost=None,
+    db_path=None,
+) -> dict[int, list[Any]]:
+    """Cierres por estrategia del *frontier* sobre el tramo IS (nunca OOS-2)."""
+
+    if frame is None or setup is None or cost is None:
+        from . import campaigns, perturb
+
+        _combined, _campaign, setup, cost = perturb.load_campaign_inputs(
+            campaign_id, db_path=db_path
+        )
+        frame = campaigns.load_segment(campaign_id, "is", db_path=db_path)
+    frontier = databank.frontier(campaign_id, db_path=db_path)
+    out: dict[int, list[Any]] = {}
+    for row in frontier:
+        strategy = databank.get_strategy(row["strategy_id"], db_path=db_path)
+        if strategy is None:
+            continue
+        model = dsl.Strategy.model_validate(strategy["dsl"])
+        prepared, limits = _prepared_for(model, frame, cost, setup)
+        result = fastbt.run(
+            compiler.compile(model, frame),
+            frame,
+            exit_spec_from_strategy(model),
+            cost,
+            limits,
+            prepared=prepared,
+        )
+        out[int(row["strategy_id"])] = [
+            trade.exit_time for trade in result.trades
+        ]
+    return out
+
+
+def wf_trade_frequency(
+    campaign_id: str,
+    trade_times_by_strategy: dict[int, list[Any]] | None,
+    *,
+    db_path=None,
+) -> dict[str, Any]:
+    """Repite el conteo de operaciones por ventana sobre una campaña."""
+
+    frame, strategy_ids = _frontier_frame(campaign_id, db_path)
+    if frame is None:
+        return {}
+    from ..walkforward import walk_forward
+
+    config = load_engine_config().robustness
+    try:
+        wf = walk_forward(
+            frame.to_numpy(dtype=float),
+            train_len=int(config.wf_train_days),
+            test_len=int(config.wf_test_days),
+        )
+    except ValueError:
+        return {}
+    return _wf_trade_frequency(
+        frame, wf.fold_details, trade_times_by_strategy, strategy_ids
+    )
+
+
+def _pbo_wf(
+    campaign_id: str,
+    db_path,
+    *,
+    trade_times_by_strategy: dict[int, list[Any]] | None = None,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    config = load_engine_config().robustness
+    frame, strategy_ids = _frontier_frame(campaign_id, db_path)
+    if frame is None:
         return (
             {"status": "Sin datos", "pbo": None, "reason": "menos de 2 estrategias"},
             {"status": "Sin datos", "ok": False, "reason": "menos de 2 estrategias"},
         )
-    frame = pd.concat(series, axis=1, sort=False).fillna(0.0)
     matrix = frame.to_numpy(dtype=float)
     pbo_result: dict[str, Any]
     if matrix.shape[1] < int(config.pbo_min_strategies):
@@ -267,12 +417,14 @@ def _pbo_wf(campaign_id: str, db_path) -> tuple[dict[str, Any], dict[str, Any]]:
                 "pbo": None,
                 "reason": f"{type(exc).__name__}: {exc}",
             }
+    fold_details: list[dict[str, Any]] = []
     try:
         wf = walk_forward(
             matrix,
             train_len=int(config.wf_train_days),
             test_len=int(config.wf_test_days),
         )
+        fold_details = list(wf.fold_details)
         verdict = wf.verdict(
             min_stitched_sharpe=float(config.wf_min_oos_sharpe),
             min_efficiency=float(config.wf_min_efficiency),
@@ -305,6 +457,15 @@ def _pbo_wf(campaign_id: str, db_path) -> tuple[dict[str, Any], dict[str, Any]]:
             "verdict": "Sin datos",
             "reason": f"{type(exc).__name__}: {exc}",
         }
+    if trade_times_by_strategy is not None and fold_details:
+        wf_result.update(
+            _wf_trade_frequency(
+                frame,
+                fold_details,
+                trade_times_by_strategy,
+                strategy_ids,
+            )
+        )
     return pbo_result, wf_result
 
 
@@ -620,7 +781,17 @@ def run(
         paths=int(config.bootstrap_paths),
         seed=int(campaign["config"].get("seed", 0)) + 3_000,
     )
-    pbo, wf = _pbo_wf(campaign_id, db_path)
+    pbo, wf = _pbo_wf(
+        campaign_id,
+        db_path,
+        trade_times_by_strategy=variant_trade_times(
+            campaign_id,
+            frame=is_frame,
+            setup=setup,
+            cost=cost,
+            db_path=db_path,
+        ),
+    )
     regime = _regime(base.daily_r, _risk_for_account(setup.account))
     challenge = _challenge(base.daily_r)
     hour_weekday, streaks = _hour_streaks(base.trades, model.session.tz or setup.session_tz)
@@ -673,4 +844,11 @@ def run(
     }
 
 
-__all__ = ["account_regime", "random_baseline", "run"]
+__all__ = [
+    "WF_INFORMATIVE_MIN_TEST_TRADES",
+    "account_regime",
+    "random_baseline",
+    "run",
+    "variant_trade_times",
+    "wf_trade_frequency",
+]
