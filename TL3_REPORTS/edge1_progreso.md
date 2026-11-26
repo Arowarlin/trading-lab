@@ -2,6 +2,8 @@
 
 Plan: `8026de6dc2407ff8f56a6ebb09078be8e547dc0649f0e33346c29371abc5c509` · iniciado 2026-11-25 23:15:30Z
 
+**Estado:** X2 en curso (pasada 1). Al terminar: X3 robustez → X4 pasada 2 → X5 confirm (solo 4 puertas) → X6 EAs → X7 consola/ESTADO → X8 cierre/tag `edge1`. EDGE-2 queda en Y0-Y1, sin Y2. No se toca `fastbt.py`.
+
 | # | Campana | Activo | TF | Plantilla | Eval | Efect | Finalistas | Estado | Tiempo |
 |---:|---|---|---|---|---:|---:|---:|---|---:|
 | 1 | `edge1-01-trend-pullback-mtf-usdjpy-h4` | USDJPY | H4 | trend_pullback_mtf | 439 | 76 | 2 | done | 8.1 min |
@@ -20,3 +22,7 @@ Plan: `8026de6dc2407ff8f56a6ebb09078be8e547dc0649f0e33346c29371abc5c509` · inic
 | 14 | `edge1-14-asia-range-reversi-eurusd-h1` | EURUSD | H1 | asia_range_reversion | 435 | 58 | 0 | done | 13.2 min |
 | 15 | `edge1-15-trend-pullback-mtf-eurusd-h1` | EURUSD | H1 | trend_pullback_mtf | 438 | 109 | 0 | done | 16.1 min |
 | 16 | `edge1-16-vol-squeeze-breako-eurusd-h1` | EURUSD | H1 | vol_squeeze_breakout | 435 | 97 | 0 | done | 19.1 min |
+| 17 | `edge1-17-asia-range-reversi-gbpusd-h1` | GBPUSD | H1 | asia_range_reversion | 429 | 79 | 0 | done | 11.9 min |
+| 18 | `edge1-18-trend-pullback-mtf-gbpusd-h1` | GBPUSD | H1 | trend_pullback_mtf | 439 | 161 | 3 | done | 16.9 min |
+| 19 | `edge1-19-vol-squeeze-breako-gbpusd-h1` | GBPUSD | H1 | vol_squeeze_breakout | 439 | 79 | 0 | done | 18.5 min |
+| 20 | `edge1-20-london-breakout-eurusd-h1` | EURUSD | H1 | london_breakout | 223 | 3 | 0 | done | 7.6 min |
