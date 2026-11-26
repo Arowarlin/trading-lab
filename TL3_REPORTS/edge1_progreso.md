@@ -12,3 +12,7 @@ Plan: `8026de6dc2407ff8f56a6ebb09078be8e547dc0649f0e33346c29371abc5c509` · inic
 | 6 | `edge1-06-donchian-vol-h4-gbpusd-h4` | GBPUSD | H4 | donchian_vol_h4 | 438 | 36 | 1 | done | 9.2 min |
 | 7 | `edge1-07-trend-pullback-mtf-gbpusd-h4` | GBPUSD | H4 | trend_pullback_mtf | 439 | 66 | 5 | done | 8.7 min |
 | 8 | `edge1-08-vol-squeeze-breako-gbpusd-h4` | GBPUSD | H4 | vol_squeeze_breakout | 437 | 37 | 1 | done | 9.1 min |
+| 9 | `edge1-09-trend-pullback-mtf-xauusd-h4` | XAUUSD | H4 | trend_pullback_mtf | 440 | 66 | 0 | done | 8.2 min |
+| 10 | `edge1-10-vol-squeeze-breako-xauusd-h4` | XAUUSD | H4 | vol_squeeze_breakout | 437 | 35 | 0 | done | 8.7 min |
+| 11 | `edge1-11-trend-pullback-mtf-usdjpy-h1` | USDJPY | H1 | trend_pullback_mtf | 440 | 117 | 3 | done | 16.3 min |
+| 12 | `edge1-12-vol-squeeze-breako-usdjpy-h1` | USDJPY | H1 | vol_squeeze_breakout | 432 | 83 | 3 | done | 22.6 min |

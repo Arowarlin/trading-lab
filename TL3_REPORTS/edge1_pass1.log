@@ -6,3 +6,7 @@
 2026-11-26 00:08:53Z edge1-06-donchian-vol-h4-gbpusd-h4 status=done eval=438 eff=36 finalists=1 elapsed=553.9s
 2026-11-26 00:17:33Z edge1-07-trend-pullback-mtf-gbpusd-h4 status=done eval=439 eff=66 finalists=5 elapsed=519.7s
 2026-11-26 00:26:37Z edge1-08-vol-squeeze-breako-gbpusd-h4 status=done eval=437 eff=37 finalists=1 elapsed=543.7s
+2026-11-26 00:34:52Z edge1-09-trend-pullback-mtf-xauusd-h4 status=done eval=440 eff=66 finalists=0 elapsed=494.8s
+2026-11-26 00:43:37Z edge1-10-vol-squeeze-breako-xauusd-h4 status=done eval=437 eff=35 finalists=0 elapsed=524.7s
+2026-11-26 00:59:52Z edge1-11-trend-pullback-mtf-usdjpy-h1 status=done eval=440 eff=117 finalists=3 elapsed=975.0s
+2026-11-26 01:22:29Z edge1-12-vol-squeeze-breako-usdjpy-h1 status=done eval=432 eff=83 finalists=3 elapsed=1357.1s
