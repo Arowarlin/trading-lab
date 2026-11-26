@@ -104,8 +104,11 @@ def _seed_synthetic_spreads() -> None:
 
     Los tests de Discovery leían ``broker_spreads`` de la lab.db real del
     operador: en CI fallaban y en local dependían de lo medido ese día. Aquí se
-    siembra un perfil plano (0,6 bps mediana, 1,0 bps p75, 24 horas) para cada
-    cuenta CFD e instrumento permitido. No son datos de mercado.
+    siembra un perfil plano de 24 horas para cada cuenta CFD e instrumento
+    permitido. No son datos de mercado: CFD-006 es más barata en FX y oro y más
+    cara en índices (donde además paga más swap), para que el modo ``best``
+    reparta entre cuentas como con los spreads reales
+    (``test_feasibility_cesta_cubre_todas_las_cuentas``).
     """
 
     import sqlite3
@@ -127,8 +130,11 @@ def _seed_synthetic_spreads() -> None:
         for instrument in account.allowed_instruments or []:
             canonical = str(instrument).upper()
             name = (account.broker_symbols or {}).get(canonical) or broker_symbol(canonical)
+            index_like = canonical in {"US100", "US500", "US30", "GER40"}
+            cheap = (account.id == "CFD-006") != index_like
+            median, p75 = (0.3, 0.5) if cheap else (0.9, 1.5)
             for hour in range(24):
-                rows.add((str(name).upper(), hour, 0.6, 1.0, 1000, None, None, source))
+                rows.add((str(name).upper(), hour, median, p75, 1000, None, None, source))
     with sqlite3.connect(DEFAULT_DB) as con:
         con.executemany(
             "INSERT OR IGNORE INTO broker_spreads (symbol, hour_utc, median_bps, p75_bps,"

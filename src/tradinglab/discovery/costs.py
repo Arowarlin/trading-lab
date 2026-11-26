@@ -498,9 +498,13 @@ class CostBook:
         *,
         session_tz: str | None = None,
         point: float | None = None,
+        calendar: pd.Index | None = None,
     ) -> CostApplication:
         """Aplica coste por operación. ``point`` se conserva por compatibilidad
-        y no se usa aquí; el slippage del escenario vive en ``retester``."""
+        y no se usa aquí; el slippage del escenario vive en ``retester``.
+
+        ``calendar``: días del tramo evaluado (``FastResult.daily_r.index``). Los
+        días sin salida entran con 0 en ``daily_r`` (ENG-1 D-07)."""
         if self._panels is None:
             raise ValueError("CostBook.apply necesita panel(bars) antes")
         tz = str(session_tz or self.session_tz)
@@ -640,6 +644,9 @@ class CostBook:
         daily_r = pd.Series(daily, dtype=float).sort_index()
         if len(daily_r):
             daily_r.index = pd.to_datetime(daily_r.index)
+        if calendar is not None and len(calendar):
+            days = pd.DatetimeIndex(pd.to_datetime(calendar)).union(pd.DatetimeIndex(daily_r.index))
+            daily_r = daily_r.reindex(days, fill_value=0.0).astype(float)
         daily_r.name = "r"
         cost_by_account = {
             name: (float(np.median(values)) if values else None)
@@ -744,7 +751,9 @@ def apply_result(
 
     from . import metrics as metrics_module
 
-    applied = book.apply(result.trades, session_tz=session_tz, point=point)
+    applied = book.apply(
+        result.trades, session_tz=session_tz, point=point, calendar=result.daily_r.index
+    )
     payload = metrics_module.summarize(
         applied.trades, applied.daily_r, point=point
     )

@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import pandas as pd
+import pytest
 
+from tradinglab.config import ROOT
 from tradinglab.discovery import basket
 
 
@@ -85,6 +87,13 @@ def test_load_rechaza_un_solo_simbolo(tmp_path) -> None:
         basket.load(path)
 
 
+@pytest.mark.skipif(
+    not all(
+        (ROOT / "data" / "cache" / "dukascopy" / f"{symbol}_M1.parquet").exists()
+        for symbol in ("XAUUSD", "US100")
+    ),
+    reason="necesita la caché Dukascopy real de XAUUSD y US100 (solo en el equipo del operador)",
+)
 def test_feasibility_cesta_no_calcula_expectativa(tmp_path, monkeypatch) -> None:
     from tradinglab.discovery import metrics
 

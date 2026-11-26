@@ -348,7 +348,7 @@ def simulate_bars(
         limits,
         cost_model_version=2,
     )
-    applied = book.apply(result.trades, session_tz="UTC")
+    applied = book.apply(result.trades, session_tz="UTC", calendar=result.daily_r.index)
     values = np.array(
         [trade.r_net for trade in applied.trades if trade.r_net is not None],
         dtype=float,

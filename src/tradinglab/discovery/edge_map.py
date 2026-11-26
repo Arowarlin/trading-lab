@@ -677,7 +677,10 @@ def _firm_rows(
                     prepared=prepared,
                 )
                 applied = book.apply(
-                    result.trades, session_tz=limits.session_tz, point=setup.point
+                    result.trades,
+                    session_tz=limits.session_tz,
+                    point=setup.point,
+                    calendar=result.daily_r.index,
                 )
                 net = metrics.expectancy_r(applied.trades)
                 cost_values = [
@@ -1212,7 +1215,12 @@ def _base_viability(
         prepared=prepared,
         collect_metrics=False,
     )
-    applied = book.apply(result.trades, session_tz=limits.session_tz, point=setup.point)
+    applied = book.apply(
+        result.trades,
+        session_tz=limits.session_tz,
+        point=setup.point,
+        calendar=result.daily_r.index,
+    )
     cost_r = _trade_cost_r(applied.trades)
     screening = template_cost_r(
         account.id,
