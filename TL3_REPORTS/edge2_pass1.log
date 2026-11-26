@@ -6,3 +6,7 @@
 2026-11-26 14:41:12Z edge2-06-vol-squeeze-breako-us100-h1 status=done eval=438 eff=75 finalists=1 console=si elapsed=478.1s
 2026-11-26 14:48:33Z edge2-07-donchian-vol-h4-us500-h4 status=done eval=435 eff=49 finalists=0 console=si elapsed=440.5s
 2026-11-26 14:55:46Z edge2-08-trend-pullback-mtf-us500-h4 status=done eval=435 eff=58 finalists=2 console=si elapsed=432.8s
+2026-11-26 15:02:30Z edge2-09-vol-squeeze-breako-us500-h4 status=done eval=437 eff=38 finalists=0 console=si elapsed=404.4s
+2026-11-26 15:02:57Z edge2-10-st-reversal-idx-us500-h1 status=bloqueado: CalledProcessError: Command '['E:\\trading-lab\\.venv\\Scripts\\lab.exe', 'discovery', 'approve', 'edge2-10-st-reversal-idx-us500-h1', '--approved-by-operator']' returned non-zero exit status 1. eval=Sin datos eff=Sin datos finalists=Sin datos console=si elapsed=23.3s
+2026-11-26 15:12:23Z edge2-11-trend-pullback-mtf-us500-h1 status=done eval=440 eff=80 finalists=1 console=si elapsed=565.5s
+2026-11-26 15:22:55Z edge2-12-vol-squeeze-breako-us500-h1 status=done eval=438 eff=78 finalists=0 console=si elapsed=631.7s

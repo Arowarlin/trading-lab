@@ -24,3 +24,7 @@ Y1b, se usa el plan recongelado. Comprobacion cada 10 min; sin lanzar campanas h
 | 6 | `edge2-06-vol-squeeze-breako-us100-h1` | US100 | H1 | vol_squeeze_breakout | 438 | 75 | 1 | done | si | 8.0 min |
 | 7 | `edge2-07-donchian-vol-h4-us500-h4` | US500 | H4 | donchian_vol_h4 | 435 | 49 | 0 | done | si | 7.3 min |
 | 8 | `edge2-08-trend-pullback-mtf-us500-h4` | US500 | H4 | trend_pullback_mtf | 435 | 58 | 2 | done | si | 7.2 min |
+| 9 | `edge2-09-vol-squeeze-breako-us500-h4` | US500 | H4 | vol_squeeze_breakout | 437 | 38 | 0 | done | si | 6.7 min |
+| 10 | `edge2-10-st-reversal-idx-us500-h1` | US500 | H1 | st_reversal_idx | Sin datos | Sin datos | Sin datos | bloqueado: CalledProcessError: Command '['E:\\trading-lab\\.venv\\Scripts\\lab.exe', 'discovery', 'approve', 'edge2-10-st-reversal-idx-us500-h1', '--approved-by-operator']' returned non-zero exit status 1. | si | 0.4 min |
+| 11 | `edge2-11-trend-pullback-mtf-us500-h1` | US500 | H1 | trend_pullback_mtf | 440 | 80 | 1 | done | si | 9.4 min |
+| 12 | `edge2-12-vol-squeeze-breako-us500-h1` | US500 | H1 | vol_squeeze_breakout | 438 | 78 | 0 | done | si | 10.5 min |
