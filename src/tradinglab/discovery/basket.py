@@ -359,6 +359,7 @@ def _run_leg(
         full.trades,
         session_tz=context.limits.session_tz,
         point=context.setup.point,
+        calendar=full.daily_r.index,
     )
     trades = [replace(trade, instrument=symbol) for trade in applied.trades]
     cost_values: dict[str, list[float]] = {}
@@ -459,6 +460,11 @@ def _fold_rows(
         series = pd.Series(daily, dtype=float).sort_index()
         if len(series):
             series.index = pd.to_datetime(series.index)
+        # Días del pliegue sin salida con 0 (ENG-1 D-07).
+        fold_days = pd.DatetimeIndex(pd.to_datetime(sorted(dates))).union(
+            pd.DatetimeIndex(series.index)
+        )
+        series = series.reindex(fold_days, fill_value=0.0).astype(float)
         payload = metrics.summarize(selected, series, point=point)
         rows.append(
             {

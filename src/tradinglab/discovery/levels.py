@@ -368,7 +368,10 @@ def _account_confirmation(
             prepared=prepared,
         )
         applied = book.apply(
-            result.trades, session_tz=limits.session_tz, point=account_setup.point
+            result.trades,
+            session_tz=limits.session_tz,
+            point=account_setup.point,
+            calendar=result.daily_r.index,
         )
         net = expectancy_r(applied.trades)
         trades = len(applied.trades)

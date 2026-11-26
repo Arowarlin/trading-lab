@@ -144,3 +144,39 @@ def test_a04_calendario_el_stop_va_antes_que_la_salida_de_calendario():
     assert len(result.trades) == 1
     assert result.trades[0].reason == "stop"
     assert result.trades[0].exit_price == pytest.approx(98.0)
+
+
+def test_d07_costbook_tambien_incluye_los_dias_sin_operacion():
+    # Misma idea que D-07, por la vía CostBook (campañas con cost_accounts).
+    from tradinglab.discovery import costs
+
+    days = pd.bdate_range("2024-01-08", periods=40)
+    stamps = [
+        pd.Timestamp(day).replace(hour=hour).tz_localize(NY) for day in days for hour in range(10, 16)
+    ]
+    index = pd.DatetimeIndex(stamps).tz_convert("UTC")
+    n = len(index)
+    close = np.full(n, 1.1)
+    high = close + 0.0005
+    low = close - 0.0005
+    entries = tuple(range(0, n - 12, 60))
+    for pos in entries:
+        high[pos + 1] = 1.13
+    bars = pd.DataFrame({"open": close, "high": high, "low": low, "close": close}, index=index)
+    limits = RunLimits(
+        session_tz=NY, session_start="10:00", session_end="15:00", flat_at="15:00",
+        cost_model_version=2,
+    )
+    book = costs.build_cost_book(
+        "EURUSD", accounts=["CFD-001"], mode="target", session_tz=NY,
+        db_path=costs.LAB_DB, cost_model_version=2,
+    )
+    spec = ExitSpec(stop="pct", stop_mult=2.0, target="pct", target_pct=2.0)
+    result = run(_signals(n, entries), bars, spec, book, limits)
+    applied, payload = costs.apply_result(book, result, session_tz=NY, point=0.00001)
+    assert len(applied.trades) >= 3
+    calendar = pd.bdate_range(days[0], days[-1])
+    assert set(calendar).issubset(set(pd.DatetimeIndex(applied.daily_r.index)))
+    full = applied.daily_r.reindex(calendar, fill_value=0.0)
+    expected = float(full.mean() / full.std(ddof=1) * math.sqrt(252))
+    assert payload["sharpe_daily"] == pytest.approx(expected, rel=1e-9)
