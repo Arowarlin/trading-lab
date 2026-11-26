@@ -1191,6 +1191,7 @@ def _base_viability(
         session_start=model.session.start,
         session_end=model.session.end,
         flat_at=model.session.flat_at,
+        flat_mode=model.session.flat_mode,
         weekdays=(0, 1, 2, 3, 4),
     ).validated()
     limits = specs.run_limits_from_strategy(model, setup, close_at_end=True)

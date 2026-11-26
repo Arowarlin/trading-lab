@@ -135,6 +135,7 @@ def template_session(template: str, instrument: str) -> dict[str, Any]:
         "start": str(session.get("start") or "09:35"),
         "end": str(session.get("end") or "11:30"),
         "flat_at": str(session.get("flat_at") or "15:45"),
+        "flat_mode": str(session.get("flat_mode") or "legacy"),
         "or_minutes": int(session.get("or_minutes") or 15),
     }
 

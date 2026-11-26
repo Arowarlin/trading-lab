@@ -135,6 +135,10 @@ class RunLimits:
     session_start: str = "00:00"
     session_end: str = "00:00"
     flat_at: str | None = None
+    # ``legacy`` conserva la fórmula histórica bit a bit. ``no_overnight``
+    # añade el cierre de la vela que contiene ``flat_at`` y, si hace falta, la
+    # última vela disponible de cada día de sesión.
+    flat_mode: str = "legacy"
     weekdays: tuple[int, ...] = (0, 1, 2, 3, 4)
     max_trades_per_day: int | None = None
     cooldown_bars: int = 0
@@ -1547,6 +1551,7 @@ def _mask_key(limits: RunLimits) -> tuple:
         limits.session_start,
         limits.session_end,
         limits.flat_at,
+        limits.flat_mode,
         tuple(int(day) for day in limits.weekdays),
     )
 
@@ -1584,18 +1589,6 @@ def _session_mask(bars: pd.DataFrame, limits: RunLimits) -> SessionMask:
     weekday = np.isin(
         local.day_of_week.to_numpy(), np.asarray(limits.weekdays, dtype=int)
     )
-    if flat_s is None:
-        flat_flag = np.zeros(n, dtype=bool)
-    else:
-        # Posición relativa al inicio de la sesión. Para 18:00→02:45, el
-        # flat de 02:45 cae 8 h 45 min después del inicio y NO marca la tarde.
-        day_seconds = 24 * 3600
-        relative = (seconds - start_s) % day_seconds
-        duration = (manage_end - start_s) % day_seconds
-        if duration == 0:
-            duration = day_seconds
-        flat_relative = (flat_s - start_s) % day_seconds
-        flat_flag = (relative >= flat_relative) & (relative <= duration)
     local_day = (
         local.normalize()
         .tz_localize(None)
@@ -1608,6 +1601,46 @@ def _session_mask(bars: pd.DataFrame, limits: RunLimits) -> SessionMask:
         # 02:00) pertenecen a la sesión que empezó el día anterior.
         before_end = seconds < end_s
         day_id = local_day - before_end.astype(np.int64)
+    if flat_s is None:
+        flat_flag = np.zeros(n, dtype=bool)
+    else:
+        # Posición relativa al inicio de la sesión. Para 18:00→02:45, el
+        # flat de 02:45 cae 8 h 45 min después del inicio y NO marca la tarde.
+        day_seconds = 24 * 3600
+        relative = (seconds - start_s) % day_seconds
+        duration = (manage_end - start_s) % day_seconds
+        if duration == 0:
+            duration = day_seconds
+        flat_relative = (flat_s - start_s) % day_seconds
+        flat_flag = (relative >= flat_relative) & (relative <= duration)
+        mode = str(getattr(limits, "flat_mode", "legacy") or "legacy")
+        if mode not in {"legacy", "no_overnight"}:
+            raise FastBtError(f"flat_mode desconocido: {mode!r}")
+        if mode == "no_overnight":
+            # (1) La vela que contiene el final de la sesión, si ninguna vela
+            # empieza dentro del tramo [flat_at, manage_end].
+            if n > 1:
+                deltas = np.diff(bars.index.asi8) // 1_000_000_000
+                positive = deltas[deltas > 0]
+                tf_seconds = int(np.median(positive)) if positive.size else 0
+            else:
+                tf_seconds = 0
+            contains = (relative < flat_relative) & (
+                relative + tf_seconds > duration
+            )
+            flat_flag = flat_flag | contains
+            # (2) La última vela disponible del día de sesión (cierres
+            # tempranos de NYSE o velas que faltan), solo si ese día no ha
+            # disparado ya ningún flat.
+            allowed_day = manage_window & weekday
+            starts = np.r_[0, np.flatnonzero(day_id[1:] != day_id[:-1]) + 1]
+            ends = np.r_[starts[1:] - 1, n - 1]
+            for begin, finish in zip(starts, ends):
+                if flat_flag[begin : finish + 1].any():
+                    continue
+                candidates = np.flatnonzero(allowed_day[begin : finish + 1])
+                if candidates.size:
+                    flat_flag[begin + int(candidates[-1])] = True
     return SessionMask(
         allowed=manage_window & weekday,
         allowed_entry=entry_window & weekday & ~flat_flag,

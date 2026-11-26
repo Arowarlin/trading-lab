@@ -2,7 +2,7 @@
 //| TradingLab 2.0 - Discovery Lab - EA exportado (determinista)     |
 //| Genoma (sha256): 50d8a1315516aef9bd08ec12fe02c5136f83c3d4f62dc918e4299ec68cbfe797
 //| Plantilla: ninguna - version n/a
-//| Exportador: 1.0.0
+//| Exportador: 1.1.0
 //| Simbolo: US100 - TF: M5 - Cuenta: CFD-001 - Firma: ftmo
 //| Magic: 556374321 - Riesgo: 0.5% - Perdida diaria: 5000 - Total: 10000
 //| Sizing DSL: 1R (evaluacion); el EA usa el riesgo del perfil.     |
@@ -31,6 +31,7 @@ input string InpTraceFile = "US100_M5_CFD-001_trace.csv";
 const int SESSION_START = 575;
 const int SESSION_END = 945;
 const int FLAT_AT = 955;
+const int FLAT_MODE = 0;
 const int MANAGE_END = 955;
 const int OR_MINUTES = 15;
 const int MAX_TRADES_PER_DAY = 2;

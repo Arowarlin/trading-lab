@@ -74,6 +74,7 @@ class QueueSetup:
     session_start: str = "09:35"
     session_end: str = "11:30"
     flat_at: str | None = "15:45"
+    flat_mode: str = "legacy"
     weekdays: tuple[int, ...] = (0, 1, 2, 3, 4)
     stop_n: int = 14
     trail_n: int = 14
@@ -152,6 +153,7 @@ class QueueSetup:
             session_start=str(session.get("start") or "09:35"),
             session_end=str(session.get("end") or "11:30"),
             flat_at=session.get("flat_at", "15:45"),
+            flat_mode=str(session.get("flat_mode") or "legacy"),
             weekdays=tuple(int(day) for day in limits.get("weekdays", (0, 1, 2, 3, 4))),
             stop_n=int(limits.get("stop_n", 14)),
             trail_n=int(limits.get("trail_n", 14)),
@@ -401,6 +403,7 @@ def _init_worker(payload: dict[str, Any]) -> None:
         session_start=setup.session_start,
         session_end=setup.session_end,
         flat_at=setup.flat_at,
+        flat_mode=setup.flat_mode,
         weekdays=setup.weekdays,
     )
     prepared = fastbt.prepare(

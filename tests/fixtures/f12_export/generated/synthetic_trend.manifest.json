@@ -4,7 +4,7 @@
     "ema"
   ],
   "drawdown_mode": "static",
-  "exporter_version": "1.0.0",
+  "exporter_version": "1.1.0",
   "file": "synthetic_trend.mq5",
   "firm": "ftmo",
   "instrument": "US100",
@@ -14,7 +14,7 @@
     "max_loss": 10000.0,
     "per_trade_risk_pct": 0.5
   },
-  "sha256": "b80fab8a9251880929c299ef002a07ec4a7d17e0f812c6916ecda51070c17801",
+  "sha256": "9b48e84474a94567c1fad53d1db51c8d4b82bb08cc64461649eee9d003d50e98",
   "strategy_hash": "b939df9164d8664420a467ff197be58a6eed0ac0a372319f165331de9bd9b732",
   "template": {
     "name": "ninguna",

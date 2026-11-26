@@ -112,6 +112,40 @@ def bar_delta(timeframe: str) -> pd.Timedelta:
     return pd.Timedelta(minutes=timeframe_minutes(timeframe))
 
 
+def flat_at_fires(
+    timeframe: str, start: str, end: str, flat_at: str
+) -> bool:
+    """¿La fórmula ``legacy`` marca alguna vela de esa sesión y TF?
+
+    Replica sin barras la condición de ``fastbt._session_mask``: la vela se
+    etiqueta por su hora de apertura y debe empezar dentro de
+    ``[flat_at, manage_end]``. No valida el TF ni la sesión.
+    """
+
+    step = timeframe_minutes(timeframe)
+    begin = _hhmm_minutes(start)
+    finish = _hhmm_minutes(end)
+    flat = _hhmm_minutes(flat_at)
+    manage_end = max(finish, flat)
+    duration = (manage_end - begin) % (24 * 60) or 24 * 60
+    flat_relative = (flat - begin) % (24 * 60)
+    for minute in range(0, 24 * 60, step):
+        relative = (minute - begin) % (24 * 60)
+        if flat_relative <= relative <= duration:
+            return True
+    return False
+
+
+def flat_at_warning(
+    timeframe: str, start: str, end: str, flat_at: str
+) -> str | None:
+    """Aviso estático si con ``legacy`` el ``flat_at`` no dispara."""
+
+    if flat_at_fires(timeframe, start, end, flat_at):
+        return None
+    return f"flat_at no dispara en {timeframe}: la posición puede dormir"
+
+
 def session_tz(name: str | None, default: str = "America/New_York") -> str:
     """Valida una zona IANA; devuelve ``default`` si no hay valor."""
 
@@ -129,6 +163,8 @@ __all__ = [
     "TimeframeError",
     "bar_delta",
     "bars_in_window",
+    "flat_at_fires",
+    "flat_at_warning",
     "higher_timeframes",
     "is_higher",
     "minutes_to_bars",

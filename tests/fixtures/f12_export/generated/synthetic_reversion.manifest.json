@@ -5,7 +5,7 @@
     "rsi"
   ],
   "drawdown_mode": "static",
-  "exporter_version": "1.0.0",
+  "exporter_version": "1.1.0",
   "file": "synthetic_reversion.mq5",
   "firm": "ftmo",
   "instrument": "US100",
@@ -15,7 +15,7 @@
     "max_loss": 10000.0,
     "per_trade_risk_pct": 0.5
   },
-  "sha256": "0adcca88e8023110c66f16619a7a468eabd6ba84e6aa213aa3f3b7892644c726",
+  "sha256": "49a72821373fe682863abdcd68837729b64c611a7e81b8620b3b40fa2588467c",
   "strategy_hash": "d7ec70df127d080832ffa5224af94c2cd000d0ba3e2934c498d49402ada0e56f",
   "template": {
     "name": "ninguna",

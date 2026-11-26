@@ -31,7 +31,7 @@ from . import (
 )
 from .config import load_engine_config
 from .engine import candidate_strategies
-from .timeframes import timeframe_minutes
+from .timeframes import flat_at_warning, timeframe_minutes
 
 MIN_FEASIBLE_PCT = 50.0
 
@@ -126,6 +126,7 @@ def _context(campaign_id: str, db_path):
         session_start=setup.session_start,
         session_end=setup.session_end,
         flat_at=setup.flat_at,
+        flat_mode=setup.flat_mode,
         weekdays=setup.weekdays,
         cost_model_version=setup.cost_model_version,
     )
@@ -165,6 +166,7 @@ def _context_from(campaign, setup, bars):
         session_start=setup.session_start,
         session_end=setup.session_end,
         flat_at=setup.flat_at,
+        flat_mode=setup.flat_mode,
         weekdays=setup.weekdays,
         cost_model_version=setup.cost_model_version,
     )
@@ -369,6 +371,12 @@ def _check_context(
         "n_feasible": n_feasible,
         "feasible_pct": feasible_pct,
         "passes": feasible_pct >= MIN_FEASIBLE_PCT,
+        "flat_at_warning": flat_at_warning(
+            setup.timeframe,
+            setup.session_start,
+            setup.session_end,
+            setup.flat_at or "15:45",
+        ),
         "rows": [asdict(row) for row in rows],
     }
 
@@ -546,6 +554,7 @@ def _scan_timeframe(
         session_start=session["start"],
         session_end=session["end"],
         flat_at=session["flat_at"],
+        flat_mode=str(session.get("flat_mode") or "legacy"),
         weekdays=(0, 1, 2, 3, 4),
         bars=frame,
     ).validated()
@@ -554,6 +563,7 @@ def _scan_timeframe(
         session_start=setup.session_start,
         session_end=setup.session_end,
         flat_at=setup.flat_at,
+        flat_mode=setup.flat_mode,
         weekdays=setup.weekdays,
         cost_model_version=setup.cost_model_version,
     )
@@ -683,6 +693,9 @@ def _scan_timeframe(
         "mean_bars": _median([row["mean_bars"] for row in rows]),
         "mean_minutes": _median([row["mean_minutes"] for row in rows]),
         "passes": bool(n_checked) and feasible_pct >= MIN_FEASIBLE_PCT,
+        "flat_at_warning": flat_at_warning(
+            timeframe, session["start"], session["end"], session["flat_at"]
+        ),
         "reasons": reasons[:5],
         "rows": rows,
     }

@@ -70,6 +70,7 @@ def run_limits_from_strategy(
         session_start=session.start,
         session_end=session.end,
         flat_at=session.flat_at,
+        flat_mode=session.flat_mode,
         weekdays=setup.weekdays,
         max_trades_per_day=model.limits.max_trades_per_day,
         cooldown_bars=cooldown_bars(model),

@@ -52,7 +52,7 @@ from .fastbt import CostPanel
 from .fastbt import run as run_fastbt
 from .timeframes import minutes_to_bars
 
-EXPORTER_VERSION = "1.0.0"
+EXPORTER_VERSION = "1.1.0"
 
 UNSUPPORTED_BLOCKS: dict[str, str] = {
     "vwap_distance": (
@@ -897,8 +897,7 @@ bool InSession(const datetime server)
    if(SESSION_START < SESSION_END) return (minute >= SESSION_START && minute < SESSION_END);
    return (minute >= SESSION_START || minute < SESSION_END);
 }
-
-bool InEntryWindow(const datetime server)
+/*__FLAT_MANAGE_HELPERS__*/bool InEntryWindow(const datetime server)
 {
    int minute = NyMinute(ServerToNy(server));
    if(SESSION_START < SESSION_END) return (minute >= SESSION_START && minute <= SESSION_END);
@@ -922,19 +921,7 @@ int SessionDayKey(const datetime server)
    }
    return key;
 }
-
-bool FlatFlag(const datetime server)
-{
-   datetime ny = ServerToNy(server);
-   int minute = NyMinute(ny);
-   int relative = (minute - SESSION_START + 1440) % 1440;
-   int duration = (MANAGE_END - SESSION_START + 1440) % 1440;
-   if(duration == 0) duration = 1440;
-   int flat_relative = (FLAT_AT - SESSION_START + 1440) % 1440;
-   return (relative >= flat_relative && relative <= duration);
-}
-
-bool HasBars(const int shift, const int count)
+/*__FLAT_FUNCTIONS__*/bool HasBars(const int shift, const int count)
 {
    if(shift < 0 || count <= 0) return false;
    return (shift + count <= Bars(_Symbol, _Period));
@@ -1422,6 +1409,83 @@ double SessionReturnAt(const int shift, const int start_minute, const int end_mi
 }
 """
 
+_FLAT_MANAGE_HELPERS_LEGACY = ""
+_FLAT_MANAGE_HELPERS_NO_OVERNIGHT = r"""
+bool InManageWindow(const datetime server)
+{
+   int minute = NyMinute(ServerToNy(server));
+   if(SESSION_START < MANAGE_END) return (minute >= SESSION_START && minute <= MANAGE_END);
+   return (minute >= SESSION_START || minute <= MANAGE_END);
+}
+"""
+
+_FLAT_FUNCTIONS_LEGACY = r"""
+bool FlatFlag(const datetime server)
+{
+   datetime ny = ServerToNy(server);
+   int minute = NyMinute(ny);
+   int relative = (minute - SESSION_START + 1440) % 1440;
+   int duration = (MANAGE_END - SESSION_START + 1440) % 1440;
+   if(duration == 0) duration = 1440;
+   int flat_relative = (FLAT_AT - SESSION_START + 1440) % 1440;
+   return (relative >= flat_relative && relative <= duration);
+}
+"""
+
+_FLAT_FUNCTIONS_NO_OVERNIGHT = r"""
+bool FlatFlag(const datetime server)
+{
+   datetime ny = ServerToNy(server);
+   int minute = NyMinute(ny);
+   int relative = (minute - SESSION_START + 1440) % 1440;
+   int duration = (MANAGE_END - SESSION_START + 1440) % 1440;
+   if(duration == 0) duration = 1440;
+   int flat_relative = (FLAT_AT - SESSION_START + 1440) % 1440;
+   bool flag = (relative >= flat_relative && relative <= duration);
+   if(FLAT_MODE == 1)
+   {
+      // La vela que contiene el final de la sesión cuando ninguna empieza
+      // dentro del tramo [flat_at, manage_end].
+      int relative_s = relative * 60;
+      int duration_s = duration * 60;
+      int flat_s = flat_relative * 60;
+      int tf_seconds = PeriodSeconds(_Period);
+      if(relative_s < flat_s && relative_s + tf_seconds > duration_s) flag = true;
+   }
+   return flag;
+}
+
+bool FlatFlagAt(const int shift)
+{
+   if(shift < 0 || shift >= Bars(_Symbol, _Period)) return false;
+   datetime time = iTime(_Symbol, _Period, shift);
+   if(FlatFlag(time)) return true;
+   if(FLAT_MODE != 1 || shift == 0) return false;
+   if(!InManageWindow(time)) return false;
+   int day = SessionDayKey(time);
+   // Última vela disponible de la ventana de gestión en ese día de sesión.
+   for(int later = shift - 1; later >= 0; later--)
+   {
+      datetime next = iTime(_Symbol, _Period, later);
+      if(SessionDayKey(next) != day) break;
+      if(InManageWindow(next)) return false;
+   }
+   // Si ya disparó un flat antes en el mismo día, no se añade otro.
+   for(int prior = shift + 1; prior < Bars(_Symbol, _Period); prior++)
+   {
+      datetime before = iTime(_Symbol, _Period, prior);
+      if(SessionDayKey(before) != day) break;
+      if(FlatFlag(before)) return false;
+   }
+   return true;
+}
+"""
+
+_FLAT_ENTRY_LEGACY = "FlatFlag(time)"
+_FLAT_ENTRY_NO_OVERNIGHT = "FlatFlagAt(shift)"
+_FLAT_MANAGE_LEGACY = "FlatFlag(iTime(_Symbol, _Period, 1))"
+_FLAT_MANAGE_NO_OVERNIGHT = "FlatFlagAt(1)"
+
 
 _TRADING_RUNTIME = r"""
 long g_magic = 0;
@@ -1503,7 +1567,7 @@ bool EntryWindowAllows(const int shift)
    datetime time = iTime(_Symbol, _Period, shift);
    if(!IsTradingWeekday(time)) return false;
    if(!InEntryWindow(time)) return false;
-   if(FlatFlag(time)) return false;
+   if(/*__FLAT_ENTRY__*/) return false;
    return true;
 }
 
@@ -1640,7 +1704,7 @@ void OnNewBar(const datetime previous)
          CloseOurPosition();
          has_position = false;
       }
-      else if(FlatFlag(iTime(_Symbol, _Period, 1)))
+      else if(/*__FLAT_MANAGE__*/)
       {
          CloseOurPosition();
          has_position = false;
@@ -1741,12 +1805,32 @@ def _mql5_source(
     init_code = compiler.init_code()
     update_code = compiler.update_code()
     state_code = compiler.state_code()
-    prelude = _MQL5_PRELUDE.replace("WEEKDAY_TEST", weekday_test)
+    no_overnight = session.flat_mode == "no_overnight"
+    manage_helpers = (
+        _FLAT_MANAGE_HELPERS_NO_OVERNIGHT if no_overnight else ""
+    ) + "\n"
+    flat_functions = (
+        _FLAT_FUNCTIONS_NO_OVERNIGHT if no_overnight else _FLAT_FUNCTIONS_LEGACY
+    ) + "\n"
+    prelude = (
+        _MQL5_PRELUDE.replace("WEEKDAY_TEST", weekday_test)
+        .replace("/*__FLAT_MANAGE_HELPERS__*/", manage_helpers)
+        .replace("/*__FLAT_FUNCTIONS__*/", flat_functions)
+        .replace(
+            "/*__FLAT_ENTRY__*/",
+            _FLAT_ENTRY_NO_OVERNIGHT if no_overnight else _FLAT_ENTRY_LEGACY,
+        )
+        .replace(
+            "/*__FLAT_MANAGE__*/",
+            _FLAT_MANAGE_NO_OVERNIGHT if no_overnight else _FLAT_MANAGE_LEGACY,
+        )
+    )
     constants = "\n".join(
         [
             f"const int SESSION_START = {start};",
             f"const int SESSION_END = {end};",
             f"const int FLAT_AT = {flat};",
+            f"const int FLAT_MODE = {1 if session.flat_mode == 'no_overnight' else 0};",
             f"const int MANAGE_END = {manage_end};",
             f"const int OR_MINUTES = {int(session.or_minutes)};",
             f"const int MAX_TRADES_PER_DAY = {int(strategy.limits.max_trades_per_day)};",
@@ -1864,6 +1948,13 @@ def _mql5_source(
             "}",
             "",
         ]
+    )
+    source = source.replace(
+        "/*__FLAT_ENTRY__*/",
+        _FLAT_ENTRY_NO_OVERNIGHT if no_overnight else _FLAT_ENTRY_LEGACY,
+    ).replace(
+        "/*__FLAT_MANAGE__*/",
+        _FLAT_MANAGE_NO_OVERNIGHT if no_overnight else _FLAT_MANAGE_LEGACY,
     )
     return source
 

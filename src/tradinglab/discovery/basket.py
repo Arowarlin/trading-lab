@@ -305,6 +305,7 @@ def _setup_for(
         session_start=model.session.start,
         session_end=model.session.end,
         flat_at=model.session.flat_at,
+        flat_mode=model.session.flat_mode,
         weekdays=(0, 1, 2, 3, 4),
         data_source=campaign_or_spec["data_source"],
     ).validated()

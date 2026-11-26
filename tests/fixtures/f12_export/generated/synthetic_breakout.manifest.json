@@ -6,7 +6,7 @@
     "range_expansion"
   ],
   "drawdown_mode": "static",
-  "exporter_version": "1.0.0",
+  "exporter_version": "1.1.0",
   "file": "synthetic_breakout.mq5",
   "firm": "ftmo",
   "instrument": "US100",
@@ -16,7 +16,7 @@
     "max_loss": 10000.0,
     "per_trade_risk_pct": 0.5
   },
-  "sha256": "9bc5618e8dc38ab83348720aae73a5c8cc9d1689908e98b219422255beae10dd",
+  "sha256": "fd71f4412b3afc839ffa7d3fcec405a508fbf11da9dea51f9230f059e63d53c8",
   "strategy_hash": "50d8a1315516aef9bd08ec12fe02c5136f83c3d4f62dc918e4299ec68cbfe797",
   "template": {
     "name": "ninguna",

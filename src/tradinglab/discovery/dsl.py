@@ -102,6 +102,7 @@ class Session(BaseModel):
     start: str = "09:35"
     end: str = "11:30"
     flat_at: str = "15:45"
+    flat_mode: Literal["legacy", "no_overnight"] = "legacy"
     or_minutes: int = Field(default=15, ge=1, le=120)
 
     @field_validator("start", "end", "flat_at")
@@ -272,8 +273,14 @@ def depth(strategy: Strategy | dict) -> int:
 
 def canonical_json(strategy: Strategy | dict) -> str:
     model = strategy if isinstance(strategy, Strategy) else Strategy.model_validate(strategy)
+    payload = model.model_dump(mode="json", exclude_none=True)
+    session = payload.get("session")
+    if isinstance(session, dict) and session.get("flat_mode") == "legacy":
+        # ``legacy`` es el defecto histórico: no entra en el hash para que
+        # todas las estrategias ya registradas conserven su ``strategy_hash``.
+        session.pop("flat_mode", None)
     return json.dumps(
-        model.model_dump(mode="json", exclude_none=True),
+        payload,
         sort_keys=True,
         separators=(",", ":"),
         ensure_ascii=False,

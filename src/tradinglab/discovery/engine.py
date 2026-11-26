@@ -19,6 +19,7 @@ import pandas as pd
 
 from . import campaigns, databank, decisions, dsl, fitness, genetic, grid, jobs, nsga2, plateau, protocol_v2
 from .config import load_engine_config
+from .timeframes import flat_at_warning
 
 
 @dataclass
@@ -311,6 +312,12 @@ def _preflight_campaign(
         "duplicates": duplicates,
         "reasons": reasons,
         "last_error": campaign.get("last_error"),
+        "flat_at_warning": flat_at_warning(
+            setup.timeframe,
+            setup.session_start,
+            setup.session_end,
+            setup.flat_at or "15:45",
+        ),
         **power_payload,
     }
 
