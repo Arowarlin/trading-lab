@@ -57,6 +57,22 @@ LOW y latentes: A-05..A-10, B-05..B-09, B-11..B-14, C-07..C-14, D-08..D-12 (ver 
 | F0-07 | **Fuga de aislamiento:** `test_optimize` y `test_research` pasan en el equipo del operador solo porque el DSR global lee los informes reales de `reports/research/` (`global_dsr.py:188`). Su resultado depende de lo que haya en disco | V1 | ENG-F2 |
 | F0-02 | `engine_version` = `0.1.0` desde siempre: no distingue el motor de antes y después de ROBUST-1 | V1 | Con MOTOR-FLAT (sube la versión) |
 
+## 3b. Discovery: qué no puede encontrar el motor (`WORKER_REPORTS/E-edge.md`)
+
+| ID | Hallazgo | Verif. |
+|---|---|---|
+| E-01 | `genetic.mutate_session` tiene fija la ventana 09:30-15:00 (`genetic.py:425`). En las plantillas de Asia, Londres y 24 h **toda** mutación de sesión se descarta (0/200 frente a 147/200 en `ny_open`): el GA nunca exploró el horario en FX ni en índices 24 h | V2 |
+| E-02 | Los finalistas se eligen por OOS-1 **sin un n mínimo**: los cinco de `edge1-07` pasaron con 1 operación en OOS-1 | R |
+| E-03 | `edge_map.py:437-446` etiqueta "sin edge bruto" casos con bruto **y** neto positivos (turn_of_month US100, d1_extension_reversion US100, donchian XAU) | R |
+| E-04 | **Contador:** EDGE-1 registró 12.320 pruebas, pero `count_tests` subió +10.768. Faltan **1.552** sin explicar. Verificar en `discovery.db` (tarea L) | R (documentos) |
+| E-05 | `ESTADO.md` §3 dice "Y2 no se lanza en esta sesión", pero `554497c` muestra 4 campañas EDGE-2 terminadas: ESTADO está desfasado | V1 (git) |
+| E-06 | Estructural: solo OHLCV (sin order flow; VWAP con volumen 1 si falta), sin nodo de eventos ni señales entre activos, todo en R con stop ATR. Con `cost_r ≤ 0,10` la microestructura de stop corto queda fuera (NQ: stop ≥ ~12,7 pt) | R |
+
+**Potencia** (unilateral, α 0,05, 80 %; comprobado por Claude): para 0,1 R hacen falta
+**619 / 1.212 / 2.233** operaciones con σ = 1,0 / 1,4 / 1,9 R. Los 22 finalistas de EDGE-1 hacen
+6-58 operaciones al año en IS. **EDGE-1 descarta ventajas de ≳0,3-0,4 R en esas plantillas, pero no
+dice nada de 0,05-0,15 R.**
+
 ## 4. Qué significa esto para los veredictos
 
 1. **"EDGE-1: 0 robustas" no demuestra que no haya ventaja.** La puerta que más rechazó fue el PBO

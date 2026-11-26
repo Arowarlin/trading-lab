@@ -11,3 +11,6 @@
 - 2026-11-26 · ENG-D1 COMPLETED (12 hallazgos: 3 HIGH). Claude verificó D-01, D-03 y D-07 en el código.
 - 2026-11-26 · ENG-G1 COMPLETED: `AUDIT_FINDINGS.md`. Los 43 fallos de CI son de entorno (F0-07: fuga por `reports/research`).
 - 2026-11-26 · ENG-E1 RUNNING. Nuevas: F2a READY, F2b BLOCKED, M1 READY (solo rama), S1 READY (diseño), C2, L1.
+- 2026-11-26 · ENG-E1 COMPLETED. E-01 (`mutate_session` fijo a 09:30-15:00) verificado. Potencia: 619-2.233 operaciones para 0,1 R.
+- 2026-11-26 · ENG-F4 REVIEW (fixture de secretos; suite de comprobación en marcha). ENG-P1 COMPLETED (L0, L1a, L1b, L1d).
+- 2026-11-26 · ENG-R1 REVIEW: `EDGE_RESEARCH_PLAN.md`. Propuesta: pruebas únicas prerregistradas en lugar de barridos GA.

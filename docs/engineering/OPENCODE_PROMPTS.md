@@ -69,6 +69,21 @@ Carpeta de trabajo: E:\tl-eng-l1
 Prohibido: modificar el script, la caché, data-check o engine.yaml; ejecutar fetch, lab, pytest o git push.
 ```
 
+## L1d · ¿Dónde están las 1.552 pruebas de EDGE-1 que no suma el contador? (E-04, lectura)
+
+```text
+Eres un trabajador de TradingLab. Solo lees; no cambias nada.
+Carpeta de trabajo: E:\tl-eng-l1
+
+1. Ejecuta exactamente (abre discovery.db en modo SOLO LECTURA):
+   E:\trading-lab\.venv\Scripts\python.exe -c "import sqlite3;c=sqlite3.connect('file:E:/trading-lab/data/discovery.db?mode=ro',uri=True);rows=c.execute(\"select id,n_total,status,approved_at is not null from disc_campaigns where id like 'edge1-%' order by id\").fetchall();[print(r) for r in rows];print('registradas',sum(r[1] or 0 for r in rows));print('cuentan',sum(r[1] or 0 for r in rows if r[3] and (r[2] or '')!='superseded'))"
+2. Escribe la salida literal en E:\tl-eng-l1\docs\engineering\WORKER_REPORTS\L1d-contador.md
+   y debajo, una lista de las campañas que NO cuentan (approved = 0 o status = superseded) con su n_total.
+3. PARA. No hagas commit.
+
+Prohibido: abrir discovery.db en modo escritura, ejecutar lab, pytest o git push.
+```
+
 ## L1c · Suite completa con el fixture nuevo · **BLOCKED**
 
 No se lanza todavía. Con el `.venv` de `E:\trading-lab`, los tests importan `E:\trading-lab\src`, así
