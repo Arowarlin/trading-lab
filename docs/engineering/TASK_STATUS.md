@@ -28,3 +28,6 @@
 - 2026-11-26 · L0, L1a, L1b, L1d y L2 COMPLETED en el equipo del operador (commit 9c32476). Cifras en AUDIT_FINDINGS §6.
 - 2026-11-26 · URGENTE: F0-08 real, 1.210 alertas de test enviadas por ntfy desde el 9-nov. La integración de F4/F5 pasa a prioridad 1.
 - 2026-11-26 · ENG-L3 (C1) BLOCKED por datos: la caché USDJPY no tiene ASK. Decisión del operador: descargar el ASK o enmendar el prerregistro antes de ver resultados.
+- 2026-11-26 · Merge de ENG-1 en el master del operador (sin conflictos), baseline y tag `tl2-eng1-f5-pre`; `propfund verify` 4 OK. `pytest` allí: 2 failed (test_research), 2110 passed, 3 xfailed.
+- 2026-11-26 · Los 2 fallos eran la fuga F0-07 destapada por F5: dependían de la lab.db real. Corregido (DB propia con 40 pruebas sintéticas); también test_optimize. En la nube: 41 failed (entorno) / 2044 passed.
+- 2026-11-26 · El AVISO del operador era un falso positivo: comparaba la fecha de data/lab.db, que las tareas programadas tocan cada 15 min. Con una lab.db centinela la suite no cambió ninguna fila. El detector ahora cuenta solo alertas con firma de test.

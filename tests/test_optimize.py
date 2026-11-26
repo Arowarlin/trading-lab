@@ -11,6 +11,29 @@ from tradinglab.db import connect, init_db
 from tradinglab.learning import count_tests
 
 
+def _seed_global_trials(monkeypatch, db, n: int = 40) -> None:
+    """40 pruebas sintéticas para el DSR global en la DB del test (ENG-1 F0-07).
+
+    Antes el test solo pasaba en el equipo del operador porque el DSR global
+    leía ``reports/research/*.json`` reales.
+    """
+
+    from tradinglab import global_dsr
+
+    rng = np.random.default_rng(2026)
+    with connect(db) as con:
+        con.executemany(
+            "INSERT INTO optimization_trials (ts, study, trial, period_start, period_end,"
+            " sr_period, periods_per_year) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            [
+                ("2026-01-01T00:00:00+00:00", "sintetico", i, "2020-01-01", "2024-12-31",
+                 float(rng.normal(0.0, 0.02)), 252.0)
+                for i in range(n)
+            ],
+        )
+    for name in ("_research_report", "_ea_report", "_intraday_reports"):
+        monkeypatch.setattr(global_dsr, name, lambda items: None)
+
 def _frame(rows: int = 420) -> pd.DataFrame:
     x = np.arange(rows, dtype=float)
     # Ruido fijo: sin él el Sharpe por periodo supera 1 y el guard de
@@ -43,6 +66,7 @@ def test_run_optuna_sintetico_suma_trials_y_no_toca_holdout(
     monkeypatch.setattr(optimize.data_mod, "fetch", fake_fetch)
     db = tmp_path / "lab.db"
     init_db(db)
+    _seed_global_trials(monkeypatch, db)
     report = optimize.run_optuna(
         "SPY",
         "trend",

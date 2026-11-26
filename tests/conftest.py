@@ -72,36 +72,48 @@ def _no_real_secrets(request, monkeypatch):
         monkeypatch.delenv(key, raising=False)
 
 
-_WATCHED = ("data/lab.db", "data/telegram_state.json", "data/task_missed_seen.json")
+# Firmas de las alertas que generan los tests (F0-08). Otras escrituras en la
+# lab.db real (tareas programadas cada 15 min, bots, consola) son legítimas, así
+# que no se mira la fecha del fichero: se cuentan solo filas con estas firmas.
+_TEST_ALERT_SQL = (
+    "SELECT COUNT(*) FROM alerts WHERE message LIKE '%gate-test%' OR message LIKE '%intra-x%'"
+    " OR message LIKE '%BTCUSD%' OR message LIKE '%presupuesto test%'"
+)
 
 
-def _stat_watched():
+def _real_test_alerts():
+    import sqlite3
+
     from tradinglab.config import ROOT
 
-    out = {}
-    for rel in _WATCHED:
-        path = ROOT / rel
-        out[rel] = path.stat().st_mtime_ns if path.exists() else None
-    return out
+    path = ROOT / "data" / "lab.db"
+    if not path.exists():
+        return None
+    try:
+        con = sqlite3.connect(f"file:{path.as_posix()}?mode=ro", uri=True, timeout=5)
+        try:
+            return int(con.execute(_TEST_ALERT_SQL).fetchone()[0])
+        finally:
+            con.close()
+    except sqlite3.Error:
+        return None
 
 
 def pytest_sessionstart(session):
-    session.config._tl_watched = _stat_watched()
+    session.config._tl_test_alerts = _real_test_alerts()
 
 
 def pytest_terminal_summary(terminalreporter, exitstatus, config):
-    before = getattr(config, "_tl_watched", None)
-    if before is None:
+    before = getattr(config, "_tl_test_alerts", None)
+    after = _real_test_alerts()
+    if before is None or after is None or after <= before:
         return
-    touched = [rel for rel, stamp in _stat_watched().items() if stamp != before.get(rel)]
-    if touched:
-        terminalreporter.write_sep(
-            "!",
-            "AVISO: la suite modificó ficheros reales del laboratorio: "
-            + ", ".join(touched)
-            + " (docs/engineering/AUDIT_FINDINGS.md, F0-08)",
-            yellow=True,
-        )
+    terminalreporter.write_sep(
+        "!",
+        f"AVISO: la suite escribió {after - before} alertas de test en data/lab.db real"
+        " (docs/engineering/AUDIT_FINDINGS.md, F0-08)",
+        yellow=True,
+    )
 
 
 @pytest.fixture(autouse=True)

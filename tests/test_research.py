@@ -15,6 +15,33 @@ from tradinglab.learning import count_tests
 from tradinglab.prop.rules import ftmo
 
 
+def _isolated_global_trials(monkeypatch, db: Path, n: int = 40) -> Path:
+    """DB propia con ``n`` pruebas sintéticas para el DSR global (ENG-1 F0-07).
+
+    Antes estos tests solo pasaban en el equipo del operador porque el DSR
+    global leía la ``lab.db`` real y ``reports/research/*.json``.
+    """
+
+    from tradinglab import global_dsr
+    from tradinglab.db import connect, init_db
+
+    init_db(db)
+    rng = np.random.default_rng(2026)
+    with connect(db) as con:
+        con.executemany(
+            "INSERT INTO optimization_trials (ts, study, trial, period_start, period_end,"
+            " sr_period, periods_per_year) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            [
+                ("2026-01-01T00:00:00+00:00", "sintetico", i, "2020-01-01", "2024-12-31",
+                 float(rng.normal(0.0, 0.02)), 252.0)
+                for i in range(n)
+            ],
+        )
+    for name in ("_research_report", "_ea_report", "_intraday_reports"):
+        monkeypatch.setattr(global_dsr, name, lambda items: None)
+    return db
+
+
 def test_deflated_sharpe_penaliza_mas_variantes():
     from tradinglab.stats import deflated_sharpe
 
@@ -214,17 +241,19 @@ def test_run_research_edge_passes_pbo_walkforward_and_regime(monkeypatch, tmp_pa
         wf_test_len=126,
         exposures=[1.0],
     )
+    db = _isolated_global_trials(monkeypatch, tmp_path / "lab.db")
     report = research.run_research(
         cfg,
         ftmo(100_000),
         cache_dir="unused",
         artifacts_dir=tmp_path / "artifacts",
+        db_path=db,
     )
 
     assert report["pbo"] is not None and report["pbo"]["pbo"] <= 0.30
     assert report["walk_forward"] is not None
     assert report["walk_forward"]["verdict"] == "ok"
-    assert report["dsr_n_trials"] == count_tests(DEFAULT_DB)
+    assert report["dsr_n_trials"] == count_tests(db)
     assert report["results"][0]["dsr"] == report["results"][0]["dsr_global"]
     assert report["results"][0]["dsr_global"] is not None
     assert report["results"][0]["dsr_gate"] == "global"
@@ -403,7 +432,7 @@ def test_write_outputs_creates_files(tmp_path, monkeypatch):
     assert "DSR: n_trials" in md
 
 
-def test_near_misses_are_listed_but_not_actionable(monkeypatch):
+def test_near_misses_are_listed_but_not_actionable(monkeypatch, tmp_path):
     monkeypatch.setattr(research.data_mod, "fetch", lambda *a, **k: _frame())
     cfg = research.ResearchConfig(
         symbols=["TEST"],
@@ -422,7 +451,8 @@ def test_near_misses_are_listed_but_not_actionable(monkeypatch):
         pbo_max_combinations=500,
         exposures=[1.0],
     )
-    report = research.run_research(cfg, ftmo(100_000), cache_dir="unused")
+    db = _isolated_global_trials(monkeypatch, tmp_path / "lab.db")
+    report = research.run_research(cfg, ftmo(100_000), cache_dir="unused", db_path=db)
 
     assert report["proposals"] == []
     assert report["near_misses"]

@@ -15,9 +15,13 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[3]
 MARK = "ENG-1 F5 · `DEFAULT_DB` configurable solo para la suite de tests"
+AUTH = (
+    "- **Autorización del operador (literal):** «apruebo todo» (2026-11-26, sesión de Claude Code),\n"
+    "  en respuesta a: aprobar ENG-F5 (`DEFAULT_DB` configurable; toca `config.py`) y ENG-F3 (`uv lock`).\n"
+)
 ENTRY = f"""
 ### 2026-11-26 · {MARK}
-- **Qué:** `config.DEFAULT_DB` lee `TRADINGLAB_DB` si existe; `telegram.STATE_PATH` y
+{AUTH}- **Qué:** `config.DEFAULT_DB` lee `TRADINGLAB_DB` si existe; `telegram.STATE_PATH` y
   `task_health.STATE_FILE` van junto a `DEFAULT_DB`. `tests/conftest.py` define la variable con una
   carpeta temporal y quita `.env`/keyring a los tests sin marcador de red/credenciales.
 - **Por qué:** cada `pytest` escribía alertas de test en `data/lab.db` real y las **enviaba por ntfy**
@@ -46,8 +50,9 @@ def main(argv: list[str] | None = None) -> int:
     if not target.exists():
         print(f"Sin datos: no existe {target}")
         return 1
-    if MARK in target.read_text(encoding="utf-8"):
-        print("La entrada ya existe; no se toca nada.")
+    text = target.read_text(encoding="utf-8")
+    if MARK in text and AUTH in text:
+        print("La entrada ya existe y está completa; no se toca nada.")
         return 0
     owner = "eng1-operador"
     try:
@@ -56,9 +61,17 @@ def main(argv: list[str] | None = None) -> int:
         print(f"No se escribe: el lock changelog-produccion no está libre ({exc}).")
         return 2
     try:
-        with target.open("a", encoding="utf-8", newline="\n") as handle:
-            handle.write(ENTRY)
-        print(f"Entrada añadida a {target}")
+        text = target.read_text(encoding="utf-8")
+        if MARK in text:
+            # Entrada escrita por la versión anterior del script: solo falta la autorización.
+            heading = f"### 2026-11-26 · {MARK}\n"
+            new_text = text.replace(heading, heading + AUTH, 1)
+            target.write_text(new_text, encoding="utf-8", newline="\n")
+            print(f"Autorización añadida a la entrada existente en {target}")
+        else:
+            with target.open("a", encoding="utf-8", newline="\n") as handle:
+                handle.write(ENTRY)
+            print(f"Entrada añadida a {target}")
     finally:
         orq_lock.release("changelog-produccion", owner, locks_dir=args.locks_dir)
     return 0
