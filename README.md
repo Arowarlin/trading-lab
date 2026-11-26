@@ -271,3 +271,28 @@ Los cierres están en `.orquestador/RESULTADO-*.md` y los informes en
 
 
 - 2026-11-26: EDGE-1 cerrado (28 campanas, 22 finalistas, 0 confirmadas, 0 EAs; tag `edge1`).
+
+### Cierre 1j - motor flat_mode (2026-11-26)
+
+- `discovery` **0.2.0** y exportador **1.1.0**: `Session.flat_mode`
+  (`legacy` por defecto, `no_overnight`). El hash de una estrategia `legacy` no
+  cambia: `flat_mode` no entra en `canonical_json` cuando vale `legacy`.
+- **Identidad legacy:** los arrays de `flat_flag` de las 15 plantillas previas x
+  M5/M15/M30/H1/H4 (60 dias sinteticos) y el `.mq5` legacy son identicos; en el
+  EA solo cambian la linea de version y `FLAT_MODE`.
+- `no_overnight`: marca la vela que contiene `flat_at` y la ultima vela
+  disponible de cada dia de sesion (cierres tempranos NYSE y velas que faltan).
+  H-2026-013 pasa de **21** a **0** operaciones con `nights > 0` (799 ops), sin
+  PnL. `M5` en dias normales es identico a `legacy`.
+- Aviso estatico en `preflight`/`feasibility` cuando `legacy` no dispara.
+  Inventario en `TL3_REPORTS/motor_flat_inventario.md`: 64 campanas, **52
+  afectadas** (48 de 24 h por diseno y 4 intradia de `st_reversal_idx`); 22
+  finalistas EDGE-1, 21 de varios dias y 1 intradia correcto; **0 EAs** en
+  `exports/edge1/`.
+- Plantillas nuevas con `no_overnight`: `intraday_momentum_close_v3`,
+  `session_breakout_htf_v3` y `st_reversal_idx_v3`. M4b: plantilla
+  `h1_sma50_session_long_v2`, spec 15:00/360 y `H-2026-013b` (`draft`, **sin
+  verificar**; la verificacion la hace otra sesion).
+- Cierre: `ruff` limpio; `pytest -q` **2100 passed + 1 skipped** (30:55);
+  `lab doctor` Frescura FAIL 6/17 y Reglas fondeo WARN (entorno). Sin campanas,
+  sin `record-informal`, sin ordenes, sin push. Tag `motor-flat`.

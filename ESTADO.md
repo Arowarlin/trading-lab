@@ -4,7 +4,7 @@
 > actualiza al cerrar cada cola. Las colas antiguas de `.orquestador/` son historia; la vigente es la
 > que aparece aquí.
 >
-> **Actualizado:** 2026-11-26 17:26 · `count_tests` **17.974** · WF-TF cerrado (0/34)
+> **Actualizado:** 2026-11-26 17:50 · `count_tests` **17.974** · WF-TF cerrado (0/34)
 
 ## 1. Objetivo
 Encontrar una ventaja **real y neta de costes** y operarla en demo o en retos de prop firm (solo
@@ -117,6 +117,24 @@ OOS-2. count_tests pasó de 1.926 a 12.694. Tag edge1 al cerrar X8.
   (34:40); `lab doctor` Frescura FAIL 7/17 y Reglas fondeo WARN (entorno);
   `lab propfund verify` **4 OK**.
 - `count_tests` **12.694 → 12.694**; tags `robust-pre` y `robust-1`.
+
+## 10. Motor flat_mode (2026-11-26)
+
+- `discovery` 0.2.0: `flat_mode` `legacy` (defecto, identico bit a bit) y
+  `no_overnight` (cierra la vela que contiene `flat_at` y la ultima vela
+  disponible del dia de sesion; cubre cierres tempranos NYSE y velas que
+  faltan). H-2026-013: **21 → 0** operaciones con `nights > 0` (799 ops, sin
+  PnL).
+- Inventario: 64 campanas, 52 afectadas con `legacy` (48 de 24 h por diseno y 4
+  intradia de `st_reversal_idx`); 22 finalistas EDGE-1 (21 multi-dia, 1
+  intradia correcto); 0 EAs en `exports/edge1/`. Informe
+  `TL3_REPORTS/motor_flat_inventario.md` y 7 avisos.
+- `motor flat_mode; intraday_momentum_close_v3 lista para una campana futura`.
+  Tambien `session_breakout_htf_v3` y `st_reversal_idx_v3`.
+- `h1_sma50_session_long_v2` + spec 15:00/360 + `H-2026-013b` (`draft`) listos
+  para la verificacion independiente; **no verificados aqui**.
+- Sin campanas, sin `record-informal`, sin ordenes, sin push. Tag
+  `motor-flat`.
 
 ## 10. Campañas EDGE-2 (2026-11-26)
 
