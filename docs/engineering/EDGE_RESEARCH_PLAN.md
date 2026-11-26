@@ -55,8 +55,19 @@ probado: `WORKER_REPORTS/E-edge.md`.
     placebo) se declara aquí: **1** prueba principal y **1** placebo, que no suma porque no se elige
     entre ellas.
 
-**Condición previa:** abrir en solo lectura la definición de H-2026-002 en `lab.db`. Si ya era esta
-hipótesis, C1 queda **REJECTED (ya probada)** y no se repite.
+**Condición previa: RESUELTA (2026-11-26).**
+- H-2026-002 era `asia_range_reversion` en USDJPY H1, una reversión de los extremos del rango
+  18:00-03:00 NY (`data/tl3/tl3_research.db`, `COLA-TL3.md:91`, `RESULTADO-C1-prep.md`). Es otro
+  mecanismo.
+- Los 48 barridos `FIX_FLOW` solo usaron los fixes **ECB 13:15 y Londres 16:00**
+  (`intraday.py:62-67, 1226-1262`).
+- `tokyo_breakout` es una ruptura, no un flujo de calendario.
+- **El fix de Tokio en días gotobi no se ha probado.** Contaminación débil, que se declara: la sesión
+  asiática de USDJPY ya se ha mirado mucho (H-2026-002, `tokyo_breakout`, `session_trend`).
+
+**Método aprobado por el operador (2026-11-26):** pruebas únicas prerregistradas en lugar de barridos
+GA. Esto **no** autoriza a registrar ni a ejecutar C1. Registrar suma +1 al contador y ejecutar lee
+datos reales: las dos cosas requieren otra aprobación explícita.
 
 ## 3. A1 · Reversión post-cierre en NQ (esbozo)
 - **Mecanismo:** el desequilibrio de las órdenes MOC empuja el precio en los últimos minutos de la

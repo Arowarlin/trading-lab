@@ -15,11 +15,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .config import ROOT
+from .config import DEFAULT_DB
 
 PREFIX = "TradingLab"
 MAX_AGE_HOURS = 24
-STATE_FILE = ROOT / "data" / "task_missed_seen.json"
+# Junto a la base de datos: ROOT/data salvo en la suite de tests (TRADINGLAB_DB).
+STATE_FILE = DEFAULT_DB.parent / "task_missed_seen.json"
 
 _PS = r"""
 $ErrorActionPreference = 'Stop'

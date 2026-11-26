@@ -7,7 +7,19 @@ un ``lab.db`` temporal y afirme valores absolutos del contador.
 
 from __future__ import annotations
 
+import os
+import tempfile
+from pathlib import Path
+
 import pytest
+
+# ENG-1 F5: la suite nunca escribe en data/lab.db real. Debe fijarse antes de
+# importar tradinglab, porque DEFAULT_DB se lee al importar config y muchos
+# módulos lo copian como argumento por defecto. Si alguien ya la definió a
+# propósito, se respeta.
+if not os.environ.get("TRADINGLAB_DB"):
+    _SUITE_DATA = Path(tempfile.mkdtemp(prefix="tradinglab-tests-"))
+    os.environ["TRADINGLAB_DB"] = str(_SUITE_DATA / "lab.db")
 
 
 @pytest.fixture(autouse=True)

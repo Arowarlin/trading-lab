@@ -18,3 +18,7 @@
 - 2026-11-26 · ENG-S1 REVIEW: `STATS_REDESIGN.md` (diseño; aplicar requiere aprobación y tag edge2).
 - 2026-11-26 · ENG-C2a REVIEW: C-02 corregido en la rama (el último mes en caché solo cuenta como completo si llega a su último día laborable).
 - 2026-11-26 · ENG-F4 COMPLETED: suite completa con el fixture = 43 failed / 2030 passed, el mismo conjunto de fallos; el aviso F0-08 aparece (data/lab.db, telegram_state.json).
+- 2026-11-26 · Operador: "apruebo todo" (F5, F3, prompts L, método de pruebas únicas). No incluye registrar ni ejecutar C1.
+- 2026-11-26 · ENG-F3 COMPLETED: lock regenerado con uv 0.13.7, solo añade paquetes.
+- 2026-11-26 · ENG-F5 REVIEW: `TRADINGLAB_DB` (config, telegram, task_health) + conftest; pasos de integración en `INTEGRACION_PENDIENTE.md`.
+- 2026-11-26 · ENG-R1b COMPLETED: C1 no repite H-2026-002 ni FIX_FLOW. ENG-R3 COMPLETED: script C1 + 5 tests. L2 READY, L3 BLOCKED.

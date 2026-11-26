@@ -84,6 +84,28 @@ Carpeta de trabajo: E:\tl-eng-l1
 Prohibido: abrir discovery.db en modo escritura, ejecutar lab, pytest o git push.
 ```
 
+## L2 · Preparar C1: festivos japoneses y cobertura de USDJPY (sin rendimiento)
+
+```text
+Eres un trabajador de TradingLab. No calculas ningún rendimiento.
+Carpeta de trabajo: E:\tl-eng-l1
+
+1. Descarga el CSV oficial de festivos de Japón (Oficina del Gabinete) a E:\tl-eng-l1\data\calendar\jp_holidays_cao.csv:
+   Invoke-WebRequest -Uri "https://www8.cao.go.jp/chosei/shukujitsu/syukujitsu.csv" -OutFile data\calendar\jp_holidays_cao.csv
+   Si falla, escribe el error en docs\engineering\WORKER_REPORTS\L2-c1-prep.md y PARA.
+2. Ejecuta exactamente (solo lee el índice y cuenta velas; no mira precios):
+   E:\trading-lab\.venv\Scripts\python.exe -c "import pandas as pd;f=pd.read_parquet(r'E:\trading-lab\data\cache\dukascopy\USDJPY_M1.parquet',columns=['ask_open']);i=pd.DatetimeIndex(pd.to_datetime(f.index));i=i.tz_localize('UTC') if i.tz is None else i.tz_convert('UTC');m=(i<'2023-01-01')&(i.hour==0)&(i.minute.isin([0,54]));s=f.loc[m,'ask_open'];print('primera',i.min(),'velas_00:00_y_00:54',int(m.sum()),'con_ask',int(s.notna().sum()));print(s.groupby(i[m].year).count().to_string())"
+3. Escribe la salida literal en docs\engineering\WORKER_REPORTS\L2-c1-prep.md, más el número de líneas del CSV y su primera y última fecha.
+4. PARA. No ejecutes c1_tokyo_fix_gotobi.py. No hagas commit.
+
+Prohibido: leer datos de 2023 en adelante, editar código, ejecutar lab, pytest o git push.
+```
+
+## L3 · Ejecutar C1 · **BLOCKED**
+
+Ejecutar C1 suma +1 al contador de pruebas. Requiere que el operador escriba literalmente
+`APRUEBO C1` en una sesión de Claude Code, después de revisar L2.
+
 ## L1c · Suite completa con el fixture nuevo · **BLOCKED**
 
 No se lanza todavía. Con el `.venv` de `E:\trading-lab`, los tests importan `E:\trading-lab\src`, así

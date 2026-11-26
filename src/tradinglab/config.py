@@ -10,7 +10,13 @@ from pydantic import BaseModel, Field, model_validator
 
 ROOT = Path(__file__).resolve().parents[2]
 CONFIG_DIR = ROOT / "config"
-DEFAULT_DB = ROOT / "data" / "lab.db"
+# ``TRADINGLAB_DB`` solo existe para que la suite de tests use una base de datos
+# temporal (ENG-1 F5). Sin la variable, la ruta es la de siempre.
+DEFAULT_DB = (
+    Path(os.environ["TRADINGLAB_DB"])
+    if os.environ.get("TRADINGLAB_DB")
+    else ROOT / "data" / "lab.db"
+)
 
 # Secretos que pueden vivir en Windows Credential Manager (keyring).
 # La precedencia es: variable de shell > keyring > .env.

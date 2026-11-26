@@ -33,7 +33,8 @@ from .time_utils import utc_now
 
 CONFIG_PATH = ROOT / "config" / "telegram.yaml"
 EXAMPLE_PATH = ROOT / "config" / "telegram.example.yaml"
-STATE_PATH = ROOT / "data" / "telegram_state.json"
+# Junto a la base de datos: ROOT/data salvo en la suite de tests (TRADINGLAB_DB).
+STATE_PATH = DEFAULT_DB.parent / "telegram_state.json"
 LOG_DIR = ROOT / "logs" / "telegram"
 TOKEN_KEY = "TELEGRAM_BOT_TOKEN"
 CHAT_KEY = "TELEGRAM_CHAT_ID"
