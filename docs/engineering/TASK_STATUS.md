@@ -38,3 +38,4 @@
 - 2026-11-26 · ENG-F2b REVIEW: suite 21 failed / 2089 passed (antes 38), ninguno nuevo; D-07 en CostBook. Test de ruido: candidatos −0,049 R, pero 7 finalistas de ruido con OOS-1 > 0 (AUDIT_FINDINGS §8).
 - 2026-11-26 · ENG-E02 REVIEW: mecanismo min_trades_oos1 (apagado por defecto). El valor se propondrá con el banco S2.
 - 2026-11-26 · ENG-B02 REVIEW: levels._account_confirmation pasa cost_model_version y spread_model de la campaña.
+- 2026-11-26 · ENG-B03 PENDING: no es un arreglo pequeño (robustez lee result.metrics en ~12 sitios); se agrupa con S1 y se aprobará con el banco S2.
