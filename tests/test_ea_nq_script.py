@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 import pandas as pd
+import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "ea_nq_out_of_period.py"
@@ -24,6 +25,7 @@ def _run(*args: str):
     )
 
 
+@pytest.mark.requires_local("data/cache/ea/US100_CASH_M5_NY.parquet")
 def test_script_nq_sintetico(tmp_path):
     report = tmp_path / "nq_sintetico.md"
     result = _run("--synthetic", "--report", str(report))
@@ -36,6 +38,7 @@ def test_script_nq_sintetico(tmp_path):
     assert "Veredicto" in text
 
 
+@pytest.mark.requires_local("data/cache/ea/US100_CASH_M5_NY.parquet")
 def test_puente_no_imprime_rendimiento(tmp_path):
     report = tmp_path / "puente.md"
     result = _run("--synthetic", "--bridge", "--report", str(report))
@@ -50,6 +53,7 @@ def test_puente_no_imprime_rendimiento(tmp_path):
     assert "Total R |" not in text
 
 
+@pytest.mark.requires_local("data/cache/ea/US100_CASH_M5_NY.parquet")
 def test_granularidad_d1_responde_sin_datos(tmp_path):
     index = pd.date_range("2022-01-03", "2022-12-30", freq="B")
     d1 = pd.DataFrame(

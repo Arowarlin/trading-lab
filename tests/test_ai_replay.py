@@ -20,6 +20,7 @@ class _Broker:
         return []
 
 
+@pytest.mark.requires_local("data/cache/mt5/EURUSD_M15.parquet")
 def test_snapshot_anonimizado_sin_fecha_ni_simbolo():
     plan = prepare_replay("intraday", n=1, strategy="ema_pullback", symbol="EURUSD")
     moment = plan.moments[0]
@@ -32,6 +33,7 @@ def test_snapshot_anonimizado_sin_fecha_ni_simbolo():
     assert moment.anonymized["asset_class"] == "forex"
 
 
+@pytest.mark.requires_local("data/cache/mt5/EURUSD_M15.parquet")
 def test_solo_momentos_con_setup_valido():
     plan = prepare_replay("intraday", n=3, strategy="ema_pullback", symbol="EURUSD")
     assert plan.moments
@@ -42,6 +44,7 @@ def test_solo_momentos_con_setup_valido():
         assert ok is True, reason
 
 
+@pytest.mark.requires_local("data/cache/mt5/EURUSD_M15.parquet")
 def test_respeta_fecha_de_corte():
     plan = prepare_replay(
         "swing", n=3, strategy="trend_pullback", symbol="US100.cash"
@@ -115,6 +118,7 @@ def test_pausa_por_replay(tmp_path, monkeypatch):
     assert audit["result"] == "paused"
 
 
+@pytest.mark.requires_local("data/cache/mt5/EURUSD_M15.parquet")
 def test_run_replay_con_llm_simulado(tmp_path):
     plan = prepare_replay("intraday", n=2, strategy="ema_pullback", symbol="EURUSD")
     db = tmp_path / "lab.db"

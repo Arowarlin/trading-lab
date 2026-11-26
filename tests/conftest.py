@@ -161,6 +161,32 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config):
     )
 
 
+def pytest_collection_modifyitems(config, items):
+    """``requires_local``: se salta solo si falta alguna ruta (ENG-1 F2a).
+
+    Son tests que comprueban a propósito ficheros reales del operador (terminal
+    MT5, caché de datos, discovery.db). En su equipo se ejecutan igual; en CI
+    o en la nube se saltan con el motivo escrito, en vez de fallar.
+    """
+
+    from tradinglab.config import ROOT
+
+    for item in items:
+        for marker in item.iter_markers("requires_local"):
+            missing = []
+            for raw in marker.args:
+                path = Path(raw)
+                path = path if path.is_absolute() or ":" in str(raw)[:3] else ROOT / path
+                if not path.exists():
+                    missing.append(str(raw))
+            if missing:
+                item.add_marker(
+                    pytest.mark.skip(
+                        reason="necesita ficheros del equipo del operador: " + ", ".join(missing)
+                    )
+                )
+
+
 @pytest.fixture(autouse=True)
 def _allow_unapproved_performance(monkeypatch):
     """Los tests calculan rendimiento con datos sintéticos por diseño."""

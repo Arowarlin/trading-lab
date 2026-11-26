@@ -154,3 +154,18 @@ Puerta 2 recalculada sobre una copia de discovery.db (sin campañas, sin contado
 **Veredicto:** con herramientas corregidas, las plantillas de EDGE-1 (FX/oro, M15-H4) no muestran una
 ventaja seleccionable después de costes. Para seguir, hacen falta hipótesis nuevas con más operaciones
 o cestas (STATS_REDESIGN §4, EDGE_RESEARCH_PLAN), no más barridos de estas plantillas.
+
+## 10. F0-09 (HIGH, producción) · El hash congelado del forward del EA depende de los finales de línea del disco
+
+- `ea_forward.EA_CRITERIA` incluye `sha256` de los bytes crudos de `US100_EA.mq5`, los `.mqh`, el `.set`,
+  `ea_us100_engine.py` y `nyse_calendar.py` (`ea_forward.py:31-40`). El hash congelado
+  `f490642ba7a1f71b` (`tests/test_ea_forward.py:28`) **solo se reproduce** si en la copia del operador
+  `US100_EA.mq5`, `US100_ExitManager.mqh`, `US100_RiskManager.mqh` y `ea_us100_engine.py` tienen **CRLF**
+  y el resto LF (comprobado por fuerza bruta sobre las 2.048 combinaciones). En git todos están en LF
+  (`.gitattributes`: `* text=auto eol=lf`), así que CI y cualquier checkout limpio dan `71ee2cabe6aa9aef`.
+- **Riesgo:** el día que git reescriba uno de esos 4 ficheros (checkout, reset, merge que los toque), el
+  hash cambia aunque el EA sea idéntico, y las comprobaciones de criterios congelados del forward pueden
+  fallar ("congelados").
+- **Corrección propuesta (requiere la cola de producción de AGENTS.md):** normalizar `\r\n` → `\n` antes
+  de calcular el hash y migrar el hash congelado (con baseline, tag `-pre` y CHANGELOG). Mientras tanto,
+  los 5 tests de `test_ea_forward` siguen fallando en CI **a propósito**: avisan de este problema.
