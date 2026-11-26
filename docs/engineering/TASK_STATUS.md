@@ -46,3 +46,4 @@
 - 2026-11-26 · F0-09 REVIEW: ea_forward normaliza CRLF y acepta el hash antiguo como alias; tests rojos antes / verdes después; test_ea_forward pasa también en Linux/CI.
 - 2026-11-26 · C-07 REVIEW: corregido en discovery/calendars.py (investigación). nyse_calendar.py (EA) NO se toca: su único caso es 2021-12-31 histórico y está en el hash congelado del forward; documentado en test_discovery_calendars.
 - 2026-11-26 · F0-06 REVIEW: si el worker no arranca, la cola aborta con el motivo real ('arranque del worker: ...'). Tests rojos antes / verdes después.
+- 2026-11-26 · C-01 REVIEW: data-check M1-M30 clasifica los huecos largos entre semana (antes los descartaba). Fin de semana sigue sin contar; pausas largas recurrentes = programadas. Efecto: US100/US500 M15/M30 2015-2017 dejarán de dar ok (las ~650 noches sin datos de L1b).

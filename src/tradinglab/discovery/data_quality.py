@@ -566,6 +566,17 @@ def _calendar_gap_session(
     return False, "horario"
 
 
+def _spans_weekend(start: pd.Timestamp, resume: pd.Timestamp) -> bool:
+    """Hueco que cubre el cierre de fin de semana (sábado completo, menos de 4 días)."""
+
+    if resume - start > pd.Timedelta(days=4):
+        return False
+    saturday = start.normalize()
+    while saturday.day_of_week != 5:
+        saturday += pd.Timedelta(days=1)
+    return start <= saturday and resume >= saturday + pd.Timedelta(days=1)
+
+
 def _gap_analysis(
     frame: pd.DataFrame,
     tf_minutes: int,
@@ -588,11 +599,15 @@ def _gap_analysis(
         minutes = (current - start).total_seconds() / 60.0
         if minutes <= 0:
             continue
-        if tf_minutes < 60 and (minutes <= threshold or minutes >= max_gap):
+        if tf_minutes < 60 and minutes <= threshold:
             continue
         local_start = start.tz_convert(ZoneInfo(pause_tz))
         gaps.append(
             {
+                # ENG-1 C-01: los huecos >= max_gap_hours de M1-M30 ya no se
+                # descartan; se clasifican por calendario/sesión como en H1/H4
+                # (fin de semana y festivos siguen sin contar).
+                "long": bool(tf_minutes < 60 and minutes >= max_gap),
                 "start": local_start,
                 "start_utc": start,
                 "resume": current.tz_convert(ZoneInfo(pause_tz)),
@@ -603,8 +618,11 @@ def _gap_analysis(
         )
     days = len({stamp.date() for stamp in local_index})
     counts: dict[str, int] = {}
+    long_counts: dict[str, int] = {}
     for gap in gaps:
         counts[gap["hhmm"]] = counts.get(gap["hhmm"], 0) + 1
+        if gap.get("long"):
+            long_counts[gap["hhmm"]] = long_counts.get(gap["hhmm"], 0) + 1
 
     calendar_data = _calendar_map(calendar)
     scheduled: list[dict] = []
@@ -612,7 +630,21 @@ def _gap_analysis(
     calendar_gaps: list[dict] = []
     outside_calendar = 0
     for gap in gaps:
-        if tf_minutes >= 60:
+        if gap.get("long") and _spans_weekend(gap["start"], gap["resume"]):
+            # El cierre de fin de semana de M1-M30 se ignora como siempre: C-01
+            # busca huecos largos ENTRE SEMANA, no la hora exacta del cierre.
+            continue
+        if gap.get("long"):
+            # Pausa larga recurrente (misma hora casi todos los días): programada,
+            # como las cortas. Si no se repite, se clasifica por calendario/sesión.
+            # Solo cuentan otros huecos largos: una pausa diaria corta a la misma
+            # hora no convierte en programado un hueco de 24 h.
+            share = long_counts[gap["hhmm"]] / days if days else 0.0
+            if share >= float(config.scheduled_gap_share):
+                gap["share"] = round(share, 4)
+                scheduled.append(gap)
+                continue
+        if tf_minutes >= 60 or gap.get("long"):
             session = None
             if symbol and source:
                 session = config.session_for(

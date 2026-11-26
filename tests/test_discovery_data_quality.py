@@ -280,8 +280,12 @@ def test_pausa_16_50_ny_con_dst_es_la_misma() -> None:
             "oos2": ("2024-07-01", None),
         },
     )
-    assert report.status == "ok"
-    assert report.non_scheduled_gaps == 0
+    # Las dos piezas (enero y julio) dejan un hueco de ~6 meses entre ellas.
+    # Desde ENG-1 C-01 los huecos largos de M1-M30 ya no se descartan: ese es el
+    # único no programado. Lo que este test protege es la pausa con DST.
+    assert report.non_scheduled_gaps == 1
+    hole = report.gap_thresholds["non_scheduled_samples"][0]
+    assert hole["minutes"] > 100 * 24 * 60
     assert report.scheduled_pauses
     assert report.scheduled_pauses[0]["start_hhmm"] == "16:50"
     assert report.scheduled_pauses[0]["count"] == 20
