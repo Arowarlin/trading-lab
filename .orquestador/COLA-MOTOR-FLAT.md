@@ -36,10 +36,17 @@ Comprueba cada 10 min. Así ninguna campaña cambia de motor a mitad de una pasa
   `flat_mode: "legacy" | "no_overnight"`, por defecto **`legacy`**.
   - **`legacy`:** la fórmula actual, **idéntica bit a bit**. Todo lo ya registrado y ejecutado
     (EDGE-1, EDGE-2, NQF, campañas antiguas) se reproduce igual.
-  - **`no_overnight`:** además de lo anterior, se marca la vela que contiene el final de la sesión
-    sin haber marcado ninguna antes:
-    `relative < flat_relative and relative + tf_seconds > duration`. El cierre ocurre a su `close`,
-    como mucho una vela después de `flat_at`, y la posición nunca duerme.
+  - **`no_overnight`:** además de lo anterior, se marca:
+    1. la vela que contiene el final de la sesión sin haber marcado ninguna antes:
+       `relative < flat_relative and relative + tf_seconds > duration`;
+    2. **(enmienda 2026-11-26, tras la verificación de H-2026-013)** la **última vela disponible del
+       día de sesión** (`day_id[i+1] != day_id[i]`, o fin de datos) mientras no haya disparado ningún
+       flat ese día. Esto cubre los cierres tempranos de NYSE (13:00) y los días con velas que faltan.
+       La auditoría F3 encontró que **21 de 799** operaciones de H-2026-013 durmieron porque en esos
+       días no existe la vela de las 15:00.
+
+    El cierre ocurre a su `close`, como mucho una vela después de `flat_at` (o antes en un cierre
+    temprano), y la posición nunca duerme.
 - Se implementa igual en `fastbt._session_mask`, en `export_mql5.FlatFlag` (constante `FLAT_MODE`
   en el `.mq5`) y en `discovery/drift.py`, que también usa `flat_flag`.
 - **Aviso estático** en `preflight`/`feasibility`: si con `legacy` el `flat_at` no cae en ninguna
@@ -69,8 +76,12 @@ Los tests documentan el comportamiento `legacy` y deben pasar **antes y después
 - Tests de `no_overnight`:
   - con 09:30-15:55 en M15, M30 y H1 se marca la vela que contiene las 15:55 (15:45 en M15, 15:30
     en M30, 15:00 en H1);
-  - ninguna operación sintética pasa la noche;
-  - en M5 el resultado es idéntico a `legacy`.
+  - ninguna operación sintética pasa la noche, **incluido un día de cierre temprano NYSE**
+    (velas hasta las 12:00 en H1) y un día al que le falta la última vela;
+  - en M5, en días normales, el resultado es idéntico a `legacy`;
+  - con el spec de H-2026-013 (sesión 09:00-10:00, `flat_at` 15:00, H1) sobre el tramo de desarrollo,
+    con `no_overnight` hay **0** operaciones con `nights > 0` (en `legacy` hay 21). Solo se cuentan
+    operaciones, sin PnL.
 - **Identidad:** en todas las plantillas de `config/discovery/templates/` y en M5, M15, M30, H1 y H4,
   `legacy` da el mismo `flat_flag` que en `motor-flat-pre`. Se comparan los arrays con barras
   sintéticas de 60 días.
@@ -95,6 +106,22 @@ Los tests documentan el comportamiento `legacy` y deben pasar **antes y después
 - **No** se registra ninguna campaña.
 - Las de 24 h se quedan en `legacy`. Su YAML gana un comentario "varios días: flat_at no dispara en
   TF ≥ M15".
+
+### M4b · H-2026-013 lista para volver a verificar (sin verificarla aquí)
+La verificación F3 (`TL3_REPORTS/verificacion_h-2026-013.md`, veredicto **Defectos**, hash
+`9605ebc8…`) bloquea `require_verified` para ese hash. Aquí solo se corrige lo que encontró:
+1. Plantilla nueva `h1_sma50_session_long_v2.yaml` (la v1 no se toca) con
+   `flat_mode: no_overnight`.
+2. Spec `.orquestador/specs/h-2026-013-us100-h1-sma50.yaml`: el encabezado pasa a 15:00 / 360 min,
+   como el código (los defectos documentales 1 y 2), y apunta a la plantilla `_v2`. Se conserva una
+   copia de la versión anterior con el sufijo `.v1.yaml` mediante `git mv`; no se borra.
+3. Registro: `registry.add_status("H-2026-013b", "H-2026-013", "draft", "v2: no_overnight y spec
+   15:00/360 tras verificación F3")` bajo el lock `tl3-registry`.
+4. **No** se vuelve a ejecutar `feasibility` con PnL ni se verifica: la verificación la hace **otra
+   sesión** (independencia), contra el commit de este bloque.
+5. No se calculó ningún PnL de H-2026-013 (solo `feasibility`), así que no hace falta fecha de inicio
+   nueva: es la misma hipótesis sin evaluar, con el código corregido.
+6. Commit `motor-flat: M4b - H-2026-013 v2 para verificar`.
 
 ### M5 · Cierre
 - `ruff`, `pytest -q` completo y `lab doctor`.
