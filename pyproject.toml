@@ -15,16 +15,23 @@ dependencies = [
     "python-dotenv==1.2.4",
     "pyarrow==26.0.1",
     "httpx==0.28.1",
-    "alpaca-py==0.45.0",
     "keyring==25.7.0",
     "optuna==5.0.0",
     "quantstats==0.0.86",
     "arch==9.0.0",
+    "scipy==1.18.1",
 ]
 
 [project.optional-dependencies]
 mt5 = ["MetaTrader5==5.0.6231", "tzdata==2026.6"]
-dev = ["pytest==9.2.0", "ruff==0.17.4", "pre-commit==4.7.0"]
+dev = [
+    "pytest==9.2.0",
+    "ruff==0.17.4",
+    "pre-commit==4.7.0",
+    "hypothesis==6.170.15",
+    "pytest-cov==7.1.0",
+    "coverage==7.17.3",
+]
 discovery = ["numba>=0.60"]
 
 [project.scripts]
