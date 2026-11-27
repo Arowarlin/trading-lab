@@ -54,7 +54,8 @@ def test_expected_classification_on_2026_11_27():
     by_id = {firm["id"]: firm["automation"]["category"] for firm in _firms()}
     assert by_id["lucid"] == "allowed"
     assert by_id["alphafutures"] == "prohibited"
+    assert by_id["takeprofittrader"] == "prohibited"
     for firm in ("topstep", "myfundedfutures", "tradeday", "tradeify", "bulenox"):
         assert by_id[firm] == "conditional", firm
-    for firm in ("apex", "takeprofittrader", "earn2trade"):
+    for firm in ("apex", "earn2trade"):
         assert by_id[firm] == "unverified", firm

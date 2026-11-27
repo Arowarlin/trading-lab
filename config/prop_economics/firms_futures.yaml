@@ -100,10 +100,14 @@ firms:
     name: Take Profit Trader
     website: https://takeprofittrader.com
     automation:
-      category: unverified
-      status: unverified
-      prior: {category: prohibited, status: needs_verification, consulted_at: 2026-11-19, note: "solo fuente secundaria"}
-      note: "La portada no menciona bots y /terms responde 403 (2026-11-27). Falta leer su FAQ oficial."
+      category: prohibited
+      status: verified
+      conditions:
+        - "La web oficial lista \"No trading bots\" entre las reglas de la cuenta, junto a \"Be consistent\" y \"No counter positions\"."
+        - "Copy trading entre cuentas propias: mostrado como permitido en la misma web (detalle sin leer: /terms responde 403)."
+      quote: "No trading bots"
+      source: {url: "https://takeprofittrader.com/", consulted_at: 2026-11-27}
+      note: "Texto embebido en la portada oficial (cadena de interfaz 'no-trading-bots'); el help center está en takeprofittraderhelp.zendesk.com, no leído."
 
   - id: earn2trade
     name: Earn2Trade
