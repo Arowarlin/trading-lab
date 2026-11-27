@@ -53,3 +53,6 @@ FUT-C0 (especificación Research A), FUT-D0 (especificación Research B).
 **2163 passed, 22 skipped, 2 deselected, 0 failed** en 28:15. Avisos: `fork()` con hilos en
 `multiprocessing` (Linux) y `psutil` no instalado en `discovery/jobs.py`. Línea base para comparar las
 entregas de OpenCode.
+
+Tras FUT-D1 (dependencias) y los tests de hooks y catálogo, 2026-11-27: **2224 passed, 22 skipped,
+2 deselected, 0 failed** en 28:11 (+61 tests nuevos).
