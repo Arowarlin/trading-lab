@@ -91,3 +91,23 @@ def test_c14_load_source_cuenta_los_duplicados_de_la_cache(tmp_path) -> None:
     assert loaded.rows == 3  # el cargador sigue quitándolo (keep="last")
     assert loaded.duplicates == 1  # antes no se sabía
     assert loaded.as_dict()["duplicates"] == 1
+
+
+def test_c06_un_hueco_largo_cuenta_sus_velas() -> None:
+    from tradinglab.discovery import data_quality
+
+    full = pd.date_range("2023-01-01", "2023-12-31 23:00", freq="h", tz="UTC")
+    hole = (full >= pd.Timestamp("2023-06-05", tz="UTC")) & (full < pd.Timestamp("2023-06-15", tz="UTC"))
+
+    def report(index):
+        frame = pd.DataFrame(
+            {"open": 100.0, "high": 101.0, "low": 99.0, "close": 100.5, "volume": 1.0}, index=index
+        )
+        return data_quality.check_dataset(frame, "EURUSD", "H1").gap_thresholds
+
+    base, holed = report(full), report(full[~hole])
+    extra_gap_pct = holed["gap_pct"] - base["gap_pct"]
+    extra_bars = holed["gap_bars_missing"] - base["gap_bars_missing"]
+    assert extra_gap_pct < 0.001  # antes solo esto: el hueco de 10 días vale 1 evento
+    assert extra_bars >= 8 * 24  # ahora: sus ~240 velas
+    assert holed["gap_bars_pct"] - base["gap_bars_pct"] > 0.02

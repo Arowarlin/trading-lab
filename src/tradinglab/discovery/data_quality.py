@@ -885,6 +885,20 @@ def check_dataset(
             status = "warn"
     expected_bars = _expected_bars(index, tf_minutes)
     gap_pct = (non_scheduled / expected_bars) if expected_bars else 0.0
+    # ENG-1 C-06: gap_pct cuenta huecos, no velas; un hueco de 8 días vale 1.
+    # Se añade la proporción de velas perdidas (cota superior: incluye las
+    # horas sin sesión dentro del hueco) y avisa, sin cambiar la regla de fallo.
+    missing_bars = int(
+        sum(float(gap.get("minutes") or 0.0) for gap in gap_samples) // max(tf_minutes, 1)
+    )
+    gap_bars_pct = (missing_bars / expected_bars) if expected_bars else 0.0
+    if gap_bars_pct > config.fail_if_gap_pct_gt:
+        issues.append(
+            f"velas perdidas en huecos no programados: ~{missing_bars} "
+            f"({gap_bars_pct:.3%} de {expected_bars}; cota superior)"
+        )
+        if status == "ok":
+            status = "warn"
     if non_scheduled > config.warn_if_gaps_gt:
         issues.append(
             f"huecos no programados: {non_scheduled} "
@@ -938,6 +952,8 @@ def check_dataset(
             "session_tz": session_tz,
             "pause_tz": pause_tz,
             "gap_pct": round(gap_pct, 6),
+            "gap_bars_missing": missing_bars,
+            "gap_bars_pct": round(gap_bars_pct, 6),
             "expected_bars": expected_bars,
             "non_scheduled_samples": [
                 {

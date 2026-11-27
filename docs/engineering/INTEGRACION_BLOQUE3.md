@@ -17,6 +17,7 @@
 | F0-10 | Duración de vela correcta con pandas 3 | No |
 | B-03 | Con v3, la validación usa el mismo coste que la selección (CostBook por operación) | No (Discovery) |
 | B-14 | TCA: slippage nulo sin precio de señal, bid/ask del envío, `expected_cost_bps` nulo en MT5, paper con `origin="paper"` fuera del T12. El envío de órdenes no cambia | **Sí** (`execution/mt5.py`, grupo `ftmo_risk`; `execution/paper.py`) |
+| Menores | B-11, B-12, B-13, C-06 (aviso por velas perdidas), C-13, C-14, D-09, D-10. Sin cambio en resultados del motor | No |
 
 Suite completa en Linux antes de integrar: 1 fallo esperado (`test_componentes_protegidos_intactos`,
 porque `ea_forward.py` y `execution/mt5.py` cambian hasta que se rehace el baseline en el paso 6).
@@ -42,7 +43,7 @@ git tag tl2-eng1-b14-pre master
 
 ```powershell
 git fetch origin claude/upbeat-pasteur-nz8e0u
-git merge --no-ff origin/claude/upbeat-pasteur-nz8e0u -m "merge: ENG-1 bloque 3 (F0-09, v3 activa, C-01, C-07, E-01, E-03, F0-06, D-04, D-05, A-01, F0-10, B-03, B-14)"
+git merge --no-ff origin/claude/upbeat-pasteur-nz8e0u -m "merge: ENG-1 bloque 3 (F0-09, v3 activa, C-01, C-07, E-01, E-03, F0-06, D-04, D-05, A-01, F0-10, B-03, B-14 y menores)"
 ```
 
 4. Comprobar que el forward del EA sigue funcionando con el hash guardado (no cambia nada en `lab.db`):
