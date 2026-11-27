@@ -245,46 +245,47 @@ error MC dentro de §6.5.
 schema_version: 1
 program_id: topstep_50k_combine_xfa
 firm_id: topstep
-rules_version: "2026-11-25.1"
-consulted_at: 2026-11-25
+rules_version: "2026-11-27.1"
+consulted_at: 2026-11-27
 expires_after_days: 30
 instrument_unit: micro            # micro | mini
 phases:
   evaluation:
-    start_balance: {value: 50000, status: verified_repo}
-    profit_target: {value: 3000, status: verified_repo}
-    max_loss: {mode: trailing_eod, amount: 2000, check: realtime_unrealized, lock_at: start_balance, status: verified_repo}
-    daily_loss: {amount: 1000, action: pause_day, enabled: false, optional: true, status: verified_repo}
-    consistency: {max_best_day_fraction: 0.55, basis: total_profit, on_violation: raise_target, status: verified_repo}
-    min_trading_days: {value: 2, status: verified_repo}
-    max_contracts: {mini: 5, micro: 50, status: verified_repo}
+    start_balance: {value: 50000, status: verified}
+    profit_target: {value: 3000, status: verified}
+    max_loss: {mode: trailing_eod, amount: 2000, check: realtime_unrealized, lock_at: start_balance, status: verified}
+    daily_loss: {amount: 1000, action: pause_day, enabled: false, optional: true, status: verified}
+    consistency: {max_best_day_fraction: 0.55, basis: total_profit, on_violation: raise_target, status: verified}
+    min_trading_days: {value: 2, status: verified}
+    max_contracts: {mini: 5, micro: 50, status: verified}
     flat_by: {value: "15:10 America/Chicago", status: verified_repo}
   funded:
-    start_balance: {value: 0, status: verified_repo}
-    max_loss: {mode: trailing_eod, amount: 2000, lock_at: 0, lock_after_first_payout: true, status: verified_repo}
-    scaling_plan: {status: sin_datos}
+    start_balance: {value: 0, status: verified}
+    max_loss: {mode: trailing_eod, amount: 2000, lock_at: 0, lock_after_first_payout: true, status: verified}
+    scaling_plan: {status: sin_datos, note: "tabla publicada como imagen"}
+    max_accounts: {value: 5, status: verified}
+    inactivity_close_days: {value: 30, status: verified}
     payout:
-      eligibility: {template: winning_days, n: 5, min_day_profit: 150, status: verified_repo}
-      max_fraction_of_balance: {value: 0.5, status: verified_repo}
-      cap_per_payout: {value: 2000, alt: 5000, status: discrepancia}
-      min_amount: {value: 125, status: verified_repo}
-      split: {value: 0.90, status: verified_repo}
+      eligibility: {template: winning_days, n: 5, min_day_profit: 150, status: verified}
+      max_fraction_of_balance: {value: 0.5, status: verified}
+      cap_per_payout: {value: 2000, status: verified, note: "4.000 si se añadió DLL al comprar (oferta temporal)"}
+      min_amount: {value: 125, status: verified}
+      split: {value: 0.90, status: verified}
       processing_days: {status: sin_datos}
 fees:
-  evaluation: {type: subscription, amount: 49, period_days: 30, status: verified_repo}
-  activation: {amount: 149, status: verified_repo}
-  reset: {status: sin_datos}
-  data_platform_monthly: {status: sin_datos}
+  evaluation: {type: subscription, amount: 49, period_days: 30, status: verified}
+  activation: {amount: 149, status: verified}
+  reset: {amount: 49, status: verified}
+  data_platform_monthly: {amount: 0, status: verified, note: "L1 incluido; L2 es un extra"}
 commissions_per_side: {MNQ: {status: sin_datos}, NQ: {status: sin_datos}}
 sources:
-  - {url: "https://help.topstep.com/en/articles/8284197", consulted_at: 2026-11-25}
-  - {url: "https://help.topstep.com/en/articles/8284233", consulted_at: 2026-11-25}
-  - {url: "https://help.topstep.com/en/articles/14289835", consulted_at: 2026-11-25}
+  - {url: "https://help.topstep.com/en/articles/8284197-trading-combine-parameters", consulted_at: 2026-11-27}
+  - {url: "https://help.topstep.com/en/articles/8284215-express-funded-account-parameters", consulted_at: 2026-11-27}
+  - {url: "https://help.topstep.com/en/articles/8284233-topstep-payout-policy", consulted_at: 2026-11-27}
+  - {url: "https://help.topstep.com/en/articles/14289835-topstep-pricing-and-payment-questions", consulted_at: 2026-11-27}
 ```
 
-`verified_repo` = verificado por el laboratorio el 2026-11-25 según
-`NASDAQ_EDGE_INSTITUTIONAL/01_RESEARCH/Prop_Firm_Rules.md §1`; **no** re-verificado en esta sesión. Con
-`expires_after_days: 30`, el motor deja de aceptarlo el **2026-12-25**.
+Valores `verified` leídos por Claude el 2026-11-27 en el help center oficial (`docs/futures/research/prop_firms_2026-11-27.md §1`); `verified_repo` = del 2026-11-25, no releído hoy. Con `expires_after_days: 30`, el motor deja de aceptarlo el **2026-12-27**.
 
 ## 9. Libro real (separado)
 

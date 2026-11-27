@@ -15,7 +15,7 @@ en una sesión, dice qué ficheros puede escribir y cuándo **PARAR**. Claude re
 | 0 | Auditoría del repo | **Hecha** (`00_AUDITORIA_REPO.md`) | OP-1 |
 | 1 | Auditoría tecnológica open-source | **Hecha** (`01_MATRIZ_TECNOLOGIA.md`) | OP-2 |
 | 2 | Extensiones de Claude Code | **Hecha** (`02_EXTENSIONES_CLAUDE_CODE.md`) | OP-3 |
-| 3 | Skills, subagentes y hooks | **Hooks y plugins hechos** (FUT-T1a, 2026-11-27); skills y agentes pendientes (FUT-T1b) | — |
+| 3 | Skills, subagentes y hooks | **Hecha** (FUT-T1a hooks y plugins; FUT-T1b 9 skills y 7 agentes; 2026-11-27) | — |
 | 4 | Benchmarks (FUT-X1-X3) | Protocolo listo (`01 §5`) | OP-6 (instalación y datos) |
 | 5 | Datos de futuros | Arquitectura (`03 §3`); FUT-B1/B3 READY | OP-4 (compra) |
 | 6 | Motor EV de prop firms | **Especificado** (`04_SPEC_PROP_EV.md`); FUT-A READY tras OP-1 | tests T1-T14 verdes |
@@ -62,14 +62,14 @@ la línea de FUT-A8, que se coordina con el lock `cli-py`.
 | FUT-B1 | Coste exacto de datos Databento (gratis, solo metadatos) | OpenCode en el equipo del operador | **READY** | — | `scripts/futures_data_cost.py` (nuevo); `docs/futures/evidencia/databento_costes_2026-11.json` y `.md` | prompt §4.4 | borrar nada; `git revert` |
 | FUT-B2 | Descarga con `instrument_id` + `definition` y normalización | OpenCode | BLOCKED (OP-4) | B1 | `src/tradinglab/futures/data/` | identidad y hash por fichero | — |
 | FUT-B3 | Manifiesto con hash de los datos de futuros que ya existen | OpenCode en el equipo del operador | **READY** | — | `scripts/futures_manifest.py` (nuevo); `docs/futures/evidencia/manifest_futuros.jsonl` y `.md` | prompt §4.5 | `git revert` |
-| FUT-R1 | Reglas oficiales vigentes de Topstep, Apex, TradeDay, MyFundedFutures, Take Profit Trader y Earn2Trade (tarifas, drawdown, payouts, automatización) | **Claude** | **READY** | — | `docs/futures/research/prop_firms_2026-12.md` + YAML de programas | cada valor con URL y fecha; discrepancias marcadas | — |
+| FUT-R1 | Reglas oficiales vigentes de Topstep, Apex, TradeDay, MyFundedFutures, Take Profit Trader y Earn2Trade (tarifas, drawdown, payouts, automatización) | **Claude** | **PARCIAL** (2026-11-27): Topstep `verified`; MFF/TradeDay/TPT `parcial`; Apex y Earn2Trade bloqueadas (403) | — | `docs/futures/research/prop_firms_2026-12.md` + YAML de programas | cada valor con URL y fecha; discrepancias marcadas | — |
 | FUT-E1 | Matriz de plataformas con documentación oficial (NT8, Tradovate, ProjectX) | **Claude** | **READY** | — | `03_ARQUITECTURA_FUTURES.md §6` | estados V/PV/NA/NI/RL/RC con fuente | — |
 | FUT-C0 | Especificación de Research A (hipótesis A-J con definición matemática, datos mínimos, costes, criterio de rechazo) | **Claude** | READY | — | `docs/futures/research/RA_spec.md` | cada hipótesis con nivel de datos de `03 §3.1` | — |
 | FUT-D0 | Especificación de Research B con clasificación de contaminación por hipótesis e instrumento | **Claude** | READY | — | `docs/futures/research/RB_spec.md` | ninguna hipótesis NQ sin su etiqueta | — |
 | FUT-J0 | Contrato de ejecución y riesgo (`OrderIntent`, `RiskCheck`, ticket) | **Claude** | BACKLOG | E1 | `docs/futures/research/execution_spec.md` | — | — |
 | FUT-H0 | Modelo de dominio del dashboard (realizado vs simulado) | **Claude** | BACKLOG | A8 | `docs/futures/research/dashboard_model.md` | — | — |
 | FUT-T1a | Hooks de `AGENTS.md` y plugins `context7` + `pyright-lsp` (alcance de proyecto) | Claude | **COMPLETED** (2026-11-27) | — | `.claude/settings.json`, `.claude/hooks/run.sh`, `.claude/hooks/tl_guard.py`, `tests/test_claude_hooks.py` | 61 tests verdes; hooks probados en vivo (Bash y ruff) | quitar la clave `hooks` / `claude plugin uninstall … --scope project` |
-| FUT-T1b | 9 skills y 7 agentes del proyecto (`02 §5-6`) | Claude | READY | T1a | `.claude/skills/*/SKILL.md`, `.claude/agents/*.md` | cada skill con sus 8 apartados | borrar nada: `git revert` |
+| FUT-T1b | 9 skills y 7 agentes del proyecto (`02 §5-6`) | Claude | **COMPLETED** (2026-11-27; frontmatter YAML validado, las 9 skills cargan) | T1a | `.claude/skills/*/SKILL.md`, `.claude/agents/*.md` | cada skill con sus 8 apartados | borrar nada: `git revert` |
 | FUT-T2 | Servidor MCP `tradinglab-state` de solo lectura | OpenCode | BACKLOG | T1 | `src/tradinglab/mcp_state/` | abre SQLite con `mode=ro` (test) | — |
 | FUT-X1…X3 | PoC de benchmark | OpenCode | BLOCKED (OP-6) | A6 | venv aparte; `docs/futures/benchmarks/` | `01 §5` | borrar el venv |
 
@@ -138,9 +138,9 @@ config/prop_economics/programs/synthetic_trailing.yaml, tests/test_prop_economic
    synthetic_trailing.yaml: igual pero trailing_eod D=2000 lock_at 0.
 5. Tests (exactos):
    - los 3 YAML cargan sin error;
-   - is_expired(topstep, date(2026,12,24)) is False y is_expired(topstep, date(2026,12,25)) is True;
-   - blocking_unknowns(topstep) == ["commissions_per_side.MNQ","commissions_per_side.NQ","fees.data_platform_monthly",
-     "fees.reset","phases.funded.payout.cap_per_payout","phases.funded.payout.processing_days","phases.funded.scaling_plan"];
+   - is_expired(topstep, date(2026,12,26)) is False y is_expired(topstep, date(2026,12,27)) is True;
+   - blocking_unknowns(topstep) == ["commissions_per_side.MNQ","commissions_per_side.NQ",
+     "phases.funded.payout.processing_days","phases.funded.scaling_plan"];
    - un YAML con mode "trailing_xyz" o amount -1 lanza ValidationError;
    - blocking_unknowns(synthetic_static) == [].
 NO escribas el simulador. PARA al terminar.
