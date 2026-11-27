@@ -117,7 +117,11 @@ def install_assumed_slippage() -> None:
 
     load_profile._wf_tf_assumed_slippage = True  # type: ignore[attr-defined]
     profile_module.load_profile = load_profile
-    perturb.load_profile = load_profile
+    # ENG-1 B-03: perturb ya no importa load_profile; el coste de validación se
+    # construye en discovery.costs (validation_cost y build_account_cost).
+    from tradinglab.discovery import costs as discovery_costs
+
+    discovery_costs.load_profile = load_profile
 
 
 def _sin_datos(reason: str, **extra: Any) -> dict[str, Any]:

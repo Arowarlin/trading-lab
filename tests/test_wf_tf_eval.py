@@ -69,7 +69,16 @@ def test_ventanas_del_tf_se_aplican() -> None:
 
 
 @pytest.mark.requires_local("data/discovery.db")
-def test_identidad_60_20_con_robustness() -> None:
+def test_identidad_60_20_con_robustness(monkeypatch) -> None:
+    # La identidad 60/20 es con las puertas v2 (frontier, ventanas fijas). Con v3
+    # activas (2026-11-26) robustness usa la población y ventanas por TF.
+    from tradinglab.discovery.config import load_engine_config
+
+    base = load_engine_config()
+    v2 = base.model_copy(
+        update={"robustness": base.robustness.model_copy(update={"gates_version": 2})}
+    )
+    monkeypatch.setattr(robustness, "load_engine_config", lambda: v2)
     campaign = "edge1-11-trend-pullback-mtf-usdjpy-h1"
     real_db = ROOT / "data" / "discovery.db"
     new = wf_tf_eval.evaluate_campaign(
@@ -114,16 +123,17 @@ def test_matriz_diaria_ordenada() -> None:
 
 
 def test_fallback_de_slippage_idempotente(monkeypatch) -> None:
-    from tradinglab.discovery import perturb
+    from tradinglab.discovery import costs as discovery_costs
     from tradinglab.propfund import costs as profile_module
 
     monkeypatch.setattr(profile_module, "load_profile", profile_module.load_profile)
-    monkeypatch.setattr(perturb, "load_profile", profile_module.load_profile)
+    monkeypatch.setattr(discovery_costs, "load_profile", discovery_costs.load_profile)
     wf_tf_eval.install_assumed_slippage()
     first = profile_module.load_profile
     assert getattr(first, "_wf_tf_assumed_slippage", False)
     wf_tf_eval.install_assumed_slippage()
     assert profile_module.load_profile is first
+    assert discovery_costs.load_profile is first  # ENG-1 B-03
 
 
 def test_etiqueta_wf_antigua() -> None:

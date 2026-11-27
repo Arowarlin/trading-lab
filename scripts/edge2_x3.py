@@ -30,7 +30,7 @@ def _install_slippage_fallback() -> None:
     parchea solo en este proceso la carga del perfil.
     """
 
-    from tradinglab.discovery import perturb as perturb_module
+    from tradinglab.discovery import costs as discovery_costs
     from tradinglab.discovery.costs import assumed_slippage_for
     from tradinglab.propfund import costs as profile_module
 
@@ -44,7 +44,8 @@ def _install_slippage_fallback() -> None:
         return profile
 
     profile_module.load_profile = load_profile
-    perturb_module.load_profile = load_profile
+    # ENG-1 B-03: el coste de validación se construye en discovery.costs.
+    discovery_costs.load_profile = load_profile
 
 
 def _validation(strategy_id: int, test: str):
