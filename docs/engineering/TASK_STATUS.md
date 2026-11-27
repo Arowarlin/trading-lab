@@ -49,3 +49,4 @@
 - 2026-11-26 · C-01 REVIEW: data-check M1-M30 clasifica los huecos largos entre semana (antes los descartaba). Fin de semana sigue sin contar; pausas largas recurrentes = programadas. Efecto: US100/US500 M15/M30 2015-2017 dejarán de dar ok (las ~650 noches sin datos de L1b).
 - 2026-11-27 · E-03 REVIEW: edge_map etiqueta 'edge neto sin robustez' cuando bruto y neto son positivos sin candidatas (antes 'sin edge bruto').
 - 2026-11-27 · E-01 REVIEW: mutate_session explora horarios fuera de 09:30-15:00 (Asia/Londres 0/200 → 200/200), conserva la forma y flat_at dentro; NY idéntico bit a bit (0 diferencias en 500 semillas); 24 h sin mutar.
+- 2026-11-27 · D-04 REVIEW: family.spa_test usa el SPA de Hansen studentizado (arch), bloque automático y alineación por fecha. Con H0 cierta y AR(1) 0,3: 5,5 % de rechazos (200 réplicas; antes ~17-29 %).
