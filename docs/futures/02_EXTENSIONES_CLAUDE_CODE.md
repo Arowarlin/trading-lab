@@ -61,6 +61,32 @@ Todo lo demás: no, o más adelante con un motivo. Superpowers **no** se instala
 (`verification-before-completion`, `systematic-debugging`, `writing-plans`) ya están en el método del
 repo o pasan a las skills propias.
 
+### 3.0 Estado (2026-11-27, aprobado por el operador)
+
+Instalados con **alcance de proyecto** desde esta sesión, con la CLI oficial (Claude Code 2.1.332):
+
+```text
+claude plugin marketplace add anthropics/claude-plugins-official --scope project
+claude plugin install context7@claude-plugins-official --scope project
+claude plugin install pyright-lsp@claude-plugins-official --scope project
+```
+
+Quedan declarados en `.claude/settings.json` (`extraKnownMarketplaces` + `enabledPlugins`), así que
+Claude Code los ofrece al abrir el repo en cualquier equipo. Evidencia: `docs/futures/evidencia/
+plugins-antes.txt` y `plugins-despues.txt` (inventario: Context7 = 1 MCP, pyright-lsp = 1 LSP; coste de
+contexto siempre activo ~0 tokens en ambos).
+
+- **Context7 en la nube:** el entorno `trading-lab` permite ya `mcp.context7.com` (cambio aprobado);
+  `curl` llega (HTTP 405 a un GET, lo esperado), pero `claude mcp list` sigue dando `ERR_PROXY_TUNNEL`
+  en esta sesión. **No verificado** hasta una sesión nueva. En Windows no hay proxy.
+- **pyright-lsp** necesita `pyright-langserver` en el PATH. En la nube ya viene (1.1.414). En Windows:
+  `uv tool install pyright` (una vez).
+- **Hooks** (`§7`) activos: `.claude/hooks/run.sh` + `tl_guard.py`, 61 tests en
+  `tests/test_claude_hooks.py`. Se lanzan con `bash`: en Windows hace falta **Git for Windows** (Git Bash).
+  Si no hay bash o Python, el hook falla y la acción sigue (no bloquea): es una red de seguridad, no un
+  sandbox. **No verificado en Windows**; primera prueba del operador: pedir a Claude `git add -A` y ver que
+  se deniega, y revisar `/hooks`.
+
 ### 3.1 Instalación y vuelta atrás (para el equipo del operador, **requiere aprobación**)
 
 ```powershell

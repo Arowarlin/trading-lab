@@ -15,7 +15,7 @@ en una sesión, dice qué ficheros puede escribir y cuándo **PARAR**. Claude re
 | 0 | Auditoría del repo | **Hecha** (`00_AUDITORIA_REPO.md`) | OP-1 |
 | 1 | Auditoría tecnológica open-source | **Hecha** (`01_MATRIZ_TECNOLOGIA.md`) | OP-2 |
 | 2 | Extensiones de Claude Code | **Hecha** (`02_EXTENSIONES_CLAUDE_CODE.md`) | OP-3 |
-| 3 | Skills, subagentes y hooks | **Diseñada** (`02 §5-7`) | OP-5 → FUT-T1 |
+| 3 | Skills, subagentes y hooks | **Hooks y plugins hechos** (FUT-T1a, 2026-11-27); skills y agentes pendientes (FUT-T1b) | — |
 | 4 | Benchmarks (FUT-X1-X3) | Protocolo listo (`01 §5`) | OP-6 (instalación y datos) |
 | 5 | Datos de futuros | Arquitectura (`03 §3`); FUT-B1/B3 READY | OP-4 (compra) |
 | 6 | Motor EV de prop firms | **Especificado** (`04_SPEC_PROP_EV.md`); FUT-A READY tras OP-1 | tests T1-T14 verdes |
@@ -25,6 +25,10 @@ en una sesión, dice qué ficheros puede escribir y cuándo **PARAR**. Claude re
 | 10 | Integración y validación | — | — |
 
 ## 2. Decisiones del operador
+
+> **2026-11-27:** el operador aprobó todo ("tienes aprobación para absolutamente todo, vamos paso a paso").
+> Se ejecuta por pasos y cada paso queda en su commit. Sigue vigente lo que `AGENTS.md` no deja a
+> la aprobación general: nunca live ni dinero real, y nada de activar bots ni F13 sin una orden explícita.
 
 | ID | Decisión | Desbloquea | Recomendación de Claude |
 |---|---|---|---|
@@ -64,7 +68,8 @@ la línea de FUT-A8, que se coordina con el lock `cli-py`.
 | FUT-D0 | Especificación de Research B con clasificación de contaminación por hipótesis e instrumento | **Claude** | READY | — | `docs/futures/research/RB_spec.md` | ninguna hipótesis NQ sin su etiqueta | — |
 | FUT-J0 | Contrato de ejecución y riesgo (`OrderIntent`, `RiskCheck`, ticket) | **Claude** | BACKLOG | E1 | `docs/futures/research/execution_spec.md` | — | — |
 | FUT-H0 | Modelo de dominio del dashboard (realizado vs simulado) | **Claude** | BACKLOG | A8 | `docs/futures/research/dashboard_model.md` | — | — |
-| FUT-T1 | Hooks, skills y agentes del proyecto | OpenCode + revisión de Claude | BLOCKED (OP-5) | — | `.claude/settings.json`, `.claude/hooks/*.py`, `.claude/skills/*/SKILL.md`, `.claude/agents/*.md` | cada hook bloquea su caso en un test | borrar la entrada del JSON |
+| FUT-T1a | Hooks de `AGENTS.md` y plugins `context7` + `pyright-lsp` (alcance de proyecto) | Claude | **COMPLETED** (2026-11-27) | — | `.claude/settings.json`, `.claude/hooks/run.sh`, `.claude/hooks/tl_guard.py`, `tests/test_claude_hooks.py` | 61 tests verdes; hooks probados en vivo (Bash y ruff) | quitar la clave `hooks` / `claude plugin uninstall … --scope project` |
+| FUT-T1b | 9 skills y 7 agentes del proyecto (`02 §5-6`) | Claude | READY | T1a | `.claude/skills/*/SKILL.md`, `.claude/agents/*.md` | cada skill con sus 8 apartados | borrar nada: `git revert` |
 | FUT-T2 | Servidor MCP `tradinglab-state` de solo lectura | OpenCode | BACKLOG | T1 | `src/tradinglab/mcp_state/` | abre SQLite con `mode=ro` (test) | — |
 | FUT-X1…X3 | PoC de benchmark | OpenCode | BLOCKED (OP-6) | A6 | venv aparte; `docs/futures/benchmarks/` | `01 §5` | borrar el venv |
 

@@ -1,0 +1,32 @@
+# Estado antes de FUT-T1 (2026-11-27, sesión en la nube)
+
+$ claude --version
+2.1.332 (Claude Code)
+
+$ claude plugin marketplace list
+Configured marketplaces:
+
+  > anthropic-plugin-directory
+    Source: Built in (Anthropic Directory)
+
+
+$ claude plugin list
+Built-in plugins:
+
+  > cc-plugin-agents-md@builtin
+    Status: √ enabled
+
+  > cc-plugin-plugin-authoring@builtin
+    Status: √ enabled
+
+  > cc-plugin-privacy@builtin
+    Status: √ enabled
+
+  > cc-plugin-telemetry@builtin
+    Status: √ enabled
+
+  > cc-plugin-you-should-know@builtin
+    Status: × disabled
+
+
+.claude/settings.json del proyecto: no existía

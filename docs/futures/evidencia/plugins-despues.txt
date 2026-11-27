@@ -1,0 +1,78 @@
+# Estado después de FUT-T1 (2026-11-27, sesión en la nube)
+
+$ claude plugin marketplace list
+Configured marketplaces:
+
+  > anthropic-plugin-directory
+    Source: Built in (Anthropic Directory)
+
+  > claude-plugins-official
+    Source: GitHub (anthropics/claude-plugins-official)
+
+
+$ claude plugin list
+Installed plugins:
+
+  > context7@claude-plugins-official
+    Version: 0fbfda5a91f4
+    Scope: project
+    Status: √ enabled
+
+  > pyright-lsp@claude-plugins-official
+    Version: 1.0.0
+    Scope: project
+    Status: √ enabled
+
+Built-in plugins:
+
+  > cc-plugin-agents-md@builtin
+    Status: √ enabled
+
+  > cc-plugin-plugin-authoring@builtin
+    Status: √ enabled
+
+  > cc-plugin-privacy@builtin
+    Status: √ enabled
+
+  > cc-plugin-telemetry@builtin
+    Status: √ enabled
+
+  > cc-plugin-you-should-know@builtin
+    Status: × disabled
+
+
+$ claude plugin details context7@claude-plugins-official
+context7
+  Description: Upstash Context7 MCP server for up-to-date documentation lookup. Connects to Context7's hosted remote MCP server (https://mcp.context7.com/mcp) — no local Node.js or npx required — to pull version-specific documentation and code examples directly from source repositories into your LLM context. Works anonymously out of the box; set CONTEXT7_API_KEY for higher rate limits.
+  Source: context7@claude-plugins-official
+
+Component inventory
+  Skills (0)
+  Agents (0)
+  Hooks (0)
+  MCP servers (1)  context7  (tool schemas resolved at runtime; not counted)
+  LSP servers (0)
+
+Projected token cost
+  Always-on:   ~0 tok   added to every session
+
+$ claude plugin details pyright-lsp@claude-plugins-official
+pyright-lsp 1.0.0
+  Description: Python language server (Pyright) for type checking and code intelligence
+  Source: pyright-lsp@claude-plugins-official
+
+Component inventory
+  Skills (0)
+  Agents (0)
+  Hooks (0)
+  MCP servers (0)
+  LSP servers (1)  pyright  (no model context cost)
+
+Projected token cost
+  Always-on:   ~0 tok   added to every session
+
+$ curl https://mcp.context7.com/mcp (GET)
+405
+
+$ pyright --version
+pyright 1.1.414
