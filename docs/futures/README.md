@@ -48,4 +48,8 @@ FUT-C0 (especificación Research A), FUT-D0 (especificación Research B).
 
 ## 4. Resultado de la suite
 
-Pendiente de anotar al terminar la ejecución.
+`pytest -q -m "not network and not mt5 and not lmstudio and not alpaca and not credentials"` sobre
+`5b277cb` en Linux (Python 3.13, `uv sync --frozen --extra dev --extra discovery`), 2026-11-27:
+**2163 passed, 22 skipped, 2 deselected, 0 failed** en 28:15. Avisos: `fork()` con hilos en
+`multiprocessing` (Linux) y `psutil` no instalado en `discovery/jobs.py`. Línea base para comparar las
+entregas de OpenCode.
