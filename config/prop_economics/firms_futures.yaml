@@ -1,0 +1,140 @@
+# Catálogo de firmas de fondeo de FUTUROS · clasificación por automatización (bots)
+#
+# Fuente de verdad del motor EV (docs/futures/04_SPEC_PROP_EV.md) para la política de bots.
+# No sustituye a config/propfund/firms.yaml (Prop Fund, producción): la sincronización es la tarea
+# FUT-A10 de docs/futures/05_COLA_Y_ROADMAP.md.
+#
+# Categorías de automation.category:
+#   allowed      Permite bots (con los límites generales: sin HFT, sin explotar fills simulados).
+#   conditional  Permite bots propios con condiciones (propiedad, plataforma, API, tipo de cuenta).
+#   prohibited   No permite bots; como mucho, señales semiautomáticas con ejecución manual.
+#   unverified   No verificado en fuente oficial en la fecha indicada (no se usa para decidir).
+#
+# status: verified (leído en la página oficial citada en consulted_at) · unverified · sin_datos.
+# Regla: una firma unverified NUNCA se trata como si permitiera bots.
+
+version: 1
+consulted_at: 2026-11-27
+expires_after_days: 30
+
+firms:
+  - id: topstep
+    name: Topstep
+    website: https://www.topstep.com
+    automation:
+      category: conditional
+      status: verified
+      conditions:
+        - "Solo a través de la API TopstepX (ProjectX), suscripción aparte: 29 USD/mes (14,50 con el código de Topstep)."
+        - "Válida en Trading Combine y Express Funded; no disponible en Live Funded."
+        - "Prohibidos VPS, VPN y servidores remotos: la actividad debe salir del equipo propio."
+      quote: "Live funded accounts are not allowed to trade through the ProjectX API."
+      source: {url: "https://help.topstep.com/en/articles/11187768-topstepx-api-access", consulted_at: 2026-11-27}
+
+  - id: myfundedfutures
+    name: My Funded Futures
+    website: https://myfundedfutures.com
+    automation:
+      category: conditional
+      status: verified
+      conditions:
+        - "Estrategias automatizadas con configuración propia."
+        - "Sin HFT y sin explotar los fills favorables del entorno simulado."
+        - "En cuentas Live, seguir las guías de CME para automatización."
+      quote: "Traders may make use of automated trading strategies tailored to their own specific settings"
+      source: {url: "https://intercom.help/myfundedfutures/en/articles/8444599-fair-play-and-prohibited-trading-practices", consulted_at: 2026-11-27}
+
+  - id: lucid
+    name: Lucid Trading
+    website: https://lucidtrading.com
+    automation:
+      category: allowed
+      status: verified
+      conditions:
+        - "Sistemas automatizados y copiadores de operaciones permitidos; el trader responde de los fallos de su software."
+        - "HFT prohibido (detección automática; se retiran los beneficios y, si se repite, se cierra la cuenta)."
+      quote: "Automated trading systems and trade copiers are permitted"
+      source: {url: "https://intercom.help/lucid-trading/en/articles/11404728-permitted-activities", consulted_at: 2026-11-27}
+      extra_sources:
+        - {url: "https://intercom.help/lucid-trading/en/articles/11404736-prohibited-high-frequency-trading", consulted_at: 2026-11-27}
+
+  - id: tradeday
+    name: TradeDay
+    website: https://www.tradeday.com
+    automation:
+      category: conditional
+      status: verified
+      conditions:
+        - "Sistema propio en una plataforma soportada: NinjaTrader, Tradovate, TradingView, Jigsaw o Quantower."
+        - "TradeDay no da acceso a las APIs de plataforma (tampoco a la de Tradovate)."
+        - "Prohibidos los bots comprados a terceros y que varios usuarios usen el mismo bot."
+        - "Prohibidas las estrategias de más de 200 operaciones al día."
+      quote: "Algos and Bots purchased from a third party and employed by the trader are forbidden."
+      source: {url: "https://tradeday.freshdesk.com/en/support/solutions/articles/103000085101-automated-and-algo-trading", consulted_at: 2026-11-27}
+      extra_sources:
+        - {url: "https://tradeday.freshdesk.com/en/support/solutions/articles/103000121031-prohibited-trade-practices", consulted_at: 2026-11-27}
+
+  - id: tradeify
+    name: Tradeify
+    website: https://tradeify.co
+    automation:
+      category: conditional
+      status: verified
+      conditions:
+        - "Demostrar que se es el único propietario del bot; Tradeify puede pedir un vídeo en directo activándolo en el PC propio."
+        - "Uso exclusivo en Tradeify: usar el mismo bot en otras firmas va contra su política."
+        - "Sin bots HFT; sin hedging entre cuentas ni grupos de productos."
+      quote: "You must be able to prove that you are the sole owner of the bot or strategy"
+      source: {url: "https://intercom.help/tradeify/en/articles/10468318-guidelines-for-traders", consulted_at: 2026-11-27}
+
+  - id: apex
+    name: Apex Trader Funding
+    website: https://apextraderfunding.com
+    automation:
+      category: unverified
+      status: unverified
+      prior: {category: prohibited, status: needs_verification, consulted_at: 2026-11-19, url: "https://apextraderfunding.com/help-center/getting-started/prohibited-activities/"}
+      note: "La web oficial responde 403 al acceso automático (2026-11-27). No se suplantó un navegador. Hay que leerla con un navegador."
+
+  - id: takeprofittrader
+    name: Take Profit Trader
+    website: https://takeprofittrader.com
+    automation:
+      category: unverified
+      status: unverified
+      prior: {category: prohibited, status: needs_verification, consulted_at: 2026-11-19, note: "solo fuente secundaria"}
+      note: "La portada no menciona bots y /terms responde 403 (2026-11-27). Falta leer su FAQ oficial."
+
+  - id: earn2trade
+    name: Earn2Trade
+    website: https://www.earn2trade.com
+    automation:
+      category: unverified
+      status: sin_datos
+      note: "La web y help.earn2trade.com responden 403 al acceso automático (2026-11-27)."
+
+  - id: bulenox
+    name: Bulenox
+    website: https://bulenox.com
+    automation:
+      category: conditional
+      status: verified
+      conditions:
+        - "Bots, algoritmos y copiadores permitidos, pero solo herramientas hechas por el usuario y para su uso personal."
+        - "Prohibidas las herramientas comerciales, compartidas, alquiladas o públicas."
+        - "Conectar a Rithmic por una API de terceros o software compuesto cuesta 100 USD/mes adicionales."
+      quote: "Only user-built tools intended solely for the account owner’s personal use are permitted."
+      source: {url: "https://bulenox.com/faq", consulted_at: 2026-11-27}
+
+  - id: alphafutures
+    name: Alpha Futures
+    website: https://alpha-futures.com
+    automation:
+      category: prohibited
+      status: verified
+      conditions:
+        - "IA, bots y cualquier mecanismo automático prohibidos en todos los tipos de cuenta."
+        - "Permitido el semiautomático (indicador que da señales) si el trader coloca, vigila y gestiona cada operación."
+        - "No trabajan con estrategias de 100 o más operaciones al día."
+      quote: "The use of AI, bots, and other automated trading mechanisms is strictly prohibited across all account types."
+      source: {url: "https://intercom.help/alpha-futures-limited-f14467eeaf9c/en/articles/9508585-prohibited-trading-practices", consulted_at: 2026-11-27}
