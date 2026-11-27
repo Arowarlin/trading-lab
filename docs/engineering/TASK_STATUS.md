@@ -50,3 +50,4 @@
 - 2026-11-27 · E-03 REVIEW: edge_map etiqueta 'edge neto sin robustez' cuando bruto y neto son positivos sin candidatas (antes 'sin edge bruto').
 - 2026-11-27 · E-01 REVIEW: mutate_session explora horarios fuera de 09:30-15:00 (Asia/Londres 0/200 → 200/200), conserva la forma y flat_at dentro; NY idéntico bit a bit (0 diferencias en 500 semillas); 24 h sin mutar.
 - 2026-11-27 · D-04 REVIEW: family.spa_test usa el SPA de Hansen studentizado (arch), bloque automático y alineación por fecha. Con H0 cierta y AR(1) 0,3: 5,5 % de rechazos (200 réplicas; antes ~17-29 %).
+- 2026-11-27 · D-05 REVIEW (v3): mc_trades solo cuenta el remuestreo (barajar da la media real); bootstrap diario con bloque >= longitud óptima. v2 idéntico.
