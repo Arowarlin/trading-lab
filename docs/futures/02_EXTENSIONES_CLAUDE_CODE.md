@@ -122,7 +122,7 @@ Motivo del servidor propio: hoy cada agente consulta el estado con SQL improvisa
 (`OPENCODE_PROMPTS.md` L1a). Un servidor de solo lectura da la **misma respuesta a Claude y a OpenCode**
 y no puede escribir en ninguna base.
 
-## 5. Skills propias de TradingLab (diseño)
+## 5. Skills propias de TradingLab (creadas el 2026-11-27 en `.claude/skills/`)
 
 De las 26 propuestas se crean **9**. Se descartan las que duplican skills integradas
 (`tradinglab-code-review` → `/code-review`; `tradinglab-security-audit` → `/security-review`;
@@ -141,7 +141,7 @@ De las 26 propuestas se crean **9**. Se descartan las que duplican skills integr
 | `opencode-task-generation` | task generation | especificación | formato de `05_COLA_Y_ROADMAP.md §4` para **DeepSeek V4.1 Flash**: una sesión, ficheros cerrados, cifras exactas, punto de parada | checklist del formato | prompt pegable | tarea > 1 sesión | prohibiciones de `AGENTS.md` siempre incluidas |
 | `tradinglab-regression-testing` | regression-testing | cambio en producción | baseline (`lab propfund baseline`), test antes/después, CHANGELOG, tag `tl2-<id>-pre` | test rojo antes / verde después | entrada de CHANGELOG | falta baseline | solo con aprobación del operador |
 
-## 6. Subagentes (diseño)
+## 6. Subagentes (creados el 2026-11-27 en `.claude/agents/`)
 
 De los 15 propuestos quedan **7**. Se descartan: *Rust Code Reviewer* (el repo **no tiene ningún `.rs`**,
 Confirmado), *Security Auditor* y *Python Code Reviewer* (cubiertos por `/security-review` y
@@ -162,7 +162,7 @@ Los agentes de investigación devuelven su informe a la sesión principal, que e
 **No verificado:** que la versión local de Claude Code acepte patrones de Bash en el `tools:` de un
 agente; por eso la restricción de Bash va en el hook de §7.
 
-## 7. Hooks (diseño; `.claude/settings.json` del proyecto)
+## 7. Hooks (activos desde el 2026-11-27; `.claude/settings.json` del proyecto)
 
 Todos deterministas, baratos (< 1 s) y reversibles (borrar la entrada del JSON). Ninguno hace commit,
 push ni despliegue.
