@@ -28,6 +28,7 @@ firms:
         - "Solo a través de la API TopstepX (ProjectX), suscripción aparte: 29 USD/mes (14,50 con el código de Topstep)."
         - "Válida en Trading Combine y Express Funded; no disponible en Live Funded."
         - "Prohibidos VPS, VPN y servidores remotos: la actividad debe salir del equipo propio."
+        - "NinjaTrader 8 no está disponible: TopstepX es la única plataforma (ficha topstep.md)."
       quote: "Live funded accounts are not allowed to trade through the ProjectX API."
       source: {url: "https://help.topstep.com/en/articles/11187768-topstepx-api-access", consulted_at: 2026-11-27}
 
@@ -127,6 +128,7 @@ firms:
         - "Bots, algoritmos y copiadores permitidos, pero solo herramientas hechas por el usuario y para su uso personal."
         - "Prohibidas las herramientas comerciales, compartidas, alquiladas o públicas."
         - "Conectar a Rithmic por una API de terceros o software compuesto cuesta 100 USD/mes adicionales."
+        - "CONTRADICCIÓN: los Términos exigen revisión y aprobación previa de Bulenox para cualquier algoritmo o software automático de terceros y prohíben algoritmos de scalping y el DTC Protocol Bridge API: pedir aprobación por escrito antes de usar un bot (ficha bulenox.md)."
       quote: "Only user-built tools intended solely for the account owner’s personal use are permitted."
       source: {url: "https://bulenox.com/faq", consulted_at: 2026-11-27}
 
