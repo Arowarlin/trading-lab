@@ -747,14 +747,9 @@ def run(
     require_approved_campaign(campaign, action="robustness")
     model = dsl.Strategy.model_validate(strategy["dsl"])
     setup = jobs.QueueSetup.from_campaign(campaign, bars=None)
-    from ..propfund.costs import load_profile
+    from . import costs as discovery_costs
 
-    profile = load_profile(setup.account, setup.instrument, firm=setup.firm)
-    cost = fastbt.cost_from_profile(
-        profile,
-        use_p75=bool(setup.use_p75),
-        cost_model_version=setup.cost_model_version,
-    )
+    cost = discovery_costs.validation_cost(setup)  # ENG-1 B-03
     is_frame = campaigns.load_segment(campaign_id, "is", frame=frame, db_path=db_path)
     oos1_frame = campaigns.load_segment(
         campaign_id, "oos1", frame=frame, db_path=db_path
@@ -769,6 +764,9 @@ def run(
         cost,
         limits,
         prepared=prepared,
+    )
+    base = discovery_costs.applied_result(
+        base, cost, session_tz=limits.session_tz, point=float(setup.point)
     )
     base_metrics = {
         "expectancy_r": base.metrics.get("expectancy_r"),
@@ -790,6 +788,9 @@ def run(
         cost,
         is_limits,
         prepared=is_prepared,
+    )
+    is_result = discovery_costs.applied_result(
+        is_result, cost, session_tz=is_limits.session_tz, point=float(setup.point)
     )
     databank.add_evaluation(
         strategy_id,
@@ -819,6 +820,9 @@ def run(
         cost,
         oos1_limits,
         prepared=oos1_prepared,
+    )
+    oos1_result = discovery_costs.applied_result(
+        oos1_result, cost, session_tz=oos1_limits.session_tz, point=float(setup.point)
     )
     databank.add_evaluation(
         strategy_id,

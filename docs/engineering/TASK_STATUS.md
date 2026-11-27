@@ -52,3 +52,4 @@
 - 2026-11-27 · D-04 REVIEW: family.spa_test usa el SPA de Hansen studentizado (arch), bloque automático y alineación por fecha. Con H0 cierta y AR(1) 0,3: 5,5 % de rechazos (200 réplicas; antes ~17-29 %).
 - 2026-11-27 · D-05 REVIEW (v3): mc_trades solo cuenta el remuestreo (barajar da la media real); bootstrap diario con bloque >= longitud óptima. v2 idéntico.
 - 2026-11-27 · A-01 (entradas) REVIEW: weekday_mode opcional ('label' por defecto; 'session' = día del cierre de la vela). Exportar a MQL5 con 'session' da error claro. F0-10: duración de vela robusta a la unidad de pandas 3.
+- 2026-11-27 · B-03 REVIEW (v3): robustez, perturbación y confirmación OOS-2 usan el CostBook de la campaña con coste por operación (como la selección); slippage de perturbación = el mayor de sus cuentas. v2 y campañas legacy idénticas. 7 tests nuevos; noise_full, levels, perturb, costs verdes.

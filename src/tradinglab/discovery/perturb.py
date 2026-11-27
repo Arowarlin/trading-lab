@@ -16,7 +16,6 @@ import pandas as pd
 
 from ..config import DEFAULT_DB
 from ..indicators import atr
-from ..propfund.costs import load_profile
 from . import campaigns, compiler, databank, dsl, fastbt, jobs
 from .specs import exit_spec_from_strategy, run_limits_from_strategy
 
@@ -50,12 +49,9 @@ def load_campaign_inputs(
     )
     combined = pd.concat([is_frame, oos1_frame], axis=0, sort=False)
     setup = jobs.QueueSetup.from_campaign(campaign, bars=combined)
-    profile = load_profile(setup.account, setup.instrument, firm=setup.firm)
-    cost = fastbt.cost_from_profile(
-        profile,
-        use_p75=bool(setup.use_p75),
-        cost_model_version=setup.cost_model_version,
-    )
+    from .costs import validation_cost
+
+    cost = validation_cost(setup)  # ENG-1 B-03: con v3, el CostBook de la campaña
     return combined, campaign, setup, cost
 
 
@@ -89,6 +85,11 @@ def load_spread_histogram(
 def default_slippage(cost: Any) -> float:
     """Slippage máximo por operación (unidades de precio) del perfil."""
 
+    accounts = getattr(cost, "accounts", None)
+    if accounts:  # CostBook (ENG-1 B-03): el mayor de sus cuentas
+        values = [getattr(item.profile, "slippage_price", None) for item in accounts]
+        values = [float(v) for v in values if v is not None]
+        return max(values) if values else 0.0
     profile = getattr(cost, "profile", None)
     value = getattr(profile, "slippage_price", None)
     return 0.0 if value is None else float(value)
@@ -137,7 +138,7 @@ def _run(
 ) -> fastbt.FastResult:
     if prepared is None or limits is None:
         prepared, limits = _prepared(model, frame, cost, setup)
-    return fastbt.run(
+    result = fastbt.run(
         signals
         if signals is not None
         else compiler.compile(
@@ -151,6 +152,9 @@ def _run(
         limits,
         prepared=prepared,
     )
+    from .costs import applied_result
+
+    return applied_result(result, cost, session_tz=limits.session_tz, point=float(setup.point))
 
 
 def perturb_frame(

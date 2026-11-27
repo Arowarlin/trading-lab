@@ -733,6 +733,42 @@ def build_cost_book_for_setup(setup: Any) -> CostBook:
     )
 
 
+def validation_cost(setup: Any):
+    """Coste de las puertas de validación (robustez, perturbación, confirmación).
+
+    ENG-1 B-03: con puertas v3 y una campaña que no es ``legacy_cost`` se usa el
+    mismo ``CostBook`` que la selección (cuentas, modo y spread por hora), como
+    ``jobs._init_worker``. Con v2, el perfil de una cuenta de siempre.
+    """
+
+    if int(load_engine_config().robustness.gates_version) == 3 and not getattr(
+        setup, "legacy_cost", False
+    ):
+        return build_cost_book_for_setup(setup)
+    profile = load_profile(setup.account, setup.instrument, firm=setup.firm)
+    return fastbt.cost_from_profile(
+        profile,
+        use_p75=bool(setup.use_p75),
+        cost_model_version=setup.cost_model_version,
+    )
+
+
+def applied_result(
+    result: fastbt.FastResult, cost: Any, *, session_tz: str, point: float
+) -> fastbt.FastResult:
+    """Con un ``CostBook``, el resultado con el coste aplicado por operación.
+
+    ``fastbt.run`` con un ``CostBook`` usa su panel envolvente (peor o mejor
+    componente por vela); la selección aplica el libro operación a operación.
+    Llamar justo después de ``fastbt.run`` sobre las mismas barras.
+    """
+
+    if not isinstance(cost, CostBook):
+        return result
+    applied, payload = apply_result(cost, result, session_tz=session_tz, point=point)
+    return replace(result, trades=applied.trades, daily_r=applied.daily_r, metrics=payload)
+
+
 def default_cost_model_version() -> int:
     """Versión para evaluaciones nuevas sin campaña guardada."""
 

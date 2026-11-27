@@ -578,14 +578,7 @@ def confirm(
     oos2_frame = campaigns.read_holdout(strategy_id, frame=frame, db_path=db_path)
     model = dsl.Strategy.model_validate(strategy["dsl"])
     setup = jobs.QueueSetup.from_campaign(campaign, bars=None)
-    from ..propfund.costs import load_profile
-
-    profile = load_profile(setup.account, setup.instrument, firm=setup.firm)
-    cost = fastbt.cost_from_profile(
-        profile,
-        use_p75=bool(setup.use_p75),
-        cost_model_version=setup.cost_model_version,
-    )
+    cost = costs.validation_cost(setup)  # ENG-1 B-03
     limits = run_limits_from_strategy(model, setup, close_at_end=True)
     trailing = model.exit.trailing or {}
     prepared = fastbt.prepare(
@@ -605,6 +598,7 @@ def confirm(
         limits,
         prepared=prepared,
     )
+    result = costs.applied_result(result, cost, session_tz=limits.session_tz, point=float(setup.point))
     oos2_metrics = {
         **dict(result.metrics),
         "return_dates": [stamp.isoformat() for stamp in result.daily_r.index],
