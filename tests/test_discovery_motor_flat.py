@@ -347,7 +347,12 @@ def _h2026_013_nights(mode: str) -> tuple[int, int]:
 def test_h2026_013_cero_noches_con_no_overnight() -> None:
     legacy_trades, legacy_nights = _h2026_013_nights("legacy")
     new_trades, new_nights = _h2026_013_nights("no_overnight")
-    assert legacy_nights == 21, f"legacy: {legacy_trades} ops, {legacy_nights} noches"
+    # Motor 0.3.0 (ENG-1 A-01): el stop/objetivo se evalúa en todas las velas con
+    # posición, también fuera de sesión. Antes 21 noches; 8 eran festivos de EE. UU.
+    # (Acción de Gracias, MLK, Presidents, Labor Day) que ahora cierran la misma tarde.
+    # Verificado con docs/engineering/tools/m1_nights_check.py (799 ops en ambos).
+    assert legacy_trades == 799, f"legacy: {legacy_trades} ops"
+    assert legacy_nights == 13, f"legacy: {legacy_trades} ops, {legacy_nights} noches"
     assert new_nights == 0, f"no_overnight: {new_trades} ops, {new_nights} noches"
 
 
