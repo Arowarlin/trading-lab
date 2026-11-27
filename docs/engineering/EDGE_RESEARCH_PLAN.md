@@ -76,6 +76,12 @@ ver ningún resultado (no hay ninguno calculado):
 - Orden: comprobar datos → `lab learning record-informal --n 1` (+1) → ejecutar una vez → informe.
   No se repite con otros parámetros pase lo que pase.
 
+**Resultado (2026-11-27, L3): `rejected`.** 1.401 eventos (35 Sin datos), bruto +1,23 pips, neto
++0,43 pips, t HAC 1,02 < 1,645. Mitades: 2003-2012 −0,46 y 2013-2022 +1,27 pips. Placebo (días no
+gotobi): neto −0,44 pips, t −1,84. Se acepta el veredicto: no se repite con otra ventana, comisión ni
+periodo. Que la segunda mitad sea positiva es una observación a posteriori; convertirla en hipótesis
+exigiría datos que no se hayan mirado, y el único tramo así es el OOS-2 sellado.
+
 **Método aprobado por el operador (2026-11-26):** pruebas únicas prerregistradas en lugar de barridos
 GA. Esto **no** autoriza a registrar ni a ejecutar C1. Registrar suma +1 al contador y ejecutar lee
 datos reales: las dos cosas requieren otra aprobación explícita.
