@@ -103,6 +103,10 @@ class Session(BaseModel):
     end: str = "11:30"
     flat_at: str = "15:45"
     flat_mode: Literal["legacy", "no_overnight"] = "legacy"
+    # ENG-1 A-01: ``label`` (defecto histórico) filtra ``weekdays`` por el día de
+    # la etiqueta de la vela; ``session`` por el día de su cierre (en D1 la sesión
+    # del lunes, etiquetada el domingo a las 17:00 NY, cuenta como lunes).
+    weekday_mode: Literal["label", "session"] = "label"
     or_minutes: int = Field(default=15, ge=1, le=120)
 
     @field_validator("start", "end", "flat_at")
@@ -279,6 +283,8 @@ def canonical_json(strategy: Strategy | dict) -> str:
         # ``legacy`` es el defecto histórico: no entra en el hash para que
         # todas las estrategias ya registradas conserven su ``strategy_hash``.
         session.pop("flat_mode", None)
+    if isinstance(session, dict) and session.get("weekday_mode") == "label":
+        session.pop("weekday_mode", None)  # mismo criterio: no cambia hashes viejos
     return json.dumps(
         payload,
         sort_keys=True,

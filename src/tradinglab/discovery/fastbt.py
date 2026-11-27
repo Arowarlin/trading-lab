@@ -139,6 +139,8 @@ class RunLimits:
     # añade el cierre de la vela que contiene ``flat_at`` y, si hace falta, la
     # última vela disponible de cada día de sesión.
     flat_mode: str = "legacy"
+    # ENG-1 A-01: ``label`` (histórico) o ``session`` (día del cierre de la vela).
+    weekday_mode: str = "label"
     weekdays: tuple[int, ...] = (0, 1, 2, 3, 4)
     max_trades_per_day: int | None = None
     cooldown_bars: int = 0
@@ -1570,7 +1572,23 @@ def _mask_key(limits: RunLimits) -> tuple:
         limits.flat_at,
         limits.flat_mode,
         tuple(int(day) for day in limits.weekdays),
+        getattr(limits, "weekday_mode", "label"),
     )
+
+
+def _bar_seconds(index: pd.Index) -> int:
+    """Duración típica de la vela en segundos, sea cual sea la unidad del índice.
+
+    ``asi8 // 1e9`` suponía nanosegundos; en pandas 3 los índices son de
+    microsegundos por defecto y la duración salía 1000 veces menor (ENG-1).
+    """
+
+    stamps = pd.DatetimeIndex(index)
+    if len(stamps) < 2:
+        return 0
+    steps = np.asarray((stamps[1:] - stamps[:-1]).total_seconds(), dtype=float)
+    steps = steps[steps > 0]
+    return int(np.median(steps)) if steps.size else 0
 
 
 def _session_mask(bars: pd.DataFrame, limits: RunLimits) -> SessionMask:
@@ -1603,8 +1621,16 @@ def _session_mask(bars: pd.DataFrame, limits: RunLimits) -> SessionMask:
     entry_window = _in_window(start_s, end_s)
     manage_end = end_s if flat_s is None else max(end_s, flat_s)
     manage_window = _in_window(start_s, manage_end)
+    weekday_mode = str(getattr(limits, "weekday_mode", "label") or "label")
+    if weekday_mode not in {"label", "session"}:
+        raise FastBtError(f"weekday_mode desconocido: {weekday_mode!r}")
+    weekday_source = local
+    if weekday_mode == "session" and n > 1:
+        # Día del cierre de la vela: etiqueta + duración típica - 1 s.
+        bar_seconds = _bar_seconds(bars.index)
+        weekday_source = local + pd.Timedelta(seconds=max(0, bar_seconds - 1))
     weekday = np.isin(
-        local.day_of_week.to_numpy(), np.asarray(limits.weekdays, dtype=int)
+        weekday_source.day_of_week.to_numpy(), np.asarray(limits.weekdays, dtype=int)
     )
     local_day = (
         local.normalize()
@@ -1636,12 +1662,7 @@ def _session_mask(bars: pd.DataFrame, limits: RunLimits) -> SessionMask:
         if mode == "no_overnight":
             # (1) La vela que contiene el final de la sesión, si ninguna vela
             # empieza dentro del tramo [flat_at, manage_end].
-            if n > 1:
-                deltas = np.diff(bars.index.asi8) // 1_000_000_000
-                positive = deltas[deltas > 0]
-                tf_seconds = int(np.median(positive)) if positive.size else 0
-            else:
-                tf_seconds = 0
+            tf_seconds = _bar_seconds(bars.index) if n > 1 else 0
             contains = (relative < flat_relative) & (
                 relative + tf_seconds > duration
             )

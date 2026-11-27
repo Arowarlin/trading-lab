@@ -169,3 +169,12 @@ o cestas (STATS_REDESIGN §4, EDGE_RESEARCH_PLAN), no más barridos de estas pla
 - **Corrección propuesta (requiere la cola de producción de AGENTS.md):** normalizar `\r\n` → `\n` antes
   de calcular el hash y migrar el hash congelado (con baseline, tag `-pre` y CHANGELOG). Mientras tanto,
   los 5 tests de `test_ea_forward` siguen fallando en CI **a propósito**: avisan de este problema.
+
+## 11. F0-10 (LOW, latente) · Duración de vela con índices de pandas 3
+
+`fastbt` calculaba la duración de la vela con `asi8 // 1_000_000_000`, que supone nanosegundos. En
+pandas 3 los índices son de **microsegundos** por defecto (también al leer parquet): la duración salía
+1000 veces menor. Afectaba al `no_overnight` de MOTOR-FLAT (la regla "vela que contiene `flat_at`" no
+disparaba), pero la regla de reserva (última vela de la sesión del día) daba el mismo resultado en todos
+los casos probados (M15 con datos de 24 h, sesión nocturna H1): **sin efecto encontrado**. Corregido con
+`_bar_seconds` (segundos reales, cualquier unidad). Test: `tests/test_eng1_tf_seconds.py`.

@@ -1805,6 +1805,10 @@ def _mql5_source(
     init_code = compiler.init_code()
     update_code = compiler.update_code()
     state_code = compiler.state_code()
+    if getattr(session, "weekday_mode", "label") != "label":
+        # ENG-1 A-01: el EA filtra por el día de la vela (iTime); exportar otro
+        # criterio daría un EA distinto del backtest.
+        raise ValueError("weekday_mode 'session' no se puede exportar a MQL5 todavía")
     no_overnight = session.flat_mode == "no_overnight"
     manage_helpers = (
         _FLAT_MANAGE_HELPERS_NO_OVERNIGHT if no_overnight else ""
