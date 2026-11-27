@@ -185,6 +185,8 @@ class PaperBroker:
                 slippage_bps=tca_slip(signal_px, fill_px, side),
                 expected_cost_bps=self.slippage_bps + self.commission_bps,
                 realized_cost_bps=realized_bps + self.commission_bps,
+                # ENG-1 B-14: el slippage del paper es el supuesto, no una medición.
+                origin="paper",
             )
         except Exception:
             pass

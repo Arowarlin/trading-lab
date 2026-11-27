@@ -283,12 +283,15 @@ def measure_slippage(
     con.row_factory = sqlite3.Row
     try:
         orders = _order_lookup(con)
+        columns = {row[1] for row in con.execute("PRAGMA table_info(tca)")}
+        # ENG-1 B-14: el paper graba el slippage supuesto, no uno medido.
+        no_paper = " AND COALESCE(t.origin, '') <> 'paper'" if "origin" in columns else ""
         rows = con.execute(
             "SELECT t.id, t.symbol, t.account, t.side, t.order_px, t.fill_px,"
             " t.ts_utc, t.fill_id, o.account_id"
             " FROM tca t LEFT JOIN order_accounts o ON o.order_id = t.fill_id"
             " WHERE t.order_px IS NOT NULL AND t.fill_px IS NOT NULL"
-            " AND t.tca_version >= 2"
+            " AND t.tca_version >= 2" + no_paper
         ).fetchall()
     except sqlite3.Error:
         return []

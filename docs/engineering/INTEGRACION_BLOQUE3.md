@@ -16,9 +16,10 @@
 | A-01 | `weekday_mode` opcional (apagado) | No |
 | F0-10 | Duración de vela correcta con pandas 3 | No |
 | B-03 | Con v3, la validación usa el mismo coste que la selección (CostBook por operación) | No (Discovery) |
+| B-14 | TCA: slippage nulo sin precio de señal, bid/ask del envío, `expected_cost_bps` nulo en MT5, paper con `origin="paper"` fuera del T12. El envío de órdenes no cambia | **Sí** (`execution/mt5.py`, grupo `ftmo_risk`; `execution/paper.py`) |
 
 Suite completa en Linux antes de integrar: 1 fallo esperado (`test_componentes_protegidos_intactos`,
-porque `ea_forward.py` cambia hasta que se rehace el baseline en el paso 6).
+porque `ea_forward.py` y `execution/mt5.py` cambian hasta que se rehace el baseline en el paso 6).
 
 ## Pasos (PowerShell, en orden; sin campañas ni `pytest` en marcha)
 
@@ -32,33 +33,35 @@ Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match "discovery 
 
 ```powershell
 cd E:\trading-lab
-.\.venv\Scripts\lab.exe propfund baseline --reason "ENG-1 F0-09: antes del cambio del hash del forward"
+.\.venv\Scripts\lab.exe propfund baseline --reason "ENG-1 F0-09 y B-14: antes del hash del forward y de la TCA"
 git tag tl2-eng1-f009-pre master
+git tag tl2-eng1-b14-pre master
 ```
 
 3. Traer e integrar la rama (si sale CONFLICT, parar y avisar):
 
 ```powershell
 git fetch origin claude/upbeat-pasteur-nz8e0u
-git merge --no-ff origin/claude/upbeat-pasteur-nz8e0u -m "merge: ENG-1 bloque 3 (F0-09, v3 activa, C-01, C-07, E-01, E-03, F0-06, D-04, D-05, A-01, F0-10, B-03)"
+git merge --no-ff origin/claude/upbeat-pasteur-nz8e0u -m "merge: ENG-1 bloque 3 (F0-09, v3 activa, C-01, C-07, E-01, E-03, F0-06, D-04, D-05, A-01, F0-10, B-03, B-14)"
 ```
 
 4. Comprobar que el forward del EA sigue funcionando con el hash guardado (no cambia nada en `lab.db`):
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest -q tests\test_eng1_ea_hash.py tests\test_ea_forward.py
+.\.venv\Scripts\python.exe -m pytest -q tests\test_eng1_ea_hash.py tests\test_ea_forward.py tests\test_eng1_b14_tca.py tests\test_mt5_tca.py tests\test_mt5.py
 ```
 
-5. Entrada del CHANGELOG (toma el lock `changelog-produccion`):
+5. Entradas del CHANGELOG (toman el lock `changelog-produccion`):
 
 ```powershell
 .\.venv\Scripts\python.exe docs\engineering\tools\eng_changelog.py F0-09
+.\.venv\Scripts\python.exe docs\engineering\tools\eng_changelog.py B-14
 ```
 
 6. Baseline **después** (el manifiesto registra el nuevo `ea_forward.py`) y verificación:
 
 ```powershell
-.\.venv\Scripts\lab.exe propfund baseline --reason "ENG-1 F0-09: hash normalizado a LF con alias del anterior"
+.\.venv\Scripts\lab.exe propfund baseline --reason "ENG-1 F0-09 y B-14: hash normalizado a LF; TCA sin ceros falsos"
 .\.venv\Scripts\lab.exe propfund verify
 ```
 
@@ -73,7 +76,7 @@ Get-Content E:\pytest-bloque3.log -Tail 15
 
 ```powershell
 git add config\propfund\protected_manifest.json docs\CHANGELOG-produccion.md
-git commit -m "eng1: baseline F0-09 y CHANGELOG"
+git commit -m "eng1: baseline F0-09/B-14 y CHANGELOG"
 git push origin master --tags
 ```
 

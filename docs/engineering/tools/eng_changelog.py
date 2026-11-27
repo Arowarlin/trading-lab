@@ -36,7 +36,31 @@ ENTRIES: dict[str, tuple[str, str]] = {
 - **Vuelta atrás:** tag `tl2-eng1-f009-pre`.
 """,
     ),
+    "B-14": (
+        "ENG-1 B-14 · Huecos de la TCA v2 (MT5 y paper)",
+        """- **Autorización del operador (literal):** «tienes permiso para todo» y «hacer» (2026-11-26/27,
+  sesión de Claude Code), en respuesta a la lista de pendientes que incluía B-14.
+- **Qué:** solo cambia lo que se **graba** en `tca`; el envío de órdenes (`request`, SL/TP, volumen,
+  reintentos de filling) es idéntico.
+  1. `execution/mt5.py`: sin `signal_price`, `slippage_bps` va nulo (antes medía tick → fill y se
+     guardaba como decisión → fill). `ai_trader` y `forward_intraday` ya pasan `signal_price`.
+  2. `execution/mt5.py`: `expected_cost_bps` nulo cuando el bróker no tiene coste supuesto (antes 0).
+  3. `execution/mt5.py`: `bid`/`ask` del tick del envío (`submit_tick`), el mismo que `requested_price`.
+  4. `execution/paper.py`: el paper graba `origin="paper"`; `slippage_measured` (T12) lo excluye,
+     porque su slippage es el supuesto, no una medición.
+- **No incluido (diseño aparte):** salidas SL/TP del servidor (reconciliar con `history_deals`) y
+  `ts_utc` del fill (`deal.time_msc`). Ver docs/engineering/WORKER_REPORTS/B-costs.md, "Diseño de
+  medición TCA".
+- **Prueba:** `tests/test_eng1_b14_tca.py` (valor anterior frente al nuevo); `test_mt5_tca` y
+  `test_mt5` actualizados con el valor anterior anotado.
+- **Baseline:** `lab propfund baseline --reason "ENG-1 B-14 …"` antes y después del merge
+  (`execution/mt5.py` está en el grupo protegido `ftmo_risk`).
+- **Vuelta atrás:** tag `tl2-eng1-b14-pre`.
+""",
+    ),
 }
+
+DATES = {"F0-09": "2026-11-26", "B-14": "2026-11-27"}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -64,7 +88,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     try:
         with target.open("a", encoding="utf-8", newline="\n") as handle:
-            handle.write(f"\n### 2026-11-26 · {title}\n{body}")
+            handle.write(f"\n### {DATES.get(args.entry, '2026-11-26')} · {title}\n{body}")
         print(f"Entrada añadida a {target}")
     finally:
         orq_lock.release("changelog-produccion", owner, locks_dir=args.locks_dir)

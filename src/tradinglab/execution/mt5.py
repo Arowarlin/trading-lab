@@ -716,11 +716,9 @@ class MT5Broker:
 
         tick = self.tick(symbol)
         price = tick["ask"] if volume > 0 else tick["bid"]
-        signal_px = (
-            float(signal_price)
-            if signal_price is not None and float(signal_price) > 0
-            else float(price)
-        )
+        # ENG-1 B-14: sin precio de decisión el slippage va nulo (nunca tick->fill).
+        has_signal = signal_price is not None and float(signal_price) > 0
+        signal_px = float(signal_price) if has_signal else float(price)
         digits = spec["digits"]
         effective_magic = self.magic if magic is None else int(magic)
 
@@ -813,17 +811,25 @@ class MT5Broker:
                         signal_px=signal_px,
                         order_px=submit_px,
                         fill_px=fill_px,
-                        slippage_bps=tca_slip(signal_px, fill_px, side),
+                        slippage_bps=(
+                            tca_slip(signal_px, fill_px, side) if has_signal else None
+                        ),
                         # order_send -> respuesta; no es decisión -> fill.
                         latency_ms=latency_ms,
-                        expected_cost_bps=float(getattr(self, "slippage_bps", 0.0) or 0.0),
+                        # ENG-1 B-14: MT5 no tiene coste supuesto; nulo, no 0.
+                        expected_cost_bps=(
+                            None
+                            if getattr(self, "slippage_bps", None) is None
+                            else float(self.slippage_bps)
+                        ),
                         realized_cost_bps=(
                             abs(fill_px - submit_px) / submit_px * 10_000.0
                             if fill_px and submit_px
                             else None
                         ),
-                        bid=float(tick["bid"]),
-                        ask=float(tick["ask"]),
+                        # ENG-1 B-14: el libro del instante del envío, no el de la señal.
+                        bid=float(submit_tick["bid"]),
+                        ask=float(submit_tick["ask"]),
                         requested_price=float(submit_px),
                         order_type="market",
                         origin=str(bot),
