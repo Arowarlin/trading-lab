@@ -115,6 +115,9 @@ operador en esa misma sesión. `record-informal` solo lo usa el operador.
 - `.orquestador/tl2-audit/`: auditoría TL2, mapa y arquitectura objetivo.
 - `.orquestador/RESULTADO-*.md`: cierre de cada bloque de trabajo.
 - `docs/README-historico.md`: README anterior (histórico).
+- `docs/futures/`: programa **futures-first** (auditoría, matriz tecnológica, extensiones de Claude Code,
+  arquitectura y ADR, especificación del motor EV de prop firms y cola de OpenCode). Punto de entrada:
+  `docs/futures/README.md`.
 
 ## 7 · Alcance
 
