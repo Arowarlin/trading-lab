@@ -65,6 +65,17 @@ probado: `WORKER_REPORTS/E-edge.md`.
 - **El fix de Tokio en días gotobi no se ha probado.** Contaminación débil, que se declara: la sesión
   asiática de USDJPY ya se ha mirado mucho (H-2026-002, `tokyo_breakout`, `session_trend`).
 
+**Aprobación de ejecución (2026-11-27):** el operador escribió «apruebo c1». Fijado **antes** de
+ver ningún resultado (no hay ninguno calculado):
+- Comisión: **0,8 pips ida y vuelta**. 5 USD por lote (CFD-006, dato del operador 2026-11-22) son
+  `5 × precio / 1000` pips; con 160, por encima del máximo de 2003-2022 (≈152), es conservadora.
+- Datos: se ejecuta solo si el ASK cubre **>= 95 %** de las velas 00:00 y 00:54 UTC de cada año
+  2004-2022 (2003 empieza el 4 de mayo). Si no, C1 queda **Sin datos**: no se registra ni suma.
+- Estrés con spread p75 a esa hora: **Sin datos** (`broker_spreads` no tiene la franja 00:00 UTC
+  medida por separado). El ASK/BID de Dukascopy ya incluye el spread real de cada evento.
+- Orden: comprobar datos → `lab learning record-informal --n 1` (+1) → ejecutar una vez → informe.
+  No se repite con otros parámetros pase lo que pase.
+
 **Método aprobado por el operador (2026-11-26):** pruebas únicas prerregistradas en lugar de barridos
 GA. Esto **no** autoriza a registrar ni a ejecutar C1. Registrar suma +1 al contador y ejecutar lee
 datos reales: las dos cosas requieren otra aprobación explícita.

@@ -101,10 +101,37 @@ Carpeta de trabajo: E:\tl-eng-l1
 Prohibido: leer datos de 2023 en adelante, editar código, ejecutar lab, pytest o git push.
 ```
 
-## L3 · Ejecutar C1 · **BLOCKED**
+## L3 · Ejecutar C1 · **READY cuando L6 termine** (aprobado: «apruebo c1», 2026-11-27)
 
-Ejecutar C1 suma +1 al contador de pruebas. Requiere que el operador escriba literalmente
-`APRUEBO C1` en una sesión de Claude Code, después de revisar L2.
+Suma +1 al contador de pruebas. Se ejecuta **una sola vez**. Lanzar solo después de subir L6-ask.md.
+
+```text
+Eres un trabajador de TradingLab. Ejecutas UNA prueba prerregistrada; no cambias nada más.
+Carpeta de trabajo: E:\trading-lab
+Informe: docs\engineering\WORKER_REPORTS\L3-c1.md
+
+0. Comprueba que no hay ningún proceso "discovery run" ni "fetch-dukascopy" vivo:
+   Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match "discovery run|fetch-dukascopy" }
+   Si sale alguno, escribe "bloqueado: proceso vivo" en el informe y PARA.
+1. Comprueba que existe el calendario de festivos:
+   Test-Path E:\tl-eng-l1\data\calendar\jp_holidays_cao.csv
+   Si da False, escribe "bloqueado: falta jp_holidays_cao.csv" en el informe y PARA.
+2. Condición de datos (no mira precios). Ejecuta exactamente:
+   .\.venv\Scripts\python.exe -c "import pandas as pd;f=pd.read_parquet(r'E:\trading-lab\data\cache\dukascopy\USDJPY_M1.parquet',columns=['ask_open']);i=pd.DatetimeIndex(pd.to_datetime(f.index));i=i.tz_localize('UTC') if i.tz is None else i.tz_convert('UTC');m=(i>='2004-01-01')&(i<'2023-01-01')&(i.hour==0)&(i.minute.isin([0,54]));c=f.loc[m,'ask_open'].notna().groupby(i[m].year).mean();print(c.round(3).to_string());print('MIN',round(float(c.min()),3))"
+   Copia la salida al informe. Si MIN es menor que 0.95, escribe "Sin datos: ASK insuficiente" y PARA
+   (no registres nada).
+3. Registra la prueba (+1 al contador) ANTES de ejecutarla:
+   .\.venv\Scripts\lab.exe learning record-informal --n 1 --reason "C1 fix Tokio gotobi USDJPY 2003-2022 (EDGE_RESEARCH_PLAN §2), prueba única" --approved-by-operator
+   Copia la salida al informe.
+4. Ejecuta exactamente, una sola vez:
+   .\.venv\Scripts\python.exe docs\engineering\tools\c1_tokyo_fix_gotobi.py --cache E:\trading-lab\data\cache\dukascopy\USDJPY_M1.parquet --jp-holidays E:\tl-eng-l1\data\calendar\jp_holidays_cao.csv --commission-pips-rt 0.8 --out docs\engineering\WORKER_REPORTS\L3-c1.json --approved-by-operator
+5. Copia la línea JSON que imprime al informe, literal. PARA. No interpretes el veredicto.
+   No hagas commit.
+
+Prohibido: repetir el paso 4, cambiar la comisión u otro argumento, leer datos de 2023 en adelante,
+editar código, ejecutar campañas, pytest o git push. Si el paso 4 da error, copia el error y PARA
+(no lo reintentes).
+```
 
 ## L4 · Puerta 2 de EDGE-1 y EDGE-2 con puertas v2 y v3 (sin campañas, sin OOS-2)
 
