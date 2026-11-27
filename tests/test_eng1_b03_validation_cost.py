@@ -123,3 +123,57 @@ def test_default_slippage_con_costbook_toma_el_mayor():
     assert perturb.default_slippage(book) == pytest.approx(2.5)
     single = SimpleNamespace(profile=SimpleNamespace(slippage_price=1.2))
     assert perturb.default_slippage(single) == pytest.approx(1.2)
+
+
+def _bars(n=3, start="2024-01-10 15:00"):
+    return pd.DataFrame(
+        {"open": [100.0] * n, "high": [101.0] * n, "low": [99.0] * n, "close": [100.0] * n},
+        index=pd.date_range(start, periods=n, freq="5min", tz="UTC"),
+    )
+
+
+def test_b11_la_cache_del_panel_no_depende_solo_del_id():
+    from tradinglab.discovery.costs import _bars_key
+
+    a, b = _bars(), _bars(start="2024-02-10 15:00")
+    assert _bars_key(a) != _bars_key(b)
+    assert _bars_key(a) == _bars_key(a)
+    same_id = _bars_key(a)
+    fake_reuse = (same_id[0], 3, b.index[0], b.index[-1])
+    assert fake_reuse != same_id  # mismo id, otras barras: no sirve la caché
+
+
+def _v2_panel(slip):
+    array = np.asarray([1.0, 1.0, 1.0])
+    return fastbt.CostPanel(
+        spread_bps=array.copy(), slip_bps=np.asarray(slip, dtype=float), comm_bps=np.zeros(3)
+    )
+
+
+def test_b12_salida_por_objetivo_sin_slippage_de_salida_en_el_desglose():
+    item = SimpleNamespace(
+        account="A", instrument="US100", assumed_slippage=1.0, slippage_source="x",
+        panel=lambda bars: _v2_panel([2.0, 0.0, 3.0]), swap=None,
+    )
+    book = costs.CostBook([item], mode="target", session_tz="UTC", cost_model_version=2)
+    book.panel(_bars())
+    trade = fastbt.Trade(**{**_trade().__dict__, "reason": "target"})
+    out = book.apply([trade], session_tz="UTC").trades[0]
+    factor = 100.0 / 1.0 / 10_000.0
+    assert out.slip_r == pytest.approx(2.0 * factor)  # antes (2 + 3) * factor
+    assert out.r_cost == pytest.approx(out.spread_r + out.slip_r + out.comm_r)
+
+
+def test_b13_sin_swap_y_noche_queda_marcado():
+    item = SimpleNamespace(
+        account="A", instrument="US100", assumed_slippage=1.0, slippage_source="x",
+        panel=lambda bars: _v2_panel([0.0, 0.0, 0.0]), swap=None,
+    )
+    book = costs.CostBook([item], mode="target", session_tz="UTC", cost_model_version=2)
+    book.panel(_bars())
+    night = fastbt.Trade(
+        **{**_trade().__dict__, "exit_time": pd.Timestamp("2024-01-11 15:30", tz="UTC")}
+    )
+    same_day, overnight = book.apply([_trade(), night], session_tz="UTC").trades
+    assert same_day.swap_source is None
+    assert overnight.swap_source == "Sin datos" and overnight.swap_r == 0.0

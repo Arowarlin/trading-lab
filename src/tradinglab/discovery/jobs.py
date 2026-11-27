@@ -361,7 +361,10 @@ def _slice_bars(
     if start:
         mask &= bars.index >= pd.Timestamp(start, tz="UTC")
     if end:
-        mask &= bars.index <= pd.Timestamp(end, tz="UTC") + pd.Timedelta(days=1)
+        # ENG-1 D-10: fin inclusivo sin la vela 00:00 del día siguiente.
+        from .campaigns import _end_ts
+
+        mask &= bars.index <= _end_ts(end)
     sliced = bars.loc[mask]
     if len(sliced) == 0:
         raise QueueError(

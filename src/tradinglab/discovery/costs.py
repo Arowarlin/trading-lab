@@ -384,6 +384,26 @@ def build_account_cost(
     )
 
 
+def _crosses_day(trade: fastbt.Trade, tz: str) -> bool:
+    try:
+        return trade.exit_time.tz_convert(tz).date() > trade.entry_time.tz_convert(tz).date()
+    except (AttributeError, TypeError, ValueError):
+        return False
+
+
+def _bars_key(bars: pd.DataFrame) -> tuple:
+    """Clave del panel en caché: ``id`` más longitud y extremos del índice.
+
+    ENG-1 B-11: con solo ``id(bars)``, un objeto nuevo que reutiliza el id de
+    otro ya liberado recibía el panel de otras barras.
+    """
+
+    index = bars.index
+    if len(index) == 0:
+        return (id(bars), 0, None, None)
+    return (id(bars), len(index), index[0], index[-1])
+
+
 class CostBook:
     """Libro de costes por cuenta; ``worst`` aplica el máximo por operación."""
 
@@ -416,7 +436,7 @@ class CostBook:
             load_engine_config().discovery.swap_credit
         )
         self._panels: list[fastbt.CostPanel] | None = None
-        self._bars_id: int | None = None
+        self._bars_id: tuple | None = None
         self._worst_panel: fastbt.CostPanel | None = None
 
     @property
@@ -433,7 +453,8 @@ class CostBook:
         return f"{self.mode}:{'+'.join(self.account_ids)}:{self.accounts[0].instrument}"
 
     def panel(self, bars: pd.DataFrame) -> fastbt.CostPanel:
-        if self._panels is not None and self._bars_id == id(bars):
+        key = _bars_key(bars)  # ENG-1 B-11: id() solo puede reutilizarse
+        if self._panels is not None and self._bars_id == key:
             assert self._worst_panel is not None
             return self._worst_panel
         panels = [item.panel(bars) for item in self.accounts]
@@ -455,7 +476,7 @@ class CostBook:
                 ),
             }
         self._panels = panels
-        self._bars_id = id(bars)
+        self._bars_id = key
         self._worst_panel = fastbt.CostPanel(
             spread_bps=spread,
             slip_bps=slip,
@@ -563,6 +584,10 @@ class CostBook:
                         )
                     factor = trade.entry_price / float(risk) / 10_000.0
                     comm_r = comm_bps_sum * factor
+                    if trade.reason == "target":
+                        # ENG-1 B-12: la salida por objetivo no paga slippage;
+                        # solo cambia el desglose, no ``r_cost``.
+                        slip_bps_sum = float(panel.slip_bps[e])
                     slip_r = slip_bps_sum * factor
                     spread_r = spread_trade * factor
                 else:
@@ -576,6 +601,10 @@ class CostBook:
                 swap_r = 0.0
                 swap_source = None
                 swap = getattr(item, "swap", None)
+                if swap is None and _crosses_day(trade, tz):
+                    # ENG-1 B-13: perfil sin swap y operación que pasa la noche:
+                    # 0 R, pero marcado; antes quedaba como swap 0 silencioso.
+                    swap_source = "Sin datos"
                 if swap is not None:
                     if hasattr(swap, "r_with_source"):
                         swap_r, swap_source = swap.r_with_source(

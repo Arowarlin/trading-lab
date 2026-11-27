@@ -282,6 +282,7 @@ def test_count_tests_readonly_incluye_incubados(tmp_path: Path) -> None:
         "strategy_trials": 1,
         "incubated": 1,
         "campaign_registry": 11,
+        "informal_trials": 0,
         "discovery": 0,
         "total": 16,
     }
