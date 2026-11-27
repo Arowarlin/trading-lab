@@ -220,12 +220,14 @@ def test_submit_market_guarda_bid_ask_y_solicitado(monkeypatch, tmp_path):
 
     result = broker.submit_market("XAUUSD", 0.01, bot="bot", dry_run=False)
     assert result["ok"] is True
-    assert captured["bid"] == pytest.approx(100.00)
-    assert captured["ask"] == pytest.approx(100.02)
+    # ENG-1 B-14: bid/ask del envío (antes 100,00/100,02, los de la señal) y,
+    # sin signal_price, slippage nulo (antes 9,998 bps tick -> fill).
+    assert captured["bid"] == pytest.approx(100.05)
+    assert captured["ask"] == pytest.approx(100.07)
     assert captured["signal_px"] == pytest.approx(100.02)
     assert captured["order_px"] == pytest.approx(100.07)
     assert captured["fill_px"] == pytest.approx(100.12)
-    assert captured["slippage_bps"] == pytest.approx(9.998, abs=0.001)
+    assert captured["slippage_bps"] is None
     assert captured["requested_price"] == pytest.approx(100.07)
     assert captured["order_type"] == "market"
     assert captured["origin"] == "bot"

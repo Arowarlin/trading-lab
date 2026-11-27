@@ -203,9 +203,29 @@ def _mc_trades(trades, *, paths: int, seed: int) -> dict[str, Any]:
     }
 
 
-def _bootstrap(daily: pd.Series, *, paths: int, seed: int) -> dict[str, Any]:
+def _mc_trades_ok(mc_trades: dict[str, Any], *, gates_v3: bool) -> bool:
+    resample = (mc_trades.get("resample_expectancy_p5") or -1.0) > 0.0
+    if gates_v3:
+        return bool(resample)
+    shuffle = (mc_trades.get("shuffle_expectancy_p5") or -1.0) > 0.0
+    return bool(shuffle or resample)
+
+
+def _bootstrap(
+    daily: pd.Series, *, paths: int, seed: int, auto_block: bool = False
+) -> dict[str, Any]:
     values = pd.to_numeric(daily, errors="coerce").dropna().to_numpy(dtype=float)
     block = 5
+    if auto_block and values.size >= 20:
+        # ENG-1 D-05 (puertas v3): bloque >= longitud óptima estimada, para
+        # conservar la dependencia temporal; mínimo 5 días como antes.
+        try:
+            from arch.bootstrap import optimal_block_length
+
+            estimated = float(optimal_block_length(values)["stationary"].iloc[0])
+            block = int(min(max(5, np.ceil(estimated)), max(5, values.size // 4)))
+        except Exception:  # noqa: BLE001 - sin estimación, el bloque de siempre
+            block = 5
     if values.size < block:
         return {"status": "Sin datos"}
     rng = np.random.default_rng(seed)
@@ -727,14 +747,9 @@ def run(
     require_approved_campaign(campaign, action="robustness")
     model = dsl.Strategy.model_validate(strategy["dsl"])
     setup = jobs.QueueSetup.from_campaign(campaign, bars=None)
-    from ..propfund.costs import load_profile
+    from . import costs as discovery_costs
 
-    profile = load_profile(setup.account, setup.instrument, firm=setup.firm)
-    cost = fastbt.cost_from_profile(
-        profile,
-        use_p75=bool(setup.use_p75),
-        cost_model_version=setup.cost_model_version,
-    )
+    cost = discovery_costs.validation_cost(setup)  # ENG-1 B-03
     is_frame = campaigns.load_segment(campaign_id, "is", frame=frame, db_path=db_path)
     oos1_frame = campaigns.load_segment(
         campaign_id, "oos1", frame=frame, db_path=db_path
@@ -749,6 +764,9 @@ def run(
         cost,
         limits,
         prepared=prepared,
+    )
+    base = discovery_costs.applied_result(
+        base, cost, session_tz=limits.session_tz, point=float(setup.point)
     )
     base_metrics = {
         "expectancy_r": base.metrics.get("expectancy_r"),
@@ -770,6 +788,9 @@ def run(
         cost,
         is_limits,
         prepared=is_prepared,
+    )
+    is_result = discovery_costs.applied_result(
+        is_result, cost, session_tz=is_limits.session_tz, point=float(setup.point)
     )
     databank.add_evaluation(
         strategy_id,
@@ -800,6 +821,9 @@ def run(
         oos1_limits,
         prepared=oos1_prepared,
     )
+    oos1_result = discovery_costs.applied_result(
+        oos1_result, cost, session_tz=oos1_limits.session_tz, point=float(setup.point)
+    )
     databank.add_evaluation(
         strategy_id,
         segment="oos1",
@@ -829,10 +853,12 @@ def run(
         paths=int(config.mc_paths),
         seed=int(campaign["config"].get("seed", 0)) + 2_000,
     )
+    gates_v3 = int(config.gates_version) == 3
     bootstrap = _bootstrap(
         base.daily_r,
         paths=int(config.bootstrap_paths),
         seed=int(campaign["config"].get("seed", 0)) + 3_000,
+        auto_block=gates_v3,
     )
     pbo, wf = _pbo_wf(
         campaign_id,
@@ -873,10 +899,10 @@ def run(
         "wf": bool(wf.get("ok")),
         "regime": bool(regime.get("passed")),
         "challenge": bool(challenge.get("passed")),
-        "mc_trades": bool(
-            (mc_trades.get("shuffle_expectancy_p5") or -1.0) > 0.0
-            or (mc_trades.get("resample_expectancy_p5") or -1.0) > 0.0
-        ),
+        # ENG-1 D-05: barajar no cambia la media, así que el percentil 5
+        # "barajado" es la expectativa real y la puerta v2 equivale a
+        # "expectativa > 0". Con puertas v3 solo cuenta el remuestreo.
+        "mc_trades": _mc_trades_ok(mc_trades, gates_v3=gates_v3),
         "bootstrap": bool((bootstrap.get("expectancy_p5") or -1.0) > 0.0),
     }
     for name, result in validations.items():

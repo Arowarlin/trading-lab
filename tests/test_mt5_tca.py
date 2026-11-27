@@ -101,7 +101,11 @@ def test_separa_senal_envio_y_fill_frente_al_registro_antiguo(monkeypatch, tmp_p
     assert captured["order_px"] == pytest.approx(100.07)
     assert captured["fill_px"] == pytest.approx(100.12)
     assert captured["requested_price"] == pytest.approx(100.07)
-    assert captured["slippage_bps"] == pytest.approx(9.998, abs=0.001)
+    # ENG-1 B-14: sin signal_price el slippage va nulo; antes 9,998 bps tick->fill.
+    assert captured["slippage_bps"] is None
+    # ENG-1 B-14: bid/ask del tick del envío (antes 100,00/100,02, el de la señal).
+    assert (captured["bid"], captured["ask"]) == (pytest.approx(100.05), pytest.approx(100.07))
+    assert captured["expected_cost_bps"] is None  # antes 0,0
 
     # Antiguo: señal y envío compartían el tick de la petición.
     old_signal_px = old_order_px = 100.02
@@ -110,7 +114,7 @@ def test_separa_senal_envio_y_fill_frente_al_registro_antiguo(monkeypatch, tmp_p
     assert old_signal_px == pytest.approx(captured["signal_px"])
     assert old_order_px != pytest.approx(captured["order_px"])
     assert old_fill_px == pytest.approx(captured["fill_px"])
-    assert old_slippage_bps == pytest.approx(captured["slippage_bps"], abs=0.001)
+    assert captured["slippage_bps"] != old_slippage_bps
 
 
 def test_fill_cero_no_se_sustituye_por_el_precio_pedido(monkeypatch, tmp_path):
@@ -279,5 +283,6 @@ def test_mismo_tick_que_tl2_tca_pre(monkeypatch, tmp_path):
     assert captured["signal_px"] == pytest.approx(100.02)
     assert captured["order_px"] == pytest.approx(100.02)
     assert captured["fill_px"] == pytest.approx(100.12)
-    assert captured["slippage_bps"] == pytest.approx(9.998, abs=0.001)
+    # ENG-1 B-14: sin signal_price, nulo (en tl2-tca2-pre era 9,998 bps).
+    assert captured["slippage_bps"] is None
     assert captured["requested_price"] == pytest.approx(100.02)

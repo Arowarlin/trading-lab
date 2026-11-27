@@ -28,16 +28,41 @@ from .lifecycle import (
 )
 
 
+def _canonical_bytes(path: Path) -> bytes:
+    """Bytes con finales de línea LF (ENG-1 F0-09).
+
+    El hash de los criterios no debe depender de si la copia de trabajo tiene
+    CRLF o LF: git guarda LF (``.gitattributes``) y Windows puede tener CRLF.
+    """
+
+    return path.read_bytes().replace(b"\r\n", b"\n")
+
+
 def _sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    return hashlib.sha256(_canonical_bytes(path)).hexdigest()
 
 
 def _code_sha256(paths: list[Path]) -> str:
     digest = hashlib.sha256()
     for path in sorted(paths):
         digest.update(path.name.encode("utf-8"))
-        digest.update(path.read_bytes())
+        digest.update(_canonical_bytes(path))
     return digest.hexdigest()
+
+
+# Hashes congelados antes de F0-09 que corresponden al MISMO contenido que el
+# hash normalizado: solo cambian los finales de línea de la copia del operador.
+# Equivalencia demostrada en tests/test_eng1_ea_hash.py. Cualquier otro hash
+# distinto sigue bloqueando el forward.
+LEGACY_CRITERIA_HASHES: dict[str, frozenset[str]] = {
+    "71ee2cabe6aa9aef": frozenset({"f490642ba7a1f71b"}),
+}
+
+
+def _same_criteria(stored: str, current: str) -> bool:
+    return str(stored) == current or str(stored) in LEGACY_CRITERIA_HASHES.get(
+        current, frozenset()
+    )
 
 
 EA_DIR = ROOT / "integrations" / "mt5" / "us100_ftmo1"
@@ -173,7 +198,7 @@ def ensure_forward(
     row = dict(found) if found is not None else None
     if row is not None and row.get("criteria_hash"):
         frozen = criteria_hash(EA_CRITERIA)
-        if str(row["criteria_hash"]) != frozen:
+        if not _same_criteria(str(row["criteria_hash"]), frozen):
             raise LifecycleError(
                 f"{bot}: criterios ya congelados con hash {row['criteria_hash']}; "
                 f"el código propone {frozen} y no se puede cambiar el forward"

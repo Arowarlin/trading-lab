@@ -49,5 +49,6 @@ def test_con_minimo_se_descarta_el_finalista_de_pocas_operaciones():
     assert "1 operaciones < 30" in reasons["a"]
 
 
-def test_engine_yaml_no_activa_el_minimo():
-    assert load_engine_config().validation.min_trades_oos1 is None
+def test_engine_yaml_activa_el_minimo_de_30():
+    # Activado por el operador el 2026-11-26 con el valor del banco S2.
+    assert load_engine_config().validation.min_trades_oos1 == 30

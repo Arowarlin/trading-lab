@@ -56,6 +56,7 @@ STATES = (
     "inválida",
     "sin edge bruto",
     "edge bruto que el coste elimina",
+    "edge neto sin robustez",
     "sobreajustada",
     "candidata nivel 3",
     "confirmada nivel 4",
@@ -443,7 +444,9 @@ def _state_from_campaign(
     elif net_median is None or net_median <= 0.0:
         state = "edge bruto que el coste elimina"
     else:
-        state = "sin edge bruto"
+        # Bruto y neto positivos, pero ninguna estrategia llega a candidata
+        # (ENG-1 E-03: antes se etiquetaba "sin edge bruto", lo contrario).
+        state = "edge neto sin robustez"
     reasons: list[str] = []
     if overfit:
         reasons.append(f"{overfit} estrategias sobreajustadas (PBO>0,5 o WF fallido)")

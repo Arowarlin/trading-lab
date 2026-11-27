@@ -516,10 +516,13 @@ def _psr_bonferroni_v3(
         psr = dsr_from_returns(daily_r, [], n_trials=1, periods_per_year=252.0, benchmark_sr=0.0)
     except Exception as exc:  # noqa: BLE001 - Sin datos, no se aprueba
         psr = {"status": "Sin datos", "dsr": None, "reason": f"{type(exc).__name__}: {exc}"}
+    # Los metadatos de la confirmación (n_trials, k_finalists, n_accounts...)
+    # mandan sobre los del PSR, que se calcula con n_trials = 1 por diseño.
     keep = {key: base[key] for key in base if key not in {"dsr", "kind", "status", "note"}}
     return {
-        **keep,
         **psr,
+        **keep,
+        "psr_n_trials": psr.get("n_trials"),
         "kind": "psr_bonferroni_v3",
         "gates_version": 3,
         "threshold": threshold,
@@ -575,14 +578,7 @@ def confirm(
     oos2_frame = campaigns.read_holdout(strategy_id, frame=frame, db_path=db_path)
     model = dsl.Strategy.model_validate(strategy["dsl"])
     setup = jobs.QueueSetup.from_campaign(campaign, bars=None)
-    from ..propfund.costs import load_profile
-
-    profile = load_profile(setup.account, setup.instrument, firm=setup.firm)
-    cost = fastbt.cost_from_profile(
-        profile,
-        use_p75=bool(setup.use_p75),
-        cost_model_version=setup.cost_model_version,
-    )
+    cost = costs.validation_cost(setup)  # ENG-1 B-03
     limits = run_limits_from_strategy(model, setup, close_at_end=True)
     trailing = model.exit.trailing or {}
     prepared = fastbt.prepare(
@@ -602,6 +598,7 @@ def confirm(
         limits,
         prepared=prepared,
     )
+    result = costs.applied_result(result, cost, session_tz=limits.session_tz, point=float(setup.point))
     oos2_metrics = {
         **dict(result.metrics),
         "return_dates": [stamp.isoformat() for stamp in result.daily_r.index],

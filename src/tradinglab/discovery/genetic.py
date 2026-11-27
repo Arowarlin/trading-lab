@@ -420,12 +420,39 @@ def mutate_session(
     session = data.setdefault("session", {})
     start_h, start_m = (int(part) for part in str(session.get("start", "09:35")).split(":"))
     end_h, end_m = (int(part) for part in str(session.get("end", "11:30")).split(":"))
-    minutes_start = start_h * 60 + start_m + rng.choice([-15, -5, 5, 15])
-    minutes_end = end_h * 60 + end_m + rng.choice([-15, -5, 5, 15])
-    if minutes_start < 9 * 60 + 30 or minutes_end > 15 * 60:
-        return None
-    if minutes_end <= minutes_start:
-        return None
+    start0 = start_h * 60 + start_m
+    end0 = end_h * 60 + end_m
+    delta_start = rng.choice([-15, -5, 5, 15])
+    delta_end = rng.choice([-15, -5, 5, 15])
+    minutes_start = start0 + delta_start
+    minutes_end = end0 + delta_end
+    if 9 * 60 + 30 <= start0 < end0 <= 15 * 60:
+        # Sesión de la sesión regular NY: la regla de siempre (bit a bit).
+        if minutes_start < 9 * 60 + 30 or minutes_end > 15 * 60:
+            return None
+        if minutes_end <= minutes_start:
+            return None
+    else:
+        # ENG-1 E-01: Asia, Londres y otras sesiones también mutan (antes
+        # siempre se descartaban). Se conserva la forma de la sesión.
+        day = 24 * 60
+        duration0 = (end0 - start0) % day
+        if duration0 == 0 or duration0 >= 23 * 60:
+            return None  # 24 h: desplazarla no cambia nada
+        minutes_start %= day
+        minutes_end %= day
+        duration = (minutes_end - minutes_start) % day
+        if duration < 30 or duration >= 23 * 60:
+            return None
+        if (start0 > end0) != (minutes_start > minutes_end):
+            return None
+        flat = session.get("flat_at")
+        if flat:
+            flat_h, flat_m = (int(part) for part in str(flat).split(":"))
+            flat_new = (flat_h * 60 + flat_m + delta_end) % day
+            if not 0 < (flat_new - minutes_start) % day <= duration:
+                return None
+            session["flat_at"] = f"{flat_new // 60:02d}:{flat_new % 60:02d}"
     session["start"] = f"{minutes_start // 60:02d}:{minutes_start % 60:02d}"
     session["end"] = f"{minutes_end // 60:02d}:{minutes_end % 60:02d}"
     if symmetric:

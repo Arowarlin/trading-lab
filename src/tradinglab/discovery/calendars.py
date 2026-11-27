@@ -69,6 +69,17 @@ def _observed(day: date) -> date:
     return day
 
 
+def _new_year_observed(year: int) -> date | None:
+    """Año Nuevo observado, o None si caería el 31-dic del año anterior (ENG-1 C-07).
+
+    Con el 1-ene en sábado, NYSE, CME y el FX no cierran el viernes 31-dic
+    (p. ej. 2010-12-31, 2021-12-31): abren con normalidad.
+    """
+
+    observed = _observed(date(year, 1, 1))
+    return None if observed.year != year else observed
+
+
 def _key(day: date) -> int:
     return int(day.strftime("%Y%m%d"))
 
@@ -82,16 +93,9 @@ def nyse_holidays(start: int = 2003, end: int = 2030) -> dict[int, str]:
     out: dict[int, str] = {}
     for year in range(start - 1, end + 2):
         new_year = date(year, 1, 1)
-        observed = _observed(new_year)
-        label = (
-            f"Año Nuevo {year} (observado)"
-            if observed.year != year
-            else "Año Nuevo"
-            if observed == new_year
-            else "Año Nuevo (observado)"
-        )
-        if year <= end:
-            _add(out, observed, label)
+        observed = _new_year_observed(year)
+        if observed is not None and year <= end:
+            _add(out, observed, "Año Nuevo" if observed == new_year else "Año Nuevo (observado)")
         _add(out, _nth_weekday(year, 1, 0, 3), "MLK")
         _add(out, _nth_weekday(year, 2, 0, 3), "Presidents")
         _add(out, _good_friday(year), "Viernes Santo")
@@ -153,7 +157,9 @@ def fx_metal_holidays(start: int = 2003, end: int = 2030) -> dict[int, str]:
         ):
             if year > end:
                 continue
-            observed = _observed(day)
+            observed = _new_year_observed(year) if label == "Año Nuevo" else _observed(day)
+            if observed is None:
+                continue
             _add(
                 out,
                 observed,
@@ -188,7 +194,9 @@ def cme_holidays(start: int = 2010, end: int = 2030) -> dict[int, str]:
         ):
             if year > end:
                 continue
-            observed = _observed(day)
+            observed = _new_year_observed(year) if label == "Año Nuevo" else _observed(day)
+            if observed is None:
+                continue
             _add(
                 out,
                 observed,

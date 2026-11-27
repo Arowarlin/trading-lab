@@ -80,6 +80,10 @@ class DukascopyError(RuntimeError):
     pass
 
 
+class DukascopyDataError(DukascopyError):
+    """El feed respondió, pero con velas inválidas (ENG-1 C-13): no es de red."""
+
+
 class _RateLimiter:
     """Reparte peticiones a una tasa máxima sin serializar las respuestas."""
 
@@ -190,7 +194,7 @@ def decode_candles(
         stamp = start + timedelta(seconds=int(offset))
         rows.append((stamp, open_, high, low, close, float(volume)))
     if invalid:
-        raise DukascopyError(
+        raise DukascopyDataError(
             f"{invalid} velas OHLC inválidas en {day.isoformat()} ({side_key})"
         )
     if not rows:
@@ -442,12 +446,16 @@ def download(
             bid_frames: list[pd.DataFrame] = []
             ask_frames: list[pd.DataFrame] = []
             failed: list[date] = []
+            invalid_days: list[str] = []
             with ThreadPoolExecutor(max_workers=int(workers)) as pool:
                 futures = {pool.submit(_pair, day): day for day in days}
                 for future in as_completed(futures):
                     day = futures[future]
                     try:
                         _, bid, ask = future.result()
+                    except DukascopyDataError as exc:
+                        invalid_days.append(str(exc))
+                        continue
                     except DukascopyError:
                         failed.append(day)
                         continue
@@ -469,6 +477,9 @@ def download(
                         day = futures[future]
                         try:
                             _, bid, ask = future.result()
+                        except DukascopyDataError as exc:
+                            invalid_days.append(str(exc))
+                            continue
                         except DukascopyError:
                             failed.append(day)
                             continue
@@ -478,6 +489,13 @@ def download(
                         bid_frames.append(bid)
                         if not ask.empty:
                             ask_frames.append(ask)
+            if invalid_days:
+                # ENG-1 C-13: reintentar no lo arregla; se dice qué pasa.
+                raise DukascopyDataError(
+                    f"OHLC inválido en {month_key}: {'; '.join(sorted(invalid_days)[:5])}. "
+                    "El feed devolvió datos incoherentes, no es un fallo de red; "
+                    "reintentar no lo arregla"
+                )
             if failed:
                 sample = ", ".join(day.isoformat() for day in failed[:5])
                 raise DukascopyError(

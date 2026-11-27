@@ -57,6 +57,8 @@ class LoadedSource:
     frame: pd.DataFrame = field(repr=False, compare=False)
     source: str = "broker"
     derived_from: str | None = None
+    # ENG-1 C-14: velas repetidas en la caché que el cargador eliminó (keep="last").
+    duplicates: int = 0
 
     def as_dict(self) -> dict:
         return {
@@ -67,6 +69,7 @@ class LoadedSource:
             "rows": self.rows,
             "adjusted": self.adjusted,
             "dropped": self.dropped,
+            "duplicates": self.duplicates,
             "source": self.source,
             "derived_from": self.derived_from,
             "read_only": True,
@@ -112,6 +115,20 @@ def _path_timeframe(path: str) -> str | None:
         return normalize_timeframe(match.group(1))
     except ValueError:
         return None
+
+
+def _cache_duplicates(path: Path) -> int:
+    """Marcas de tiempo repetidas en un parquet de caché (ENG-1 C-14).
+
+    Los cargadores de Dukascopy y Databento las eliminan antes del control, así
+    que «Duplicados 0» no decía nada de la fuente. Solo lee el índice.
+    """
+
+    try:
+        index = pd.read_parquet(path, columns=[]).index
+    except Exception:  # noqa: BLE001 - el conteo es informativo
+        return 0
+    return int(pd.Index(index).duplicated().sum())
 
 
 def _read_frame(
@@ -229,6 +246,7 @@ def load_source(
             dropped=0,
             frame=frame,
             source="databento",
+            duplicates=_cache_duplicates(path),
             derived_from=source_tf if source_tf != target else None,
         )
     if source_key == "dukascopy":
@@ -266,6 +284,7 @@ def load_source(
             dropped=0,
             frame=frame,
             source="dukascopy",
+            duplicates=_cache_duplicates(path),
             derived_from="M1" if str(timeframe).upper() != "M1" else None,
         )
     discovery = (

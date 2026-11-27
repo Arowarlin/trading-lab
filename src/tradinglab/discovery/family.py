@@ -19,12 +19,35 @@ from . import databank, results
 from .timeframes import timeframe_minutes
 
 
-def _aligned(series: Iterable[Iterable[float]]) -> np.ndarray | None:
-    arrays = [
-        np.asarray([float(value) for value in values], dtype=float)
-        for values in series
-    ]
-    arrays = [array[np.isfinite(array)] for array in arrays if len(array) > 1]
+def _aligned(
+    series: Iterable[Iterable[float]],
+    dates: Iterable[Iterable[Any] | None] | None = None,
+) -> np.ndarray | None:
+    """Matriz (observaciones x series).
+
+    Con fechas (ENG-1 D-04): se alinean por día, con 0 los días sin operación de
+    cada serie. Sin fechas: comportamiento anterior (recorte a la más corta),
+    solo para compatibilidad.
+    """
+
+    values = [np.asarray([float(v) for v in item], dtype=float) for item in series]
+    date_lists = list(dates) if dates is not None else [None] * len(values)
+    if date_lists and all(d is not None and len(list(d)) == len(v) for d, v in zip(date_lists, values)):
+        import pandas as pd
+
+        frames = {}
+        for index, (vals, days) in enumerate(zip(values, date_lists)):
+            stamps = pd.DatetimeIndex(pd.to_datetime(list(days))).normalize()
+            serie = pd.Series(vals, index=stamps)
+            frames[index] = serie[np.isfinite(serie.to_numpy())].groupby(level=0).sum()
+        frames = {k: v for k, v in frames.items() if len(v) > 1}
+        if not frames:
+            return None
+        joined = pd.concat(frames, axis=1, sort=True)
+        calendar = pd.bdate_range(joined.index.min(), joined.index.max()).union(joined.index)
+        joined = joined.reindex(calendar).fillna(0.0)
+        return joined.to_numpy(dtype=float) if len(joined) >= 2 else None
+    arrays = [array[np.isfinite(array)] for array in values if len(array) > 1]
     if not arrays:
         return None
     length = min(len(array) for array in arrays)
@@ -36,46 +59,56 @@ def _aligned(series: Iterable[Iterable[float]]) -> np.ndarray | None:
 def spa_test(
     series: Iterable[Iterable[float]],
     *,
+    dates: Iterable[Iterable[Any] | None] | None = None,
     block_size: int = 1,
     reps: int = 1000,
     seed: int = 7,
 ) -> dict[str, Any]:
-    """p-valor SPA (Hansen) con bootstrap estacionario."""
+    """p-valor SPA de Hansen (2005), studentizado, con bootstrap estacionario.
 
-    matrix = _aligned(series)
+    H0: ninguna serie tiene media positiva (referencia = 0). ENG-1 D-04: antes
+    no se studentizaba, el bloque salía casi siempre 1 y las series se
+    emparejaban por posición. Ahora se usa ``arch.bootstrap.SPA`` (p consistente),
+    el bloque es el mayor entre ``block_size`` (duración media de las
+    operaciones) y la longitud óptima estimada, y las series se alinean por
+    fecha cuando hay fechas.
+    """
+
+    matrix = _aligned(series, dates)
+    minimum = max(1, int(block_size))
     if matrix is None:
-        return {
-            "status": "Sin datos",
-            "p_value": None,
-            "n_series": 0,
-            "block_size": max(1, int(block_size)),
-        }
-    from arch.bootstrap import StationaryBootstrap
+        return {"status": "Sin datos", "p_value": None, "n_series": 0, "block_size": minimum}
+    from arch.bootstrap import SPA, optimal_block_length
 
     observations, models = matrix.shape
-    means = matrix.mean(axis=0)
-    statistic = float(np.max(math.sqrt(observations) * means))
-    boot = StationaryBootstrap(
-        max(1, int(block_size)), np.arange(observations), seed=int(seed)
+    try:
+        automatic = float(optimal_block_length(matrix.mean(axis=1))["stationary"].iloc[0])
+    except Exception:  # noqa: BLE001 - sin estimación, se usa el mínimo
+        automatic = 1.0
+    block = int(min(max(minimum, math.ceil(automatic)), max(1, observations // 2)))
+    spa = SPA(
+        np.zeros(observations),
+        -matrix,
+        block_size=block,
+        reps=int(reps),
+        bootstrap="stationary",
+        studentize=True,
+        seed=int(seed),
     )
-    exceed = 0
-    for data in boot.bootstrap(int(reps)):
-        indices = np.asarray(data[0][0], dtype=int).reshape(-1)
-        sampled = matrix[indices].mean(axis=0)
-        boot_stat = float(
-            np.max(math.sqrt(observations) * (sampled - means))
-        )
-        if boot_stat >= statistic:
-            exceed += 1
-    p_value = (exceed + 1.0) / (int(reps) + 1.0)
+    spa.compute()
+    p_value = float(spa.pvalues["consistent"])
     return {
         "status": "ok",
-        "p_value": float(p_value),
+        "p_value": p_value,
+        "p_values": {key: float(value) for key, value in spa.pvalues.items()},
         "n_series": int(models),
         "observations": int(observations),
-        "block_size": max(1, int(block_size)),
-        "statistic": statistic,
+        "block_size": block,
+        "block_size_min": minimum,
+        "block_size_auto": automatic,
         "reps": int(reps),
+        "method": "hansen_spa_studentized",
+        "aligned_by_date": dates is not None,
     }
 
 
@@ -167,6 +200,7 @@ def family_test(
                 {
                     "campaign_id": str(row["id"]),
                     "returns": values,
+                    "dates": metrics.get("return_dates"),
                     "holding_days": holding_days,
                 }
             )
@@ -189,8 +223,10 @@ def family_test(
             )
         ),
     )
+    dates = [item.get("dates") for item in selected]
     result = spa_test(
         [item["returns"] for item in selected],
+        dates=dates if all(d and len(d) == len(i["returns"]) for d, i in zip(dates, selected)) else None,
         block_size=block_size,
         reps=reps,
         seed=seed,

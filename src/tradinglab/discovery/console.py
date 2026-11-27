@@ -81,8 +81,12 @@ def _scrub_oos2(value: Any) -> Any:
 def count_tests_readonly(
     lab_db: str | Path,
     discovery_db: str | Path | None = None,
-) -> dict[str, int]:
-    """Mismo contador que `learning.count_tests` sin abrir la base en escritura."""
+) -> dict[str, int | None]:
+    """Mismo contador que `learning.count_tests` sin abrir la base en escritura.
+
+    ENG-1 D-09: suma ``informal_trials`` y, si ``discovery.db`` no se puede leer,
+    ``discovery`` y ``total`` van nulos (la consola muestra "Sin datos") en vez de 0.
+    """
 
     breakdown = {
         "lessons": 0,
@@ -91,6 +95,7 @@ def count_tests_readonly(
         "strategy_trials": 0,
         "incubated": 0,
         "campaign_registry": 0,
+        "informal_trials": 0,
         "discovery": 0,
     }
     con = _ro(lab_db)
@@ -119,6 +124,11 @@ def count_tests_readonly(
                     "SELECT COALESCE(SUM(n_total), 0) AS n FROM campaign_registry"
                 ).fetchone()
                 breakdown["campaign_registry"] = int(row["n"] or 0)
+            if _table(con, "informal_trials"):
+                row = con.execute(
+                    "SELECT COALESCE(SUM(n), 0) AS n FROM informal_trials"
+                ).fetchone()
+                breakdown["informal_trials"] = int(row["n"] or 0)
         finally:
             con.close()
     if discovery_db:
@@ -126,8 +136,11 @@ def count_tests_readonly(
             breakdown["discovery"] = int(
                 campaigns.discovery_tests(discovery_db).get("total") or 0
             )
-        except Exception:  # noqa: BLE001
-            breakdown["discovery"] = 0
+        except Exception as exc:  # noqa: BLE001
+            breakdown["discovery"] = None
+            breakdown["total"] = None
+            breakdown["discovery_error"] = f"Sin datos: {exc}"  # type: ignore[assignment]
+            return breakdown
     breakdown["total"] = sum(breakdown.values())
     return breakdown
 
