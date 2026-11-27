@@ -68,6 +68,19 @@
       "changes": [],
       "date": "2026-11-26",
       "reason": "ENG-1 F5: DEFAULT_DB configurable para tests"
+    },
+    {
+      "changes": [],
+      "date": "2026-11-27",
+      "reason": "ENG-1 F0-09 y B-14: antes del hash del forward y de la TCA"
+    },
+    {
+      "changes": [
+        "ea_us100_ftmo1: src/tradinglab/ea_forward.py (changed)",
+        "ftmo_risk: src/tradinglab/execution/mt5.py (changed)"
+      ],
+      "date": "2026-11-27",
+      "reason": "ENG-1 F0-09 y B-14: hash normalizado a LF; TCA sin ceros falsos"
     }
   ],
   "groups": {
@@ -109,7 +122,7 @@
         "integrations/mt5/us100_ftmo1/US100_MarketAnalysis.mqh": "c4e7f8f5bf9b781d0dac1c2a930f0e2b8b08b013098b0cca6bd230b50da9f19e",
         "integrations/mt5/us100_ftmo1/US100_RiskManager.mqh": "b9a0554361cc7b7bd38b5ac1f7e1a7bdea50d1b7c00123d401fe55acb1898880",
         "integrations/mt5/us100_ftmo1/US100_Strategy.mqh": "7a42e8d3826eb04cfff1466a51c6a14b66bcaad6cc6b03c916b1e2bfc74ffd78",
-        "src/tradinglab/ea_forward.py": "9671db092f2b5b54a976eec2108aba170d98d05f81b7c71f9cbdd866bcbed585",
+        "src/tradinglab/ea_forward.py": "3c1972ff29b9e7487b64f7cc076ff097cf0d309e3a24329100732fd6d58d713a",
         "src/tradinglab/ea_horizon.py": "01a4895b8aecc0006429fc86147a313c388e7501abbe50336f97e1ce13c00838",
         "src/tradinglab/ea_registry.py": "bb97597de5f20625ce44e9b3d2581424980a964490ada45ffef1fb06103b4047",
         "src/tradinglab/ea_us100.py": "ee71e40114fa69d1ed76199a7d9455474645828feff1064e2c428f5ce7fe2a3e",
@@ -136,7 +149,7 @@
         "config/prop_templates.yaml": "e4c8be816420dd337b580583a1ed9a2e542461290e052cc80bba9ec4e391f9dc",
         "mql5/TradingLabGuardian.mq5": "bdd94e1c060a1996713ca98d780b1d5e8f45f9ad6b06c1b4dc7d104c054705d0",
         "src/tradinglab/account_daily.py": "217e2eb4ee60709d6956ad9bd02c2424357d13d827e3d6ffb06319fda1036c72",
-        "src/tradinglab/execution/mt5.py": "4c50c9530cfe351b75aae86aaa9d6a042818a0b36e5de8ae00fad315ba4afbc6",
+        "src/tradinglab/execution/mt5.py": "269f13088c772ea6b41865b49436b7b5592910883f6803eef0f9054ec774e03c",
         "src/tradinglab/execution/mt5_offsets.py": "9535fbfe22242c002dd122a2a386be67d42a82f096b678a13f6b5bf3f2557dd5",
         "src/tradinglab/guardian.py": "a9bbeda2b6dce38e97de3d780a7361d828632ab7ba89ee08329bc829c3637559",
         "src/tradinglab/prop/__init__.py": "2b5f0229b536875861f8c5a94b0b7ccec5b2474ee14c6950be58e6461f0da816",

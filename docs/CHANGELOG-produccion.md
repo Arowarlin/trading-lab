@@ -292,3 +292,42 @@ comprueba. El baseline de hashes vive en
   `uv.lock` con `arch` y `numba`, y 3 regresiones `xfail` del motor.
 - **Baseline:** `lab propfund baseline --reason "ENG-1 F5 …"` antes del merge.
 - **Vuelta atrás:** tag `tl2-eng1-f5-pre`.
+
+### 2026-11-26 · ENG-1 F0-09 · Hash del forward del EA independiente de los finales de línea
+- **Autorización del operador (literal):** «si a ambas preguntas» y «tienes permiso para todo»
+  (2026-11-26, sesión de Claude Code), en respuesta a corregir F0-09.
+- **Qué:** `ea_forward._sha256` y `_code_sha256` normalizan CRLF → LF antes de calcular el hash.
+  `ensure_forward` acepta el hash congelado anterior `f490642ba7a1f71b` como alias de
+  `71ee2cabe6aa9aef` (`LEGACY_CRITERIA_HASHES`); cualquier otro hash distinto sigue bloqueando.
+- **Por qué:** el hash solo se reproducía si en la copia de Windows `US100_EA.mq5`,
+  `US100_ExitManager.mqh`, `US100_RiskManager.mqh` y `ea_us100_engine.py` tenían CRLF. El día que git
+  los reescribiera con LF, el forward fallaría con "criterios ya congelados" aunque el EA fuera el
+  mismo (docs/engineering/AUDIT_FINDINGS.md §10).
+- **Prueba:** `tests/test_eng1_ea_hash.py` reconstruye la copia del operador desde git y demuestra que
+  el cálculo anterior da `f490642ba7a1f71b` y el nuevo `71ee2cabe6aa9aef` sobre el mismo contenido; el
+  forward con el hash antiguo sigue funcionando y con otro hash sigue bloqueado. `test_ea_forward`
+  pasa ahora también en CI (antes fallaba 5 tests).
+- **Sin cambio en el forward en marcha:** la fila de `lifecycle_bots` no se reescribe.
+- **Baseline:** `lab propfund baseline --reason "ENG-1 F0-09 …"` antes y después del merge
+  (`ea_forward.py` está en el grupo protegido `ea_us100_ftmo1`).
+- **Vuelta atrás:** tag `tl2-eng1-f009-pre`.
+
+### 2026-11-27 · ENG-1 B-14 · Huecos de la TCA v2 (MT5 y paper)
+- **Autorización del operador (literal):** «tienes permiso para todo» y «hacer» (2026-11-26/27,
+  sesión de Claude Code), en respuesta a la lista de pendientes que incluía B-14.
+- **Qué:** solo cambia lo que se **graba** en `tca`; el envío de órdenes (`request`, SL/TP, volumen,
+  reintentos de filling) es idéntico.
+  1. `execution/mt5.py`: sin `signal_price`, `slippage_bps` va nulo (antes medía tick → fill y se
+     guardaba como decisión → fill). `ai_trader` y `forward_intraday` ya pasan `signal_price`.
+  2. `execution/mt5.py`: `expected_cost_bps` nulo cuando el bróker no tiene coste supuesto (antes 0).
+  3. `execution/mt5.py`: `bid`/`ask` del tick del envío (`submit_tick`), el mismo que `requested_price`.
+  4. `execution/paper.py`: el paper graba `origin="paper"`; `slippage_measured` (T12) lo excluye,
+     porque su slippage es el supuesto, no una medición.
+- **No incluido (diseño aparte):** salidas SL/TP del servidor (reconciliar con `history_deals`) y
+  `ts_utc` del fill (`deal.time_msc`). Ver docs/engineering/WORKER_REPORTS/B-costs.md, "Diseño de
+  medición TCA".
+- **Prueba:** `tests/test_eng1_b14_tca.py` (valor anterior frente al nuevo); `test_mt5_tca` y
+  `test_mt5` actualizados con el valor anterior anotado.
+- **Baseline:** `lab propfund baseline --reason "ENG-1 B-14 …"` antes y después del merge
+  (`execution/mt5.py` está en el grupo protegido `ftmo_risk`).
+- **Vuelta atrás:** tag `tl2-eng1-b14-pre`.
