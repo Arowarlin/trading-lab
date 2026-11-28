@@ -86,7 +86,17 @@ Trabajo no bloqueado, en este orden:
     FUT-A6 (Monte Carlo), para que la cola no se pare cuando cierren A3 y A5.
 12. ✅ (2026-11-28, `research/dashboard_model.md`) **FUT-H0 · Modelo de dominio del dashboard:** realizado frente a simulado; payout solicitado,
     aprobado, procesado y recibido.
-13. FUT-E4 (límites de Tradovate).
+13. ✅ (2026-11-28, `research/platform_matrix.md`) FUT-E4 (límites de Tradovate).
+
+**Estado al cierre (2026-11-28):** todo lo de Claude que no depende de datos está hecho. Bloqueado:
+- OP-4 (compra de datos) y OP-7 (comisiones de MES y MGC): FUT-D2, FUT-C1, FUT-B2 y todo lo que mira
+  datos;
+- **operador con navegador**: FUT-E2 (ProjectX), FUT-E3 (CME), precio de Lucid, Apex, Earn2Trade y TPT;
+- **OpenCode** (DeepSeek V4.1 Flash): FUT-A1, A2, B1 y B3 READY; después A3, A4, A5 y A6a, cuyos prompts
+  están listos.
+
+Cuando lleguen las entregas de OpenCode, Claude las revisa con el agente `tradinglab-reviewer`
+(ficheros permitidos, cifras exactas, `ruff` y `pytest`).
 
 Sigue prohibido: live, campañas, `.env`, borrar, descargar automáticamente de webs que lo prohíben
 (ahora también ProjectX) y mezclar datos que no sean de futuros.
