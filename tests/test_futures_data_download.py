@@ -210,3 +210,50 @@ def test_manifiesto_una_linea_por_fichero(tmp_path):
     assert len(raw) == 2
     assert [json.loads(line)["root"] for line in raw] == ["NQ", "MNQ"]
     assert len({json.loads(line)["path"] for line in raw}) == 2
+
+
+def test_monthly_parte_por_mes_natural():
+    jobs = dd.monthly([dd.Job(schema="tbbo", root="NQ", start="2019-06-03", end="2019-08-15")])
+    assert [(j.start, j.end) for j in jobs] == [
+        ("2019-06-03T00:00:00Z", "2019-07-01T00:00:00Z"),
+        ("2019-07-01T00:00:00Z", "2019-08-01T00:00:00Z"),
+        ("2019-08-01T00:00:00Z", "2019-08-15T00:00:00Z"),
+    ]
+    assert {j.symbol for j in jobs} == {"NQ.v.0"}
+
+
+def test_trozo_de_tick_largo_se_rechaza_sin_red(tmp_path):
+    client = FakeClient()
+    big = dd.Job(schema="tbbo", root="MNQ", start="2019-06-03", end="2023-12-29")
+    with pytest.raises(dd.DownloadError, match="monthly"):
+        dd.download(big, client, tmp_path, approved_by_operator=True)
+    assert client.posts == []
+    ohlcv = dd.Job(schema="ohlcv-1m", root="ES", start="2010-06-06", end="2018-12-31")
+    assert dd.download(ohlcv, client, tmp_path, approved_by_operator=True).exists()
+
+
+def test_zstd_cuenta_filas_y_normaliza(tmp_path):
+    zstandard = pytest.importorskip("zstandard")
+    packed = zstandard.ZstdCompressor().compress(TRADES_CSV.encode("utf-8"))
+    path = dd.download(JOB, FakeClient(packed), tmp_path, approved_by_operator=True)
+    assert path.read_bytes() == packed                       # el crudo se guarda tal cual, comprimido
+    assert dd.read_manifest(tmp_path)[0]["rows"] == 3
+    assert dd.normalize_trades(path)["price"].tolist() == [20125.25, 20125.0, 20125.0]
+
+
+def test_sin_zstandard_la_ficha_queda_sin_filas_pero_existe(tmp_path, monkeypatch):
+    import builtins
+    real_import = builtins.__import__
+
+    def no_zstd(name, *args, **kwargs):
+        if name == "zstandard":
+            raise ImportError(name)
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", no_zstd)
+    packed = dd.ZSTD_MAGIC + b"cuerpo comprimido simulado"
+    path = dd.download(JOB, FakeClient(packed), tmp_path, approved_by_operator=True)
+    entry = dd.read_manifest(tmp_path)[0]
+    assert entry["rows"] is None and entry["sha256"] == dd.sha256_file(path)
+    with pytest.raises(dd.DownloadError, match="zstandard"):
+        dd.normalize_trades(path)

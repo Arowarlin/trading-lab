@@ -34,6 +34,7 @@ dev = [
 ]
 discovery = ["numba>=0.60"]
 mcp = ["mcp==2.3.0"]
+futdata = ["zstandard==0.25.0"]
 
 [project.scripts]
 lab = "tradinglab.cli:app"

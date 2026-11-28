@@ -15,6 +15,14 @@ Reglas de ``docs/futures/03_ARQUITECTURA_FUTURES.md`` §3.2:
 los timestamps con ``:`` sustituido por ``-`` para que sea válido en Windows; el rango original queda
 literal en el manifiesto.
 
+**Trozos mensuales:** los esquemas de tick (``trades``, ``tbbo``, ``mbp-*``, ``mbo``, ``bbo-1s``) se piden por
+meses (``monthly``); ``download`` rechaza un trozo de tick de más de 32 días, porque la respuesta entera
+vive en memoria (años de ``tbbo`` son decenas de GB).
+
+**Compresión:** Databento devuelve el CSV comprimido con zstd y se guarda tal cual. Las filas del
+manifiesto se cuentan descomprimiendo en memoria si está ``zstandard`` (extra ``futdata``); si no, quedan
+``null`` y se rellenan al normalizar. Nunca se escribe el fichero y luego se falla al contarlo.
+
 ``normalize_trades`` devuelve el DataFrame normalizado con las columnas literales de Databento
 (``ts_event`` en UTC ns, ``price``, ``size``, ``side`` con la letra B/A/N e ``instrument_id``);
 ``write_norm_trades`` lo guarda en parquet. El mapeo B=+1, A=−1, N=excluido pertenece a la capa de
@@ -60,6 +68,10 @@ ALLOWED_SCHEMAS = (
 
 TRADES_COLUMNS = ("ts_event", "price", "size", "side", "instrument_id")
 SIDES = ("A", "B", "N")
+
+TICK_SCHEMAS = ("trades", "tbbo", "mbp-1", "bbo-1s", "mbp-10", "mbo")
+MAX_TICK_CHUNK_DAYS = 32
+ZSTD_MAGIC = b"\x28\xb5\x2f\xfd"
 
 DEFAULT_OUT_ROOT = ROOT / "data" / "futures"
 _ROOT_PATTERN = re.compile(r"^[A-Z0-9]{2,6}$")
@@ -153,6 +165,30 @@ def plan(rows: Iterable[dict[str, Any]]) -> list[Job]:
     return jobs
 
 
+def monthly(jobs: Iterable[Job]) -> list[Job]:
+    """Parte cada trabajo en trozos por mes natural (UTC); los extremos del rango se respetan."""
+    out: list[Job] = []
+    for job in jobs:
+        start = pd.Timestamp(job.start, tz="UTC") if pd.Timestamp(job.start).tzinfo is None else \
+            pd.Timestamp(job.start).tz_convert("UTC")
+        end = pd.Timestamp(job.end, tz="UTC") if pd.Timestamp(job.end).tzinfo is None else \
+            pd.Timestamp(job.end).tz_convert("UTC")
+        cut = start
+        while cut < end:
+            nxt = min((cut + pd.offsets.MonthBegin(1)).normalize(), end)
+            out.append(Job(schema=job.schema, root=job.root, start=cut.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                           end=nxt.strftime("%Y-%m-%dT%H:%M:%SZ"), dataset=job.dataset))
+            cut = nxt
+    return out
+
+
+def _span_days(job: Job) -> float:
+    start, end = pd.Timestamp(job.start), pd.Timestamp(job.end)
+    start = start.tz_localize("UTC") if start.tzinfo is None else start
+    end = end.tz_localize("UTC") if end.tzinfo is None else end
+    return (end - start).total_seconds() / 86400.0
+
+
 def raw_path(job: Job, out_root: str | Path = DEFAULT_OUT_ROOT) -> Path:
     """``<out_root>/raw/databento/GLBX.MDP3/<schema>/<raíz>/<start>_<end>.csv.zst``."""
     return (
@@ -227,11 +263,23 @@ def _response_text(response: Any) -> str:
     return str(getattr(response, "text", "") or "")[:300]
 
 
-def _count_rows(payload: bytes) -> int:
+def _decompress(payload: bytes) -> bytes:
+    """CSV en claro: descomprime zstd si hace falta (extra ``futdata``)."""
+    if not payload.startswith(ZSTD_MAGIC):
+        return payload
     try:
-        text = payload.decode("utf-8")
-    except UnicodeDecodeError as exc:
-        raise DownloadError("respuesta de Databento no es CSV UTF-8") from exc
+        import zstandard
+    except ImportError as exc:
+        raise DownloadError("Sin datos: falta zstandard para leer .csv.zst (uv sync --extra futdata)") from exc
+    return zstandard.ZstdDecompressor().stream_reader(io.BytesIO(payload)).read()
+
+
+def _count_rows(payload: bytes) -> int | None:
+    """Filas de datos del CSV (sin cabecera). ``None`` si no se pueden contar: nunca lanza."""
+    try:
+        text = _decompress(payload).decode("utf-8")
+    except (DownloadError, UnicodeDecodeError, Exception):  # noqa: BLE001
+        return None
     lines = [line for line in text.splitlines() if line.strip()]
     return max(0, len(lines) - 1)
 
@@ -290,6 +338,8 @@ def download(
     """
     if not approved_by_operator:
         raise RuntimeError("OP-4 sin aprobar")
+    if job.schema in TICK_SCHEMAS and _span_days(job) > MAX_TICK_CHUNK_DAYS:
+        raise DownloadError(f"trozo de {job.schema} de {_span_days(job):.0f} días: pártelo con monthly(...)")
     path = raw_path(job, out_root)
     if path.exists():
         current = sha256_file(path)
@@ -307,12 +357,13 @@ def download(
         return path
 
     payload = _get_range(job, client)
+    rows = _count_rows(payload)          # antes de escribir: contar nunca deja un fichero sin ficha
     _write_new(path, payload)
     entry = {
         "path": _entry_key(path, out_root),
         "sha256": sha256_file(path),
         "bytes": path.stat().st_size,
-        "rows": _count_rows(payload),
+        "rows": rows,
         "provider": PROVIDER,
         "dataset": job.dataset,
         "schema": job.schema,
@@ -354,6 +405,7 @@ def normalize_trades(payload: bytes | str | Path) -> pd.DataFrame:
     raw = _read_payload(payload)
     if not raw:
         raise DownloadError("Sin datos: respuesta vacía")
+    raw = _decompress(raw)
     try:
         frame = pd.read_csv(io.BytesIO(raw))
     except Exception as exc:  # noqa: BLE001
@@ -427,6 +479,7 @@ __all__ = [
     "download_many",
     "manifest_entry",
     "manifest_path",
+    "monthly",
     "normalize_trades",
     "plan",
     "raw_path",
