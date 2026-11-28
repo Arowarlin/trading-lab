@@ -60,7 +60,7 @@ que falte.
 
 ## Sesión 3 (escrito el 2026-11-28 tras cerrar los pasos 1-6)
 
-7. **FUT-J0 · Contrato de ejecución y riesgo** en `docs/futures/research/execution_spec.md`:
+7. ✅ (2026-11-28, `research/execution_spec.md`) **FUT-J0 · Contrato de ejecución y riesgo** en `docs/futures/research/execution_spec.md`:
    - `OrderIntent` con `origin ∈ {automated, semi_manual}`;
    - `RiskCheck` con las reglas de cada programa: contratos máximos, escalones de escalado, `flat_by`,
      ventanas de noticias, prohibición de overnight;
