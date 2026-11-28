@@ -49,7 +49,7 @@ proxy.
 4. ✅ (2026-11-28) **FUT-E1 · Matriz de plataformas** (NinjaTrader 8, Tradovate, ProjectX) con documentación oficial de
    las plataformas, no de las firmas. Antes de descargar nada, comprobar sus términos sobre el acceso
    automatizado. Si hace falta un host nuevo, proponerlo con `update_environment`.
-5. **Ficha → YAML de programa** para My Funded Futures Rapid y Lucid Flex (esquema de `04 §8`), con el
+5. ✅ (2026-11-28, borradores en `research/programs/`; FUT-A10 los lleva a `config/`) **Ficha → YAML de programa** para My Funded Futures Rapid y Lucid Flex (esquema de `04 §8`), con el
    estado de cada valor. Los precios de Lucid quedan como `sin_datos`.
 6. **Actualizar `docs/futures/README.md`** (índice) y **`ESTADO.md`**, si procede, con el lock
    `readme-plan`.
