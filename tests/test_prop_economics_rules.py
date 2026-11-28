@@ -30,12 +30,12 @@ def test_expiry(topstep):
 
 
 def test_blocking_unknowns_topstep(topstep):
+    # FUT-A1b: las comisiones ya están verificadas (tabla TopstepX)
     assert blocking_unknowns(topstep) == [
-        "commissions_per_side.MNQ",
-        "commissions_per_side.NQ",
         "phases.funded.payout.processing_days",
         "phases.funded.scaling_plan",
     ]
+    assert (topstep.commissions_per_side["MNQ"].value, topstep.commissions_per_side["NQ"].value) == (0.61, 1.89)
 
 
 def test_blocking_unknowns_synthetic_static():

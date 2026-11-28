@@ -285,7 +285,7 @@ sources:
   - {url: "https://help.topstep.com/en/articles/14289835-topstep-pricing-and-payment-questions", consulted_at: 2026-11-27}
 ```
 
-Valores `verified` leídos por Claude el 2026-11-27 en el help center oficial (`docs/futures/research/prop_firms_2026-11-27.md §1`); `verified_repo` = del 2026-11-25, no releído hoy. Con `expires_after_days: 30`, el motor deja de aceptarlo el **2026-12-27**.
+**FUT-A1b (2026-11-28):** en `config/` las comisiones ya son `verified` (MNQ 0,61 y NQ 1,89 USD por lado, tabla TopstepX); el YAML de arriba queda como versión inicial. Valores `verified` leídos por Claude el 2026-11-27 en el help center oficial (`docs/futures/research/prop_firms_2026-11-27.md §1`); `verified_repo` = del 2026-11-25, no releído hoy. Con `expires_after_days: 30`, el motor deja de aceptarlo el **2026-12-27**.
 
 ## 9. Libro real (separado)
 

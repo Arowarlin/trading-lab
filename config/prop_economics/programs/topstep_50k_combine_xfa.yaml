@@ -33,9 +33,12 @@ fees:
   activation: {amount: 149, status: verified}
   reset: {amount: 49, status: verified}
   data_platform_monthly: {amount: 0, status: verified, note: "L1 incluido; L2 es un extra"}
-commissions_per_side: {MNQ: {status: sin_datos}, NQ: {status: sin_datos}}
+commissions_per_side:   # FUT-A1b (2026-11-28): tabla TopstepX, ida y vuelta 1,22 (MNQ) y 3,78 (NQ) con bolsa y NFA
+  MNQ: {value: 0.61, status: verified, note: "1,22 ida y vuelta; incluye bolsa, NFA 0,02 y comisión 0,50"}
+  NQ: {value: 1.89, status: verified, note: "3,78 ida y vuelta; el artículo de la LFA dice 3,70/lote en el Combine (discrepancia menor; prevalece la tabla)"}
 sources:
   - {url: "https://help.topstep.com/en/articles/8284197-trading-combine-parameters", consulted_at: 2026-11-27}
   - {url: "https://help.topstep.com/en/articles/8284215-express-funded-account-parameters", consulted_at: 2026-11-27}
   - {url: "https://help.topstep.com/en/articles/8284233-topstep-payout-policy", consulted_at: 2026-11-27}
   - {url: "https://help.topstep.com/en/articles/14289835-topstep-pricing-and-payment-questions", consulted_at: 2026-11-27}
+  - {url: "https://help.topstep.com/en/articles/8284213-topstepx-commissions-and-fees", consulted_at: 2026-11-27}
