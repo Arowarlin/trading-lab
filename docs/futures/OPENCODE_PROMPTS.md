@@ -9,7 +9,8 @@ cada uno.
 ## 0. Cómo se usan
 
 - **Cadena S (en orden, sin parar).**
-  - Se ejecuta en el PC del operador (`E:\trading-lab`).
+  - Se ejecuta en el PC del operador, en el worktree `E:\tl-fut-s` (`E:\trading-lab` sigue en master con
+    trabajo sin commit de otra sesión: no se toca).
   - Cada paso termina con su informe `docs/futures/WORKER_REPORTS/<ID>.md`.
   - El siguiente empieza solo si el anterior terminó en verde.
   - **S4 tiene una parada obligatoria** para el operador: compilar en NinjaTrader.
@@ -21,7 +22,7 @@ cada uno.
 
 | Carril | Pasos (en orden) | Worktree | Puede ir a la vez que |
 |---|---|---|---|
-| **S** · PC del operador | S1 verificación → S2 coste de datos → S3 manifiesto → S4 puente NT8 en Sim101 | `E:\trading-lab` (rama `claude/vibrant-mayer-r46s0o`) | P1, P2, P3 |
+| **S** · PC del operador | S1 verificación → S2 coste de datos → S3 manifiesto → S4 puente NT8 en Sim101 | `E:\tl-fut-s` (rama `claude/vibrant-mayer-r46s0o`) | P1, P2, P3 |
 | **P1** · Research A en código | P1a FUT-C2 detectores y conteo → P1b FUT-C3 evaluador | `E:\tl-fut-ra` | S, P2, P3 |
 | **P2** · descarga de datos en código | P2 FUT-B2 (sin descargar nada real) | `E:\tl-fut-data` | S, P1, P3 |
 | **P3** · servidor MCP de solo lectura | P3 FUT-T2 | `E:\tl-fut-mcp` | S, P1, P2 |
@@ -103,7 +104,9 @@ Ficheros permitidos: docs\futures\WORKER_REPORTS\FUT-J4b.md y la COPIA de Tradin
 2. PARA y escribe exactamente esto al operador:
    "En NinjaTrader: New > NinjaScript Editor > abre TradingLabBridge y pulsa F5 (compilar). Si hay errores,
    cópialos aquí. Si compila: abre un gráfico de MNQ, añade la estrategia TradingLabBridge con la cuenta
-   Sim101, BridgeDir = E:\trading-lab\data\futures\nt8_bridge, MaxContracts = 1, y actívala.
+   Sim101, BridgeDir = E:\tl-fut-s\data\futures\nt8_bridge, MaxContracts = 1, y actívala.
+   (BridgeDir tiene que ser <worktree donde corre el script>\data\futures\nt8_bridge; si no coincide,
+   NinjaTrader nunca ve el intent y no llega el ack.)
    Responde OK NT8 cuando esté activa."
 3. Si el operador pega errores de compilación: NO los corrijas tú; cópialos literalmente en el informe y PARA
    (los corrige Claude).

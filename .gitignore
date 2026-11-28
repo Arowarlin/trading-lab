@@ -35,3 +35,4 @@ data/telegram_state.json
 # Protocolo de relevo Claude/OpenCode (no versionado)
 .orquestador/
 data/tl3/futures/
+data/futures/nt8_bridge/
