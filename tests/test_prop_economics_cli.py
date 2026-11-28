@@ -105,3 +105,10 @@ def test_cli_allocate_synthetic(tmp_path):
     assert "SIMULADO" in text and "HIPOTÉTICO" in text and "Escalera de evidencia" in text
     for pol in ("fixed_250", "fixed_500", "fixed_750", "fixed_1000", "cushion_k0.25_max1000"):
         assert pol in text
+
+
+def test_cli_watch_and_ranking():
+    r = runner.invoke(app, ["watch", "--today", "2026-12-27"])
+    assert r.exit_code == 0 and "rules_expired" in r.output
+    r = runner.invoke(app, ["ranking"])
+    assert r.exit_code == 0 and "myfundedfutures" in r.output and "3.55" in r.output

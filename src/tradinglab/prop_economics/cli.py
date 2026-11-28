@@ -219,3 +219,26 @@ def allocate(
         console.print(f"informe: {out}")
     else:
         console.print(text)
+
+
+@app.command("watch")
+def watch(today: str = typer.Option(None), warn_days: int = typer.Option(7)) -> None:
+    """Avisos del PFIE (solo lectura, sin red): reglas caducadas o a punto, incógnitas y páginas cambiadas."""
+    from .alerts import collect_alerts
+
+    alerts = collect_alerts(date.fromisoformat(today) if today else _today(), warn_days=warn_days)
+    console.print_json(json.dumps(alerts, ensure_ascii=False))
+
+
+@app.command("ranking")
+def ranking() -> None:
+    """Ranking ponderado de firmas con evidencia (un criterio sin nota deja a la firma fuera del general)."""
+    from .scoring import score_firms
+
+    s = score_firms()
+    table = Table(Column("firma", no_wrap=True), "plan", "total", "provisional", "sin nota")
+    for r in s["ranking"] + s["not_ranked"]:
+        table.add_row(r["firm"], str(r["plan"] or "—"), "—" if r["total"] is None else f"{r['total']:.2f}",
+                      "—" if r["provisional"] is None else f"{r['provisional']:.2f}", ", ".join(r["missing"]) or "—")
+    console.print(table)
+    console.print(f"fuente: {s['source']}")
