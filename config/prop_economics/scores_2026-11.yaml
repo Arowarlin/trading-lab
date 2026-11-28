@@ -1,0 +1,15 @@
+# Notas 0-5 por criterio del ranking ponderado (FUT-P4). Fuente: docs/futures/research/propfirms_2026-11/
+# 00_INFORME_10_FIRMAS.md §6 (2026-11-28). null = "sin nota" (dato sin verificar): no puntúa.
+weights: {rules: 0.15, payouts: 0.20, automation: 0.20, drawdown: 0.15, costs: 0.10, platform: 0.10, eligibility: 0.10}
+source: docs/futures/research/propfirms_2026-11/00_INFORME_10_FIRMAS.md
+firms:
+  myfundedfutures: {plan: Rapid, rules: 3, payouts: 4, automation: 4, drawdown: 2, costs: 4, platform: 5, eligibility: 3}
+  tradeify: {plan: Select Flex, rules: 3, payouts: 4, automation: 3, drawdown: 4, costs: 4, platform: 3, eligibility: 3}
+  tradeday: {plan: QP EOD, rules: 3, payouts: 2, automation: 3, drawdown: 3, costs: 5, platform: 3, eligibility: 3}
+  topstep: {plan: Combine → XFA, rules: 4, payouts: 3, automation: 2, drawdown: 3, costs: 4, platform: 1, eligibility: 3}
+  alphafutures: {plan: Standard, rules: 4, payouts: 4, automation: 1, drawdown: 4, costs: 2, platform: 1, eligibility: 3}
+  lucid: {plan: Flex, rules: 4, payouts: 4, automation: 5, drawdown: 4, costs: null, platform: 4, eligibility: 3}
+  bulenox: {plan: Momentum, rules: 2, payouts: null, automation: 3, drawdown: 3, costs: 3, platform: 5, eligibility: 3}
+  takeprofittrader: {plan: null, rules: null, payouts: null, automation: 1, drawdown: null, costs: null, platform: null, eligibility: null}
+  apex: {plan: null, rules: null, payouts: null, automation: null, drawdown: null, costs: null, platform: null, eligibility: null}
+  earn2trade: {plan: null, rules: null, payouts: null, automation: null, drawdown: null, costs: null, platform: null, eligibility: null}
