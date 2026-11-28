@@ -111,6 +111,10 @@ git fetch origin claude/vibrant-mayer-r46s0o
 git worktree add ..\tl-fut-a origin/claude/vibrant-mayer-r46s0o
 ```
 
+> **2026-11-28:** la cola pendiente para OpenCode, con la cadena secuencial (S1-S4) y los carriles paralelos
+> (P1-P3), está en **`OPENCODE_PROMPTS.md`**. Los prompts de esta sección (§4.2-§4.9) corresponden a
+> tareas ya hechas por Claude y quedan como histórico.
+
 ### 4.1 BLOQUE COMÚN (pegar siempre antes de cada prompt)
 
 ```text

@@ -120,3 +120,16 @@ Siguiente, sin bloqueo:
 5. FUT-C1 (rasgos de order flow con tests sintéticos; el esquema real se confirma con FUT-B2).
 
 Bloqueado: OP-4 (compra de datos), OP-7 (comisiones de MES y MGC) y lo que se lee con navegador.
+
+## 2026-11-28 · cola para OpenCode
+
+`docs/futures/OPENCODE_PROMPTS.md` tiene todos los prompts pendientes (DeepSeek V4.1 Flash):
+- **cadena S** en el PC del operador: verificación en Windows → coste de datos → manifiesto → puente NT8 en
+  Sim101 con `scripts/nt8_bridge_smoke.py`;
+- **carriles paralelos:** P1 Research A (C2 → C3), P2 descarga en código (B2, sin descargar nada) y P3
+  servidor MCP de solo lectura (T2).
+
+Remote Control: la carpeta `E:\trading-lab` del equipo Arowarlin figura en la lista, pero no se ofrece a
+sesiones en la nube (`not_available`). Pendiente de que el operador actualice la app de Windows o trabaje
+en una sesión local.
+
