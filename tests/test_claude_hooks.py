@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -18,6 +19,23 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 GUARD = ROOT / ".claude" / "hooks" / "tl_guard.py"
 RUNNER = ROOT / ".claude" / "hooks" / "run.sh"
+
+
+def _git_bash() -> str | None:
+    """bash que entiende rutas Windows; el de WSL (System32) no sirve para este runner."""
+    if os.name != "nt":
+        return shutil.which("bash")
+    candidates = [
+        Path(os.environ.get("ProgramFiles", r"C:\Program Files")) / "Git" / "bin" / "bash.exe",
+        Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "Git" / "bin" / "bash.exe",
+    ]
+    for candidate in candidates:
+        if candidate.is_file():
+            return str(candidate)
+    return None
+
+
+BASH = _git_bash()
 
 _spec = importlib.util.spec_from_file_location("tl_guard", GUARD)
 guard = importlib.util.module_from_spec(_spec)
@@ -145,17 +163,20 @@ def test_ruff_reports_only_python(tmp_path):
     assert reason and "F401" in reason
 
 
-@pytest.mark.skipif(shutil.which("bash") is None, reason="bash no disponible")
+@pytest.mark.skipif(BASH is None, reason="Git Bash no disponible; el bash de WSL no sirve")
 def test_runner_end_to_end():
+    assert BASH is not None
     payload = json.dumps({"tool_name": "Bash", "tool_input": {"command": "git add -A"}})
     out = subprocess.run(
-        ["bash", str(RUNNER), "bash"], input=payload, capture_output=True, text=True, timeout=30
+        [BASH, RUNNER.as_posix(), "bash"], input=payload, capture_output=True, text=True, timeout=30
     )
     assert out.returncode == 0
     decision = json.loads(out.stdout)["hookSpecificOutput"]
     assert decision["permissionDecision"] == "deny"
     ok = json.dumps({"tool_name": "Bash", "tool_input": {"command": "git status"}})
-    out = subprocess.run(["bash", str(RUNNER), "bash"], input=ok, capture_output=True, text=True, timeout=30)
+    out = subprocess.run(
+        [BASH, RUNNER.as_posix(), "bash"], input=ok, capture_output=True, text=True, timeout=30
+    )
     assert out.returncode == 0 and out.stdout.strip() == ""
 
 

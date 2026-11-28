@@ -10,6 +10,7 @@
     "decisions",
     "discovery",
     "fund",
+    "futecon",
     "incubation",
     "journal",
     "learning",
@@ -32,6 +33,7 @@
     "view-decisions",
     "view-discovery",
     "view-fund",
+    "view-futecon",
     "view-incubation",
     "view-journal",
     "view-learning",
@@ -105,6 +107,10 @@
     {
       "view": "propfund",
       "label": "⬢ Prop Fund"
+    },
+    {
+      "view": "futecon",
+      "label": "◆ Economía futuros"
     },
     {
       "view": "risk",
@@ -232,6 +238,11 @@
     "equity-fill",
     "equity-regime-note",
     "evaluate-bots",
+    "fe-alerts",
+    "fe-nominal",
+    "fe-ranking",
+    "fe-real",
+    "fe-sim",
     "fund-account",
     "fund-accounts",
     "fund-alerts",
@@ -468,6 +479,7 @@
     "view-bots",
     "view-decisions",
     "view-fund",
+    "view-futecon",
     "view-incubation",
     "view-journal",
     "view-learning",
@@ -506,6 +518,7 @@
     "/api/fund/limits",
     "/api/fund/pause/resume",
     "/api/funnel",
+    "/api/futures/economics",
     "/api/instruments",
     "/api/journal?",
     "/api/learning",
