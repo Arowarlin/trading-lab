@@ -136,7 +136,8 @@ investigado · **RL** requiere licencia · **RC** requiere confirmación del pro
 | Límites de tasa | NI | NI | NI |
 
 La matriz se completa en FUT-E1 (investigación de Claude con documentación oficial) y cada "V" exige
-una prueba real en demo.
+una prueba real en demo. **Versión del 2026-11-28 con fuentes:** `research/platform_matrix.md` (sustituye
+a esta tabla inicial).
 
 ## 7. Programas de investigación A y B
 

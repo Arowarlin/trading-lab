@@ -46,7 +46,7 @@ proxy.
      subasta fallidas, agotamiento, confirmación, expansión de volumen, recuperación de liquidez);
    - para cada una, el nivel de datos mínimo (L1 `trades`/`tbbo`, L2 `mbp-10`, L3 `mbo`), las
      definiciones con fórmulas y los costes con stops cortos (≈ 0,25 R con 5 puntos en MNQ).
-4. **FUT-E1 · Matriz de plataformas** (NinjaTrader 8, Tradovate, ProjectX) con documentación oficial de
+4. ✅ (2026-11-28) **FUT-E1 · Matriz de plataformas** (NinjaTrader 8, Tradovate, ProjectX) con documentación oficial de
    las plataformas, no de las firmas. Antes de descargar nada, comprobar sus términos sobre el acceso
    automatizado. Si hace falta un host nuevo, proponerlo con `update_environment`.
 5. **Ficha → YAML de programa** para My Funded Futures Rapid y Lucid Flex (esquema de `04 §8`), con el
