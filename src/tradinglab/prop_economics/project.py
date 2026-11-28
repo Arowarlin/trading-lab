@@ -54,6 +54,7 @@ class ProjectConfig:
     payout_fee: float = 0.0
     assume_processing_days: int | None = None
     assume: tuple[tuple[str, float], ...] = ()   # supuestos explícitos para valores sin_datos (p. ej. cap_per_payout)
+    sizing: object | None = None                 # policies.SizingPolicy: contratos según el colchón (FUT-O3)
 
 
 def session_offsets(start: date, max_days: int) -> np.ndarray:
@@ -136,7 +137,8 @@ def simulate_project_path(program: Program, pool: list[DayPath], idx_row: np.nda
                     fees_at[t] += fee
                     charges += 1
             cap = max_contracts_for(program, "evaluation", st.balance - st.start_balance)
-            ce = cfg.contracts_eval if cap is None else min(cfg.contracts_eval, cap)
+            ce = cfg.contracts_eval if cfg.sizing is None else cfg.sizing.contracts(st.balance - st.threshold)
+            ce = ce if cap is None else min(ce, cap)
             st = step_day(st, program, day, ce)
             if st.status == "passed":
                 out["passed"] += 1
@@ -152,7 +154,8 @@ def simulate_project_path(program: Program, pool: list[DayPath], idx_row: np.nda
                 rebuy(t)
         else:
             cap = max_contracts_for(program, "funded", fst.balance - fst.start_balance)
-            cf = cfg.contracts_funded if cap is None else min(cfg.contracts_funded, cap)
+            cf = cfg.contracts_funded if cfg.sizing is None else cfg.sizing.contracts(fst.balance - fst.threshold)
+            cf = cf if cap is None else min(cf, cap)
             fst, ev = step_funded_day(fst, program, rules, day, cf, t, policy=cfg.policy,
                                       policy_arg=cfg.policy_arg, payout_fee=cfg.payout_fee)
             if ev is not None:
@@ -344,7 +347,12 @@ def simulate_project(program: Program, pool: list[DayPath], cfg: ProjectConfig, 
                 fees_sum = fees_sum + np.where(due, fee, 0.0)
                 echarges = echarges + due
         if is_e.any():
-            close, breach, peak, th = _vec_marks(base * ce, eb, epi, eth, is_e, e_ml, e_dll, e_lock)
+            if cfg.sizing is None:
+                ce_t = np.full(n, ce)
+            else:
+                ce_t = cfg.sizing.contracts(eb - eth)
+                ce_t = ce_t if e_cap is None else np.minimum(ce_t, e_cap)
+            close, breach, peak, th = _vec_marks(base * ce_t[:, None], eb, epi, eth, is_e, e_ml, e_dll, e_lock)
             pnl = close - eb
             edays = edays + is_e
             etd = etd + (is_e & (ntr_pool[rows] > 0))
@@ -381,7 +389,8 @@ def simulate_project(program: Program, pool: list[DayPath], cfg: ProjectConfig, 
         # ---- financiada
         if is_f.any():
             caps = _funded_caps(program, fb - f_s)
-            cf = np.full(n, cfg.contracts_funded) if caps is None else np.minimum(cfg.contracts_funded, caps)
+            want = np.full(n, cfg.contracts_funded) if cfg.sizing is None else cfg.sizing.contracts(fb - fth)
+            cf = want if caps is None else np.minimum(want, caps)
             close, breach, peak, th = _vec_marks(base * cf[:, None], fb, fpi, fth, is_f, f_ml, f_dll, f_lock)
             pnl = close - fb
             fb = np.where(is_f, close, fb)
