@@ -33,6 +33,7 @@ dev = [
     "coverage==7.17.3",
 ]
 discovery = ["numba>=0.60"]
+mcp = ["mcp==2.3.0"]
 
 [project.scripts]
 lab = "tradinglab.cli:app"
