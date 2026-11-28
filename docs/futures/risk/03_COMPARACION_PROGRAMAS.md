@@ -49,7 +49,27 @@ mediana y qué colas?
 
 ## 4. Sensibilidad de MFF (`sim/programs_compare_mff_sens.json`)
 
-(Se rellena.)
+EV y mediana a 12 meses y ruina a 24 meses, en USD. Error estándar del EV: entre 12 y 95.
+
+| Variante | Ventaja bruta | Riesgo | EV 12 m | Mediana 12 m | P(neto > 0) | Ruina 24 m |
+|---|---:|---:|---:|---:|---:|---:|
+| Base (209 de lista; MFE U(0,1)) | +0,13 R | 250 | 561 | −579 | 0,41 | 27,8 % |
+| Base | +0,13 R | 500 | 981 | −1.394 | 0,38 | 63,5 % |
+| Base | +0,20 R | 500 | 3.873 | 2.362 | 0,61 | 37,9 % |
+| `mfe_losers = 0` | +0,13 R | 500 | 1.390 | −1.306 | 0,43 | 57,2 % |
+| Promoción a 125 | +0,13 R | 250 | 936 | −220 | 0,47 | 2,7 % |
+| Promoción a 125 | +0,13 R | 500 | **2.385** | **1.302** | 0,60 | 35,1 % |
+| Promoción a 125 | +0,20 R | 500 | 5.601 | 4.734 | 0,81 | 14,9 % |
+| Promoción a 125 + `mfe_losers = 0` | +0,13 R | 500 | 2.851 | 1.898 | 0,65 | 29,2 % |
+| Base, sin ventaja bruta | 0 | 500 | −1.137 | −1.463 | 0,07 | 95,6 % |
+
+**Lectura:**
+- **En MFF Rapid, el precio de la evaluación domina.** Con el mismo presupuesto, 209 frente a 125 USD
+  cambia el número de intentos y hace pasar el EV de 981 a 2.385 (riesgo 500, +0,13 R).
+- **El supuesto de la excursión favorable** en el trailing intradía mueve el EV entre un 18 % y un
+  42 % en las celdas con ventaja.
+- **Sin ventaja bruta, MFF pierde casi todo el presupuesto:** ruina del 96 % a 24 meses con 500 USD
+  de riesgo.
 
 ## 5. Lectura y recomendación condicional
 
