@@ -14,9 +14,11 @@ from pathlib import Path
 
 import pytest
 
-from tradinglab.config import ROOT
-from tradinglab.mcp_state import server as state
-from tradinglab.prop_economics import ledger
+pytest.importorskip("mcp", reason="extra opcional mcp no instalado (uv sync --extra mcp)")
+
+from tradinglab.config import ROOT  # noqa: E402
+from tradinglab.mcp_state import server as state  # noqa: E402
+from tradinglab.prop_economics import ledger  # noqa: E402
 
 TODAY = "2026-11-28"
 
