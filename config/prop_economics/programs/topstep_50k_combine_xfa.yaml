@@ -1,0 +1,41 @@
+schema_version: 1
+program_id: topstep_50k_combine_xfa
+firm_id: topstep
+rules_version: "2026-11-27.1"
+consulted_at: 2026-11-27
+expires_after_days: 30
+instrument_unit: micro            # micro | mini
+phases:
+  evaluation:
+    start_balance: {value: 50000, status: verified}
+    profit_target: {value: 3000, status: verified}
+    max_loss: {mode: trailing_eod, amount: 2000, check: realtime_unrealized, lock_at: start_balance, status: verified}
+    daily_loss: {amount: 1000, action: pause_day, enabled: false, optional: true, status: verified}
+    consistency: {max_best_day_fraction: 0.55, basis: total_profit, on_violation: raise_target, status: verified}
+    min_trading_days: {value: 2, status: verified}
+    max_contracts: {mini: 5, micro: 50, status: verified}
+    flat_by: {value: "15:10 America/Chicago", status: verified_repo}
+  funded:
+    start_balance: {value: 0, status: verified}
+    max_loss: {mode: trailing_eod, amount: 2000, lock_at: 0, lock_after_first_payout: true, status: verified}
+    scaling_plan: {status: sin_datos, note: "tabla publicada como imagen"}
+    max_accounts: {value: 5, status: verified}
+    inactivity_close_days: {value: 30, status: verified}
+    payout:
+      eligibility: {template: winning_days, n: 5, min_day_profit: 150, status: verified}
+      max_fraction_of_balance: {value: 0.5, status: verified}
+      cap_per_payout: {value: 2000, status: verified, note: "4.000 si se añadió DLL al comprar (oferta temporal)"}
+      min_amount: {value: 125, status: verified}
+      split: {value: 0.90, status: verified}
+      processing_days: {status: sin_datos}
+fees:
+  evaluation: {type: subscription, amount: 49, period_days: 30, status: verified}
+  activation: {amount: 149, status: verified}
+  reset: {amount: 49, status: verified}
+  data_platform_monthly: {amount: 0, status: verified, note: "L1 incluido; L2 es un extra"}
+commissions_per_side: {MNQ: {status: sin_datos}, NQ: {status: sin_datos}}
+sources:
+  - {url: "https://help.topstep.com/en/articles/8284197-trading-combine-parameters", consulted_at: 2026-11-27}
+  - {url: "https://help.topstep.com/en/articles/8284215-express-funded-account-parameters", consulted_at: 2026-11-27}
+  - {url: "https://help.topstep.com/en/articles/8284233-topstep-payout-policy", consulted_at: 2026-11-27}
+  - {url: "https://help.topstep.com/en/articles/14289835-topstep-pricing-and-payment-questions", consulted_at: 2026-11-27}

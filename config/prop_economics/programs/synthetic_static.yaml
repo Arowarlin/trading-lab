@@ -1,0 +1,17 @@
+# Programa SINTÉTICO para tests y vectores T1-T3 (04_SPEC_PROP_EV.md §10). No es una firma real.
+schema_version: 1
+program_id: synthetic_static
+firm_id: synthetic
+rules_version: "2026-11-27.1"
+consulted_at: 2026-11-27
+expires_after_days: 3650
+instrument_unit: micro
+phases:
+  evaluation:
+    start_balance: {value: 0, status: assumed}
+    profit_target: {value: 3000, status: assumed}
+    max_loss: {mode: static, amount: 2000, status: assumed}
+    min_trading_days: {value: 0, status: assumed}
+fees:
+  evaluation: {type: one_time, amount: 100, status: assumed}
+  activation: {amount: 150, status: assumed}
