@@ -35,10 +35,13 @@ def structure_pool(*, risk_usd: float, rr: float, edge_net_usd: float, cost_rt_p
     if not 0 < p < 1:
         raise ValueError(f"p fuera de (0, 1): {p:.3f}")
     rng = np.random.default_rng(seed)
+    wins = np.zeros(n_days, dtype=bool)
+    wins[: int(round(p * n_days))] = True        # proporción exacta: la ventaja del pool es la nominal
+    rng.shuffle(wins)
     pool = []
     for i in range(n_days):
         u = float(rng.random())
-        win = rng.random() < p
+        win = bool(wins[i])
         marks = [0.0, -u * risk, w_net] if win else [0.0, u * risk * rr, -l_net]
         pool.append(DayPath(start + timedelta(days=i), np.asarray(marks), 1, (2,), marks[-1] + cost, cost, risk,
                             frozenset(), "synthetic"))

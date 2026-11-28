@@ -52,10 +52,15 @@ def synthetic_pool(*, mu_gross_r: float, rr: float, risk_usd: float, cost_rt: fl
     p = (mu_gross_r + 1.0) / (rr + 1.0)
     if not 0 < p < 1:
         raise ValueError(f"p(ganar) fuera de (0, 1): {p}")
+    # proporción EXACTA de ganadoras (solo se sortean el orden y las excursiones): la ventaja del pool es la
+    # nominal y no depende de la semilla (con sorteo libre, 1.000 días pueden desviarla ±0,05 R)
+    wins = np.zeros(n_days, dtype=bool)
+    wins[: int(round(p * n_days))] = True
+    rng.shuffle(wins)
     pool = []
     for i in range(n_days):
         u = float(rng.random())
-        if rng.random() < p:
+        if wins[i]:
             marks = [0.0, -u * risk_usd, rr * risk_usd - cost_rt]
         else:
             marks = [0.0, u * risk_usd, -risk_usd - cost_rt]
