@@ -100,3 +100,23 @@ Cuando lleguen las entregas de OpenCode, Claude las revisa con el agente `tradin
 
 Sigue prohibido: live, campañas, `.env`, borrar, descargar automáticamente de webs que lo prohíben
 (ahora también ProjectX) y mezclar datos que no sean de futuros.
+
+## Sesión 3b · implementación (2026-11-28, «apruebo todo puedes seguir y también lo que opencode debe hacer»)
+
+Hecho por Claude, con commit y push por tarea:
+- **Motor EV:** FUT-A1-A10 y A1b.
+- **Libro real:** FUT-H1.
+- **ORPAE:** FUT-O1-O6.
+- **Ejecución:** FUT-J1-J2.
+- **Scripts de datos:** FUT-B1 y B3, que ejecuta el operador.
+
+Para cada uno, la cola (`05`) dice qué y dónde.
+
+Siguiente, sin bloqueo:
+1. FUT-J3 (envoltorio dry-run de ProjectX);
+2. FUT-P (Prop Firm Intelligence Engine: registro, frescura, compatibilidad, ranking ponderado);
+3. FUT-H2/H3 (API y vista del dashboard, con el lock `web-py`);
+4. FUT-M1-M3 (políticas de ratio negativo y positivo sobre el motor);
+5. FUT-C1 (rasgos de order flow con tests sintéticos; el esquema real se confirma con FUT-B2).
+
+Bloqueado: OP-4 (compra de datos), OP-7 (comisiones de MES y MGC) y lo que se lee con navegador.

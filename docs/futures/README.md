@@ -10,16 +10,34 @@ Research, Claude Code Extensions & Engineering Orchestration Prompt", del operad
 - Todo lo que no sea futuros queda en segundo plano.
 - Solo datos de futuros CME: nada de CFD, Dukascopy ni MT5 como datos o proxy.
 
-**Estado:**
-- **Diseño e investigación de Claude:** hechos. Incluye la auditoría, la arquitectura, la especificación
-  EV, los hooks, las skills, los agentes, las 10 firmas, el riesgo, Research A y B, la matriz de
-  plataformas y dos borradores de programa.
-- **Ninguna estrategia está validada** (`NO EDGE VALIDATED`). Todo el dimensionamiento es condicional.
-- **Siguiente:**
-  - el operador decide OP-4 (compra de datos), OP-7 (comisiones de MES y MGC) y OP-8 (sello del holdout
-    de futuros);
-  - OpenCode (DeepSeek V4.1 Flash) implementa FUT-A1/A2/B1/B3, que están READY;
-  - Claude sigue con FUT-J0 (contrato de ejecución) y lo que quede en `CONTINUACION.md`.
+**Estado (actualizado el 2026-11-28, tras «apruebo todo… y también lo que opencode debe hacer»):**
+- **Código implementado por Claude**, con tests exactos (todo en paper; nada live):
+  - **Motor EV de prop firms** (`src/tradinglab/prop_economics/`):
+    - esquema de programas y reglas caducadas (A1, A1b, A10);
+    - `DayPath` (A2);
+    - motor escalar de evaluación, financiada y payouts (A3, A4);
+    - tarifas (A5);
+    - bootstrap y evaluación vectorizada (A6a);
+    - proyecto completo vectorizado, igual camino a camino al escalar (A6b);
+    - escenarios y μ\* (A7);
+    - informe y CLI `lab propecon` (A8);
+    - propiedades (A9);
+    - libro real inmutable (H1).
+  - **ORPAE** (O1-O6): μ_LCB, Kelly y Optimal f como diagnóstico, políticas de tamaño, selección con la
+    cota inferior, cartera correlada/independiente y `lab propecon allocate`.
+  - **Ejecución** (`src/tradinglab/futures/execution/`): `OrderIntent`, `RiskCheck` R01-R16,
+    `PaperAdapter` y ticket semimanual (J1, J2).
+  - **Scripts de datos** para el equipo del operador: FUT-B1 (coste en Databento) y FUT-B3 (manifiesto).
+  - **Programas en `config/prop_economics/programs/`:** Topstep 50K, MFF Rapid 50K y Lucid Flex 50K, más
+    dos sintéticos.
+- **Ninguna estrategia está validada** (`NO EDGE VALIDATED`). Las simulaciones con pools sintéticos se
+  etiquetan HIPOTÉTICO.
+- **Bloqueado:**
+  - **OP-4:** compra de datos; primero hay que ejecutar `scripts/futures_data_cost.py` en el equipo del
+    operador;
+  - **OP-7:** comisiones de MES y MGC;
+  - con navegador: ProjectX, CME y el precio de Lucid.
+- **Siguiente:** `CONTINUACION.md`.
 
 ## Documentos
 
@@ -41,6 +59,7 @@ Research, Claude Code Extensions & Engineering Orchestration Prompt", del operad
 | K | `risk/` | Auditoría de riesgo, Kelly, ruina, 6 perfiles a 6/12/24 meses, ORPAE, módulos MOD-NR/MOD-PR, simuladores | hecho (FUT-RISK) |
 | K | `risk/03_COMPARACION_PROGRAMAS.md` | Topstep frente a MFF Rapid frente a Lucid Flex con la misma estrategia hipotética; precio de equilibrio de Lucid | hecho (2026-11-28) |
 | R | `research/execution_spec.md` | Contrato `OrderIntent` → `RiskCheck` (R01-R16) → adaptador o ticket semimanual, con vectores V1-V16 | especificación (FUT-J0) |
+| C | `../../config/prop_economics/programs/` | Programas YAML (Topstep, MFF Rapid, Lucid Flex y sintéticos) | vigentes |
 | C | `../../config/prop_economics/firms_futures.yaml` | Catálogo de 10 firmas por bots y modo de ejecución | hecho (FUT-R2) |
 
 ## Informes que el encargo pide y dónde están
