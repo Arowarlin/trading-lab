@@ -80,11 +80,11 @@ que falte.
 2026-11-28). Siguen bloqueadas por OP-4/OP-7: FUT-D2, FUT-C1 y todo lo que mira datos.
 
 Trabajo no bloqueado, en este orden:
-10. **FUT-E3:** especificaciones y horarios de CME (horas de GC, MES y MGC), revisando antes sus
+10. ⛔ (2026-11-28: `www.cmegroup.com` corta las conexiones automáticas en HTTP/2 y 1.1; no se fuerza ni se imita un navegador → **operador con navegador**) **FUT-E3:** especificaciones y horarios de CME (horas de GC, MES y MGC), revisando antes sus
     términos.
-11. **Prompts pegables** de OpenCode (DeepSeek V4.1 Flash) para FUT-A4 (financiada y payouts, T9) y
+11. ✅ (2026-11-28, `05 §4.8-4.9`; A6 dividida en A6a/A6b) **Prompts pegables** de OpenCode (DeepSeek V4.1 Flash) para FUT-A4 (financiada y payouts, T9) y
     FUT-A6 (Monte Carlo), para que la cola no se pare cuando cierren A3 y A5.
-12. **FUT-H0 · Modelo de dominio del dashboard:** realizado frente a simulado; payout solicitado,
+12. ✅ (2026-11-28, `research/dashboard_model.md`) **FUT-H0 · Modelo de dominio del dashboard:** realizado frente a simulado; payout solicitado,
     aprobado, procesado y recibido.
 13. FUT-E4 (límites de Tradovate).
 
