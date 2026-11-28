@@ -19,8 +19,8 @@ en una sesión, dice qué ficheros puede escribir y cuándo **PARAR**. Claude re
 | 4 | Benchmarks (FUT-X1-X3) | Protocolo listo (`01 §5`) | OP-6 (instalación y datos) |
 | 5 | Datos de futuros | Arquitectura (`03 §3`); FUT-B1/B3 READY | OP-4 (compra) |
 | 6 | Motor EV de prop firms | **Especificado** (`04_SPEC_PROP_EV.md`); FUT-A READY tras OP-1 | tests T1-T14 verdes |
-| 7 | Research A (order flow) | **Especificada** (`research/RA_spec.md`); familia FUT-RA-1 de 6 pruebas en NQ→MNQ; BLOCKED por datos | OP-4, OP-7, OP-8 → FUT-C1 |
-| 8 | Research B (NY open) | **Especificada** (`research/RB_spec.md`); familia FUT-RB-1 de 5 pruebas en ES/GC; NQ solo forward | OP-4, OP-7, OP-8 → FUT-D2 |
+| 7 | Research A (order flow) | **Especificada** (`research/RA_spec.md`); familia FUT-RA-1 de 6 pruebas en NQ→MNQ; BLOCKED por datos | OP-4, OP-7 → FUT-C1 |
+| 8 | Research B (NY open) | **Especificada** (`research/RB_spec.md`); familia FUT-RB-1 de 5 pruebas en ES/GC; NQ solo forward | OP-4, OP-7 → FUT-D2 |
 | 9 | Multiplataforma (NT8 primero) | FUT-E1 (investigación) | matriz con "V" probadas en demo |
 | 10 | Integración y validación | — | — |
 
@@ -39,7 +39,7 @@ en una sesión, dice qué ficheros puede escribir y cuándo **PARAR**. Claude re
 | **OP-5** | Crear `.claude/` del proyecto (hooks de §7, 9 skills, 7 agentes) | FUT-T1 | Sí; los hooks primero |
 | **OP-6** | Venv aparte para Nautilus/hftbacktest y datos de muestra para los PoC | FUT-X1…X3 | Después de FUT-A6 |
 | **OP-7** | Confirmar si los 0,75 USD/lado de MNQ incluyen exchange, clearing y NFA; fijar la comisión por lado de MES y MGC | costes de futuros (FUT-03), FUT-RB-1 | — |
-| **OP-8** | Partición de futuros: muestra única 2010-06-07 → 2023-12-31; OOS-2 de futuros 2024-01-01 → 2026-11-20 sellado (`research/RB_spec.md §2`) | FUT-D2, FUT-RB-1 | Sí: la misma fecha de sello que el resto del laboratorio |
+| **OP-8** | Partición de futuros: muestra única 2010-06-07 → 2023-12-31; OOS-2 de futuros 2024-01-01 → 2026-11-20 sellado; forward desde 2026-11-28 (`research/RB_spec.md §2`) | FUT-D2, FUT-C1, FUT-RB-1, FUT-RA-1 | **APROBADA por el operador el 2026-11-28** («aprueba op8») |
 
 ## 3. Cola
 
@@ -85,10 +85,10 @@ la línea de FUT-A8, que se coordina con el lock `cli-py`.
 | FUT-O1…O6 | Optimal Risk & Payout Allocation Engine (`risk/02_ORPAE_DISENO.md §4`) | OpenCode | BACKLOG | A6 | `src/tradinglab/prop_economics/{stats,sizing_diag,policies,allocate,portfolio,report}.py` | cifras de `risk/01` ±2 SE | `git revert` |
 | FUT-M1…M3 | Políticas de ratio negativo y positivo y frontera EV-ruina (`risk/modulos/`) | OpenCode | BACKLOG | O3 | `prop_economics/policies.py` | reproducir MOD-NR §4 y MOD-PR §4 y §6 | `git revert` |
 | FUT-P1…P6 | Prop Firm Intelligence Engine (`research/propfirms_2026-11/12_…`) | OpenCode | BACKLOG | A1 | `prop_economics/{registry,sources,compat,scoring,alerts}` | sin descargas de webs que lo prohíben | `git revert` |
-| FUT-C1 | Rasgos L1a: velas de delta, CVD, footprint, referencias móviles solo con pasado | OpenCode | BLOCKED (OP-4, OP-7, OP-8) | B2 | `src/tradinglab/futures/orderflow.py`, tests | `RA_spec.md §8` (cifras exactas sintéticas; nada ≥ 2024-01-01) | `git revert` |
+| FUT-C1 | Rasgos L1a: velas de delta, CVD, footprint, referencias móviles solo con pasado | OpenCode | BLOCKED (OP-4, OP-7) | B2 | `src/tradinglab/futures/orderflow.py`, tests | `RA_spec.md §8` (cifras exactas sintéticas; nada ≥ 2024-01-01) | `git revert` |
 | FUT-C2 | Conteo de eventos A-I **sin desenlaces** | OpenCode en el equipo del operador | BLOCKED (C1) | C1 | `scripts/futures_ra_count.py`, `docs/futures/evidencia/ra_conteo.md` | sin columnas de desenlace | `git revert` |
 | FUT-C3 | Evaluador único de FUT-RA-1 (fills L1b, latencia, estrés, criterios §7) | OpenCode | BLOCKED (registro de FUT-RA-1 por el operador) | C2 | `src/tradinglab/futures/research_a.py`, tests | `RA_spec.md §8` | `git revert` |
-| FUT-D2 | Conteo de eventos RB **sin desenlaces** y consulta de contaminación en `lab.db` (`mode=ro`) | OpenCode en el equipo del operador | BLOCKED (OP-4, OP-8) | FUT-B2 | `scripts/futures_rb_count.py` (nuevo), test; `docs/futures/evidencia/rb_conteo.md` | `RB_spec.md §10`: sin columnas de desenlace; nada ≥ 2024-01-01 | `git revert` |
+| FUT-D2 | Conteo de eventos RB **sin desenlaces** y consulta de contaminación en `lab.db` (`mode=ro`) | OpenCode en el equipo del operador | BLOCKED (OP-4) | FUT-B2 | `scripts/futures_rb_count.py` (nuevo), test; `docs/futures/evidencia/rb_conteo.md` | `RB_spec.md §10`: sin columnas de desenlace; nada ≥ 2024-01-01 | `git revert` |
 | FUT-D3 | Evaluador único de FUT-RB-1 (`R_net` una sola vez, criterios §8) | OpenCode | BLOCKED (registro de FUT-RB-1 por el operador) | D2 | `src/tradinglab/futures/research_b.py`, tests | vectores sintéticos de `RB_spec.md §10` | `git revert` |
 
 **Estimación** (sesiones de OpenCode, **Estimado**): A1-A2 1 cada una; A3-A4 2; A5 1; A6 2; A7 1; A8 2;

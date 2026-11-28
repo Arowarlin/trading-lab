@@ -20,7 +20,7 @@ Dukascopy o MT5 entra en un cálculo, ni como sustituto ni como proxy.
 4. **Bloqueos:**
    - no hay M1 de ES ni de GC (FUT-12): hace falta la compra OP-4, ampliada;
    - comisiones de MES y MGC: **Sin datos**;
-   - partición del holdout de futuros: decisión nueva **OP-8**.
+   - ~~partición del holdout de futuros (OP-8)~~: **aprobada el 2026-11-28**.
 5. **Potencia:** con unas 3.300 sesiones, la MDE es ≈ 0,066-0,083 R. La ventaja mínima útil provisional
    es μ\* ≈ +0,08 R (`risk/01 §5`) y se sustituye por la de FUT-A7 cuando exista. Las hipótesis
    condicionadas con menos de 2.258 eventos **no se registran**.
@@ -63,7 +63,7 @@ Son futuros. Los ficheros nuevos se nombran por raíz (`ES`, `GC`), como en `03 
   `derive-sessions`. Se excluyen los cierres anticipados.
 - **D-4:** auditoría con la skill `futures-data-audit` y manifiesto con hash (FUT-B3).
 
-**OP-8 (decisión nueva del operador), propuesta:**
+**OP-8, APROBADA por el operador el 2026-11-28 («aprueba op8»):**
 - **Muestra única:** 2010-06-07 → 2023-12-31, sin optimización, como C1.
 - **OOS-2 de futuros:** 2024-01-01 → 2026-11-20, sellado, con la misma fecha que el resto del
   laboratorio.
@@ -388,10 +388,10 @@ eventos (uno por sesión). Unilateral.
 | Paso | Qué | Quién | Estado |
 |---|---|---|---|
 | 1 | Verificar con la documentación de CME las horas de apertura y liquidación de GC (§4) y las especificaciones del §5 | Claude (FUT-E1 o una sesión aparte) | READY |
-| 2 | OP-8: partición del holdout de futuros (§2) | operador | pendiente |
+| 2 | OP-8: partición del holdout de futuros (§2) | operador | **aprobada (2026-11-28)** |
 | 3 | OP-4 ampliada: `ohlcv-1m` + `definition` de ES y GC de 2010-06 a 2026-11, con el coste exacto de FUT-B1 | operador | pendiente |
 | 4 | Comisión por lado de MES y MGC | operador | **Sin datos** |
-| 5 | **FUT-D2:** conteo de eventos **sin desenlaces** y consulta de contaminación en `lab.db` (solo lectura) | OpenCode (DeepSeek V4.1 Flash), en el equipo del operador | BLOCKED (3) |
+| 5 | **FUT-D2:** conteo de eventos **sin desenlaces** y consulta de contaminación en `lab.db` (solo lectura) | OpenCode (DeepSeek V4.1 Flash), en el equipo del operador | BLOCKED (3: compra de datos) |
 | 6 | Fijar K y registrar `FUT-RB-1` (+K) | operador | BLOCKED (2-5) |
 | 7 | **FUT-D3:** evaluador único RB (calcula `R_net` una sola vez y escribe el informe con los criterios del §8) | OpenCode | BLOCKED (6) |
 

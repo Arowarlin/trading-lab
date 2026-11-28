@@ -75,5 +75,18 @@ que falte.
    - Código en `docs/futures/risk/sim/`, sin tocar producción.
 9. **FUT-E4** (límites de tasa de Tradovate), solo si sobra tiempo.
 
+**2026-11-28, operador:** «aprueba op8 sigue con lo que no esta bloqueado». OP-8 queda aprobada
+(muestra 2010-06-07 → 2023-12-31; OOS-2 de futuros 2024-01-01 → 2026-11-20 sellado; forward desde el
+2026-11-28). Siguen bloqueadas por OP-4/OP-7: FUT-D2, FUT-C1 y todo lo que mira datos.
+
+Trabajo no bloqueado, en este orden:
+10. **FUT-E3:** especificaciones y horarios de CME (horas de GC, MES y MGC), revisando antes sus
+    términos.
+11. **Prompts pegables** de OpenCode (DeepSeek V4.1 Flash) para FUT-A4 (financiada y payouts, T9) y
+    FUT-A6 (Monte Carlo), para que la cola no se pare cuando cierren A3 y A5.
+12. **FUT-H0 · Modelo de dominio del dashboard:** realizado frente a simulado; payout solicitado,
+    aprobado, procesado y recibido.
+13. FUT-E4 (límites de Tradovate).
+
 Sigue prohibido: live, campañas, `.env`, borrar, descargar automáticamente de webs que lo prohíben
 (ahora también ProjectX) y mezclar datos que no sean de futuros.

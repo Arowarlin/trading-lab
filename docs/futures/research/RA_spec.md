@@ -26,7 +26,7 @@ del 2026-11-28).
 6. **Bloqueos:**
    - compra de datos (OP-4), con el coste exacto de FUT-B1;
    - OP-7 (qué incluye la comisión de MNQ);
-   - OP-8 (sello del holdout de futuros).
+   - OP-8 (sello del holdout de futuros): **aprobada el 2026-11-28**.
 
 ## 1. Reglas de esta línea
 
@@ -318,7 +318,7 @@ queda fuera de la muestra.
 | Paso | Qué | Quién | Estado |
 |---|---|---|---|
 | 1 | FUT-B1: coste exacto de `trades` + `tbbo` de NQ y MNQ, y `definition`, de 2019-05 a 2026-11 (también desde 2017-01, como opción) | OpenCode en el equipo del operador | READY (prompt §4.4 de `05`; añadir estos esquemas) |
-| 2 | OP-4 (compra), OP-7 (comisión), OP-8 (sello) | operador | pendiente |
+| 2 | OP-4 (compra), OP-7 (comisión); OP-8 (sello) aprobada el 2026-11-28 | operador | pendiente OP-4 y OP-7 |
 | 3 | **FUT-C1:** rasgos L1a (velas de delta, CVD, footprint y referencias móviles) con tests sintéticos y cifras exactas | OpenCode (DeepSeek V4.1 Flash) | BLOCKED (2) |
 | 4 | **FUT-C2:** conteo de eventos A-I **sin desenlaces**, por hipótesis y año, con exclusiones | OpenCode | BLOCKED (3) |
 | 5 | Fijar K y registrar `FUT-RA-1` (+K) | operador | BLOCKED (4) |
