@@ -72,3 +72,14 @@ def test_manifest_accepts_data_outside_repo(tmp_path, monkeypatch):
     pd.DataFrame({"ts_event": pd.date_range("2020-01-01", periods=1, freq="h", tz="UTC")}).to_parquet(
         inside / "US100_H1.parquet")
     assert man.describe(inside / "US100_H1.parquet")["path"] == "data/US100_H1.parquet"
+
+
+def test_minimal_cost_plan_has_no_duplicated_trades_and_seals_oos2():
+    """Plan mínimo: sin trades (tbbo ya los trae), y el OOS-2 de Research A en filas propias."""
+    cost = _load("futures_data_cost")
+    assert all(schema != "trades" for schema, *_ in cost.ROWS_MIN)
+    tbbo = [(roots, start, end) for schema, roots, start, end, _ in cost.ROWS_MIN if schema == "tbbo"]
+    assert tbbo == [(("NQ", "MNQ"), "2019-05-06", "2024-01-01"), (("NQ", "MNQ"), "2024-01-01", "2026-11-27")]
+    rows = cost.cost_rows(None, lambda c, e, p: 1, lambda **kw: {"symbols": kw["row_symbol"]}, rows=cost.ROWS_MIN)
+    assert len(rows) == sum(len(r[1]) for r in cost.ROWS_MIN) == 12
+    assert set(cost.PLANS) == {"amplio", "minimo"}

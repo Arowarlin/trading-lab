@@ -6,6 +6,16 @@
 P1-P6, M1-M3, C1, D2/D3 (código), B1/B3 (scripts). La tabla de `05_COLA_Y_ROADMAP.md §3` dice dónde está
 cada uno.
 
+**Entregados el 2026-11-28, revisados e integrados en la rama (NO relanzar):** S1 FUT-V0, S2 FUT-B1,
+S3 FUT-B3, P1a FUT-C2, P1b FUT-C3, P2 FUT-B2 y P3 FUT-T2. Claude corrigió C3, B2 y el manifiesto: los
+detalles están en `05 §3`.
+
+**Queda:** S2b (coste del plan mínimo, abajo) y S4 (parada en NinjaTrader).
+- Un solo agente por worktree. En S1 trabajaron dos sesiones a la vez en `E:\tl-fut-s`; esta vez no
+  se pisaron, pero no hay que repetirlo.
+- Antes de seguir en cualquier worktree:
+  `git pull --no-rebase --no-edit origin claude/vibrant-mayer-r46s0o`.
+
 ## 0. Cómo se usan
 
 - **Cadena S (en orden, sin parar).**
@@ -94,6 +104,20 @@ Ficheros permitidos: docs\futures\evidencia\manifest_futuros.jsonl y .md, docs\f
 2. No modifiques, copies ni muevas ningún parquet. Informe con la tabla del .md. PARA.
 ```
 
+### S2b · FUT-B1b · Coste del plan mínimo (solo metadatos, gratis; tras el pull)
+
+```text
+TAREA FUT-B1b. El script ya existe: scripts\futures_data_cost.py (NO lo modifiques).
+Ficheros permitidos: docs\futures\evidencia\databento_costes_minimo_2026-11.json y .md (los escribe el
+script), docs\futures\WORKER_REPORTS\FUT-B1b.md.
+0. git pull --no-rebase --no-edit origin claude/vibrant-mayer-r46s0o   (trae --plan minimo; nada de push)
+1. .\.venv\Scripts\python.exe scripts\futures_data_cost.py --plan minimo
+   (la clave sale de Credential Manager; NUNCA la imprimas).
+2. Comprueba que el .md tiene 12 filas (una por esquema, raíz y tramo) y la tabla de totales.
+   Si una fila trae "Sin datos: ...", déjala tal cual.
+3. Informe: copia la tabla completa. NO recomiendes compras: decide el operador (OP-4). PARA.
+```
+
 ### S4 · FUT-J4b · Puente NinjaTrader 8 en Sim101 (parada obligatoria para el operador)
 
 ```text
@@ -115,6 +139,12 @@ Ficheros permitidos: docs\futures\WORKER_REPORTS\FUT-J4b.md y la COPIA de Tradin
 5. Informe: salida literal (risk_ok, intent en cola y ack). Si no hay ack en 60 s, dilo y PARA.
    Nunca uses otra cuenta que Sim101/Playback.
 ```
+
+**Estado de S4 (2026-11-28):**
+- Hecho: la copia del `.cs`, verificada con SHA-256.
+- Falta compilar y activar la estrategia en NinjaTrader.
+- Sin ticks no hay ack. El sábado el mercado está cerrado: CME reabre el domingo a las 17:00 de Chicago
+  (18:00 de Nueva York). Antes de eso, solo con la conexión Playback y datos de repetición descargados.
 
 ## 3. Carriles en paralelo
 

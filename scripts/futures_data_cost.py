@@ -2,9 +2,11 @@
 
 Se ejecuta en el equipo del operador (la clave sale de Windows Credential Manager y no se imprime):
 
-    .\\.venv\\Scripts\\python.exe scripts\\futures_data_cost.py
+    .\\.venv\\Scripts\\python.exe scripts\\futures_data_cost.py                 (plan amplio, FUT-B1)
+    .\\.venv\\Scripts\\python.exe scripts\\futures_data_cost.py --plan minimo   (solo FUT-RB-1 y FUT-RA-1)
 
-Escribe docs/futures/evidencia/databento_costes_2026-11.json y .md. Nunca llama a timeseries.get_range.
+Escribe docs/futures/evidencia/databento_costes_2026-11.json y .md (``--plan minimo``:
+databento_costes_minimo_2026-11.json y .md). Nunca llama a timeseries.get_range.
 No recomienda compras: decide el operador (OP-4).
 """
 
@@ -29,13 +31,26 @@ ROWS: list[tuple[str, tuple[str, ...], str, str, str]] = [
     ("trades", ("NQ",), "2017-01-01", "2018-12-31", "Research A, opción (RA_spec §2)"),
     ("tbbo", ("NQ",), "2017-01-01", "2018-12-31", "Research A, opción"),
 ]
+# Plan mínimo (revisión de B1 por Claude, 2026-11-28): solo lo que piden las dos familias registrables.
+# - tbbo trae cada trade (precio, tamaño, lado agresor) más el BBO previo: en B1, trades y tbbo de NQ tienen
+#   los mismos 722.673.729 registros, así que comprar trades aparte es pagar dos veces lo mismo.
+# - El OOS-2 sellado va en filas propias: se compra solo si una hipótesis llega a candidata.
+ROWS_MIN: list[tuple[str, tuple[str, ...], str, str, str]] = [
+    ("ohlcv-1m", ("ES", "GC"), "2010-06-06", "2026-11-27", "Research B (FUT-RB-1)"),
+    ("definition", ("ES", "GC"), "2010-06-06", "2026-11-27", "Research B (rolls)"),
+    ("status", ("ES", "GC"), "2010-06-06", "2026-11-27", "Research B (sesiones, D-3)"),
+    ("tbbo", ("NQ", "MNQ"), "2019-05-06", "2024-01-01", "Research A IS (FUT-RA-1)"),
+    ("tbbo", ("NQ", "MNQ"), "2024-01-01", "2026-11-27", "Research A OOS-2 (sellado, solo si hay candidata)"),
+    ("definition", ("NQ", "MNQ"), "2019-05-06", "2026-11-27", "Research A (rolls)"),
+]
+PLANS = {"amplio": (ROWS, "databento_costes_2026-11"), "minimo": (ROWS_MIN, "databento_costes_minimo_2026-11")}
 OUT_DIR = Path(__file__).resolve().parents[1] / "docs" / "futures" / "evidencia"
 
 
-def cost_rows(client: Any, get_json, metadata_params, dataset: str = "GLBX.MDP3") -> list[dict]:
+def cost_rows(client: Any, get_json, metadata_params, dataset: str = "GLBX.MDP3", rows=None) -> list[dict]:
     """Una fila por esquema y raíz. Un fallo deja "Sin datos: <error>" y sigue con la siguiente."""
     out = []
-    for schema, roots, start, end, purpose in ROWS:
+    for schema, roots, start, end, purpose in (ROWS if rows is None else rows):
         for root in roots:
             symbol = f"{root}.v.0"
             row = {"schema": schema, "root": root, "symbol": symbol, "start": start, "end": end, "purpose": purpose,
@@ -72,15 +87,17 @@ def to_markdown(rows: list[dict]) -> str:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--out-dir", default=str(OUT_DIR))
+    ap.add_argument("--plan", choices=sorted(PLANS), default="amplio")
     args = ap.parse_args()
     from tradinglab.discovery.fetch_databento import _client, _get_json, _metadata_params
 
+    plan_rows, stem = PLANS[args.plan]
     with _client() as client:
-        rows = cost_rows(client, _get_json, _metadata_params)
+        rows = cost_rows(client, _get_json, _metadata_params, rows=plan_rows)
     out = Path(args.out_dir)
     out.mkdir(parents=True, exist_ok=True)
-    (out / "databento_costes_2026-11.json").write_text(json.dumps(rows, indent=1), encoding="utf-8")
-    (out / "databento_costes_2026-11.md").write_text(to_markdown(rows), encoding="utf-8")
+    (out / f"{stem}.json").write_text(json.dumps(rows, indent=1), encoding="utf-8")
+    (out / f"{stem}.md").write_text(to_markdown(rows), encoding="utf-8")
     print(to_markdown(rows))
 
 

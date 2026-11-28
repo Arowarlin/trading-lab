@@ -27,14 +27,18 @@ Research, Claude Code Extensions & Engineering Orchestration Prompt", del operad
     cota inferior, cartera correlada/independiente y `lab propecon allocate`.
   - **Ejecución** (`src/tradinglab/futures/execution/`): `OrderIntent`, `RiskCheck` R01-R16,
     `PaperAdapter` y ticket semimanual (J1, J2).
-  - **Scripts de datos** para el equipo del operador: FUT-B1 (coste en Databento) y FUT-B3 (manifiesto).
+  - **Scripts de datos** para el equipo del operador: FUT-B1 (coste en Databento) y FUT-B3 (manifiesto),
+    ya ejecutados el 2026-11-28.
+  - **Entregas de OpenCode del 2026-11-28, revisadas e integradas:** Research A en código (C2 detectores,
+    C3 evaluador), descarga gobernada de Databento (B2) y servidor MCP de solo lectura (T2). Claude
+    corrigió C3, B2 y el manifiesto.
   - **Programas en `config/prop_economics/programs/`:** Topstep 50K, MFF Rapid 50K y Lucid Flex 50K, más
     dos sintéticos.
 - **Ninguna estrategia está validada** (`NO EDGE VALIDATED`). Las simulaciones con pools sintéticos se
   etiquetan HIPOTÉTICO.
 - **Bloqueado:**
-  - **OP-4:** compra de datos; primero hay que ejecutar `scripts/futures_data_cost.py` en el equipo del
-    operador;
+  - **OP-4:** compra de datos. Lectura del coste: `evidencia/OP4_lectura_costes_2026-11.md` (Research B
+    entero ≈ 41,89 USD; Research A ≤ 4.133,45 USD con el OOS-2);
   - **OP-7:** comisiones de MES y MGC;
   - con navegador: ProjectX, CME y el precio de Lucid.
 - **Siguiente:** `CONTINUACION.md`.
@@ -57,6 +61,7 @@ Research, Claude Code Extensions & Engineering Orchestration Prompt", del operad
 | R | `research/platform_matrix.md` | NinjaTrader 8, Tradovate y ProjectX con documentación oficial y términos de acceso | hecho (FUT-E1) |
 | R | `research/programs/` | Borradores YAML de MFF Rapid 50K y Lucid Flex 50K | borrador (FUT-A10 los lleva a `config/`) |
 | K | `risk/` | Auditoría de riesgo, Kelly, ruina, 6 perfiles a 6/12/24 meses, ORPAE, módulos MOD-NR/MOD-PR, simuladores | hecho (FUT-RISK) |
+| E | `evidencia/OP4_lectura_costes_2026-11.md` | Coste de datos de FUT-B1 leído para OP-4: paquetes por familia, `trades` duplicado en `tbbo` | hecho (2026-11-28) |
 | K | `risk/04_PERFILES_MOTOR.md` | Seis perfiles A-F a 6/12/24 meses con el motor real en Topstep, MFF Rapid y Lucid Flex (hipotético) | hecho (2026-11-28) |
 | K | `risk/03_COMPARACION_PROGRAMAS.md` | Topstep frente a MFF Rapid frente a Lucid Flex con la misma estrategia hipotética; precio de equilibrio de Lucid | hecho (2026-11-28) |
 | R | `research/execution_spec.md` | Contrato `OrderIntent` → `RiskCheck` (R01-R16) → adaptador o ticket semimanual, con vectores V1-V16 | especificación (FUT-J0) |

@@ -60,6 +60,9 @@ queda fuera de la muestra.
   ejecución en NQ, mientras no exista MNQ. Se decide **antes** de comprar, nunca después de ver datos.
 - **Lado agresor:** en `trades`, `side = B` es compra agresora (+1), `side = A` es venta agresora (−1) y
   `N` se excluye y se cuenta. Es la documentación de Databento, **por confirmar** en FUT-B2.
+- **Compra (lectura de FUT-B1, 2026-11-28):** `tbbo` trae cada trade (precio, tamaño, lado agresor) con
+  el mejor bid/ask previo; en B1 tiene los mismos registros que `trades` en NQ, MNQ, ES y MES. Para L1a
+  y L1b basta `tbbo`: `trades` no se compra aparte (`evidencia/OP4_lectura_costes_2026-11.md`).
 - **Condiciones** (si no se cumplen: Sin datos, no se registra):
   - cobertura ≥ 99 % de los segundos de RTH con al menos un mensaje en `tbbo` por sesión;
   - las sesiones con huecos > 5 s en RTH se excluyen y se cuentan;
