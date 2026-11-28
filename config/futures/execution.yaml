@@ -1,0 +1,30 @@
+# Configuración de ejecución de futuros (docs/futures/research/execution_spec.md §4) — FUT-J1.
+# Paper/demo solamente. Cambiar este fichero no autoriza live (R16 bloquea siempre en esta fase).
+buffer: 0.10                     # colchón frente al MLL y la DLL (fijado en la especificación)
+entry_margin_minutes: 5          # última entrada = min(última entrada de la firma, flat_by − 5 min)
+default_slippage_ticks: 1
+# Comisión del laboratorio para PAPER cuando el programa no la tiene verificada (se marca cost_assumed).
+lab_commission_per_side:
+  MNQ: {value: 0.75, status: assumed, note: "dato del operador, 2026-11-25"}
+# Firmas `conditional` cuyas condiciones de automatización ha aceptado el operador por escrito (R03).
+firm_conditions_ack: []
+# Última entrada publicada por la firma, si es anterior a flat_by − margen (R08).
+last_entry_by:
+  topstep_50k_combine_xfa: {value: "15:08 America/Chicago", status: verified, source: "docs/futures/research/propfirms_2026-11/topstep.md"}
+# Adaptadores admitidos por firma (research/platform_matrix.md §2). `paper` siempre vale.
+platform_support:
+  topstep: [projectx, ticket]
+  myfundedfutures: [nt8, ticket]
+  bulenox: [nt8, ticket]
+  tradeday: [nt8, ticket]
+  lucid: [nt8, ticket]
+  tradeify: [ticket]               # NT8 por confirmar
+  takeprofittrader: [nt8, ticket]
+  alphafutures: [ticket]
+  apex: [ticket]
+  earn2trade: [ticket]
+# Límite global de exposición por subyacente entre cuentas, en micro-equivalentes (SUPUESTO del laboratorio).
+global_underlying_limit_micro:
+  NASDAQ100: {value: 100, status: assumed}
+  SP500: {value: 100, status: assumed}
+  GOLD: {value: 50, status: assumed}
