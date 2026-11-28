@@ -67,6 +67,16 @@ ALLOWED_SCHEMAS = (
 )
 
 TRADES_COLUMNS = ("ts_event", "price", "size", "side", "instrument_id")
+OHLCV_COLUMNS = ("ts_event", "open", "high", "low", "close", "volume", "instrument_id")
+
+# Paquetes aprobados por el operador (OP-4). Solo lo que está aquí se puede descargar con run_package.
+# "rb": aprobado el 2026-11-28, solo el paquete 1 de evidencia/OP4_lectura_costes_2026-11.md (≈ 41,89 USD).
+PACKAGES: dict[str, tuple[tuple[str, tuple[str, ...], str, str], ...]] = {
+    "rb": (
+        ("ohlcv-1m", ("ES", "GC"), "2010-06-06", "2026-11-27"),
+        ("definition", ("ES", "GC"), "2010-06-06", "2026-11-27"),
+    ),
+}
 SIDES = ("A", "B", "N")
 
 TICK_SCHEMAS = ("trades", "tbbo", "mbp-1", "bbo-1s", "mbp-10", "mbo")
@@ -180,6 +190,60 @@ def monthly(jobs: Iterable[Job]) -> list[Job]:
                            end=nxt.strftime("%Y-%m-%dT%H:%M:%SZ"), dataset=job.dataset))
             cut = nxt
     return out
+
+
+def yearly(jobs: Iterable[Job]) -> list[Job]:
+    """Parte cada trabajo en trozos por año natural (UTC); para esquemas de barras y definiciones."""
+    out: list[Job] = []
+    for job in jobs:
+        start, end = pd.Timestamp(job.start), pd.Timestamp(job.end)
+        start = start.tz_localize("UTC") if start.tzinfo is None else start.tz_convert("UTC")
+        end = end.tz_localize("UTC") if end.tzinfo is None else end.tz_convert("UTC")
+        cut = start
+        while cut < end:
+            nxt = min(pd.Timestamp(year=cut.year + 1, month=1, day=1, tz="UTC"), end)
+            out.append(Job(schema=job.schema, root=job.root, start=cut.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                           end=nxt.strftime("%Y-%m-%dT%H:%M:%SZ"), dataset=job.dataset))
+            cut = nxt
+    return out
+
+
+def package_jobs(name: str) -> list[Job]:
+    """Trabajos de un paquete aprobado: por años en barras y definiciones, por meses en tick."""
+    if name not in PACKAGES:
+        raise DownloadError(f"paquete no aprobado: {name!r} (aprobados: {', '.join(sorted(PACKAGES))})")
+    jobs: list[Job] = []
+    for schema, roots, start, end in PACKAGES[name]:
+        base = plan({"schema": schema, "root": r, "start": start, "end": end} for r in roots)
+        jobs += monthly(base) if schema in TICK_SCHEMAS else yearly(base)
+    return jobs
+
+
+def quote_package(name: str, client: Any, get_json, metadata_params) -> float:
+    """Coste exacto del paquete con ``metadata.get_cost`` (gratis), una llamada por esquema y raíz."""
+    if name not in PACKAGES:
+        raise DownloadError(f"paquete no aprobado: {name!r}")
+    total = 0.0
+    for schema, roots, start, end in PACKAGES[name]:
+        for root in roots:
+            params = metadata_params(dataset=DATASET, schema=schema, row_symbol=f"{root}.{ROLL}.0", start=start,
+                                     end=end)
+            total += float(get_json(client, "metadata.get_cost", params))
+    return total
+
+
+def run_package(name: str, client: Any, out_root: str | Path = DEFAULT_OUT_ROOT, *, approved_by_operator: bool,
+                max_usd: float, get_json, metadata_params) -> dict[str, Any]:
+    """Cotiza y, solo si el coste no pasa de ``max_usd``, descarga el paquete. Sin aprobación no hay red."""
+    if not approved_by_operator:
+        raise RuntimeError("OP-4 sin aprobar")
+    jobs = package_jobs(name)
+    cost = quote_package(name, client, get_json, metadata_params)
+    if cost > float(max_usd):
+        raise DownloadError(f"coste {cost:.2f} USD > tope {float(max_usd):.2f} USD: no se descarga nada")
+    paths = download_many(jobs, client, out_root, approved_by_operator=True)
+    return {"package": name, "quoted_usd": round(cost, 4), "max_usd": float(max_usd), "jobs": len(jobs),
+            "files": [p.as_posix() for p in paths]}
 
 
 def _span_days(job: Job) -> float:
@@ -437,6 +501,45 @@ def normalize_trades(payload: bytes | str | Path) -> pd.DataFrame:
     return out
 
 
+def normalize_ohlcv(payload: bytes | str | Path) -> pd.DataFrame:
+    """CSV de ``ohlcv-1m`` → ``ts_event`` (UTC ns, inicio de la vela), OHLC, volumen e ``instrument_id``."""
+    raw = _read_payload(payload)
+    if not raw:
+        raise DownloadError("Sin datos: respuesta vacía")
+    raw = _decompress(raw)
+    try:
+        frame = pd.read_csv(io.BytesIO(raw))
+    except Exception as exc:  # noqa: BLE001
+        raise DownloadError(f"CSV de ohlcv inválido: {type(exc).__name__}") from exc
+    frame.columns = [str(column).strip().lower() for column in frame.columns]
+    for column in OHLCV_COLUMNS:
+        if column not in frame.columns:
+            raise DownloadError(f"Sin datos: {column}")
+    out = pd.DataFrame(index=frame.index)
+    if frame.empty:
+        return pd.DataFrame({c: pd.Series(dtype="float64") for c in OHLCV_COLUMNS})
+    out["ts_event"] = _parse_ts(frame["ts_event"], "ts_event")
+    for column in ("open", "high", "low", "close", "volume", "instrument_id"):
+        values = pd.to_numeric(frame[column], errors="coerce")
+        if values.isna().any():
+            raise DownloadError(f"Sin datos: {column} no numérico")
+        out[column] = values.astype("int64" if column in ("volume", "instrument_id") else "float64")
+    bad = (out["high"] < out[["open", "close", "low"]].max(axis=1)) | (out["low"] > out[["open", "close"]].min(axis=1))
+    if bad.any():
+        raise DownloadError(f"Sin datos: {int(bad.sum())} velas con high/low incoherentes")
+    return out.loc[:, list(OHLCV_COLUMNS)].sort_values("ts_event", kind="stable").reset_index(drop=True)
+
+
+def build_ohlcv(paths: Sequence[str | Path]) -> pd.DataFrame:
+    """Une los trozos de una raíz; un minuto repetido entre trozos es error (no se elige uno a ciegas)."""
+    frames = [normalize_ohlcv(Path(p)) for p in paths]
+    frame = pd.concat(frames, ignore_index=True).sort_values("ts_event", kind="stable").reset_index(drop=True)
+    dup = frame["ts_event"].duplicated()
+    if dup.any():
+        raise DownloadError(f"Sin datos: {int(dup.sum())} minutos repetidos entre trozos")
+    return frame
+
+
 def write_norm_trades(
     payload: bytes | str | Path, path: str | Path
 ) -> Path:
@@ -477,6 +580,14 @@ __all__ = [
     "append_manifest",
     "download",
     "download_many",
+    "OHLCV_COLUMNS",
+    "PACKAGES",
+    "build_ohlcv",
+    "normalize_ohlcv",
+    "package_jobs",
+    "quote_package",
+    "run_package",
+    "yearly",
     "manifest_entry",
     "manifest_path",
     "monthly",

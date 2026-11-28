@@ -257,3 +257,82 @@ def test_sin_zstandard_la_ficha_queda_sin_filas_pero_existe(tmp_path, monkeypatc
     assert entry["rows"] is None and entry["sha256"] == dd.sha256_file(path)
     with pytest.raises(dd.DownloadError, match="zstandard"):
         dd.normalize_trades(path)
+
+
+OHLCV_CSV = (
+    "ts_event,rtype,publisher_id,instrument_id,open,high,low,close,volume\n"
+    "2019-03-01T14:30:00.000000000Z,33,1,5002,2790.25,2791.00,2789.75,2790.50,1200\n"
+    "2019-03-01T14:31:00.000000000Z,33,1,5002,2790.50,2790.75,2789.50,2789.75,980\n"
+)
+
+
+class MetaClient(FakeClient):
+    """Cliente falso con metadatos (GET) y descarga (POST); cuenta cada llamada."""
+
+    def __init__(self, cost: float, content: bytes = OHLCV_CSV.encode("utf-8")) -> None:
+        super().__init__(content)
+        self.cost = cost
+        self.gets: list[dict] = []
+
+
+def _get_json(client, endpoint, params):
+    client.gets.append({"endpoint": endpoint, **params})
+    assert endpoint == "metadata.get_cost"
+    return client.cost
+
+
+def _meta_params(**kw):
+    return {"schema": kw["schema"], "symbols": kw["row_symbol"], "start": kw["start"], "end": kw["end"]}
+
+
+def test_paquete_rb_es_el_aprobado_y_va_por_anos():
+    assert dd.PACKAGES["rb"] == (("ohlcv-1m", ("ES", "GC"), "2010-06-06", "2026-11-27"),
+                                 ("definition", ("ES", "GC"), "2010-06-06", "2026-11-27"))
+    jobs = dd.package_jobs("rb")
+    assert len(jobs) == 2 * 2 * 17                            # 2 esquemas × 2 raíces × 2010…2026
+    es = [j for j in jobs if j.schema == "ohlcv-1m" and j.root == "ES"]
+    assert (es[0].start, es[0].end) == ("2010-06-06T00:00:00Z", "2011-01-01T00:00:00Z")
+    assert (es[-1].start, es[-1].end) == ("2026-01-01T00:00:00Z", "2026-11-27T00:00:00Z")
+    with pytest.raises(dd.DownloadError, match="no aprobado"):
+        dd.package_jobs("ra")
+
+
+def test_run_package_sin_aprobacion_ni_por_encima_del_tope_no_descarga(tmp_path):
+    client = MetaClient(cost=11.0)
+    with pytest.raises(RuntimeError, match="OP-4"):
+        dd.run_package("rb", client, tmp_path, approved_by_operator=False, max_usd=45,
+                       get_json=_get_json, metadata_params=_meta_params)
+    assert client.gets == [] and client.posts == []
+    with pytest.raises(dd.DownloadError, match="44.00 USD > tope 43.00"):   # 4 filas × 11 USD
+        dd.run_package("rb", client, tmp_path, approved_by_operator=True, max_usd=43,
+                       get_json=_get_json, metadata_params=_meta_params)
+    assert len(client.gets) == 4 and client.posts == []
+
+
+def test_run_package_descarga_todo_y_es_idempotente(tmp_path, monkeypatch):
+    monkeypatch.setitem(dd.PACKAGES, "rb", (("ohlcv-1m", ("ES",), "2019-03-01", "2020-06-01"),))
+    client = MetaClient(cost=0.5)
+    res = dd.run_package("rb", client, tmp_path, approved_by_operator=True, max_usd=1,
+                         get_json=_get_json, metadata_params=_meta_params)
+    assert (res["quoted_usd"], res["jobs"], len(client.posts)) == (0.5, 2, 2)
+    assert len(dd.read_manifest(tmp_path)) == 2
+    again = MetaClient(cost=0.5)
+    dd.run_package("rb", again, tmp_path, approved_by_operator=True, max_usd=1,
+                   get_json=_get_json, metadata_params=_meta_params)
+    assert again.posts == []                                  # mismo hash: no vuelve a descargar
+
+
+def test_normalize_ohlcv_valores_exactos_y_union_sin_repetidos(tmp_path):
+    bars = dd.normalize_ohlcv(OHLCV_CSV)
+    assert list(bars.columns) == list(dd.OHLCV_COLUMNS)
+    assert bars["ts_event"].iloc[0] == pd.Timestamp("2019-03-01T14:30:00Z")
+    assert bars["close"].tolist() == [2790.5, 2789.75] and bars["volume"].tolist() == [1200, 980]
+    a, b = tmp_path / "a.csv", tmp_path / "b.csv"
+    a.write_text(OHLCV_CSV, encoding="utf-8")
+    b.write_text(OHLCV_CSV.replace("14:3", "15:3"), encoding="utf-8")
+    assert len(dd.build_ohlcv([a, b])) == 4
+    with pytest.raises(dd.DownloadError, match="repetidos"):
+        dd.build_ohlcv([a, a])
+    broken = OHLCV_CSV.replace("2791.00,2789.75", "2789.00,2789.75")
+    with pytest.raises(dd.DownloadError, match="incoherentes"):
+        dd.normalize_ohlcv(broken)

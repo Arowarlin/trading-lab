@@ -36,3 +36,5 @@ data/telegram_state.json
 .orquestador/
 data/tl3/futures/
 data/futures/nt8_bridge/
+data/futures/raw/
+data/futures/norm/

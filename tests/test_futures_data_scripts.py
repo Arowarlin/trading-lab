@@ -83,3 +83,22 @@ def test_minimal_cost_plan_has_no_duplicated_trades_and_seals_oos2():
     rows = cost.cost_rows(None, lambda c, e, p: 1, lambda **kw: {"symbols": kw["row_symbol"]}, rows=cost.ROWS_MIN)
     assert len(rows) == sum(len(r[1]) for r in cost.ROWS_MIN) == 12
     assert set(cost.PLANS) == {"amplio", "minimo"}
+
+
+def test_download_script_normalizes_and_summarizes(tmp_path, monkeypatch):
+    """OP-4: el script une los trozos M1 por raíz y resume filas y rangos (sin red: los trozos ya están)."""
+    zstandard = __import__("pytest").importorskip("zstandard")
+    from tradinglab.futures import data_download as dd
+    script = _load("futures_data_download")
+    monkeypatch.setitem(dd.PACKAGES, "rb", (("ohlcv-1m", ("ES",), "2019-03-01", "2020-06-01"),))
+    csv = ("ts_event,rtype,publisher_id,instrument_id,open,high,low,close,volume\n"
+           "{d}T14:30:00Z,33,1,{iid},10.0,11.0,9.0,10.5,5\n")
+    folder = tmp_path / "raw" / "databento" / "GLBX.MDP3" / "ohlcv-1m" / "ES"
+    folder.mkdir(parents=True)
+    for name, d, iid in (("a", "2019-03-01", 1), ("b", "2020-01-02", 2)):
+        (folder / f"{name}.csv.zst").write_bytes(zstandard.ZstdCompressor().compress(
+            csv.format(d=d, iid=iid).encode("utf-8")))
+    written = script.normalize_package("rb", tmp_path)
+    md = script.summary_md("rb", {"quoted_usd": 0.5, "max_usd": 45.0, "jobs": 2}, written)
+    assert "0.50 USD" in md and "| ES | 2 | 2019-03-01T14:30:00+00:00 | 2020-01-02T14:30:00+00:00 | 2 |" in md
+    assert "ningún desenlace" in md

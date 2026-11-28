@@ -10,7 +10,8 @@ cada uno.
 S3 FUT-B3, P1a FUT-C2, P1b FUT-C3, P2 FUT-B2 y P3 FUT-T2. Claude corrigió C3, B2 y el manifiesto: los
 detalles están en `05 §3`.
 
-**Queda:** S2b (coste del plan mínimo, abajo) y S4 (parada en NinjaTrader).
+**Queda:** S2b (coste del plan mínimo), S5 (descarga del paquete 1 de OP-4, aprobada el 2026-11-28) y
+S4 (parada en NinjaTrader).
 - Un solo agente por worktree. En S1 trabajaron dos sesiones a la vez en `E:\tl-fut-s`; esta vez no
   se pisaron, pero no hay que repetirlo.
 - Antes de seguir en cualquier worktree:
@@ -116,6 +117,24 @@ script), docs\futures\WORKER_REPORTS\FUT-B1b.md.
 2. Comprueba que el .md tiene 12 filas (una por esquema, raíz y tramo) y la tabla de totales.
    Si una fila trae "Sin datos: ...", déjala tal cual.
 3. Informe: copia la tabla completa. NO recomiendes compras: decide el operador (OP-4). PARA.
+```
+
+### S5 · OP-4 · Descarga del paquete `rb` (Research B; aprobada por el operador el 2026-11-28)
+
+El operador también puede ejecutar los tres comandos él mismo, sin OpenCode.
+
+```text
+TAREA OP4-RB. Esta tarea es la ÚNICA excepción a la regla 3 (datos de pago): el operador aprobó OP-4 el
+2026-11-28 solo para el paquete "rb" (≈ 41,89 USD) con un tope de 45 USD.
+Ficheros permitidos: docs\futures\evidencia\descarga_rb_2026-11.md (lo escribe el script),
+data\futures\catalog\manifest.jsonl (lo escribe el script), docs\futures\WORKER_REPORTS\OP4-RB.md.
+0. git pull --no-rebase --no-edit origin claude/vibrant-mayer-r46s0o
+1. uv sync --frozen --extra dev --extra discovery --extra futdata
+2. PARA y pide al operador que escriba exactamente: OK COMPRA 45. Sin eso, no sigas.
+3. .\.venv\Scripts\python.exe scripts\futures_data_download.py --package rb --max-usd 45 --approved-by-operator
+   (la clave sale de Credential Manager; NUNCA la imprimas). Si dice "coste ... > tope", PARA: no subas el tope.
+4. NO hagas commit de data\futures\raw ni data\futures\norm (están en .gitignore).
+5. Informe: copia literal el .md que imprime el script. No calcules nada más con esos datos. PARA.
 ```
 
 ### S4 · FUT-J4b · Puente NinjaTrader 8 en Sim101 (parada obligatoria para el operador)

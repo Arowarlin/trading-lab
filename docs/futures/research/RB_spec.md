@@ -389,7 +389,7 @@ eventos (uno por sesión). Unilateral.
 |---|---|---|---|
 | 1 | Verificar con la documentación de CME las horas de apertura y liquidación de GC (§4) y las especificaciones del §5 | Claude (FUT-E1 o una sesión aparte) | READY |
 | 2 | OP-8: partición del holdout de futuros (§2) | operador | **aprobada (2026-11-28)** |
-| 3 | OP-4 ampliada: `ohlcv-1m` + `definition` de ES y GC de 2010-06 a 2026-11, con el coste exacto de FUT-B1 | operador | pendiente |
+| 3 | OP-4 ampliada: `ohlcv-1m` + `definition` de ES y GC de 2010-06 a 2026-11, con el coste exacto de FUT-B1 | operador | **aprobada (2026-11-28, ≈ 41,89 USD)**; descarga: `scripts/futures_data_download.py --package rb` en el equipo del operador |
 | 4 | Comisión por lado de MES y MGC | operador | **Sin datos** |
 | 5 | **FUT-D2:** conteo de eventos **sin desenlaces** y consulta de contaminación en `lab.db` (solo lectura) | OpenCode (DeepSeek V4.1 Flash), en el equipo del operador | BLOCKED (3: compra de datos) |
 | 6 | Fijar K y registrar `FUT-RB-1` (+K) | operador | BLOCKED (2-5) |

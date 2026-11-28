@@ -35,7 +35,7 @@ en una sesión, dice qué ficheros puede escribir y cuándo **PARAR**. Claude re
 | **OP-1** | Aprobar la arquitectura y los ADR-F01…F10 (`03_ARQUITECTURA_FUTURES.md §8`) | FUT-A1…A9 | Sí |
 | **OP-2** | Dependencias: añadir `hypothesis` y `pytest-cov` (dev), declarar `scipy`, quitar `alpaca-py` (sin uso) | FUT-A9, cobertura | Sí |
 | **OP-3** | Plugins: `context7` y `pyright-lsp` (`02 §3`) | — | Sí, solo esos dos |
-| **OP-4** | Compra de datos de Databento (tras FUT-B1, con el coste exacto) | FUT-B2 real, Research A, Research B en ES/GC | Lectura en `evidencia/OP4_lectura_costes_2026-11.md`: Research B entero ≈ 41,89 USD (`ohlcv-1m` + `definition` de ES y GC, 2010-06 → 2026-11); Research A: `tbbo` de NQ y MNQ (trae los trades: no comprar `trades` aparte), ≤ 4.133,45 USD con OOS-2; la cifra solo-IS sale de S2b (`--plan minimo`) |
+| **OP-4** | Compra de datos de Databento | FUT-B2 real, Research A, Research B en ES/GC | **APROBADA el 2026-11-28 solo para el paquete 1** (Research B: `ohlcv-1m` + `definition` de ES y GC, 2010-06-06 → 2026-11-27, ≈ 41,89 USD; `data_download.PACKAGES["rb"]`, tope de gasto en el script). Research A (`tbbo` de NQ y MNQ) **no aprobado**: espera la cifra solo-IS de S2b. Lectura: `evidencia/OP4_lectura_costes_2026-11.md` |
 | **OP-5** | Crear `.claude/` del proyecto (hooks de §7, 9 skills, 7 agentes) | FUT-T1 | Sí; los hooks primero |
 | **OP-6** | Venv aparte para Nautilus/hftbacktest y datos de muestra para los PoC | FUT-X1…X3 | Después de FUT-A6 |
 | **OP-7** | Confirmar si los 0,75 USD/lado de MNQ incluyen exchange, clearing y NFA; fijar la comisión por lado de MES y MGC | costes de futuros (FUT-03), FUT-RB-1 | — |
