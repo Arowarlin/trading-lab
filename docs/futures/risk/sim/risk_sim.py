@@ -52,7 +52,13 @@ def kelly_fraction(mu: float) -> float:
     return max(0.0, p - (1 - p) * loss / win)
 
 
-def run(policy: dict, mu: float, *, n: int, seed: int, budget: float, regimes: bool = False) -> dict:
+def run(policy: dict, mu: float, *, n: int, seed: int, budget: float, regimes: bool = False,
+        rr: float = RR, edge_usd: float | None = None) -> dict:
+    """Simula un proyecto. Por defecto la ventaja es `mu` en R con RR fijo (resultados de 01 §4).
+
+    Con `edge_usd` la ventaja es NETA en USD por operación y `rr` es la relación objetivo/stop
+    (ratio negativo si rr < 1): lo usan los módulos MOD-NR y MOD-PR (`structures_sweep.py`).
+    """
     cfg = TOPSTEP
     rng = np.random.default_rng(seed)
     horizon = max(CHECKPOINTS)
@@ -94,6 +100,13 @@ def run(policy: dict, mu: float, *, n: int, seed: int, budget: float, regimes: b
             k = np.maximum(k, 1)  # tamaño mínimo: 1 MNQ mientras la cuenta esté viva (sin cuentas "zombi")
         k = np.minimum(k, np.where(funded, cfg["funded_max_micros"], cfg["eval_max_micros"]))
         k = np.where(active, k, 0)
+        risk_usd = k * unit
+        cost = k * COST_RT
+        if edge_usd is not None:
+            # ventaja NETA fija en USD por operación: p = (E + L) / (W + L), con W y L netos
+            w_net = rr * risk_usd - cost
+            l_net = risk_usd + cost
+            p0 = np.clip((edge_usd + l_net) / np.maximum(w_net + l_net, 1e-9), 0.0, 0.999)
         if regimes:
             switch = rng.random(n) < 0.05
             good = np.where(switch, ~good, good)
@@ -101,9 +114,7 @@ def run(policy: dict, mu: float, *, n: int, seed: int, budget: float, regimes: b
         else:
             p = p0
         win = rng.random(n) < p
-        risk_usd = k * unit
-        cost = k * COST_RT
-        pnl = np.where(win, RR * risk_usd - cost, -risk_usd - cost)
+        pnl = np.where(win, rr * risk_usd - cost, -risk_usd - cost)
         worst = np.where(win, -rng.random(n) * risk_usd, pnl)
         trade = k > 0
         breach = trade & (bal + worst <= thr)
@@ -184,7 +195,7 @@ def run(policy: dict, mu: float, *, n: int, seed: int, budget: float, regimes: b
                 "p_budget_ruin": round(float((ruin_day <= day).mean()), 3),
                 "capital_required_p95": round(float(np.percentile(max_out, 95)), 0),
             }
-    return {"p_win": round(float(p0), 4), "checkpoints": snaps, "net_24m": (received_now - fees)}
+    return {"p_win": round(float(np.mean(p0)), 4), "checkpoints": snaps, "net_24m": (received_now - fees)}
 
 
 def main() -> None:
