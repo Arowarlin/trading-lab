@@ -188,6 +188,7 @@ app.add_typer(models_app, name="models")
 app.add_typer(intel_app, name="intel")
 app.add_typer(telegram_app, name="telegram")
 app.add_typer(library_app, name="library")
+from .prop_economics.cli import app as propecon_app  # noqa: E402  (motor EV de futuros, FUT-A8)
 from .propfund.cli import app as propfund_app  # noqa: E402  (capa Prop Fund aislada)
 
 discovery_app = typer.Typer(
@@ -200,6 +201,7 @@ portfolio_app = typer.Typer(
 )
 
 app.add_typer(propfund_app, name="propfund")
+app.add_typer(propecon_app, name="propecon")
 app.add_typer(discovery_app, name="discovery")
 app.add_typer(portfolio_app, name="portfolio")
 
