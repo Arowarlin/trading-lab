@@ -43,9 +43,15 @@ data/prop_economics/                        (fuera de git)
 1. **Alta o revisión de una firma:** skill `prop-firm-rules-verification` → YAML del programa → test de
    esquema → commit. Una regla sin fuente oficial no entra como `verified`.
 2. **Vigilancia de cambios** (tarea programada **solo con aprobación del operador**, ADR de `AGENTS.md`):
-   descargar las URLs de `sources.yaml` con el cliente por defecto (sin suplantar navegadores), normalizar
-   el texto, comparar el hash con la última instantánea; si cambia → alerta con el diff de texto y la
-   regla afectada pasa a `needs_review`. Una web que responde 403 se marca `bloqueada`, nunca se fuerza.
+   - **Regla nueva (2026-11-27):** los términos de Topstep, Bulenox, TradeDay, Alpha Futures y Tradeify
+     **prohíben el acceso automatizado** a sus webs (citas en las fichas, §G). Para esas firmas y para las
+     que bloquean con 403 (Apex, Earn2Trade), la vigilancia **no descarga nada**: el operador guarda las
+     páginas desde el navegador en `data/prop_economics/snapshots/<firma>/` y el PFIE solo las compara.
+   - `sources.yaml` marca por firma `automated_access: allowed | prohibited_by_terms | blocked | unknown`.
+     Solo con `allowed` y sin cláusula en los términos se descarga, con el cliente por defecto, sin
+     suplantar navegadores y con pocas peticiones.
+   - En cualquier caso: normalizar el texto, comparar el hash con la última instantánea y, si cambia,
+     alertar con el diff y pasar la regla afectada a `needs_review`.
 3. **Compatibilidad:** para cada estrategia y programa, comprobar automatización (categoría y
    condiciones: propiedad del bot, plataforma, API, VPS, Live), frecuencia (límites de operaciones/día,
    microscalping por duración), horario de cierre, noticias, contratos y escalado. Resultado con la lista

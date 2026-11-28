@@ -59,3 +59,15 @@ def test_expected_classification_on_2026_11_27():
         assert by_id[firm] == "conditional", firm
     for firm in ("apex", "earn2trade"):
         assert by_id[firm] == "unverified", firm
+
+
+def test_execution_mode_follows_bot_policy():
+    """Una firma que prohíbe bots o sin verificar solo se opera en semimanual."""
+    for firm in _firms():
+        category = firm["automation"]["category"]
+        mode = firm["execution_mode"]
+        assert mode in {"automated", "automated_conditional", "semi_manual"}, firm["id"]
+        if category in {"prohibited", "unverified"}:
+            assert mode == "semi_manual", firm["id"]
+        if mode == "automated":
+            assert category == "allowed", firm["id"]

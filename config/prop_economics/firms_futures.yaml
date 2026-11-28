@@ -12,6 +12,15 @@
 #
 # status: verified (leído en la página oficial citada en consulted_at) · unverified · sin_datos.
 # Regla: una firma unverified NUNCA se trata como si permitiera bots.
+#
+# execution_mode (cómo opera TradingLab en cada firma, decisión del operador 2026-11-27: se trabaja con
+# las 10):
+#   automated              el bot ejecuta (dentro de las prohibiciones generales: sin HFT, etc.).
+#   automated_conditional  el bot ejecuta solo si se cumplen las condiciones de la firma.
+#   semi_manual            TradingLab genera el ticket (entrada, stop, objetivo, contratos) y una
+#                          persona coloca cada orden a mano. NUNCA se replica con un copiador
+#                          automático en una firma que prohíbe bots: sería automatización.
+# copier: política de copiadores de operaciones según la fuente (unverified = no se usa).
 
 version: 1
 consulted_at: 2026-11-27
@@ -21,6 +30,8 @@ firms:
   - id: topstep
     name: Topstep
     website: https://www.topstep.com
+    execution_mode: automated_conditional
+    copier: {policy: unverified, note: "Bots solo por la API TopstepX; no en Live Funded."}
     automation:
       category: conditional
       status: verified
@@ -35,6 +46,8 @@ firms:
   - id: myfundedfutures
     name: My Funded Futures
     website: https://myfundedfutures.com
+    execution_mode: automated_conditional
+    copier: {policy: unverified, note: "Bots con configuración propia, sin HFT."}
     automation:
       category: conditional
       status: verified
@@ -48,6 +61,8 @@ firms:
   - id: lucid
     name: Lucid Trading
     website: https://lucidtrading.com
+    execution_mode: automated
+    copier: {policy: allowed, note: "Copiadores permitidos por escrito (permitted-activities)."}
     automation:
       category: allowed
       status: verified
@@ -62,6 +77,8 @@ firms:
   - id: tradeday
     name: TradeDay
     website: https://www.tradeday.com
+    execution_mode: automated_conditional
+    copier: {policy: prohibited_shared, note: "Prohibido que varios usuarios usen el mismo bot."}
     automation:
       category: conditional
       status: verified
@@ -78,6 +95,8 @@ firms:
   - id: tradeify
     name: Tradeify
     website: https://tradeify.co
+    execution_mode: automated_conditional
+    copier: {policy: own_accounts, note: "Bot propio y exclusivo de Tradeify; sin hedging entre cuentas."}
     automation:
       category: conditional
       status: verified
@@ -91,6 +110,8 @@ firms:
   - id: apex
     name: Apex Trader Funding
     website: https://apextraderfunding.com
+    execution_mode: semi_manual
+    copier: {policy: unverified, note: "Política no verificada hoy: se opera como si prohibiera bots."}
     automation:
       category: unverified
       status: unverified
@@ -100,6 +121,8 @@ firms:
   - id: takeprofittrader
     name: Take Profit Trader
     website: https://takeprofittrader.com
+    execution_mode: semi_manual
+    copier: {policy: own_accounts_manual, note: 'La web dice "No trading bots" y muestra copy trading permitido entre cuentas propias, sin detalle.'}
     automation:
       category: prohibited
       status: verified
@@ -113,6 +136,8 @@ firms:
   - id: earn2trade
     name: Earn2Trade
     website: https://www.earn2trade.com
+    execution_mode: semi_manual
+    copier: {policy: unverified, note: "Política no verificada: se opera como si prohibiera bots."}
     automation:
       category: unverified
       status: sin_datos
@@ -121,6 +146,8 @@ firms:
   - id: bulenox
     name: Bulenox
     website: https://bulenox.com
+    execution_mode: automated_conditional
+    copier: {policy: allowed_own_tools, note: "FAQ: copiadores propios permitidos; Términos: aprobación previa por escrito."}
     automation:
       category: conditional
       status: verified
@@ -135,6 +162,8 @@ firms:
   - id: alphafutures
     name: Alpha Futures
     website: https://alpha-futures.com
+    execution_mode: semi_manual
+    copier: {policy: own_accounts_manual, note: "Solo semiautomático con ejecución manual; copy trading solo entre cuentas propias (fuente secundaria: verificar)."}
     automation:
       category: prohibited
       status: verified
