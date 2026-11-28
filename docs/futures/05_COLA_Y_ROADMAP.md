@@ -19,7 +19,7 @@ en una sesión, dice qué ficheros puede escribir y cuándo **PARAR**. Claude re
 | 4 | Benchmarks (FUT-X1-X3) | Protocolo listo (`01 §5`) | OP-6 (instalación y datos) |
 | 5 | Datos de futuros | Arquitectura (`03 §3`); FUT-B1/B3 READY | OP-4 (compra) |
 | 6 | Motor EV de prop firms | **Especificado** (`04_SPEC_PROP_EV.md`); FUT-A READY tras OP-1 | tests T1-T14 verdes |
-| 7 | Research A (order flow) | BLOCKED por datos | OP-4 + FUT-C0 |
+| 7 | Research A (order flow) | **Especificada** (`research/RA_spec.md`); familia FUT-RA-1 de 6 pruebas en NQ→MNQ; BLOCKED por datos | OP-4, OP-7, OP-8 → FUT-C1 |
 | 8 | Research B (NY open) | **Especificada** (`research/RB_spec.md`); familia FUT-RB-1 de 5 pruebas en ES/GC; NQ solo forward | OP-4, OP-7, OP-8 → FUT-D2 |
 | 9 | Multiplataforma (NT8 primero) | FUT-E1 (investigación) | matriz con "V" probadas en demo |
 | 10 | Integración y validación | — | — |
@@ -65,7 +65,7 @@ la línea de FUT-A8, que se coordina con el lock `cli-py`.
 | FUT-B3 | Manifiesto con hash de los datos de futuros que ya existen | OpenCode en el equipo del operador | **READY** | — | `scripts/futures_manifest.py` (nuevo); `docs/futures/evidencia/manifest_futuros.jsonl` y `.md` | prompt §4.5 | `git revert` |
 | FUT-R1 | Reglas oficiales vigentes de Topstep, Apex, TradeDay, MyFundedFutures, Take Profit Trader y Earn2Trade (tarifas, drawdown, payouts, automatización) | **Claude** | **PARCIAL** (2026-11-27): Topstep `verified`; MFF/TradeDay/TPT `parcial`; Apex y Earn2Trade bloqueadas (403) | — | `docs/futures/research/prop_firms_2026-12.md` + YAML de programas | cada valor con URL y fecha; discrepancias marcadas | — |
 | FUT-E1 | Matriz de plataformas con documentación oficial (NT8, Tradovate, ProjectX) | **Claude** | **READY** | — | `03_ARQUITECTURA_FUTURES.md §6` | estados V/PV/NA/NI/RL/RC con fuente | — |
-| FUT-C0 | Especificación de Research A (hipótesis A-J con definición matemática, datos mínimos, costes, criterio de rechazo) | **Claude** | READY | — | `docs/futures/research/RA_spec.md` | cada hipótesis con nivel de datos de `03 §3.1` | — |
+| FUT-C0 | Especificación de Research A (hipótesis A-J con definición matemática, datos mínimos, costes, criterio de rechazo) | **Claude** | **COMPLETED** (2026-11-28, `research/RA_spec.md`) | — | `docs/futures/research/RA_spec.md` | cada hipótesis con nivel de datos de `03 §3.1` | — |
 | FUT-D0 | Especificación de Research B con clasificación de contaminación por hipótesis e instrumento | **Claude** | **COMPLETED** (2026-11-28) | — | `docs/futures/research/RB_spec.md` | ninguna hipótesis NQ sin su etiqueta | — |
 | FUT-J0 | Contrato de ejecución y riesgo (`OrderIntent`, `RiskCheck`, ticket) | **Claude** | BACKLOG | E1 | `docs/futures/research/execution_spec.md` | — | — |
 | FUT-H0 | Modelo de dominio del dashboard (realizado vs simulado) | **Claude** | BACKLOG | A8 | `docs/futures/research/dashboard_model.md` | — | — |
@@ -79,7 +79,10 @@ la línea de FUT-A8, que se coordina con el lock `cli-py`.
 | FUT-O1…O6 | Optimal Risk & Payout Allocation Engine (`risk/02_ORPAE_DISENO.md §4`) | OpenCode | BACKLOG | A6 | `src/tradinglab/prop_economics/{stats,sizing_diag,policies,allocate,portfolio,report}.py` | cifras de `risk/01` ±2 SE | `git revert` |
 | FUT-M1…M3 | Políticas de ratio negativo y positivo y frontera EV-ruina (`risk/modulos/`) | OpenCode | BACKLOG | O3 | `prop_economics/policies.py` | reproducir MOD-NR §4 y MOD-PR §4 y §6 | `git revert` |
 | FUT-P1…P6 | Prop Firm Intelligence Engine (`research/propfirms_2026-11/12_…`) | OpenCode | BACKLOG | A1 | `prop_economics/{registry,sources,compat,scoring,alerts}` | sin descargas de webs que lo prohíben | `git revert` |
-| FUT-C0 / FUT-E1 | Especificación de Research A y matriz de plataformas | **Claude** | READY (sesión 2, `CONTINUACION.md`) | — | `docs/futures/research/` | criterios de cada especificación | — |
+| FUT-E1 | (ver arriba) | **Claude** | READY (sesión 2, `CONTINUACION.md`) | — | `docs/futures/research/` | — | — |
+| FUT-C1 | Rasgos L1a: velas de delta, CVD, footprint, referencias móviles solo con pasado | OpenCode | BLOCKED (OP-4, OP-7, OP-8) | B2 | `src/tradinglab/futures/orderflow.py`, tests | `RA_spec.md §8` (cifras exactas sintéticas; nada ≥ 2024-01-01) | `git revert` |
+| FUT-C2 | Conteo de eventos A-I **sin desenlaces** | OpenCode en el equipo del operador | BLOCKED (C1) | C1 | `scripts/futures_ra_count.py`, `docs/futures/evidencia/ra_conteo.md` | sin columnas de desenlace | `git revert` |
+| FUT-C3 | Evaluador único de FUT-RA-1 (fills L1b, latencia, estrés, criterios §7) | OpenCode | BLOCKED (registro de FUT-RA-1 por el operador) | C2 | `src/tradinglab/futures/research_a.py`, tests | `RA_spec.md §8` | `git revert` |
 | FUT-D2 | Conteo de eventos RB **sin desenlaces** y consulta de contaminación en `lab.db` (`mode=ro`) | OpenCode en el equipo del operador | BLOCKED (OP-4, OP-8) | FUT-B2 | `scripts/futures_rb_count.py` (nuevo), test; `docs/futures/evidencia/rb_conteo.md` | `RB_spec.md §10`: sin columnas de desenlace; nada ≥ 2024-01-01 | `git revert` |
 | FUT-D3 | Evaluador único de FUT-RB-1 (`R_net` una sola vez, criterios §8) | OpenCode | BLOCKED (registro de FUT-RB-1 por el operador) | D2 | `src/tradinglab/futures/research_b.py`, tests | vectores sintéticos de `RB_spec.md §10` | `git revert` |
 
@@ -203,6 +206,11 @@ docs/futures/evidencia/databento_costes_2026-11.md.
    | mbp-1      | NQ MNQ                     | 2025-11-27 | 2026-11-27 |
    | mbp-10     | NQ MNQ                     | 2026-10-27 | 2026-11-27 |
    | mbo        | NQ MNQ                     | 2026-11-16 | 2026-11-23 |
+   | ohlcv-1m   | ES GC                      | 2010-06-06 | 2018-12-31 |   (Research B, RB_spec.md §2)
+   | definition | ES GC                      | 2010-06-06 | 2018-12-31 |   (Research B)
+   | trades     | NQ                         | 2017-01-01 | 2018-12-31 |   (Research A, opción; RA_spec.md §2)
+   | tbbo       | NQ                         | 2017-01-01 | 2018-12-31 |   (Research A, opción)
+   Si FUT-B1 ya se ejecutó, ejecuta solo estas cuatro filas nuevas y añádelas al JSON y a la tabla.
    Si una llamada falla, guarda el error literal en esa fila ("Sin datos: <error>") y sigue con la siguiente.
 2. Guarda el JSON (una fila por esquema y raíz: schema, root, symbol, start, end, records, billable_bytes, cost_usd, error)
    y una tabla Markdown con los mismos campos y el total por esquema.

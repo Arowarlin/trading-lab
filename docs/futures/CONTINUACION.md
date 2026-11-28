@@ -41,7 +41,7 @@ proxy.
    - definición matemática, entradas, salidas, costes, datos mínimos, potencia frente a μ\* y criterio de
      rechazo escrito antes;
    - usar la skill `hypothesis-preregistration`. **No registrar ni ejecutar nada.**
-3. **FUT-C0 · Especificación de Research A (order flow)**, en `docs/futures/research/RA_spec.md`:
+3. ✅ (2026-11-28) **FUT-C0 · Especificación de Research A (order flow)**, en `docs/futures/research/RA_spec.md`:
    - hipótesis A-J (absorción, barrido de liquidez, divergencia de delta, desequilibrios, ruptura y
      subasta fallidas, agotamiento, confirmación, expansión de volumen, recuperación de liquidez);
    - para cada una, el nivel de datos mínimo (L1 `trades`/`tbbo`, L2 `mbp-10`, L3 `mbo`), las
