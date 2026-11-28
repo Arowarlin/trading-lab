@@ -20,7 +20,7 @@ en una sesión, dice qué ficheros puede escribir y cuándo **PARAR**. Claude re
 | 5 | Datos de futuros | Arquitectura (`03 §3`); FUT-B1/B3 READY | OP-4 (compra) |
 | 6 | Motor EV de prop firms | **Especificado** (`04_SPEC_PROP_EV.md`); FUT-A READY tras OP-1 | tests T1-T14 verdes |
 | 7 | Research A (order flow) | BLOCKED por datos | OP-4 + FUT-C0 |
-| 8 | Research B (NY open) | **Especificada** (`research/RB_spec.md`); familia FUT-RB-1 de 6 pruebas en ES/GC; NQ solo forward | OP-4, OP-7, OP-8 → FUT-D2 |
+| 8 | Research B (NY open) | **Especificada** (`research/RB_spec.md`); familia FUT-RB-1 de 5 pruebas en ES/GC; NQ solo forward | OP-4, OP-7, OP-8 → FUT-D2 |
 | 9 | Multiplataforma (NT8 primero) | FUT-E1 (investigación) | matriz con "V" probadas en demo |
 | 10 | Integración y validación | — | — |
 

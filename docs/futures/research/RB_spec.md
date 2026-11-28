@@ -15,15 +15,15 @@ Dukascopy o MT5 entra en un cálculo, ni como sustituto ni como proxy.
 1. **Ocho hipótesis definidas** con reglas fijas y sin parámetros que ajustar: RB-01 a RB-08.
 2. **NQ/MNQ: solo forward.** El EA ya miró toda su historia (FUT-11). El forward NQF-A/B/C (desde el
    2026-11-30) ya cubre ORB, barrido ON y VWAP.
-3. **Familia primaria propuesta FUT-RB-1:** 6 pruebas únicas en **ES y GC**, M1 2010-06-07 →
-   2023-12-31, con Bonferroni α = 0,05/6.
+3. **Familia primaria propuesta FUT-RB-1:** 5 pruebas únicas en **ES y GC**, M1 2010-06-07 →
+   2023-12-31, con Bonferroni α = 0,05/5.
 4. **Bloqueos:**
    - no hay M1 de ES ni de GC (FUT-12): hace falta la compra OP-4, ampliada;
    - comisiones de MES y MGC: **Sin datos**;
    - partición del holdout de futuros: decisión nueva **OP-8**.
-5. **Potencia:** con unas 3.300 sesiones, la MDE es ≈ 0,068-0,084 R. La ventaja mínima útil provisional
+5. **Potencia:** con unas 3.300 sesiones, la MDE es ≈ 0,066-0,083 R. La ventaja mínima útil provisional
    es μ\* ≈ +0,08 R (`risk/01 §5`) y se sustituye por la de FUT-A7 cuando exista. Las hipótesis
-   condicionadas con menos de 2.356 eventos **no se registran**.
+   condicionadas con menos de 2.258 eventos **no se registran**.
 6. **Paso previo permitido sin aprobación de registro:** contar eventos sin desenlaces (FUT-D2), en
    cuanto haya datos.
 
@@ -87,8 +87,10 @@ Antes de registrar, la tarea FUT-D2 lo consulta en solo lectura.
 - **NQF-A/B/C:** forward de NQ desde el 2026-11-30. No tiene datos todavía, así que no contamina el
   histórico.
 - **Mismos subyacentes en CFD:** solo como etiqueta; esos datos **no se usan**.
-  - El subyacente del ES (US500) tuvo el impulso H1 de 9:00 a 10:00 con continuación hasta las 16:00,
-    con el IS de 2011-2023 leído (`reports/edge1_h1_ny_impulse.md`).
+  - El subyacente del ES (US500) tuvo **el EA completo** (ORB-retest, barridos ON/PD, VWAP ±2σ, FVG),
+    escalado por ATR, de 2017-12-28 a 2026-11-24 (`reports/ea/us100-ftmo1-fuera-de-instrumento.md`;
+    `03 §7`). También tuvo el impulso H1 de 9:00 a 10:00 con continuación hasta las 16:00, con el IS de
+    2011-2023 leído (`reports/edge1_h1_ny_impulse.md`).
   - El del NQ tuvo `orb_ny`, `trend_intraday`, `caja_ny` y `h1_orb`.
   - El del GC tuvo `h1_orb` (sesión NY), `overlap_breakout` y `asian_rev`, más `orb_5m`, `vwap_bounce`
     y `momentum_burst` en el forward de `ai_trader` (`src/tradinglab/intraday.py:71-81`,
@@ -96,14 +98,14 @@ Antes de registrar, la tarea FUT-D2 lo consulta en solo lectura.
 
 | Hipótesis | NQ/MNQ | ES/MES | GC/MGC |
 |---|---|---|---|
-| RB-01 ORB 15 min | contaminada | parcial (NQ) | parcial (`h1_orb`, `orb_5m`) |
-| RB-02 Opening drive | contaminada (ventana 9:35 y ORB del EA) | parcial (impulso H1 → 16:00) | **limpia** |
-| RB-03 VWAP reclaim | contaminada (VWAP ±2σ; NQF-C) | parcial (NQ) | parcial (`vwap_bounce`) |
-| RB-04 Barrido ON y vuelta | contaminada (`use_on`; NQF-B) | parcial (NQ) | **limpia** (vecina: `asian_rev`) |
-| RB-05 ORB fallido | contaminada (complemento del ORB) | parcial | parcial |
+| RB-01 ORB 15 min | contaminada | contaminada (EA en el subyacente, 2017-12 → 2026-11) | parcial (`h1_orb`, `orb_5m`) |
+| RB-02 Opening drive | contaminada (ventana 9:35 y ORB del EA) | parcial (ventana del EA; impulso H1 → 16:00) | **limpia** |
+| RB-03 VWAP reclaim | contaminada (VWAP ±2σ; NQF-C) | contaminada (VWAP ±2σ del EA) | parcial (`vwap_bounce`) |
+| RB-04 Barrido ON y vuelta | contaminada (`use_on`; NQF-B) | contaminada (`use_on` del EA) | **limpia** (vecina: `asian_rev`) |
+| RB-05 ORB fallido | contaminada (complemento del ORB) | contaminada | parcial |
 | RB-06 IB estrecho → expansión | contaminada (`h1_orb` con filtro ATR) | parcial (NQ) | contaminada (`h1_orb` NY) |
 | RB-07 Momentum intradía (primera media hora → última) | parcial (`trend_intraday`) | parcial (impulso H1) | limpia, **mecanismo débil** |
-| RB-08 Reversión del hueco de apertura | parcial (niveles PD del EA) | **limpia** | no aplica (el oro cotiza de noche sin hueco de apertura) |
+| RB-08 Reversión del hueco de apertura | parcial (niveles PD del EA) | parcial (ventana del EA) | no aplica (el oro cotiza de noche sin hueco de apertura) |
 
 El veredicto de una prueba `parcial` siempre se publica con su etiqueta. Nunca se cita como "limpia".
 
@@ -191,7 +193,7 @@ Formato de cada ficha:
   - salida a las 15:55.
 - **Decisión:** **no se registra**:
   - es la lógica más minada, dentro y fuera del laboratorio;
-  - en ES y GC es `parcial`;
+  - en ES está `contaminada` y en GC es `parcial`;
   - en NQ la cubre NQF-A en forward.
 
 ### RB-02 · Opening drive
@@ -220,7 +222,7 @@ Formato de cada ficha:
   - salida a las 15:55.
 - **Decisión:** **no se registra**:
   - el mecanismo es débil;
-  - en NQ y GC está `contaminada` o es `parcial`;
+  - en NQ y ES está `contaminada`, y en GC es `parcial`;
   - su complemento (el rechazo) tampoco se registra.
 
 ### RB-04 · Barrido del rango nocturno y vuelta (sweep & reject)
@@ -239,10 +241,8 @@ Formato de cada ficha:
   - salida por tiempo a las 15:55.
 - **Regla, GC:** la misma con ON hasta las 8:19, ventana 8:20-11:29 y salida a las 13:25.
 - **Eventos:** condicionados; **Sin datos** hasta el conteo.
-- **Decisión:** **familia primaria**:
-  - GC, `limpia`;
-  - ES, `parcial`.
-  - Entra solo si el conteo da n ≥ 2.356 (§7).
+- **Decisión:** **familia primaria solo en GC** (`limpia`), si el conteo da n ≥ 2.258 (§7). En ES no
+  se registra: el EA ya aplicó `use_on` a su subyacente.
 - **Diferencia con NQF-B:** NQF-B usa velas M5, un barrido de ≥ 2 ticks, 3 velas y objetivo en el VWAP.
   No se comparan entre sí porque son instrumentos distintos.
 
@@ -296,7 +296,7 @@ Formato de cada ficha:
   - stop a `|g|` de la entrada;
   - salida por tiempo al cierre de las 11:29.
 - **Eventos:** condicionados; **Sin datos** hasta el conteo.
-- **Decisión:** **familia primaria** en ES (`limpia`), si n ≥ 2.356.
+- **Decisión:** **familia primaria** en ES (`parcial`), si n ≥ 2.258.
 
 ## 7. Potencia frente a la ventaja mínima útil
 
@@ -304,13 +304,13 @@ Formato de cada ficha:
 - σ supuesta = 1,5 R. Es conservadora: las reglas con salida por tiempo no tienen techo.
 - 1,2 R se da como referencia para las reglas con objetivo.
 
-| n eventos | K = 6, σ = 1,2 | K = 6, σ = 1,4 | K = 6, σ = 1,5 |
+| n eventos | K = 5, σ = 1,2 | K = 5, σ = 1,4 | K = 5, σ = 1,5 |
 |---:|---:|---:|---:|
-| 200 (forward de un año) | 0,275 R | 0,320 R | 0,343 R |
-| 1.000 | 0,123 R | 0,143 R | 0,153 R |
-| 1.650 (≈ 50 % de las sesiones) | 0,096 R | 0,112 R | 0,119 R |
-| 2.640 | 0,076 R | 0,088 R | 0,094 R |
-| 3.300 (≈ todas las sesiones 2010-06 → 2023-12) | **0,068 R** | 0,079 R | **0,084 R** |
+| 200 (forward de un año) | 0,269 R | 0,314 R | 0,336 R |
+| 1.000 | 0,120 R | 0,140 R | 0,150 R |
+| 1.650 (≈ 50 % de las sesiones) | 0,094 R | 0,109 R | 0,117 R |
+| 2.640 | 0,074 R | 0,086 R | 0,092 R |
+| 3.300 (≈ todas las sesiones 2010-06 → 2023-12) | **0,066 R** | 0,077 R | **0,083 R** |
 
 **Ventaja mínima útil:**
 - Provisional: μ\* ≈ **+0,08 R** neta, según la regla de `risk/01 §5`. Es la primera fila que justifica
@@ -318,7 +318,7 @@ Formato de cada ficha:
 - Se sustituye por el μ\* de FUT-A7 por programa en cuanto exista.
 
 **Reglas de potencia (fijadas aquí):**
-- **n mínimo para registrar** = 2.356, el n con el que la MDE es ≤ 0,10 R con σ = 1,5 y K = 6. Las
+- **n mínimo para registrar** = 2.258, el n con el que la MDE es ≤ 0,10 R con σ = 1,5 y K = 5. Las
   hipótesis condicionadas (RB-04, RB-08) que no lleguen, **no se registran**.
 - **"Rechazada" no descarta una ventaja útil** si la MDE de su n es mayor que 0,08 R. El informe lo
   escribe.
@@ -331,14 +331,13 @@ Formato de cada ficha:
 |---|---|---|---|---|
 | 1 | RB-02 Opening drive | ES (costes MES) | parcial | ≈ 3.300 |
 | 2 | RB-02 Opening drive | GC (costes MGC) | limpia | ≈ 3.300 |
-| 3 | RB-04 Barrido ON y vuelta | ES | parcial | conteo |
-| 4 | RB-04 Barrido ON y vuelta | GC | limpia | conteo |
-| 5 | RB-07 Momentum intradía | ES | parcial | ≈ 3.300 |
-| 6 | RB-08 Reversión del hueco | ES | limpia | conteo |
+| 3 | RB-04 Barrido ON y vuelta | GC | limpia | conteo |
+| 4 | RB-07 Momentum intradía | ES | parcial | ≈ 3.300 |
+| 5 | RB-08 Reversión del hueco | ES | parcial | conteo |
 
-- **K** es el número de pruebas que pasan las condiciones D-1…D-4 y el n mínimo, con **K ≤ 6**.
+- **K** es el número de pruebas que pasan las condiciones D-1…D-4 y el n mínimo, con **K ≤ 5**.
   - Se fija **al registrar**, antes de calcular ningún desenlace.
-  - α = 0,05/K; con K = 6, el t crítico es 2,394.
+  - α = 0,05/K; con K = 5, el t crítico es 2,326.
 - **IDs:**
   - campaña `FUT-RB-1`;
   - hipótesis `H-2026-NNN`, asignadas al registrar;
@@ -349,7 +348,7 @@ eventos (uno por sesión). Unilateral.
 
 | Criterio | Regla | Si falla |
 |---|---|---|
-| (a) | t ≥ t crítico de Bonferroni (2,394 con K = 6) | **rechazada** |
+| (a) | t ≥ t crítico de Bonferroni (2,326 con K = 5) | **rechazada** |
 | (b) | Media de `R_net` con 2 ticks por lado > 0 | **rechazada por costes** |
 | (c) | Mismo signo de la media en 2010-06-07 → 2016-12-31 y en 2017-01-01 → 2023-12-31 | **inconclusa** |
 | (d) informativo | Media ≥ μ\* (0,08 R provisional) | "candidata, no monetizable todavía en prop" |
