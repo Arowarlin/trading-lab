@@ -93,3 +93,17 @@ entregas de OpenCode.
 
 Tras FUT-D1 (dependencias) y los tests de hooks y catálogo, 2026-11-27: **2224 passed, 22 skipped,
 2 deselected, 0 failed** en 28:11 (+61 tests nuevos).
+
+2026-11-28, tras implementar el motor EV, ORPAE, PFIE y ejecución:
+- **Suite completa del repositorio:** `pytest -q -m "not network and not mt5 and not lmstudio and not
+  alpaca and not credentials"` (Linux, Python 3.13) → **2336 passed, 22 skipped, 2 deselected,
+  0 failed** en 34:30. Esa ejecución empezó antes de los últimos tests de futuros.
+- **Tests de futuros juntos,** incluidos los posteriores: `tests/test_prop_economics_*.py`,
+  `tests/test_futures_*.py`, hooks y catálogo → **293 passed** (sin los 8 `slow` de precisión T1-T7,
+  que pasan aparte en ~3 min).
+- **Test del endpoint web** (`tests/test_web_futures_economics.py`, marcado `network` por usar
+  loopback): pasa.
+- **`ruff`:** limpio en todo lo tocado.
+- **`lab doctor` en el contenedor:** FAIL en «Reloj» (no hay NTP ni MT5) y en «Frescura» (no hay datos
+  locales), los dos del entorno. Hay que repetirlo en el equipo del operador.
+
