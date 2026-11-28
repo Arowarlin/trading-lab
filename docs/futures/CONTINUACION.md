@@ -11,6 +11,11 @@ resetee". Siguen vigentes sin excepción:
 - **Rol:** Claude investiga, especifica y revisa. OpenCode implementa el código de producción con
   DeepSeek V4.1 Flash.
 
+**Decisiones del operador (2026-11-28):** "todo lo que no sea futuros, en segundo plano" y "no ligues la
+data: solo futuros". No se empieza trabajo nuevo fuera de futuros (CFD, FX/C1, EA, `ai_trader`) y la
+investigación de futuros usa **solo datos de futuros CME**: nada de CFD, Dukascopy ni MT5 como datos o
+proxy.
+
 ## Estado al cierre de la sesión 1
 
 | Hecho | Dónde |
@@ -23,12 +28,12 @@ resetee". Siguen vigentes sin excepción:
 
 ## Siguiente, en este orden (un commit + push por paso)
 
-1. **Cola de OpenCode al día** (`docs/futures/05_COLA_Y_ROADMAP.md`):
+1. ✅ (2026-11-28, `c56b698`) **Cola de OpenCode al día** (`docs/futures/05_COLA_Y_ROADMAP.md`):
    - añadir FUT-O1..O6 (`risk/02_ORPAE_DISENO.md`), FUT-P1..P6 (PFIE) y FUT-M1..M3 (módulos), con estado
      y dependencias;
    - prompts pegables para **FUT-A3** (motor de una cuenta en evaluación) y **FUT-A5** (tarifas y
      bankroll), formato §4 y vectores T8, T10, T11, T12 y T13 de `04_SPEC_PROP_EV.md`.
-2. **FUT-D0 · Especificación de Research B (NY open)**, en `docs/futures/research/RB_spec.md`:
+2. ✅ (2026-11-28) **FUT-D0 · Especificación de Research B (NY open)**, en `docs/futures/research/RB_spec.md`:
    - hipótesis ORB, opening drive, VWAP reclaim/rejection, ON/PD high-low, failed breakout,
      IB/volatilidad, continuación y reversión;
    - etiqueta de contaminación por hipótesis e instrumento (FUT-11: NQ 2010-2026 contaminado para la

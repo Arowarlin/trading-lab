@@ -20,7 +20,7 @@ en una sesión, dice qué ficheros puede escribir y cuándo **PARAR**. Claude re
 | 5 | Datos de futuros | Arquitectura (`03 §3`); FUT-B1/B3 READY | OP-4 (compra) |
 | 6 | Motor EV de prop firms | **Especificado** (`04_SPEC_PROP_EV.md`); FUT-A READY tras OP-1 | tests T1-T14 verdes |
 | 7 | Research A (order flow) | BLOCKED por datos | OP-4 + FUT-C0 |
-| 8 | Research B (NY open) | FUT-D0 (especificación) | contaminación resuelta por hipótesis |
+| 8 | Research B (NY open) | **Especificada** (`research/RB_spec.md`); familia FUT-RB-1 de 6 pruebas en ES/GC; NQ solo forward | OP-4, OP-7, OP-8 → FUT-D2 |
 | 9 | Multiplataforma (NT8 primero) | FUT-E1 (investigación) | matriz con "V" probadas en demo |
 | 10 | Integración y validación | — | — |
 
@@ -35,10 +35,11 @@ en una sesión, dice qué ficheros puede escribir y cuándo **PARAR**. Claude re
 | **OP-1** | Aprobar la arquitectura y los ADR-F01…F10 (`03_ARQUITECTURA_FUTURES.md §8`) | FUT-A1…A9 | Sí |
 | **OP-2** | Dependencias: añadir `hypothesis` y `pytest-cov` (dev), declarar `scipy`, quitar `alpaca-py` (sin uso) | FUT-A9, cobertura | Sí |
 | **OP-3** | Plugins: `context7` y `pyright-lsp` (`02 §3`) | — | Sí, solo esos dos |
-| **OP-4** | Compra de datos de Databento (tras FUT-B1, con el coste exacto) | FUT-B2, Research A, Research B en ES/GC | Empezar por `trades` + `definition` de MNQ/NQ |
+| **OP-4** | Compra de datos de Databento (tras FUT-B1, con el coste exacto) | FUT-B2, Research A, Research B en ES/GC | Empezar por `trades` + `definition` de MNQ/NQ. Para Research B: `ohlcv-1m` + `definition` de ES y GC, 2010-06 → 2026-11 (`research/RB_spec.md §2`) |
 | **OP-5** | Crear `.claude/` del proyecto (hooks de §7, 9 skills, 7 agentes) | FUT-T1 | Sí; los hooks primero |
 | **OP-6** | Venv aparte para Nautilus/hftbacktest y datos de muestra para los PoC | FUT-X1…X3 | Después de FUT-A6 |
-| **OP-7** | Confirmar si los 0,75 USD/lado de MNQ incluyen exchange, clearing y NFA | costes de futuros (FUT-03) | — |
+| **OP-7** | Confirmar si los 0,75 USD/lado de MNQ incluyen exchange, clearing y NFA; fijar la comisión por lado de MES y MGC | costes de futuros (FUT-03), FUT-RB-1 | — |
+| **OP-8** | Partición de futuros: muestra única 2010-06-07 → 2023-12-31; OOS-2 de futuros 2024-01-01 → 2026-11-20 sellado (`research/RB_spec.md §2`) | FUT-D2, FUT-RB-1 | Sí: la misma fecha de sello que el resto del laboratorio |
 
 ## 3. Cola
 
@@ -65,7 +66,7 @@ la línea de FUT-A8, que se coordina con el lock `cli-py`.
 | FUT-R1 | Reglas oficiales vigentes de Topstep, Apex, TradeDay, MyFundedFutures, Take Profit Trader y Earn2Trade (tarifas, drawdown, payouts, automatización) | **Claude** | **PARCIAL** (2026-11-27): Topstep `verified`; MFF/TradeDay/TPT `parcial`; Apex y Earn2Trade bloqueadas (403) | — | `docs/futures/research/prop_firms_2026-12.md` + YAML de programas | cada valor con URL y fecha; discrepancias marcadas | — |
 | FUT-E1 | Matriz de plataformas con documentación oficial (NT8, Tradovate, ProjectX) | **Claude** | **READY** | — | `03_ARQUITECTURA_FUTURES.md §6` | estados V/PV/NA/NI/RL/RC con fuente | — |
 | FUT-C0 | Especificación de Research A (hipótesis A-J con definición matemática, datos mínimos, costes, criterio de rechazo) | **Claude** | READY | — | `docs/futures/research/RA_spec.md` | cada hipótesis con nivel de datos de `03 §3.1` | — |
-| FUT-D0 | Especificación de Research B con clasificación de contaminación por hipótesis e instrumento | **Claude** | READY | — | `docs/futures/research/RB_spec.md` | ninguna hipótesis NQ sin su etiqueta | — |
+| FUT-D0 | Especificación de Research B con clasificación de contaminación por hipótesis e instrumento | **Claude** | **COMPLETED** (2026-11-28) | — | `docs/futures/research/RB_spec.md` | ninguna hipótesis NQ sin su etiqueta | — |
 | FUT-J0 | Contrato de ejecución y riesgo (`OrderIntent`, `RiskCheck`, ticket) | **Claude** | BACKLOG | E1 | `docs/futures/research/execution_spec.md` | — | — |
 | FUT-H0 | Modelo de dominio del dashboard (realizado vs simulado) | **Claude** | BACKLOG | A8 | `docs/futures/research/dashboard_model.md` | — | — |
 | FUT-T1a | Hooks de `AGENTS.md` y plugins `context7` + `pyright-lsp` (alcance de proyecto) | Claude | **COMPLETED** (2026-11-27) | — | `.claude/settings.json`, `.claude/hooks/run.sh`, `.claude/hooks/tl_guard.py`, `tests/test_claude_hooks.py` | 61 tests verdes; hooks probados en vivo (Bash y ruff) | quitar la clave `hooks` / `claude plugin uninstall … --scope project` |
@@ -78,7 +79,9 @@ la línea de FUT-A8, que se coordina con el lock `cli-py`.
 | FUT-O1…O6 | Optimal Risk & Payout Allocation Engine (`risk/02_ORPAE_DISENO.md §4`) | OpenCode | BACKLOG | A6 | `src/tradinglab/prop_economics/{stats,sizing_diag,policies,allocate,portfolio,report}.py` | cifras de `risk/01` ±2 SE | `git revert` |
 | FUT-M1…M3 | Políticas de ratio negativo y positivo y frontera EV-ruina (`risk/modulos/`) | OpenCode | BACKLOG | O3 | `prop_economics/policies.py` | reproducir MOD-NR §4 y MOD-PR §4 y §6 | `git revert` |
 | FUT-P1…P6 | Prop Firm Intelligence Engine (`research/propfirms_2026-11/12_…`) | OpenCode | BACKLOG | A1 | `prop_economics/{registry,sources,compat,scoring,alerts}` | sin descargas de webs que lo prohíben | `git revert` |
-| FUT-D0 / FUT-C0 / FUT-E1 | Especificaciones de Research B, Research A y matriz de plataformas | **Claude** | READY (sesión 2, `CONTINUACION.md`) | — | `docs/futures/research/` | criterios de cada especificación | — |
+| FUT-C0 / FUT-E1 | Especificación de Research A y matriz de plataformas | **Claude** | READY (sesión 2, `CONTINUACION.md`) | — | `docs/futures/research/` | criterios de cada especificación | — |
+| FUT-D2 | Conteo de eventos RB **sin desenlaces** y consulta de contaminación en `lab.db` (`mode=ro`) | OpenCode en el equipo del operador | BLOCKED (OP-4, OP-8) | FUT-B2 | `scripts/futures_rb_count.py` (nuevo), test; `docs/futures/evidencia/rb_conteo.md` | `RB_spec.md §10`: sin columnas de desenlace; nada ≥ 2024-01-01 | `git revert` |
+| FUT-D3 | Evaluador único de FUT-RB-1 (`R_net` una sola vez, criterios §8) | OpenCode | BLOCKED (registro de FUT-RB-1 por el operador) | D2 | `src/tradinglab/futures/research_b.py`, tests | vectores sintéticos de `RB_spec.md §10` | `git revert` |
 
 **Estimación** (sesiones de OpenCode, **Estimado**): A1-A2 1 cada una; A3-A4 2; A5 1; A6 2; A7 1; A8 2;
 A9 1 → ~12 sesiones para el motor EV completo. B1 y B3: 1 cada una.
