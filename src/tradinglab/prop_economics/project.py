@@ -314,6 +314,7 @@ def simulate_project(program: Program, pool: list[DayPath], cfg: ProjectConfig, 
     locked = rules.lock_after_first_payout and rules.lock_value is not None
     horizon_last = {h: int(np.searchsorted(offsets, h, side="left")) - 1 for h in cfg.horizons_days}
     snaps: dict[int, dict] = {}
+    net_paths: dict[int, np.ndarray] = {}
 
     def rebuy(mask: np.ndarray, t: int) -> None:
         nonlocal phase, eb, epe, epi, eth, ebest, etd, edays, estart, echarges, fees_sum, bought, ruin_t
@@ -455,11 +456,12 @@ def simulate_project(program: Program, pool: list[DayPath], cfg: ProjectConfig, 
         for h, last in horizon_last.items():
             if last == t:
                 net = recv_sum - fees_sum
+                net_paths[h] = net.copy()
                 snaps[h] = _metrics(net, recv_cnt, fees_sum, bought, passed_n, evals_lost, funded_lost, requested,
                                     ruin_t, max_out, t)
                 snaps[h]["to_live"] = float(to_live_n.mean())
 
-    return {"horizons": snaps, "n_paths": n_paths, "n_sessions": n_days, "idx": idx,
+    return {"horizons": snaps, "net_paths": net_paths, "n_paths": n_paths, "n_sessions": n_days, "idx": idx,
             "per_path": {"fees": fees_sum, "received": recv_sum, "received_n": recv_cnt, "bought": bought,
                          "passed": passed_n, "evals_lost": evals_lost, "funded_lost": funded_lost,
                          "requested": requested, "phase": phase, "ruin_t": ruin_t, "to_live": to_live_n}}
