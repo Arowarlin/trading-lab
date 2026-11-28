@@ -17,6 +17,7 @@
 ## Ficheros
 
 - `docs/futures/WORKER_REPORTS/FUT-V0.md` (este informe). No se ha escrito código ni se ha modificado ningún otro fichero del repo.
+- Nota: los cuatro ficheros sin seguimiento de `docs/futures/evidencia/` que aparecieron durante S1 **no los ha creado esta sesión** (ver Aviso de coordinación).
 
 ## Salidas literales
 
@@ -122,6 +123,11 @@ fuente: docs/futures/research/propfirms_2026-11/00_INFORME_10_FIRMAS.md
 
 ## Aviso
 
+- **Sesión concurrente en el mismo worktree (coordinación).** Mientras corría S1 se detectó:
+  - `claude.exe` PID 28540 (Claude Code, modelo Opus 5.5) con `--add-dir=E:\tl-fut-s`, activo desde las 10:10.
+  - Su propio `pytest` PID 7644 (`E:\tl-fut-s\.venv\Scripts\python.exe -m pytest -q -p no:cacheprovider -m ...`), lanzado a las 10:11 y todavía en marcha al redactar esto.
+  - Ese proceso escribió `docs/futures/evidencia/databento_costes_2026-11.{json,md}` (10:21:56) y `manifest_futuros.jsonl/.md` (10:22:00), con el `--data-dir E:\trading-lab\data\cache\databento` de S3.
+  - Esta sesión **no ha tocado, movido ni commiteado** esos cuatro ficheros. Hay dos pytest simultáneos sobre el mismo árbol, lo que además puede contaminar el resultado. Se para por coordinación hasta que el operador decida qué sesión sigue.
 - **3 tests en rojo; no se han corregido** (S1 ordena parar):
   1. `tests/test_claude_hooks.py::test_runner_end_to_end`: `bash` recibe `E:\tl-fut-s\.claude\hooks\run.sh` y MSYS lo convierte en `E:tl-fut-s.claudehooksrun.sh`; el proceso sale 127. Es un problema de rutas Windows/Git Bash, no del código de negocio.
   2. `tests/test_console_shell.py::test_barra_lateral_con_secciones_y_todas_las_vistas`: el HTML tiene la vista `futecon` (`src/tradinglab/webui/index.html`) y el conjunto esperado del test no la incluye.
@@ -132,4 +138,7 @@ fuente: docs/futures/research/propfirms_2026-11/00_INFORME_10_FIRMAS.md
 
 ## Siguiente
 
-- **PARADA de la cadena S.** El operador/Claude decide qué hacer con los 3 fallos (los dos de `futecon` parecen un test desactualizado; el de `bash` es de entorno Windows). No se lanza S2 hasta indicación expresa.
+- **PARADA de la cadena S** por dos motivos:
+  1. Los 3 fallos de pytest (los dos de `futecon` parecen un test desactualizado; el de `bash` es de entorno Windows).
+  2. La sesión Claude Code concurrente en el mismo worktree; hay que decidir cuál sigue para no pisar ficheros ni commits.
+- No se lanza S2 hasta indicación expresa del operador.
