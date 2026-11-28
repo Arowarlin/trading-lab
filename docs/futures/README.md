@@ -39,6 +39,8 @@ Research, Claude Code Extensions & Engineering Orchestration Prompt", del operad
 | R | `research/platform_matrix.md` | NinjaTrader 8, Tradovate y ProjectX con documentación oficial y términos de acceso | hecho (FUT-E1) |
 | R | `research/programs/` | Borradores YAML de MFF Rapid 50K y Lucid Flex 50K | borrador (FUT-A10 los lleva a `config/`) |
 | K | `risk/` | Auditoría de riesgo, Kelly, ruina, 6 perfiles a 6/12/24 meses, ORPAE, módulos MOD-NR/MOD-PR, simuladores | hecho (FUT-RISK) |
+| K | `risk/03_COMPARACION_PROGRAMAS.md` | Topstep frente a MFF Rapid frente a Lucid Flex con la misma estrategia hipotética; precio de equilibrio de Lucid | hecho (2026-11-28) |
+| R | `research/execution_spec.md` | Contrato `OrderIntent` → `RiskCheck` (R01-R16) → adaptador o ticket semimanual, con vectores V1-V16 | especificación (FUT-J0) |
 | C | `../../config/prop_economics/firms_futures.yaml` | Catálogo de 10 firmas por bots y modo de ejecución | hecho (FUT-R2) |
 
 ## Informes que el encargo pide y dónde están

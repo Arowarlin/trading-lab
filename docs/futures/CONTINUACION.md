@@ -67,7 +67,7 @@ que falte.
    - adaptadores NT8 (no gestionado), ProjectX (dry-run existente) y ticket semimanual;
    - vectores de prueba exactos para OpenCode.
    - Base: `research/platform_matrix.md §2`.
-8. **Comparación de programas con el simulador de riesgo:** Topstep 50K frente a MFF Rapid 50K frente a
+8. ✅ (2026-11-28, `risk/03_COMPARACION_PROGRAMAS.md`) **Comparación de programas con el simulador de riesgo:** Topstep 50K frente a MFF Rapid 50K frente a
    Lucid Flex 50K.
    - Ventajas **hipotéticas**, las mismas políticas y 6/12/24 meses.
    - Los precios de Lucid son Sin datos: se informa del EV por **precio de equilibrio** (la tarifa
