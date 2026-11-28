@@ -112,3 +112,10 @@ def test_cli_watch_and_ranking():
     assert r.exit_code == 0 and "rules_expired" in r.output
     r = runner.invoke(app, ["ranking"])
     assert r.exit_code == 0 and "myfundedfutures" in r.output and "3.55" in r.output
+
+
+def test_synthetic_pool_edge_is_exactly_nominal():
+    from tradinglab.prop_economics.scenarios import pool_stats
+    for seed in (1, 13, 99):
+        st = pool_stats(synthetic_pool(mu_gross_r=0.13, rr=1.5, risk_usd=50.0, cost_rt=2.22, n_days=1000, seed=seed))
+        assert abs(st["mean_net"] - (0.13 * 50 - 2.22)) < 0.07     # solo el redondeo de p·n
