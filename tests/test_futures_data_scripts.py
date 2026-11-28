@@ -53,3 +53,22 @@ def test_manifest_on_synthetic_parquet(tmp_path, monkeypatch):
     assert row["first_utc"].startswith("2020-01-01T00:00")
     assert len(row["sha256"]) == 64
     assert json.dumps(row)
+
+
+def test_manifest_accepts_data_outside_repo(tmp_path, monkeypatch):
+    """FUT-B3: los parquet viven en otro worktree (E:\\trading-lab) y el script corre en E:\\tl-fut-s."""
+    man = _load("futures_manifest")
+    repo, other = tmp_path / "repo", tmp_path / "otro" / "data"
+    repo.mkdir()
+    other.mkdir(parents=True)
+    pd.DataFrame({"ts_event": pd.date_range("2020-01-01", periods=2, freq="h", tz="UTC")}).to_parquet(
+        other / "XAUUSD_M1.parquet")
+    monkeypatch.setattr(man, "ROOT", repo)
+    row = man.describe(other / "XAUUSD_M1.parquet")
+    assert row["path"] == (other / "XAUUSD_M1.parquet").resolve().as_posix()
+    assert (row["databento_root"], row["timeframe"], row["rows"]) == ("GC", "M1", 2)
+    inside = repo / "data"
+    inside.mkdir()
+    pd.DataFrame({"ts_event": pd.date_range("2020-01-01", periods=1, freq="h", tz="UTC")}).to_parquet(
+        inside / "US100_H1.parquet")
+    assert man.describe(inside / "US100_H1.parquet")["path"] == "data/US100_H1.parquet"

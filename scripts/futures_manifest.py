@@ -29,6 +29,15 @@ def sha256(path: Path) -> str:
     return h.hexdigest()
 
 
+def _display(path: Path) -> str:
+    """Ruta relativa al repo si el fichero está dentro; si no (otro worktree, otro disco), la absoluta."""
+    path = path.resolve()
+    try:
+        return path.relative_to(ROOT.resolve()).as_posix()
+    except ValueError:
+        return path.as_posix()
+
+
 def describe(path: Path) -> dict:
     import pandas as pd
 
@@ -43,7 +52,7 @@ def describe(path: Path) -> dict:
     m = re.match(r"(?P<sym>[A-Z0-9]+)_(?P<tf>[A-Z0-9]+)\.parquet$", path.name)
     internal = m.group("sym") if m else None
     return {
-        "path": path.relative_to(ROOT).as_posix(), "bytes": path.stat().st_size, "sha256": sha256(path),
+        "path": _display(path), "bytes": path.stat().st_size, "sha256": sha256(path),
         "rows": int(len(frame)),
         "first_utc": None if ts is None or len(ts) == 0 else ts.min().isoformat(),
         "last_utc": None if ts is None or len(ts) == 0 else ts.max().isoformat(),
