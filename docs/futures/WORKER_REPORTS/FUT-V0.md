@@ -1,144 +1,31 @@
-# FUT-V0 · Verificación en Windows
+﻿# FUT-V0 · Verificación en Windows
 
-- **Fecha:** 2026-11-28
-- **Rama:** `claude/vibrant-mayer-r46s0o` (`f837d4d`)
-- **Worktree:** `E:\tl-fut-s` (el árbol principal `E:\trading-lab` no se ha tocado)
-- **Modelo:** DeepSeek V4.1 Flash
+**Ejecutado:** 2026-11-28 por Claude (sesión local), `E:\tl-fut-s`, rama `claude/vibrant-mayer-r46s0o`
+(al día con origin, sin cambios locales).
 
-## Hecho
+## Salidas
 
-1. Worktree creado desde `origin/claude/vibrant-mayer-r46s0o`; árbol limpio antes de empezar.
-2. `uv sync --frozen --extra dev --extra discovery` → venv propio en `E:\tl-fut-s\.venv` (CPython 3.12.16, 93 paquetes).
-3. `ruff check .` → sin errores.
-4. `pytest -q -m "not network and not mt5 and not lmstudio and not alpaca and not credentials"` → **3 fallos, 2466 pasados** (34 min 22 s).
-5. `lab doctor` → **FAIL solo en Frescura** (esperado: los datos viven en `E:\trading-lab\data` y no se han copiado). WARN en Telegram remoto, carpeta `logs`, vendors `TradingAgents`/`Trading-R1`, Deep LLM, MetaTrader5 (x2) y reglas de fondeo.
-6. `lab propecon programs --today 2026-12-01` y `lab propecon ranking` → OK (tablas abajo).
+- `uv sync --frozen --extra dev --extra discovery`: Checked 93 packages.
+- `ruff check .`: All checks passed!
+- `pytest -q -m "not network and not mt5 and not lmstudio and not alpaca and not credentials"`:
+  `3 failed, 2467 passed, 17 skipped, 3 deselected, 1 warning in 2058.22s (0:34:18)`
+- `lab doctor` (FAIL/WARN): Frescura FAIL (17/17, EURUSD H1 sin datos en el worktree); WARN: Telegram remoto,
+  Carpeta logs, TradingAgents, Trading-R1, Deep LLM, MetaTrader 5, Riesgo abierto, Reglas fondeo.
+- `lab propecon programs --today 2026-12-01`: 5 programas, ninguno caducado.
+- `lab propecon ranking`: MFF Rapid 3.55, Tradeify 3.45, TradeDay 3.00, Topstep 2.85, Alpha 2.80
+  (Lucid 4.11 y Bulenox 3.06 provisionales).
 
-## Ficheros
+## Fallos (no arreglados, según el prompt)
 
-- `docs/futures/WORKER_REPORTS/FUT-V0.md` (este informe). No se ha escrito código ni se ha modificado ningún otro fichero del repo.
-- Nota: los cuatro ficheros sin seguimiento de `docs/futures/evidencia/` que aparecieron durante S1 **no los ha creado esta sesión** (ver Aviso de coordinación).
-
-## Salidas literales
-
-### `ruff check .`
-
-```text
-All checks passed!
-```
-
-### `pytest`
-
-Última línea literal:
-
-```text
-3 failed, 2466 passed, 18 skipped, 3 deselected, 1 warning in 2062.09s (0:34:22)
-```
-
-Fallos, literales:
-
-```text
-=========================== short test summary info ===========================
-FAILED tests/test_claude_hooks.py::test_runner_end_to_end - AssertionError: a...
-FAILED tests/test_console_shell.py::test_barra_lateral_con_secciones_y_todas_las_vistas
-FAILED tests/test_console_shell.py::test_inventario_ui_base_sigue_completo - ...
-3 failed, 2466 passed, 18 skipped, 3 deselected, 1 warning in 2062.09s (0:34:22)
-```
-
-```text
-___________________________ test_runner_end_to_end ____________________________
-E       AssertionError: assert 127 == 0
-E        +  where 127 = CompletedProcess(args=['bash', 'E:\\tl-fut-s\\.claude\\hooks\\run.sh', 'bash'], returncode=127, stdout='', stderr='/bin/bash: E:tl-fut-s.claudehooksrun.sh: No such file or directory\n').returncode
-```
-
-```text
-_____________ test_barra_lateral_con_secciones_y_todas_las_vistas _____________
-E       AssertionError: assert {'accounts', ...cisions', ...} == {'accounts', ...cisions', ...}
-E
-E         Extra items in the left set:
-E         'futecon'
-E         Use -v to get more diff
-```
-
-```text
-___________________ test_inventario_ui_base_sigue_completo ____________________
-E       AssertionError: assert {'accounts', ...cisions', ...} == {'accounts', ...cisions', ...}
-E
-E         Extra items in the left set:
-E         'futecon'
-E         Use -v to get more diff
-```
-
-### `lab doctor` (solo filas FAIL y WARN)
-
-```text
-| Frescura          | FAIL   | 17/17 fallan ? EURUSD H1 (sin datos), EURUSD   |
-|                   |        | H4 (sin datos), EURUSD M15 (sin datos), GBPUSD |
-|                   |        | H1 (sin datos)                                 |
-| Telegram remoto   | WARN   | sin configurar                                 |
-| Carpeta logs      | WARN   | E:\tl-fut-s\logs                               |
-| TradingAgents     | WARN   | E:\tl-fut-s\vendor\TradingAgents               |
-| Trading-R1        | WARN   | E:\tl-fut-s\vendor\Trading-R1                  |
-| Deep LLM          | WARN   | sin configurar: el deep se corre bajo demanda  |
-| MetaTrader 5      | WARN   | Falta el paquete MetaTrader5. Instálalo con:   |
-|                   |        | uv pip install MetaTrader5                     |
-| Riesgo abierto    | WARN   | Falta el paquete MetaTrader5. Instálalo con:   |
-|                   |        | uv pip install MetaTrader5                     |
-| Reglas fondeo     | WARN   | plantilla FTMO en config/prop.yaml: límites    |
-|                   |        | contrastados con el directorio público         |
-|                   |        | (verified_source), no con tu contrato; aviso   |
-|                   |        | aceptable hasta verificarlo: el guard usa el   |
-|                   |        | lado conservador (equity + colchón)            |
-```
-
-### `lab propecon programs --today 2026-12-01`
-
-```text
-programa                  | versión    | consultado | caducado | incógnitas
-lucid_flex_50k            | 2026-11-2… | 2026-11-27 | no       | fees.consistency_addon, fees.data_platform_monthly, fees.evaluation, fees.reset, phases.funded.inactivity_close_days, phases.funded.max_accounts, phases.funded.payout.max_fraction_of_balance
-myfundedfutures_rapid_50k | 2026-11-2… | 2026-11-27 | no       | fees.reset, phases.funded.max_contracts, phases.funded.max_loss, phases.funded.payout.cap_per_payout, phases.funded.payout.max_fraction_of_balance, phases.funded.payout.processing_days, phases.funded.scaling_plan
-synthetic_static          | 2026-11-2… | 2026-11-27 | no       | —
-synthetic_trailing        | 2026-11-2… | 2026-11-27 | no       | —
-topstep_50k_combine_xfa   | 2026-11-2… | 2026-11-27 | no       | phases.funded.payout.processing_days, phases.funded.scaling_plan
-```
-
-(`2026-11-2…` es el truncado literal de la tabla en terminal; no se ha inventado la fecha completa.)
-
-### `lab propecon ranking`
-
-```text
-firma            | plan          | total | provisional | sin nota
-myfundedfutures  | Rapid         | 3.55  | —           | —
-tradeify         | Select Flex   | 3.45  | —           | —
-tradeday         | QP EOD        | 3.00  | —           | —
-topstep          | Combine → XFA | 2.85  | —           | —
-alphafutures     | Standard      | 2.80  | —           | —
-lucid            | Flex          | —     | 4.11        | costs
-bulenox          | Momentum      | —     | 3.06        | payouts
-takeprofittrader | —             | —     | —           | rules, payouts, drawdown, costs, platform, eligibility
-apex             | —             | —     | —           | rules, payouts, automation, drawdown, costs, platform, eligibility
-earn2trade       | —             | —     | —           | rules, payouts, automation, drawdown, costs, platform, eligibility
-fuente: docs/futures/research/propfirms_2026-11/00_INFORME_10_FIRMAS.md
-```
+- tests/test_claude_hooks.py::test_runner_end_to_end
+- tests/test_console_shell.py::test_barra_lateral_con_secciones_y_todas_las_vistas
+- tests/test_console_shell.py::test_inventario_ui_base_sigue_completo
 
 ## Aviso
 
-- **Sesión concurrente en el mismo worktree (coordinación).** Mientras corría S1 se detectó:
-  - `claude.exe` PID 28540 (Claude Code, modelo Opus 5.5) con `--add-dir=E:\tl-fut-s`, activo desde las 10:10.
-  - Su propio `pytest` PID 7644 (`E:\tl-fut-s\.venv\Scripts\python.exe -m pytest -q -p no:cacheprovider -m ...`), lanzado a las 10:11 y todavía en marcha al redactar esto.
-  - Ese proceso escribió `docs/futures/evidencia/databento_costes_2026-11.{json,md}` (10:21:56) y `manifest_futuros.jsonl/.md` (10:22:00), con el `--data-dir E:\trading-lab\data\cache\databento` de S3.
-  - Esta sesión **no ha tocado, movido ni commiteado** esos cuatro ficheros. Hay dos pytest simultáneos sobre el mismo árbol, lo que además puede contaminar el resultado. Se para por coordinación hasta que el operador decida qué sesión sigue.
-- **3 tests en rojo; no se han corregido** (S1 ordena parar):
-  1. `tests/test_claude_hooks.py::test_runner_end_to_end`: `bash` recibe `E:\tl-fut-s\.claude\hooks\run.sh` y MSYS lo convierte en `E:tl-fut-s.claudehooksrun.sh`; el proceso sale 127. Es un problema de rutas Windows/Git Bash, no del código de negocio.
-  2. `tests/test_console_shell.py::test_barra_lateral_con_secciones_y_todas_las_vistas`: el HTML tiene la vista `futecon` (`src/tradinglab/webui/index.html`) y el conjunto esperado del test no la incluye.
-  3. `tests/test_console_shell.py::test_inventario_ui_base_sigue_completo`: mismo desfase `futecon` contra el inventario.
-- El **FAIL de Frescura es esperado**: el venv y el `data/` son locales del worktree (`E:\tl-fut-s\data`), y los datos reales están en `E:\trading-lab\data` sin copiar. No es un fallo del código.
-- `uv sync` avisó de que no pudo usar hardlinks entre volúmenes/caché y copió los ficheros; cosmético.
-- Sin datos reales no se ha calculado ningún rendimiento.
+S1 no está en verde. S2, S3 y la copia de S4 se ejecutaron en paralelo con la suite (solo lectura y
+metadatos), antes de conocer este resultado. Decide el operador si los 3 fallos bloquean la cadena.
 
 ## Siguiente
 
-- **PARADA de la cadena S** por dos motivos:
-  1. Los 3 fallos de pytest (los dos de `futecon` parecen un test desactualizado; el de `bash` es de entorno Windows).
-  2. La sesión Claude Code concurrente en el mismo worktree; hay que decidir cuál sigue para no pisar ficheros ni commits.
-- No se lanza S2 hasta indicación expresa del operador.
+Diagnosticar los 3 fallos (Claude) y, después, compilar TradingLabBridge en NT8.
