@@ -2669,6 +2669,10 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 from .propfund.console import payload as propfund_payload
 
                 self._json(propfund_payload(self.server.data.root, include_exposure=True))
+            elif path == "/api/futures/economics":
+                from .prop_economics.dashboard import economics_payload
+
+                self._json(economics_payload())
             elif path == "/api/discovery/summary":
                 self._json(self.server.data.discovery_summary())
             elif path == "/api/discovery/campaigns":

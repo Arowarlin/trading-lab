@@ -1469,6 +1469,7 @@
       <button class="nav-btn" data-view="journal" title="Diario"><span class="ico">▩</span> Diario</button>
       <div class="nav-label">Riesgo y fondeo</div>
       <button class="nav-btn nav-new" data-view="propfund" title="Prop Fund"><span class="ico">⬢</span> Prop Fund</button>
+      <button class="nav-btn nav-new" data-view="futecon" title="Economía de futuros"><span class="ico">◆</span> Economía futuros</button>
       <button class="nav-btn" data-view="risk" title="Riesgo"><span class="ico">⛨</span> Riesgo</button>
       <button class="nav-btn" data-view="operator" title="Operador"><span class="ico">⌘</span> Operador</button>
       <div class="nav-label">Inteligencia</div>
@@ -2240,6 +2241,18 @@
 
     <!-- ============================================================== REPOS -->
     <!-- ============================================================ PROP FUND -->
+    <section class="view" id="view-futecon">
+      <div class="pf-hero">
+        <div class="pf-eyebrow">Futures-first · prop firms</div>
+        <div class="pf-title">Economía de futuros: real, nominal y simulado por separado</div>
+        <p class="pf-lead">Solo es dinero lo que llega al banco (libro real del operador). El saldo de la firma no es dinero y la simulación usa una ventaja supuesta: los tres bloques nunca se suman.</p>
+      </div>
+      <div class="pf-stats" id="fe-real"></div>
+      <h3>Saldo nominal de la firma</h3><div id="fe-nominal" class="tiny"></div>
+      <h3>Simulado <span class="tag yellow">SIMULADO · ventaja supuesta</span></h3><div id="fe-sim" class="tiny"></div>
+      <h3>Ranking de firmas (con evidencia)</h3><div id="fe-ranking"></div>
+      <h3>Programas y avisos</h3><div id="fe-alerts"></div>
+    </section>
     <section class="view" id="view-propfund">
       <div class="pf-hero">
         <div class="pf-hero-top">
@@ -2540,6 +2553,7 @@ const TITLES = {
   journal: ["Diario", "Operaciones cerradas, métricas y concentración"],
   risk: ["Riesgo", "Guard de FTMO, cuenta MT5 y futuros"],
   propfund: ["Prop Fund", "Empresas, cuentas, motores CFD/Futures, router y protección del carril FTMO"],
+  futecon: ["Economía futuros", "Dinero real, saldo de la firma y simulación, por separado"],
   operator: ["Operador", "Modo armado paper/demo con confirmación en dos pasos"],
   sala: ["Sala", "TradingAgents en su oficina: estados, runs y decisiones"],
   decisions: ["Decisiones", "Retorno forward del LLM por rating"],
@@ -2828,6 +2842,7 @@ function switchView(view, updateHash = true) {
   if (view === "decisions") renderDecisions();
   if (view === "repos") renderRepos();
   if (view === "propfund") loadPropFund();
+  if (view === "futecon") loadFutEcon();
   if (view === "sala") renderSala();
   if (view === "logs" && !S.selectedLog) selectLog();
 }
@@ -7070,6 +7085,34 @@ async function loadDiscSuggest() {
   } catch (err) {
     setHTML("#disc-suggest", `<div class="alert red">Sin datos: ${esc(err.message)}</div>`);
   }
+}
+
+async function loadFutEcon() {
+  let d;
+  try {
+    d = await getJSON("/api/futures/economics");
+  } catch (err) {
+    setHTML("#fe-real", `<div class="alert red">Sin datos: ${esc(err.message)}</div>`);
+    return;
+  }
+  const stat = (l, v, sub) => `<div class="pf-stat"><div class="l">${esc(l)}</div><div class="v">${esc(v)}</div><div class="s">${esc(sub)}</div></div>`;
+  const r = d.real || {};
+  const usd = (x) => (x === undefined || x === null) ? "—" : Number(x).toFixed(2);
+  setHTML("#fe-real", r.status === "ok" ? [
+    stat("Neto REAL", usd(r.net_real), "recibido − costes"),
+    stat("Recibido", usd(r.received), "payouts en el banco"),
+    stat("Costes pagados", usd(r.costs_paid), "tarifas, activaciones, suscripciones"),
+    stat("En tránsito", usd((r.pipeline || {}).in_transit), "procesado, no recibido"),
+  ].join("") : `<div class="empty">${esc(r.status || "Sin datos")}</div>`);
+  setHTML("#fe-nominal", esc((d.nominal || {}).status || "Sin datos"));
+  const sim = d.simulated || {};
+  setHTML("#fe-sim", `${esc(sim.label || "SIMULADO")} · informes: ${esc((sim.reports || []).join(", ") || "ninguno")}`);
+  const rk = d.ranking || {};
+  const rows = (rk.ranking || []).map((x) => `<tr><td><b>${esc(x.firm)}</b></td><td>${esc(x.plan || "—")}</td><td class="num">${Number(x.total).toFixed(2)}</td><td>—</td></tr>`)
+    .concat((rk.not_ranked || []).map((x) => `<tr><td>${esc(x.firm)}</td><td>${esc(x.plan || "—")}</td><td class="num">—</td><td>sin nota: ${esc((x.missing || []).join(", "))}${x.provisional ? " · provisional " + Number(x.provisional).toFixed(2) : ""}</td></tr>`));
+  setHTML("#fe-ranking", pfTable(["Firma", "Plan", { t: "Total", num: true }, "Notas"], rows));
+  const al = (d.alerts || []).map((a) => `<tr><td><span class="tag ${a.alert === "rules_expired" ? "red" : "yellow"}">${esc(a.alert)}</span></td><td class="mono tiny">${esc(a.program || a.firm || "")}</td><td class="tiny">${esc((a.keys || []).join(", ") || a.expires_on || a.page || "")}</td></tr>`);
+  setHTML("#fe-alerts", pfTable(["Aviso", "Programa / firma", "Detalle"], al, "Sin avisos"));
 }
 
 async function loadPropFund() {
