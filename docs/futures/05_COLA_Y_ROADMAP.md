@@ -52,9 +52,9 @@ la línea de FUT-A8, que se coordina con el lock `cli-py`.
 |---|---|---|---|---|---|---|---|
 | FUT-A1 | Esquema YAML de programas (pydantic), cargador, caducidad, incógnitas | OpenCode | **READY** (tras OP-1) | — | `src/tradinglab/prop_economics/__init__.py`, `rules.py`; `config/prop_economics/programs/topstep_50k_combine_xfa.yaml`, `synthetic_static.yaml`, `synthetic_trailing.yaml`; `tests/test_prop_economics_rules.py` | prompt §4.2 | borrar el paquete nuevo con `git revert` |
 | FUT-A2 | `DayPath`, constructor desde operaciones, desplazamiento δ | OpenCode | **READY** (tras OP-1) | — | `src/tradinglab/prop_economics/paths.py`; `tests/test_prop_economics_paths.py` | prompt §4.3 | `git revert` |
-| FUT-A3 | Motor de una cuenta en evaluación (drawdown, DLL, objetivo, consistencia, días, plazo) sobre una secuencia dada | OpenCode | BACKLOG | A1, A2 | `prop_economics/account.py`, `tests/test_prop_economics_account.py` | T8, T10, T13 exactos | `git revert` |
+| FUT-A3 | Motor de una cuenta en evaluación (drawdown, DLL, objetivo, consistencia, días, plazo) sobre una secuencia dada | OpenCode | READY tras A1+A2 (prompt §4.6) | A1, A2 | `prop_economics/account.py`, `tests/test_prop_economics_account.py` | T8, T10, T13 exactos | `git revert` |
 | FUT-A4 | Fase financiada y payouts | OpenCode | BACKLOG | A3 | `prop_economics/account.py` (misma tarea que A3 cerrada), `tests/test_prop_economics_payout.py` | T9 exacto | `git revert` |
-| FUT-A5 | Tarifas, política de intentos, bankroll | OpenCode | BACKLOG | A1 | `prop_economics/fees.py`, `tests/test_prop_economics_fees.py` | T11, T12 exactos | `git revert` |
+| FUT-A5 | Tarifas, política de intentos, bankroll | OpenCode | READY tras A1 (prompt §4.7) | A1 | `prop_economics/fees.py`, `tests/test_prop_economics_fees.py` | T11, T12 exactos | `git revert` |
 | FUT-A6 | Monte Carlo: stationary bootstrap, CRN, horizontes, métricas, error MC | OpenCode | BACKLOG | A2-A5 | `prop_economics/simulate.py`, `metrics.py`, tests | T1-T7 con ±0,004 (marcar `slow`) | `git revert` |
 | FUT-A7 | Escenarios y ventaja mínima μ\* | OpenCode | BACKLOG | A6 | `prop_economics/scenarios.py`, tests | monotonía en 9 puntos; μ\* de un pool sintético conocido | `git revert` |
 | FUT-A8 | Informe, sub-app CLI `lab propecon`, libro real separado | OpenCode | BACKLOG | A7 | `prop_economics/report.py`, `cli.py` del paquete, `ledger.py`; **1 línea** en `src/tradinglab/cli.py` con lock `cli-py` | el simulador no puede escribir en el libro (test) | `git revert` |
@@ -72,6 +72,13 @@ la línea de FUT-A8, que se coordina con el lock `cli-py`.
 | FUT-T1b | 9 skills y 7 agentes del proyecto (`02 §5-6`) | Claude | **COMPLETED** (2026-11-27; frontmatter YAML validado, las 9 skills cargan) | T1a | `.claude/skills/*/SKILL.md`, `.claude/agents/*.md` | cada skill con sus 8 apartados | borrar nada: `git revert` |
 | FUT-T2 | Servidor MCP `tradinglab-state` de solo lectura | OpenCode | BACKLOG | T1 | `src/tradinglab/mcp_state/` | abre SQLite con `mode=ro` (test) | — |
 | FUT-X1…X3 | PoC de benchmark | OpenCode | BLOCKED (OP-6) | A6 | venv aparte; `docs/futures/benchmarks/` | `01 §5` | borrar el venv |
+| FUT-R2 | Catálogo de 10 firmas por bots, modo de ejecución y copiadores | Claude | **COMPLETED** (2026-11-27) | R1 | `config/prop_economics/firms_futures.yaml`, test | 5 tests | `git revert` |
+| FUT-R3 | Investigación de 10 firmas con ranking ponderado | Claude | **COMPLETED** (2026-11-28) | R2 | `docs/futures/research/propfirms_2026-11/` | evidencia por ficha | — |
+| FUT-RISK | Investigación de riesgo (Kelly, ruina, perfiles, módulos MOD-NR/MOD-PR) | Claude | **COMPLETED** (2026-11-28) | — | `docs/futures/risk/` | resultados reproducibles | — |
+| FUT-O1…O6 | Optimal Risk & Payout Allocation Engine (`risk/02_ORPAE_DISENO.md §4`) | OpenCode | BACKLOG | A6 | `src/tradinglab/prop_economics/{stats,sizing_diag,policies,allocate,portfolio,report}.py` | cifras de `risk/01` ±2 SE | `git revert` |
+| FUT-M1…M3 | Políticas de ratio negativo y positivo y frontera EV-ruina (`risk/modulos/`) | OpenCode | BACKLOG | O3 | `prop_economics/policies.py` | reproducir MOD-NR §4 y MOD-PR §4 y §6 | `git revert` |
+| FUT-P1…P6 | Prop Firm Intelligence Engine (`research/propfirms_2026-11/12_…`) | OpenCode | BACKLOG | A1 | `prop_economics/{registry,sources,compat,scoring,alerts}` | sin descargas de webs que lo prohíben | `git revert` |
+| FUT-D0 / FUT-C0 / FUT-E1 | Especificaciones de Research B, Research A y matriz de plataformas | **Claude** | READY (sesión 2, `CONTINUACION.md`) | — | `docs/futures/research/` | criterios de cada especificación | — |
 
 **Estimación** (sesiones de OpenCode, **Estimado**): A1-A2 1 cada una; A3-A4 2; A5 1; A6 2; A7 1; A8 2;
 A9 1 → ~12 sesiones para el motor EV completo. B1 y B3: 1 cada una.
@@ -217,6 +224,54 @@ docs/futures/evidencia/manifest_futuros.md.
 3. Escribe una línea JSON por fichero y una tabla Markdown.
 4. Ejecuta: .\.venv\Scripts\python.exe scripts\futures_manifest.py
 5. WORKER_REPORTS\FUT-B3.md con la tabla. PARA.
+```
+
+### 4.6 FUT-A3 · Motor de una cuenta en evaluación (worktree `E:\tl-fut-a`, tras A1 y A2)
+
+```text
+TAREA FUT-A3. Lee docs/futures/04_SPEC_PROP_EV.md secciones 1, 3 y 10 (vectores T8, T10, T13). Nada más.
+Ficheros permitidos (nuevos): src/tradinglab/prop_economics/account.py, tests/test_prop_economics_account.py.
+Usa Program (rules.py, FUT-A1) y DayPath (paths.py, FUT-A2); no los modifiques.
+
+1. @dataclass AccountState: start_balance, balance, peak_eod, peak_intraday, threshold, best_day, trading_days,
+   days, status ("active" | "passed" | "failed_mll" | "failed_timeout"). Función new_evaluation(program) -> AccountState
+   (balance = start_balance; threshold = start_balance - amount; peaks = start_balance).
+2. step_day(state, program, day: DayPath, contracts: int) -> AccountState (devuelve un estado NUEVO).
+   Recorre day.marks[1:] con e = balance + contracts*m, en orden:
+   - trailing_intraday: peak_intraday = max(peak_intraday, e); threshold = min(peak_intraday - amount, lock).
+   - si e <= threshold -> status "failed_mll"; el P&L del día es e - balance; parar.
+   - DLL (si existe y enabled): si (e - balance) <= -amount -> action "pause_day": el día cierra en e; action "breach":
+     status "failed_mll". Las marcas siguientes se ignoran.
+   Al cierre: balance nuevo; si trailing_eod: peak_eod = max(peak_eod, balance) y threshold = min(peak_eod - amount, lock).
+   lock = start_balance si lock_at == "start_balance"; el número si es numérico; +infinito si es None.
+   El umbral NUNCA baja. trading_days += 1 si day.n_trades > 0. best_day = max(best_day, P&L del día).
+   Aprobado si balance - start >= max(target, best_day / c) (c = consistencia, si existe) y trading_days >= min_trading_days.
+   Si existe max_calendar_days y days >= ese valor sin aprobar -> "failed_timeout".
+3. Tests exactos (S = 0, D = 2000 salvo que se diga):
+   - T8: un día marks [0, +1500, -600], 1 contrato: trailing_intraday -> "failed_mll"; trailing_eod -> activo, balance -600;
+     static -> activo, balance -600.
+   - T10: consistencia 0,5, T = 3000, días +2000, +1100, +900 (marks [0, x]) -> tras el día 2 activo; tras el día 3 "passed".
+   - T13: DLL 1000 pause_day, static, marks [0, -400, -1000, +500] -> balance -1000, activo.
+   - static: días -1000, -1000 -> "failed_mll" en el segundo (igualdad incluida).
+   - trailing_eod con lock en 0: días +2000 (umbral 0), luego -2000 -> "failed_mll".
+NO escribas la fase financiada ni el Monte Carlo. PARA al terminar.
+```
+
+### 4.7 FUT-A5 · Tarifas y coste por intento (worktree `E:\tl-fut-a`, tras A1)
+
+```text
+TAREA FUT-A5. Lee docs/futures/04_SPEC_PROP_EV.md secciones 5 y 10 (T11, T12). Nada más.
+Ficheros permitidos (nuevos): src/tradinglab/prop_economics/fees.py, tests/test_prop_economics_fees.py.
+
+1. subscription_charges(end_day: int, period_days: int) -> int: cargos en los días 0, P, 2P... estrictamente
+   anteriores a end_day = ceil(end_day / period_days); end_day >= 1 (si no, ValueError).
+2. evaluation_cost(program, end_day) -> float: subscription -> amount * subscription_charges; one_time -> amount.
+3. ev_per_attempt(p_pass, attempt_cost, activation, net_payout_per_funded) -> float
+   = -attempt_cost + p_pass * (net_payout_per_funded - activation).
+4. cost_per_funded(p_pass, attempt_cost, activation) -> float = attempt_cost / p_pass + activation (p_pass > 0).
+5. Tests exactos: subscription_charges(30,30)=1, (31,30)=2, (61,30)=3; con 49 USD: 49, 98, 147.
+   ev_per_attempt(0.4, 100, 150, 900) == 200.0; cost_per_funded(0.4, 100, 150) == 400.0.
+PARA al terminar.
 ```
 
 ## 5. Siguiente paso de Claude
