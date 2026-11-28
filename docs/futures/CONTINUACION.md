@@ -51,9 +51,29 @@ proxy.
    automatizado. Si hace falta un host nuevo, proponerlo con `update_environment`.
 5. ✅ (2026-11-28, borradores en `research/programs/`; FUT-A10 los lleva a `config/`) **Ficha → YAML de programa** para My Funded Futures Rapid y Lucid Flex (esquema de `04 §8`), con el
    estado de cada valor. Los precios de Lucid quedan como `sin_datos`.
-6. **Actualizar `docs/futures/README.md`** (índice) y **`ESTADO.md`**, si procede, con el lock
+6. ✅ (2026-11-28) **Actualizar `docs/futures/README.md`** (índice) y **`ESTADO.md`**, si procede, con el lock
    `readme-plan`.
 
 Al terminar cada paso: `ruff check` de lo tocado, tests rápidos si hay código, commit por ruta, push a
 `claude/vibrant-mayer-r46s0o`. Si el límite de uso vuelve a cortar, dejar este fichero actualizado con lo
 que falte.
+
+## Sesión 3 (escrito el 2026-11-28 tras cerrar los pasos 1-6)
+
+7. **FUT-J0 · Contrato de ejecución y riesgo** en `docs/futures/research/execution_spec.md`:
+   - `OrderIntent` con `origin ∈ {automated, semi_manual}`;
+   - `RiskCheck` con las reglas de cada programa: contratos máximos, escalones de escalado, `flat_by`,
+     ventanas de noticias, prohibición de overnight;
+   - adaptadores NT8 (no gestionado), ProjectX (dry-run existente) y ticket semimanual;
+   - vectores de prueba exactos para OpenCode.
+   - Base: `research/platform_matrix.md §2`.
+8. **Comparación de programas con el simulador de riesgo:** Topstep 50K frente a MFF Rapid 50K frente a
+   Lucid Flex 50K.
+   - Ventajas **hipotéticas**, las mismas políticas y 6/12/24 meses.
+   - Los precios de Lucid son Sin datos: se informa del EV por **precio de equilibrio** (la tarifa
+     máxima que deja EV ≥ 0).
+   - Código en `docs/futures/risk/sim/`, sin tocar producción.
+9. **FUT-E4** (límites de tasa de Tradovate), solo si sobra tiempo.
+
+Sigue prohibido: live, campañas, `.env`, borrar, descargar automáticamente de webs que lo prohíben
+(ahora también ProjectX) y mezclar datos que no sean de futuros.
