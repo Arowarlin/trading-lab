@@ -36,7 +36,10 @@ def stationary_bootstrap_indices(n_pool: int, horizon: int, n_paths: int, mean_b
 
 
 def mean_block_length(daily_pnl: np.ndarray) -> float:
-    return max(1.0, float(optimal_block_length(np.asarray(daily_pnl, dtype=np.float64))["stationary"].iloc[0]))
+    x = np.asarray(daily_pnl, dtype=np.float64)
+    if x.size < 3 or float(np.std(x)) == 0.0:
+        return 1.0   # serie constante o demasiado corta: no hay dependencia que estimar
+    return max(1.0, float(optimal_block_length(x)["stationary"].iloc[0]))
 
 
 def _pool_matrix(pool: list[DayPath]) -> tuple[np.ndarray, np.ndarray]:
