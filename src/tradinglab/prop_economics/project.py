@@ -36,7 +36,7 @@ from .account import (
     step_funded_day,
 )
 from .paths import DayPath
-from .rules import DailyLoss, MaxLoss, Program
+from .rules import DailyLoss, MaxLoss, Program, ScalingPlan, max_contracts_for
 from .simulate import mean_block_length, stationary_bootstrap_indices
 
 EVAL, FUNDED, RUINED = 0, 1, 2
@@ -53,6 +53,7 @@ class ProjectConfig:
     policy_arg: float | None = None
     payout_fee: float = 0.0
     assume_processing_days: int | None = None
+    assume: tuple[tuple[str, float], ...] = ()   # supuestos explícitos para valores sin_datos (p. ej. cap_per_payout)
 
 
 def session_offsets(start: date, max_days: int) -> np.ndarray:
@@ -67,30 +68,41 @@ def session_offsets(start: date, max_days: int) -> np.ndarray:
     return np.asarray(out, dtype=np.int64)
 
 
-def _fees(program: Program) -> tuple[float, str, int | None, float]:
+def _fees(program: Program, assume: dict[str, float]) -> tuple[float, str, int | None, float]:
+    """Tarifa de evaluación, tipo, periodo y activación. Un valor sin_datos exige un supuesto explícito."""
     fee = program.fees.evaluation
     if fee.amount is None or fee.status == "sin_datos":
-        raise MissingRuleError("fees.evaluation")
+        if "fees.evaluation" not in assume:
+            raise MissingRuleError("fees.evaluation")
+        amount = float(assume["fees.evaluation"])
+    else:
+        amount = float(fee.amount)
     act = program.fees.activation
-    activation = 0.0 if act is None else (act.amount if act.amount is not None else None)
-    if activation is None or (act is not None and act.status == "sin_datos"):
-        raise MissingRuleError("fees.activation")
+    if act is None:
+        activation = 0.0
+    elif act.amount is None or act.status == "sin_datos":
+        if "fees.activation" not in assume:
+            raise MissingRuleError("fees.activation")
+        activation = float(assume["fees.activation"])
+    else:
+        activation = float(act.amount)
     if fee.type == "subscription" and fee.period_days is None:
         raise MissingRuleError("fees.evaluation.period_days")
-    return float(fee.amount), fee.type, fee.period_days, float(activation)
+    return amount, fee.type, fee.period_days, activation
 
 
 # ------------------------------------------------------------------ referencia escalar
 
 def simulate_project_path(program: Program, pool: list[DayPath], idx_row: np.ndarray, cfg: ProjectConfig,
                           offsets: np.ndarray) -> dict:
-    rules = payout_rules_from_program(program, assume_processing_days=cfg.assume_processing_days)
-    fee, fee_type, period, activation = _fees(program)
+    rules = payout_rules_from_program(program, assume_processing_days=cfg.assume_processing_days,
+                                      assume=dict(cfg.assume))
+    fee, fee_type, period, activation = _fees(program, dict(cfg.assume))
     n = len(offsets)
     fees_at = np.zeros(n)
     recv_at = np.zeros(n)
     recv_n_at = np.zeros(n, dtype=np.int64)
-    out = {"bought": 1, "passed": 0, "evals_lost": 0, "funded_lost": 0, "requested": 0, "ruin_t": -1}
+    out = {"bought": 1, "passed": 0, "evals_lost": 0, "funded_lost": 0, "requested": 0, "ruin_t": -1, "to_live": 0}
     phase = EVAL
     st = new_evaluation(program)
     fst = None
@@ -123,7 +135,9 @@ def simulate_project_path(program: Program, pool: list[DayPath], idx_row: np.nda
                 while offsets[t] - eval_start >= charges * period:
                     fees_at[t] += fee
                     charges += 1
-            st = step_day(st, program, day, cfg.contracts_eval)
+            cap = max_contracts_for(program, "evaluation", st.balance - st.start_balance)
+            ce = cfg.contracts_eval if cap is None else min(cfg.contracts_eval, cap)
+            st = step_day(st, program, day, ce)
             if st.status == "passed":
                 out["passed"] += 1
                 if cash(t) >= activation:
@@ -137,14 +151,19 @@ def simulate_project_path(program: Program, pool: list[DayPath], idx_row: np.nda
                 out["evals_lost"] += 1
                 rebuy(t)
         else:
-            fst, ev = step_funded_day(fst, program, rules, day, cfg.contracts_funded, t, policy=cfg.policy,
+            cap = max_contracts_for(program, "funded", fst.balance - fst.start_balance)
+            cf = cfg.contracts_funded if cap is None else min(cfg.contracts_funded, cap)
+            fst, ev = step_funded_day(fst, program, rules, day, cf, t, policy=cfg.policy,
                                       policy_arg=cfg.policy_arg, payout_fee=cfg.payout_fee)
             if ev is not None:
                 out["requested"] += 1
                 if ev.day_received < n:
                     recv_at[ev.day_received] += ev.received
                     recv_n_at[ev.day_received] += 1
-            if fst.status != "active":
+            if fst.status == "to_live":
+                out["to_live"] += 1
+                rebuy(t)
+            elif fst.status != "active":
                 out["funded_lost"] += 1
                 rebuy(t)
     out.update(fees_at=fees_at, recv_at=recv_at, recv_n_at=recv_n_at, phase=phase)
@@ -185,9 +204,28 @@ def _vec_marks(m: np.ndarray, b: np.ndarray, peak_i: np.ndarray, thr: np.ndarray
     return close, breach, peak, th
 
 
+def _funded_caps(program: Program, profit: np.ndarray) -> np.ndarray | None:
+    """Tope de contratos de la financiada por camino (máximo estático y escalón de escalado)."""
+    ph = program.phases.funded
+    unit = program.instrument_unit
+    cap = None
+    if ph.max_contracts is not None and getattr(ph.max_contracts, unit) is not None:
+        cap = np.full(profit.shape, int(getattr(ph.max_contracts, unit)))
+    if isinstance(ph.scaling_plan, ScalingPlan):
+        tiers = sorted(ph.scaling_plan.tiers, key=lambda x: x.min_profit)
+        tier_cap = np.full(profit.shape, getattr(tiers[0], unit))
+        for tier in tiers:
+            if getattr(tier, unit) is not None:
+                tier_cap = np.where(profit >= tier.min_profit, getattr(tier, unit), tier_cap)
+        cap = tier_cap if cap is None else np.minimum(cap, tier_cap)
+    return cap
+
+
 def _dll(rule: DailyLoss | None) -> DailyLoss | None:
     if rule is None or not rule.enabled:
         return None
+    if rule.amount is None:
+        raise MissingRuleError("daily_loss.amount")
     if rule.base != "day_start_balance":
         raise NotImplementedError("DLL con base distinta de day_start_balance")
     return rule
@@ -200,8 +238,9 @@ def simulate_project(program: Program, pool: list[DayPath], cfg: ProjectConfig, 
         raise MissingRuleError("phases.funded")
     for d in pool:
         d.validate()
-    rules = payout_rules_from_program(program, assume_processing_days=cfg.assume_processing_days)
-    fee, fee_type, period, activation = _fees(program)
+    rules = payout_rules_from_program(program, assume_processing_days=cfg.assume_processing_days,
+                                      assume=dict(cfg.assume))
+    fee, fee_type, period, activation = _fees(program, dict(cfg.assume))
     offsets = session_offsets(cfg.start_date, max(cfg.horizons_days))
     n_days = len(offsets)
     if idx is None:
@@ -263,7 +302,11 @@ def simulate_project(program: Program, pool: list[DayPath], cfg: ProjectConfig, 
     evals_lost = np.zeros(n, dtype=np.int64)
     funded_lost = np.zeros(n, dtype=np.int64)
     requested = np.zeros(n, dtype=np.int64)
+    to_live_n = np.zeros(n, dtype=np.int64)
+    pay_acc = np.zeros(n, dtype=np.int64)
     ruin_t = np.full(n, -1, dtype=np.int64)
+    e_cap = max_contracts_for(program, "evaluation", 0.0)
+    ce = cfg.contracts_eval if e_cap is None else min(cfg.contracts_eval, e_cap)
     max_out = fees_sum - recv_sum
     locked = rules.lock_after_first_payout and rules.lock_value is not None
     horizon_last = {h: int(np.searchsorted(offsets, h, side="left")) - 1 for h in cfg.horizons_days}
@@ -301,7 +344,7 @@ def simulate_project(program: Program, pool: list[DayPath], cfg: ProjectConfig, 
                 fees_sum = fees_sum + np.where(due, fee, 0.0)
                 echarges = echarges + due
         if is_e.any():
-            close, breach, peak, th = _vec_marks(base * cfg.contracts_eval, eb, epi, eth, is_e, e_ml, e_dll, e_lock)
+            close, breach, peak, th = _vec_marks(base * ce, eb, epi, eth, is_e, e_ml, e_dll, e_lock)
             pnl = close - eb
             edays = edays + is_e
             etd = etd + (is_e & (ntr_pool[rows] > 0))
@@ -332,11 +375,14 @@ def simulate_project(program: Program, pool: list[DayPath], cfg: ProjectConfig, 
                 arr[pay_act] = val
             win_since[pay_act] = 0
             days_since[pay_act] = 0
+            pay_acc[pay_act] = 0
             if failed.any():
                 rebuy(failed, t)
         # ---- financiada
         if is_f.any():
-            close, breach, peak, th = _vec_marks(base * cfg.contracts_funded, fb, fpi, fth, is_f, f_ml, f_dll, f_lock)
+            caps = _funded_caps(program, fb - f_s)
+            cf = np.full(n, cfg.contracts_funded) if caps is None else np.minimum(cfg.contracts_funded, caps)
+            close, breach, peak, th = _vec_marks(base * cf[:, None], fb, fpi, fth, is_f, f_ml, f_dll, f_lock)
             pnl = close - fb
             fb = np.where(is_f, close, fb)
             fpi = np.where(is_f, peak, fpi)
@@ -349,6 +395,9 @@ def simulate_project(program: Program, pool: list[DayPath], cfg: ProjectConfig, 
             profit_since = profit_since + np.where(ok, pnl, 0.0)
             best_since = np.where(ok, np.maximum(best_since, pnl), best_since)
             win_since = win_since + (ok & (pnl >= rules.min_day_profit))
+            live_now = np.zeros(n, dtype=bool)
+            if rules.to_live_daily_profit is not None:
+                live_now = ok & (pnl >= rules.to_live_daily_profit)
             profit = fb - f_s
             if rules.template == "winning_days":
                 elig = win_since >= rules.n
@@ -356,6 +405,8 @@ def simulate_project(program: Program, pool: list[DayPath], cfg: ProjectConfig, 
                 elig = (days_since >= rules.n) & (profit_since > 0) & (best_since <= rules.c * profit_since)
             else:
                 elig = (profit >= rules.min_balance) & (days_since >= rules.n)
+            if rules.net_positive_cycle:
+                elig = elig & (profit_since > 0)
             available = np.minimum(np.minimum(rules.fraction * profit, rules.cap), profit - rules.buffer_min)
             thr_after = np.maximum(fth, rules.lock_value) if locked else fth
             if cfg.policy == "max_asap":
@@ -366,12 +417,13 @@ def simulate_project(program: Program, pool: list[DayPath], cfg: ProjectConfig, 
                 w = np.minimum(available, fb - thr_after - float(cfg.policy_arg))
             else:
                 raise ValueError(f"política desconocida: {cfg.policy}")
-            pay = ok & elig & (w > 0) & (w >= rules.min_amount)
+            pay = ok & ~live_now & elig & (w > 0) & (w >= rules.min_amount)
             if pay.any():
                 received = rules.split * w - cfg.payout_fee
                 fb = np.where(pay, fb - w, fb)
                 fth = np.where(pay, thr_after, fth)
                 requested = requested + pay
+                pay_acc = pay_acc + pay
                 for arr in (profit_since, best_since):
                     arr[pay] = 0.0
                 win_since[pay] = 0
@@ -383,21 +435,25 @@ def simulate_project(program: Program, pool: list[DayPath], cfg: ProjectConfig, 
                 elif due_t < n_days:
                     sched_amt[:, due_t] += np.where(pay, received, 0.0)
                     sched_cnt[:, due_t] += pay
+            if rules.max_payouts is not None:
+                live_now = live_now | (pay & (pay_acc >= rules.max_payouts))
+            to_live_n = to_live_n + live_now
             lost = is_f & breach
             funded_lost = funded_lost + lost
-            if lost.any():
-                rebuy(lost, t)
+            if (lost | live_now).any():
+                rebuy(lost | live_now, t)
         max_out = np.maximum(max_out, fees_sum - recv_sum)
         for h, last in horizon_last.items():
             if last == t:
                 net = recv_sum - fees_sum
                 snaps[h] = _metrics(net, recv_cnt, fees_sum, bought, passed_n, evals_lost, funded_lost, requested,
                                     ruin_t, max_out, t)
+                snaps[h]["to_live"] = float(to_live_n.mean())
 
     return {"horizons": snaps, "n_paths": n_paths, "n_sessions": n_days, "idx": idx,
             "per_path": {"fees": fees_sum, "received": recv_sum, "received_n": recv_cnt, "bought": bought,
                          "passed": passed_n, "evals_lost": evals_lost, "funded_lost": funded_lost,
-                         "requested": requested, "phase": phase, "ruin_t": ruin_t}}
+                         "requested": requested, "phase": phase, "ruin_t": ruin_t, "to_live": to_live_n}}
 
 
 def _metrics(net, recv_cnt, fees, bought, passed, evals_lost, funded_lost, requested, ruin_t, max_out, t) -> dict:

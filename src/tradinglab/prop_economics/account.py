@@ -36,6 +36,8 @@ def _run_marks(balance: float, peak_intraday: float, threshold: float, max_loss:
     thr = threshold
     realtime = max_loss.mode != "trailing_eod" or max_loss.check == "realtime_unrealized"
     dll_on = dll is not None and dll.enabled
+    if dll_on and dll.amount is None:
+        raise MissingRuleError("daily_loss.amount")
     if dll_on and dll.base != "day_start_balance":
         raise NotImplementedError("DLL con base distinta de day_start_balance")
     close = b + contracts * float(day.marks[-1])
@@ -134,15 +136,22 @@ class PayoutRules:
     processing_days: int = 0
     lock_after_first_payout: bool = False
     lock_value: float | None = None
+    net_positive_cycle: bool = False
+    max_payouts: int | None = None
+    to_live_daily_profit: float | None = None
 
 
-def _required_number(value, key: str) -> float:
+def _required_number(value, key: str, assume: dict[str, float] | None = None) -> float:
     if value is None or value.status == "sin_datos" or value.value is None:
+        if assume and key in assume:
+            return float(assume[key])
         raise MissingRuleError(key)
     return float(value.value)
 
 
-def payout_rules_from_program(program: Program, *, assume_processing_days: int | None = None) -> PayoutRules:
+def payout_rules_from_program(program: Program, *, assume_processing_days: int | None = None,
+                              assume: dict[str, float] | None = None) -> PayoutRules:
+    """Reglas de payout del programa. ``assume`` cubre valores sin_datos (p. ej. ``cap_per_payout``)."""
     funded = program.phases.funded
     if funded is None:
         raise MissingRuleError("phases.funded")
@@ -159,13 +168,17 @@ def payout_rules_from_program(program: Program, *, assume_processing_days: int |
     return PayoutRules(
         template=el.template, n=el.n, min_day_profit=float(el.min_day_profit or 0.0), c=el.c,
         min_balance=float(el.min_balance or 0.0),
-        fraction=_required_number(p.max_fraction_of_balance, "max_fraction_of_balance"),
-        cap=_required_number(p.cap_per_payout, "cap_per_payout"),
-        min_amount=_required_number(p.min_amount, "min_amount"),
-        split=_required_number(p.split, "split"),
+        fraction=_required_number(p.max_fraction_of_balance, "max_fraction_of_balance", assume),
+        cap=_required_number(p.cap_per_payout, "cap_per_payout", assume),
+        buffer_min=0.0 if p.buffer_min is None else _required_number(p.buffer_min, "buffer_min", assume),
+        min_amount=_required_number(p.min_amount, "min_amount", assume),
+        split=_required_number(p.split, "split", assume),
         processing_days=processing,
         lock_after_first_payout=ml.lock_after_first_payout,
         lock_value=None if ml.lock_at is None else lock_level(ml, start),
+        net_positive_cycle=el.net_positive_cycle,
+        max_payouts=None if p.max_payouts is None else p.max_payouts.value,
+        to_live_daily_profit=None if p.to_live is None else p.to_live.value,
     )
 
 
@@ -177,7 +190,7 @@ class FundedState:
     peak_intraday: float
     threshold: float
     days: int
-    status: str  # "active" | "failed_mll"
+    status: str  # "active" | "failed_mll" | "to_live"
     win_days_since: int
     profit_since: float
     best_since: float
@@ -203,6 +216,8 @@ def new_funded(program: Program) -> FundedState:
 
 def _eligible(state: FundedState, rules: PayoutRules) -> bool:
     profit = state.balance - state.start_balance
+    if rules.net_positive_cycle and not state.profit_since > 0:
+        return False
     if rules.template == "winning_days":
         return state.win_days_since >= rules.n
     if rules.template == "trading_days_consistency":
@@ -235,6 +250,8 @@ def step_funded_day(state: FundedState, program: Program, rules: PayoutRules, da
                  days=state.days + 1, days_since=state.days_since + 1,
                  profit_since=state.profit_since + pnl, best_since=max(state.best_since, pnl),
                  win_days_since=state.win_days_since + (1 if pnl >= rules.min_day_profit else 0))
+    if rules.to_live_daily_profit is not None and pnl >= rules.to_live_daily_profit:
+        return replace(st, status="to_live"), None
     if not _eligible(st, rules):
         return st, None
     profit = st.balance - st.start_balance
@@ -253,5 +270,7 @@ def step_funded_day(state: FundedState, program: Program, rules: PayoutRules, da
         return st, None
     st = replace(st, balance=st.balance - w, threshold=thr_after, n_payouts=st.n_payouts + 1,
                  win_days_since=0, profit_since=0.0, best_since=0.0, days_since=0)
+    if rules.max_payouts is not None and st.n_payouts >= rules.max_payouts:
+        st = replace(st, status="to_live")
     event = PayoutEvent(day_index, day_index + rules.processing_days, w, rules.split * w - payout_fee)
     return st, event

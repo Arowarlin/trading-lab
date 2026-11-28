@@ -44,7 +44,7 @@ class MaxLoss(_Model):
 
 
 class DailyLoss(_Model):
-    amount: float = Field(gt=0)
+    amount: float | None = Field(default=None, gt=0)   # None solo si la regla no está activa o es sin_datos
     action: Literal["pause_day", "breach"]
     enabled: bool = True
     optional: bool = False
@@ -74,6 +74,45 @@ class Eligibility(_Model):
     min_day_profit: float | None = None
     c: float | None = None
     min_balance: float | None = None
+    net_positive_cycle: bool = False
+    status: Status
+    note: str | None = None
+
+
+class MaxPayouts(_Model):
+    value: int = Field(gt=0)
+    then: Literal["to_live"] = "to_live"
+    status: Status
+    note: str | None = None
+
+
+class ToLive(_Model):
+    trigger: Literal["daily_net_profit_ge"]
+    value: float = Field(gt=0)
+    status: Status
+    note: str | None = None
+
+
+class Tier(_Model):
+    min_profit: float
+    mini: int | None = None
+    micro: int | None = None
+
+
+class ScalingPlan(_Model):
+    status: Status
+    basis: Literal["profit_eod"] = "profit_eod"
+    tiers: list[Tier]
+    note: str | None = None
+
+
+class ComplianceRule(_Model):
+    allowed: bool | None = None
+    window_minutes: int | None = None
+    phases: list[str] | None = None
+    action: Literal["breach", "skip_day"] | None = None
+    category: str | None = None
+    source_doc: str | None = None
     status: Status
     note: str | None = None
 
@@ -85,6 +124,10 @@ class Payout(_Model):
     min_amount: Value
     split: Value
     processing_days: Value
+    buffer_min: Value | None = None
+    fraction_basis: Literal["profit", "balance"] = "profit"
+    max_payouts: MaxPayouts | None = None
+    to_live: ToLive | None = None
 
 
 class EvaluationPhase(_Model):
@@ -104,7 +147,8 @@ class FundedPhase(_Model):
     max_loss: MaxLoss
     daily_loss: DailyLoss | None = None
     max_contracts: MaxContracts | None = None
-    scaling_plan: Value | None = None
+    consistency: Value | None = None                   # solo documenta "ninguna" en la financiada
+    scaling_plan: ScalingPlan | Value | None = None
     max_accounts: Value | None = None
     inactivity_close_days: Value | None = None
     payout: Payout
@@ -124,6 +168,7 @@ class Fee(_Model):
 class EvaluationFee(_Model):
     type: Literal["subscription", "one_time"]
     amount: float | None = Field(default=None, ge=0)
+    alt: float | None = Field(default=None, ge=0)      # precio alternativo (p. ej. promoción)
     period_days: int | None = Field(default=None, gt=0)
     status: Status
     note: str | None = None
@@ -134,6 +179,7 @@ class Fees(_Model):
     activation: Fee | None = None
     reset: Fee | None = None
     data_platform_monthly: Fee | None = None
+    consistency_addon: Fee | None = None
 
 
 class Program(_Model):
@@ -147,7 +193,28 @@ class Program(_Model):
     phases: Phases
     fees: Fees
     commissions_per_side: dict[str, Value] = Field(default_factory=dict)
+    compliance: dict[str, ComplianceRule] = Field(default_factory=dict)
     sources: list[Source] = Field(default_factory=list)
+
+
+def max_contracts_for(program: Program, phase: str, profit: float) -> int | None:
+    """Contratos máximos (en la unidad del programa) para la fase y el beneficio EOD; None si no hay límite."""
+    ph = program.phases.evaluation if phase == "evaluation" else program.phases.funded
+    unit = program.instrument_unit
+    caps: list[int] = []
+    if ph is not None and ph.max_contracts is not None:
+        v = getattr(ph.max_contracts, unit)
+        if v is not None:
+            caps.append(int(v))
+    if phase == "funded" and ph is not None and isinstance(ph.scaling_plan, ScalingPlan):
+        tiers = sorted(ph.scaling_plan.tiers, key=lambda x: x.min_profit)
+        cap = getattr(tiers[0], unit)
+        for tier in tiers:
+            if profit >= tier.min_profit and getattr(tier, unit) is not None:
+                cap = getattr(tier, unit)
+        if cap is not None:
+            caps.append(int(cap))
+    return min(caps) if caps else None
 
 
 def load_program(path: str | Path) -> Program:

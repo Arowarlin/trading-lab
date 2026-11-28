@@ -1,0 +1,64 @@
+# Programa (esquema de docs/futures/04_SPEC_PROP_EV.md §8, ampliado en FUT-A10 el 2026-11-28).
+# Origen: docs/futures/research/programs/myfundedfutures_rapid_50k.yaml (borrador) y la ficha de la firma en
+# docs/futures/research/propfirms_2026-11/. Las claves que antes llevaban "# EXT" ya son del esquema.
+schema_version: 1
+program_id: myfundedfutures_rapid_50k
+firm_id: myfundedfutures
+rules_version: "2026-11-27.1"
+consulted_at: 2026-11-27
+expires_after_days: 30
+instrument_unit: micro
+phases:
+  evaluation:
+    start_balance: {value: 50000, status: verified}
+    profit_target: {value: 3000, status: verified}
+    max_loss: {mode: trailing_eod, amount: 2000, check: realtime_unrealized, status: verified,
+               note: "MLL EOD de 2.000 en evaluación; el bloqueo en evaluación no se publica (lock_at sin fijar)"}
+    daily_loss: {action: pause_day, enabled: false, optional: false, status: verified, note: "Rapid no tiene DLL"}
+    consistency: {max_best_day_fraction: 0.50, basis: total_profit, on_violation: raise_target, status: verified}
+    min_trading_days: {value: 2, status: verified}
+    max_contracts: {mini: 5, micro: 50, status: verified}
+    flat_by: {value: "16:10 America/New_York", status: verified, note: "cierre automático; overnight rompe la cuenta"}
+  funded:
+    start_balance: {value: 0, status: verified, note: "simulada financiada; valores relativos al saldo inicial"}
+    max_loss: {mode: trailing_intraday, amount: 2000, check: realtime_unrealized, lock_at: 100, status: discrepancia,
+               note: "intradía desde el máximo de equity con P&L no realizado. Bloqueo: +100 según el artículo de Rapid 50K; la FAQ dice tras el primer payout"}
+    consistency: {status: verified, note: "ninguna en la financiada"}
+    scaling_plan: {status: discrepancia, note: "no hay plan publicado para Rapid 50K; un ejemplo habla de 2 contratos iniciales"}
+    max_contracts: {mini: 5, micro: 50, status: discrepancia, note: "5/50 en simulada; 3/30 en Live"}
+    max_accounts: {value: 5, status: verified, note: "hasta 5 simuladas financiadas de 25K/50K"}
+    inactivity_close_days: {value: 7, status: verified, note: "en simulada financiada se pierden los beneficios"}
+    payout:
+      eligibility: {template: min_balance_and_days, min_balance: 2100, n: 1, status: verified,
+                    note: "colchón de 2.100 en beneficio realizado; primer payout 24 h después del primer trade, luego cada 24 h"}
+      max_fraction_of_balance: {status: sin_datos}
+      cap_per_payout: {status: sin_datos, note: "no lo dice la fuente oficial"}
+      buffer_min: {value: 2100, status: verified, note: "el colchón no se retira (solo tras ruptura en Live)"}
+      min_amount: {value: 500, status: verified}
+      split: {value: 0.90, status: verified}
+      processing_days: {value: 1, status: discrepancia, note: "6-12 h hábiles en revisión manual; la página de Rapid dice hasta 24 h hábiles"}
+      to_live: {trigger: daily_net_profit_ge, value: 10000, status: verified,
+                note: "lo que pase de 10.000 ese día se pierde; Live: saldo 0, MLL EOD 2.000 que se para en 0, 3/30, reserva de hasta 5.000"}
+fees:
+  evaluation: {type: one_time, amount: 209, alt: 125, status: assumed,
+               note: "209 de lista en los datos estructurados; 125 con el código CLUB (-40 %); la página no rotula cuál es cuál"}
+  activation: {amount: 0, status: verified}
+  reset: {status: sin_datos, note: "existe; los datos embebidos dicen 209 (confianza baja)"}
+  data_platform_monthly: {amount: 0, status: verified, note: "licencia de NinjaTrader/Tradovate y datos CME incluidos"}
+commissions_per_side: {MNQ: {value: 0.95, status: verified, note: "1,90 ida y vuelta"}, NQ: {value: 2.34, status: verified, note: "4,68 ida y vuelta"}}
+compliance:
+  news_t1: {window_minutes: 2, phases: [funded], action: breach, status: verified, note: "permitido en evaluación"}
+  overnight: {allowed: false, action: breach, status: verified}
+  half_day_close: {action: breach, status: verified, note: "sin cierre automático en medias sesiones"}
+  automation: {category: conditional, status: verified, source_doc: config/prop_economics/firms_futures.yaml}
+sources:
+  - {url: "https://myfundedfutures.com/plans/rapid", consulted_at: 2026-11-27}
+  - {url: "https://help.myfundedfutures.com/en/articles/13134709-rapid-plan-50k-a-comprehensive-look", consulted_at: 2026-11-27}
+  - {url: "https://help.myfundedfutures.com/en/articles/12802721-intraday-drawdown-explained", consulted_at: 2026-11-27}
+  - {url: "https://help.myfundedfutures.com/en/articles/13134718-understanding-rapid-live", consulted_at: 2026-11-27}
+  - {url: "https://help.myfundedfutures.com/en/articles/13286746-rapid-plan-reserve-program-performance-bonus-structure", consulted_at: 2026-11-27}
+  - {url: "https://help.myfundedfutures.com/en/articles/9735811-futures-instrument-list", consulted_at: 2026-11-27}
+  - {url: "https://help.myfundedfutures.com/en/articles/8230009-news-trading-policy", consulted_at: 2026-11-27}
+  - {url: "https://help.myfundedfutures.com/en/articles/9558251-permitted-times-to-trade", consulted_at: 2026-11-27}
+  - {url: "https://help.myfundedfutures.com/en/articles/16596524-inactivity-rule-one-time-payment-model", consulted_at: 2026-11-27}
+  - {url: "https://help.myfundedfutures.com/en/articles/12398151-does-myfundedfutures-charge-activation-fees", consulted_at: 2026-11-27}

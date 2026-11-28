@@ -59,7 +59,7 @@ select = ["E4", "E7", "E9", "F", "I", "DTZ"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-norecursedirs = ["vendor", ".venv*", "data", "reports", "logs", "legacy"]
+norecursedirs = ["vendor", ".venv*", "data", "reports", "logs", "legacy", ".hypothesis"]
 markers = [
     "network: usa red real o loopback; se salta en CI",
     "mt5: requiere MetaTrader5 o un terminal MT5",
