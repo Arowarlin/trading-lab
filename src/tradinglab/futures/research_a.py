@@ -17,6 +17,8 @@ Lecturas fijadas en FUT-C2:
 * Hipótesis D: el apilamiento es la racha completa de niveles consecutivos con desequilibrio; el stop va en su
   nivel más bajo (largo) o más alto (corto) ± 1 tick. Si una vela tiene apilamiento en las dos direcciones,
   manda el largo.
+* ``R30`` exige las 30 velas RTH anteriores (``minute_bars`` empieza a las 9:30), así que C, E y H no pueden
+  saltar antes de las 10:00 aunque la ventana abra a las 9:45 (aclarado en RA_spec §4 antes de ver datos).
 * Filtro de coste de ``count_events``: sin cotizaciones todavía (FUT-C3), la entrada proxy es el ``close`` de
   la vela de señal, así que ``cost_filter`` cuenta ``|close − stop| < 4,2`` puntos.
 """
@@ -86,7 +88,8 @@ def med_l(footprints: pd.DataFrame, *, sessions: int = 20) -> pd.Series:
     minute = _ny_minutes(footprints.index.get_level_values(0))
     total = footprints["buy"].to_numpy(float) + footprints["sell"].to_numpy(float)
     frame = pd.DataFrame({"session": pd.Index(minute.date), "total": total})
-    frame = frame.loc[frame["total"] > 0].sort_values("session", kind="stable")
+    frame = frame.loc[(frame["total"] > 0) & (minute < OOS2_START)]      # el OOS-2 tampoco entra en medL
+    frame = frame.sort_values("session", kind="stable")
     grouped = frame.groupby("session", sort=True)["total"]
     order = sorted(grouped.groups)
     arrays = [grouped.get_group(s).to_numpy() for s in order]

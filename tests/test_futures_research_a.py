@@ -206,3 +206,14 @@ def test_count_events_columns_and_cost_filter():
 def test_count_events_skips_d_without_footprints():
     b = closed(put(bars_day(DAY), "10:30", 100.0, 100.25, 99.75, 100.25, 100, 0))
     assert "D" not in count_events(b, refs_like(b)).index.get_level_values("hypothesis")
+
+
+def test_med_l_ignores_the_sealed_holdout():
+    """El pool de medL no usa sesiones del OOS-2 (≥ 2024-01-01), ni siquiera para sesiones del OOS-2."""
+    from tradinglab.futures.research_a import med_l
+    days = pd.bdate_range("2023-11-01", "2024-01-31")
+    rows = [(pd.Timestamp(f"{d.date()} 10:00", tz=NY), 400, 5.0, 5.0) for d in days]
+    fp = pd.DataFrame([{"minute": m, "level": k, "buy": b, "sell": s} for m, k, b, s in rows]
+                      ).set_index(["minute", "level"])
+    out = med_l(fp, sessions=20)
+    assert len(out) > 0 and max(out.index) < pd.Timestamp("2024-01-01").date()

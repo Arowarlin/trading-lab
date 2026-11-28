@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from tradinglab.futures.research_a_eval import cr1_t, evaluate, simulate, verdict
+from tradinglab.futures.research_a_eval import _on_grid, cr1_t, evaluate, simulate, verdict
 
 NY = "America/New_York"
 
@@ -132,12 +132,53 @@ def test_evaluate_uses_detect_and_reports_the_criteria():
     bars = pd.concat([a_signal_day(d) for d in days])
     quotes = quotes_frame([(f"{d} {hhmm}", bid, ask, 5, 5) for d in days
                            for hhmm, bid, ask in (("10:01:00.500", 99.75, 100.0),
-                                                  ("10:01:01.000", 99.75, 100.0),
+                                                  ("10:01:01.500", 99.75, 100.0),
                                                   ("10:16:00.500", 100.0, 100.25))])
     trades = trades_frame([(f"{d} 10:05:00", 108.5, 1) for d in days])
     res = evaluate(bars, refs_like(bars), None, "A", quotes, trades, t_crit=2.394, split=date(2023, 3, 2))
-    assert res["n"] == 2 and res["dropped"] == 0
-    assert res["mean_r"] == pytest.approx(((107.875 - 100.0) * 2 - 1.5) / (5.25 * 2))
+    assert (res["events"], res["cost_filtered"], res["n"], res["dropped"]) == (2, 0, 2, 0)
+    # objetivo 100 + 1,5·5,25 = 107,875 → 108,00 en la rejilla (hacia fuera); el trade a 108,50 lo atraviesa
+    assert res["mean_r"] == pytest.approx(((108.0 - 100.0) * 2 - 1.5) / (5.25 * 2))
+    assert res["mean_r_1tick"] == pytest.approx(((108.0 - 100.0) * 2 - 2.5) / (5.25 * 2))
     assert res["t_cr1"] == float("inf") and res["median_hold_s"] == 239.5
     assert res["median_hold_s"] >= 30.0 and "hold_note" not in res
     assert res["verdict"] == "candidata"
+
+
+def test_target_is_rounded_outwards_to_the_tick_grid():
+    assert _on_grid(107.875, 1, 0.25) == 108.0
+    assert _on_grid(92.125, -1, 0.25) == 92.0
+    assert _on_grid(101.5, 1, 0.25) == 101.5 and _on_grid(98.5, -1, 0.25) == 98.5
+
+
+def test_cost_filter_skips_stops_under_4_2_points():
+    """RA_spec §4: close 100,25 y stop 96,75 → 3,5 puntos < 4,2: no se opera y se cuenta."""
+    days = ["2023-03-01", "2023-03-02"]
+    bars = []
+    for d in days:
+        b = a_signal_day(d)
+        b.loc[pd.Timestamp(f"{d} 10:00", tz=NY), "low"] = 97.0
+        bars.append(b)
+    bars = pd.concat(bars)
+    quotes = quotes_frame([(f"{d} 10:01:00.500", 99.75, 100.0, 5, 5) for d in days])
+    trades = trades_frame([(f"{d} 10:05:00", 100.0, 1) for d in days])
+    res = evaluate(bars, refs_like(bars), None, "A", quotes, trades, t_crit=2.394, split=date(2023, 3, 2))
+    assert (res["events"], res["cost_filtered"], res["n"], res["dropped"]) == (2, 2, 0, 0)
+    assert res["verdict"] == "Sin datos"
+
+
+def test_latency_stress_is_base_plus_one_second():
+    """Criterio (c): L + 1 s = 1,5 s. Con la cotización de 1,0 s pasaría; con la de 1,5 s, no."""
+    days = ["2023-03-01", "2023-03-02"]
+    bars = pd.concat([a_signal_day(d) for d in days])
+    quotes = quotes_frame([(f"{d} {hhmm}", bid, ask, 5, 5) for d in days
+                           for hhmm, bid, ask in (("10:01:00.500", 99.75, 100.0),
+                                                  ("10:01:01.000", 99.75, 100.0),
+                                                  ("10:01:01.500", 100.0, 100.25),
+                                                  ("10:16:00.500", 100.0, 100.25),
+                                                  ("10:16:01.500", 100.0, 100.25))])
+    trades = trades_frame([(f"{d} 10:05:00", 108.5, 1) for d in days])
+    res = evaluate(bars, refs_like(bars), None, "A", quotes, trades, t_crit=2.394, split=date(2023, 3, 2))
+    # entrada 100,25 (riesgo 5,5, objetivo 108,50 sin atravesar) y salida por tiempo al bid 100,00
+    assert res["mean_r_latency"] == pytest.approx(((100.0 - 100.25) * 2 - 1.5) / (5.5 * 2))
+    assert res["verdict"] == "rechazada por latencia"

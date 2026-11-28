@@ -8,8 +8,13 @@ de MNQ (``quotes``: ``ts_event``, ``bid``, ``ask``, ``bid_size``, ``ask_size``) 
   ``L = 0,5 s``, al ask (largo) o al bid (corto); si el tamaño no cabe en el mejor nivel, 1 tick peor.
 * Stop a mercado: se dispara con el primer trade en el stop o más allá y se llena al bid (largo) / ask
   (corto) en ``t_disparo + L``.
-* Objetivo 1,5 R: límite; solo se llena si un trade lo atraviesa 1 tick. Salida por tiempo a los 15 minutos
-  de la entrada, al bid/ask. Stop y objetivo en el mismo segundo: gana el stop.
+* Objetivo 1,5 R: límite en la rejilla de ticks, redondeado HACIA FUERA de la entrada (un límite solo puede ir
+  en un precio negociable; hacia fuera es lo conservador); solo se llena si un trade lo atraviesa 1 tick. Salida
+  por tiempo a los 15 minutos de la entrada, al bid/ask. Stop y objetivo en el mismo segundo: gana el stop.
+* Filtro de coste ex ante (RA_spec §4): si ``|close de la vela de señal − stop| < 4,2`` puntos, no se opera y se
+  cuenta en ``cost_filtered`` (la misma entrada proxy que ``research_a.count_events``).
+* Latencia de estrés del criterio (c): ``L + 1 s`` (RA_spec §4 y §7: «latencia +1 s», es decir 1,5 s);
+  ``L + 5 s`` solo se informa.
 * ``R_net = (dir·(salida − entrada)·2 − 2·comisión − 2·slip·tick·punto) / (|entrada − stop|·2)``, con
   comisión 0,75 USD por lado (dato del operador, 2026-11-25; OP-7 pendiente).
 
@@ -30,7 +35,9 @@ from tradinglab.futures.research_a import detect
 
 NY = "America/New_York"
 BAR_SECONDS = 60
-LATENCY_STRESS_S = 1.0
+LATENCY_STRESS_S = 1.0          # se SUMA a la latencia base (criterio c)
+LATENCY_INFO_S = 5.0            # se suma a la base; solo informativo
+COST_STOP_POINTS = 4.2          # RA_spec §4: coste_R > 0,30 ⇔ stop < 4,2 puntos
 MU_STAR_R = 0.08
 
 
@@ -96,6 +103,13 @@ def _exit_fill(q: pd.DataFrame, when: pd.Timestamp, side: int) -> tuple[float, p
     return float(row["bid"] if side > 0 else row["ask"]), q.index[i]
 
 
+def _on_grid(price: float, side: int, tick: float) -> float:
+    """Precio de un límite de salida en la rejilla de ticks, redondeado hacia fuera de la entrada."""
+    steps = price / tick
+    steps = np.ceil(steps - 1e-9) if side > 0 else np.floor(steps + 1e-9)
+    return float(steps * tick)
+
+
 def simulate(ev: dict, quotes: pd.DataFrame, trades: pd.DataFrame, spec: Spec = BASE) -> dict | None:
     """Fills L1b y R neta de un evento de ``research_a.detect``. ``None`` = Sin datos."""
     return _simulate(ev, _book(quotes, ("bid", "ask", "bid_size", "ask_size"), "quotes"),
@@ -112,7 +126,7 @@ def _simulate(ev: dict, q: pd.DataFrame, t: pd.DataFrame, spec: Spec) -> dict | 
     risk = abs(entry - stop)
     if risk <= 0:
         return None
-    target = entry + side * spec.target_r * risk
+    target = _on_grid(entry + side * spec.target_r * risk, side, spec.tick)
     end = entry_time + pd.Timedelta(seconds=spec.hold_s)
     win = t.iloc[t.index.searchsorted(entry_time, side="right"):t.index.searchsorted(end, side="left")]
     prices = win["price"].to_numpy(float)
@@ -177,28 +191,55 @@ def verdict(*, n: int, mean_r: float, t_cr1: float, t_crit: float, mean_r_1tick:
     return "candidata" if mean_r >= mu_star_r else "candidata, no monetizable todavía en prop"
 
 
+def _close_lookup(bars: pd.DataFrame):
+    """``close`` de la vela de señal (índice en hora de Nueva York), la entrada proxy del filtro de coste."""
+    idx = pd.DatetimeIndex(bars.index)
+    closes = pd.Series(bars["close"].to_numpy(float), index=idx.tz_localize(NY) if idx.tz is None else
+                       idx.tz_convert(NY))
+
+    def close(minute) -> float:
+        ts = pd.Timestamp(minute)
+        ts = ts.tz_localize(NY) if ts.tzinfo is None else ts.tz_convert(NY)
+        return float(closes.loc[ts])
+    return close
+
+
 def evaluate(bars: pd.DataFrame, refs: pd.DataFrame, footprints: pd.DataFrame | None, hypothesis: str,
              quotes: pd.DataFrame, trades: pd.DataFrame, *, t_crit: float, split: date,
              mu_star_r: float = MU_STAR_R, spec: Spec = BASE) -> dict:
     """Evaluación ÚNICA de una prueba registrada (RA_spec §7) sobre las señales de ``research_a.detect``.
 
-    ``split`` separa las dos mitades del criterio (d). Un evento sin cotización en cualquiera de los tres
-    escenarios (base, +1 tick por lado, L = 1 s) queda Sin datos y se cuenta en ``dropped``.
+    ``split`` separa las dos mitades del criterio (d). Los eventos con stop < 4,2 puntos no se operan y se
+    cuentan en ``cost_filtered``. Un evento sin cotización en cualquiera de los tres escenarios del criterio
+    (base, +1 tick por lado, L + 1 s) queda Sin datos y se cuenta en ``dropped``; ``L + 5 s`` es informativo.
     """
     events = detect(bars, refs, footprints, hypothesis)
     q = _book(quotes, ("bid", "ask", "bid_size", "ask_size"), "quotes")
     t = _book(trades, ("price",), "trades")
     cost_spec = replace(spec, slip_ticks=spec.slip_ticks + 1)
-    lat_spec = replace(spec, latency_s=max(spec.latency_s, LATENCY_STRESS_S))
-    rows = []
+    lat_spec = replace(spec, latency_s=spec.latency_s + LATENCY_STRESS_S)
+    info_spec = replace(spec, latency_s=spec.latency_s + LATENCY_INFO_S)
+    close = _close_lookup(bars)
+    tradable, cost_filtered = [], 0
     for ev in events:
+        if abs(close(ev["minute"]) - float(ev["stop"])) < COST_STOP_POINTS:
+            cost_filtered += 1
+            continue
+        tradable.append(ev)
+    rows, info = [], []
+    for ev in tradable:
+        late = _simulate(ev, q, t, info_spec)
+        if late is not None:
+            info.append(late["r_net"])
         base = _simulate(ev, q, t, spec)
         stressed_cost = _simulate(ev, q, t, cost_spec)
         stressed_lat = _simulate(ev, q, t, lat_spec)
         if base is None or stressed_cost is None or stressed_lat is None:
             continue
         rows.append((ev, base, stressed_cost, stressed_lat))
-    out = {"hypothesis": hypothesis, "n": len(rows), "dropped": len(events) - len(rows)}
+    out = {"hypothesis": hypothesis, "events": len(events), "cost_filtered": cost_filtered, "n": len(rows),
+           "dropped": len(tradable) - len(rows),
+           "mean_r_latency_5s_info": float(np.mean(info)) if info else "Sin datos"}
     if len(rows) < 2:
         out["verdict"] = "Sin datos"
         return out

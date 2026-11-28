@@ -88,6 +88,9 @@ queda fuera de la muestra.
 ## 4. Convenciones comunes
 
 - **Ventana de señales:** 9:45-15:30 ET. Cierre forzado a las 15:55.
+  - Aclaración del 2026-11-28, antes de ver datos: `R30` exige las 30 velas RTH anteriores, así que C, E
+    y H no pueden saltar antes de las 10:00. A, D e I sí pueden desde las 9:45.
+  - El objetivo de 1,5 R se pone en la rejilla de ticks, redondeado hacia fuera de la entrada.
 - **Eventos:** como máximo 3 por sesión e hipótesis, separados ≥ 15 minutos desde la entrada anterior.
   Solo una posición a la vez por hipótesis.
 - **Latencia base:** L = 500 ms desde el cierre de la vela de la señal. Estrés: +1 s (criterio) y +5 s
@@ -317,12 +320,12 @@ queda fuera de la muestra.
 
 | Paso | Qué | Quién | Estado |
 |---|---|---|---|
-| 1 | FUT-B1: coste exacto de `trades` + `tbbo` de NQ y MNQ, y `definition`, de 2019-05 a 2026-11 (también desde 2017-01, como opción) | OpenCode en el equipo del operador | READY (prompt §4.4 de `05`; añadir estos esquemas) |
-| 2 | OP-4 (compra), OP-7 (comisión); OP-8 (sello) aprobada el 2026-11-28 | operador | pendiente OP-4 y OP-7 |
-| 3 | **FUT-C1:** rasgos L1a (velas de delta, CVD, footprint y referencias móviles) con tests sintéticos y cifras exactas | OpenCode (DeepSeek V4.1 Flash) | BLOCKED (2) |
-| 4 | **FUT-C2:** conteo de eventos A-I **sin desenlaces**, por hipótesis y año, con exclusiones | OpenCode | BLOCKED (3) |
+| 1 | FUT-B1: coste exacto de `trades` + `tbbo` de NQ y MNQ, y `definition`, de 2019-05 a 2026-11 (también desde 2017-01, como opción) | OpenCode en el equipo del operador | **HECHO** 2026-11-28 (`evidencia/databento_costes_2026-11.md`) |
+| 2 | OP-4 (compra), OP-7 (comisión); OP-8 (sello) aprobada el 2026-11-28 | operador | pendiente OP-4 y OP-7 (OP-8 aprobada) |
+| 3 | **FUT-C1:** rasgos L1a (velas de delta, CVD, footprint y referencias móviles) con tests sintéticos y cifras exactas | Claude | **HECHO en código** (`futures/orderflow.py`); con datos reales espera a OP-4 |
+| 4 | **FUT-C2:** conteo de eventos A-I **sin desenlaces**, por hipótesis y año, con exclusiones | OpenCode | **HECHO en código** 2026-11-28 (`futures/research_a.py`); el conteo real espera a los datos |
 | 5 | Fijar K y registrar `FUT-RA-1` (+K) | operador | BLOCKED (4) |
-| 6 | **FUT-C3:** evaluador único con fills L1b, latencia, estrés y criterios del §7 | OpenCode | BLOCKED (5) |
+| 6 | **FUT-C3:** evaluador único con fills L1b, latencia, estrés y criterios del §7 | OpenCode + correcciones de Claude | **HECHO en código** 2026-11-28 (`futures/research_a_eval.py`); NO se ejecuta con datos reales hasta el paso 5 |
 
 **Aceptación de FUT-C1:** cifras exactas sobre un conjunto sintético de trades:
 - `Δ`, `CVD` (que se reinicia a las 9:30), `B_t(k)` y `S_t(k)`;
