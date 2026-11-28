@@ -93,3 +93,15 @@ def test_cli_ledger_roundtrip(tmp_path):
     assert r.exit_code == 0, r.output
     r = runner.invoke(app, ["ledger", "summary", "--today", "2027-01-03", "--db", str(db)])
     assert r.exit_code == 0 and '"net_real": -49.0' in r.output
+
+
+def test_cli_allocate_synthetic(tmp_path):
+    out = tmp_path / "orpae.md"
+    r = runner.invoke(app, ["allocate", "--program", "topstep_50k_combine_xfa", "--synthetic-mu", "0.2",
+                            "--days", "300", "--paths", "200", "--seed", "3", "--mean-block", "1",
+                            "--assume-processing-days", "3", "--out", str(out)])
+    assert r.exit_code == 0, r.output
+    text = out.read_text(encoding="utf-8")
+    assert "SIMULADO" in text and "HIPOTÉTICO" in text and "Escalera de evidencia" in text
+    for pol in ("fixed_250", "fixed_500", "fixed_750", "fixed_1000", "cushion_k0.25_max1000"):
+        assert pol in text

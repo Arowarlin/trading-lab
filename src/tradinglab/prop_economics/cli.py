@@ -18,12 +18,14 @@ from rich.console import Console
 from rich.table import Column, Table
 
 from ..config import ROOT
+from .allocate import evaluate_grid, ladder_step, select
 from .ledger import add_account, add_event, open_ledger, summary
+from .policies import SizingPolicy
 from .pools import load_pool, synthetic_pool
 from .project import ProjectConfig, simulate_project
 from .report import build_report, to_markdown
 from .rules import blocking_unknowns, is_expired, load_program
-from .scenarios import min_profitable_edge
+from .scenarios import min_profitable_edge, pool_stats
 
 PROGRAMS_DIR = ROOT / "config" / "prop_economics" / "programs"
 LEDGER_PATH = ROOT / "data" / "prop_economics" / "ledger.db"
@@ -156,3 +158,64 @@ def ledger_summary(budget: float = typer.Option(None), next_eval_price: float = 
     s = summary(con, today=date.fromisoformat(today) if today else _today(), budget=budget,
                 next_eval_price=next_eval_price)
     console.print_json(json.dumps(s, ensure_ascii=False, default=str))
+
+
+@app.command("allocate")
+def allocate(
+    program: str = typer.Option(...), pool: Path = typer.Option(None), synthetic_mu: float = typer.Option(None),
+    rr: float = typer.Option(1.5), risk: float = typer.Option(50.0), cost: float = typer.Option(2.22),
+    days: int = typer.Option(500), budget: float = typer.Option(1500.0), paths: int = typer.Option(4000),
+    seed: int = typer.Option(7), mean_block: float = typer.Option(None), assume: list[str] = typer.Option([]),
+    assume_processing_days: int = typer.Option(None), ruin_max: float = typer.Option(0.10),
+    start: str = typer.Option("2027-01-04"), out: Path = typer.Option(None),
+) -> None:
+    """ORPAE: rejilla de políticas, selección restringida con la COTA INFERIOR de la ventaja y escalera."""
+    from .stats import mu_lcb
+
+    prog = load_program(PROGRAMS_DIR / f"{program}.yaml")
+    if pool is not None:
+        days_pool = load_pool(pool)
+    elif synthetic_mu is not None:
+        days_pool = synthetic_pool(mu_gross_r=synthetic_mu, rr=rr, risk_usd=risk, cost_rt=cost, n_days=days, seed=seed)
+    else:
+        raise typer.BadParameter("hace falta --pool o --synthetic-mu")
+    st = pool_stats(days_pool)
+    if st["mean_risk"] is None:
+        raise typer.BadParameter("el pool necesita risk_usd para medir la ventaja en R")
+    rpc = st["mean_risk"] + st["mean_cost"]
+    traded = [d for d in days_pool if d.n_trades > 0]
+    per_trade_r = [float(d.marks[-1]) / d.n_trades / st["mean_risk"] for d in traded]
+    lcb_r = mu_lcb(per_trade_r, n_boot=2000, seed=seed)
+    mean_r = st["mean_net"] / st["mean_risk"]
+    mll = prog.phases.evaluation.max_loss.amount
+    policies = [SizingPolicy("fixed", rpc, risk_usd=mll * f) for f in (0.125, 0.25, 0.375, 0.5)]
+    policies.append(SizingPolicy("cushion", rpc, kappa=0.25, r_max=0.5 * mll))
+    cfg = ProjectConfig(contracts_eval=1, contracts_funded=1, budget=budget, start_date=date.fromisoformat(start),
+                        assume_processing_days=assume_processing_days, assume=_assume(assume))
+    delta = (lcb_r - mean_r) * st["mean_risk"]
+    decision = evaluate_grid(prog, days_pool, policies, cfg, n_paths=paths, seed=seed, delta=delta,
+                             mean_block=mean_block)
+    reference = evaluate_grid(prog, days_pool, policies, cfg, n_paths=paths, seed=seed, mean_block=mean_block)
+    chosen = select(decision, ruin_max=ruin_max)
+    hypothetical = any(d.source == "synthetic" for d in days_pool)
+    lines = [f"# ORPAE · {prog.program_id} · SIMULADO", ""]
+    if hypothetical:
+        lines += ["> **HIPOTÉTICO:** pool sintético; la ventaja no está medida.", ""]
+    lines += [f"- Ventaja neta por operación: media {mean_r:+.3f} R; cota inferior (95 %) {lcb_r:+.3f} R",
+              f"- Escalera de evidencia: **{ladder_step(lcb_r)}**",
+              f"- Regla: máximo EV a 12 m con mediana > 0, ruina a 24 m ≤ {ruin_max:.0%} y P(neto > 0) ≥ 60 %",
+              f"- Elegida (con la cota inferior): **{chosen['policy'] if chosen else 'ninguna: no comprar'}**", ""]
+    for title, rows in (("Decisión (ventaja en su cota inferior)", decision), ("Referencia (ventaja media)", reference)):
+        lines += [f"## {title}", "", "| Política | EV 6 m | EV 12 m | Mediana 12 m | P5 / P95 12 m | P(neto>0) | "
+                  "P(≥1 payout) | EV 24 m | Ruina 24 m | Capital P95 |", "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|"]
+        for r in rows:
+            lines.append(f"| {r['policy']} | {r['ev6']:.0f} | {r['ev12']:.0f} ± {r['se12']:.0f} | {r['median12']:.0f} | "
+                         f"{r['p5_12']:.0f} / {r['p95_12']:.0f} | {r['p_pos12']:.2f} | {r['p_payout12']:.2f} | "
+                         f"{r['ev24']:.0f} | {r['ruin24']:.3f} | {r['cap_p95']:.0f} |")
+        lines.append("")
+    text = "\n".join(lines)
+    if out:
+        out.write_text(text, encoding="utf-8")
+        console.print(f"informe: {out}")
+    else:
+        console.print(text)
