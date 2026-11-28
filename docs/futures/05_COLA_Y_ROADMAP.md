@@ -54,9 +54,10 @@ la línea de FUT-A8, que se coordina con el lock `cli-py`.
 | FUT-A1 | Esquema YAML de programas (pydantic), cargador, caducidad, incógnitas | OpenCode | **READY** (tras OP-1) | — | `src/tradinglab/prop_economics/__init__.py`, `rules.py`; `config/prop_economics/programs/topstep_50k_combine_xfa.yaml`, `synthetic_static.yaml`, `synthetic_trailing.yaml`; `tests/test_prop_economics_rules.py` | prompt §4.2 | borrar el paquete nuevo con `git revert` |
 | FUT-A2 | `DayPath`, constructor desde operaciones, desplazamiento δ | OpenCode | **READY** (tras OP-1) | — | `src/tradinglab/prop_economics/paths.py`; `tests/test_prop_economics_paths.py` | prompt §4.3 | `git revert` |
 | FUT-A3 | Motor de una cuenta en evaluación (drawdown, DLL, objetivo, consistencia, días, plazo) sobre una secuencia dada | OpenCode | READY tras A1+A2 (prompt §4.6) | A1, A2 | `prop_economics/account.py`, `tests/test_prop_economics_account.py` | T8, T10, T13 exactos | `git revert` |
-| FUT-A4 | Fase financiada y payouts | OpenCode | BACKLOG | A3 | `prop_economics/account.py` (misma tarea que A3 cerrada), `tests/test_prop_economics_payout.py` | T9 exacto | `git revert` |
+| FUT-A4 | Fase financiada y payouts | OpenCode | READY tras A3 (prompt §4.8) | A3 | `prop_economics/account.py` (misma tarea que A3 cerrada), `tests/test_prop_economics_payout.py` | T9 exacto | `git revert` |
 | FUT-A5 | Tarifas, política de intentos, bankroll | OpenCode | READY tras A1 (prompt §4.7) | A1 | `prop_economics/fees.py`, `tests/test_prop_economics_fees.py` | T11, T12 exactos | `git revert` |
-| FUT-A6 | Monte Carlo: stationary bootstrap, CRN, horizontes, métricas, error MC | OpenCode | BACKLOG | A2-A5 | `prop_economics/simulate.py`, `metrics.py`, tests | T1-T7 con ±0,004 (marcar `slow`) | `git revert` |
+| FUT-A6a | Bootstrap estacionario (Politis-Romano), evaluación vectorizada, equivalencia exacta con A3, T1-T7 | OpenCode | READY tras A3 (prompt §4.9) | A2, A3 | `prop_economics/simulate.py`, `tests/test_prop_economics_simulate.py` | T1-T7 ±0,014 (rápido) y ±0,004 (`slow`) | `git revert` |
+| FUT-A6b | Fase financiada vectorizada, payouts y cobro, recompra con presupuesto, métricas a 30/90/180/365 días, error MC | OpenCode | BACKLOG (prompt cuando cierren A4 y A6a) | A4, A5, A6a | `simulate.py`, `metrics.py`, tests | equivalencia exacta con A4; métricas de `04 §7.3` | `git revert` |
 | FUT-A7 | Escenarios y ventaja mínima μ\* | OpenCode | BACKLOG | A6 | `prop_economics/scenarios.py`, tests | monotonía en 9 puntos; μ\* de un pool sintético conocido | `git revert` |
 | FUT-A8 | Informe, sub-app CLI `lab propecon`, libro real separado | OpenCode | BACKLOG | A7 | `prop_economics/report.py`, `cli.py` del paquete, `ledger.py`; **1 línea** en `src/tradinglab/cli.py` con lock `cli-py` | el simulador no puede escribir en el libro (test) | `git revert` |
 | FUT-A9 | Tests de propiedades (T14) | OpenCode | BACKLOG | A4, OP-2 | `tests/test_prop_economics_properties.py` | hypothesis 500 ejemplos | `git revert` |
@@ -288,6 +289,93 @@ Ficheros permitidos (nuevos): src/tradinglab/prop_economics/fees.py, tests/test_
 5. Tests exactos: subscription_charges(30,30)=1, (31,30)=2, (61,30)=3; con 49 USD: 49, 98, 147.
    ev_per_attempt(0.4, 100, 150, 900) == 200.0; cost_per_funded(0.4, 100, 150) == 400.0.
 PARA al terminar.
+```
+
+### 4.8 FUT-A4 · Fase financiada y payouts (worktree `E:\tl-fut-a`, tras A3)
+
+```text
+TAREA FUT-A4. Lee docs/futures/04_SPEC_PROP_EV.md secciones 3.1, 4 y 10 (vector T9). Nada más.
+Ficheros permitidos: src/tradinglab/prop_economics/account.py (YA EXISTE: solo AÑADIR; los tests de A3 deben seguir
+pasando), tests/test_prop_economics_payout.py (nuevo). No modifiques rules.py ni paths.py.
+B = balance - start_balance de la fase financiada (beneficio). L = umbral (threshold).
+
+1. class MissingRuleError(ValueError).
+   @dataclass(frozen=True) PayoutRules: template ("winning_days"|"trading_days_consistency"|"min_balance_and_days"),
+   n: int, min_day_profit: float = 0.0, c: float | None = None, min_balance: float = 0.0, fraction: float = 1.0,
+   cap: float = float("inf"), buffer_min: float = 0.0, min_amount: float = 0.0, split: float = 1.0,
+   processing_days: int = 0, lock_after_first_payout: bool = False, lock_value: float | None = None.
+   payout_rules_from_program(program, *, assume_processing_days: int | None = None) -> PayoutRules: lee
+   phases.funded.payout y phases.funded.max_loss; si processing_days tiene status "sin_datos" y no hay
+   assume_processing_days -> MissingRuleError("processing_days"). lock_value = max_loss.lock_at (número) o None.
+2. @dataclass FundedState: start_balance, balance, peak_eod, peak_intraday, threshold, days, status ("active"|"failed_mll"),
+   win_days_since, profit_since, best_since, days_since, n_payouts. new_funded(program) -> FundedState
+   (balance = start; threshold = start - amount; peaks = start; contadores a 0).
+   @dataclass(frozen=True) PayoutEvent: day_requested: int, day_received: int, gross: float, received: float.
+3. step_funded_day(state, program, rules, day: DayPath, contracts: int, day_index: int, *, policy="max_asap",
+   policy_arg: float | None = None, payout_fee: float = 0.0) -> tuple[FundedState, PayoutEvent | None]:
+   a) Marcas, rotura, DLL y umbral EXACTAMENTE como step_day de A3 (puedes extraer un helper privado común).
+   b) Al cierre (si sigue activa): days_since += 1; profit_since += pnl_dia; best_since = max(best_since, pnl_dia);
+      win_days_since += 1 si pnl_dia >= min_day_profit.
+   c) Elegible: winning_days -> win_days_since >= n; trading_days_consistency -> days_since >= n y
+      best_since <= c * profit_since y profit_since > 0; min_balance_and_days -> B >= min_balance y days_since >= n.
+   d) disponible = min(fraction * B, cap, B - buffer_min). Política: "max_asap" -> w = disponible;
+      "fixed" -> w = min(policy_arg, disponible); "keep_cushion" -> w = min(disponible, balance - L_despues - policy_arg),
+      con L_despues = max(L, start + lock_value) si lock_after_first_payout y lock_value no es None; si no, L.
+      Si w < min_amount: no hay payout.
+   e) Payout: received = split * w - payout_fee; balance -= w; n_payouts += 1; contadores *_since a 0;
+      si lock_after_first_payout y lock_value no es None: threshold = max(threshold, start + lock_value).
+      PayoutEvent(day_requested=day_index, day_received=day_index + processing_days, gross=w, received=received).
+4. Tests EXACTOS (start 0, max_loss trailing_eod 2000 lock_at 0, lock_after_first_payout, winning_days n=5 >=150,
+   fraction 0.5, cap 2000, min 125, split 0.9, processing 0, 1 contrato, marks [0, x]):
+   - T9: 5 días +300 -> payout el día 5: gross 750, received 675, balance 750, threshold 0. Antes del payout,
+     tras el día 5, threshold == -500. Día 6 con -800 -> status "failed_mll".
+   - Cap: 5 días +1200 -> gross 2000, received 1800, balance 4000.
+   - Filtro de días: +300, +100, +300, +300, +300 -> sin payout el día 5; día 6 +300 -> gross 800, received 720.
+   - min_amount 500: 5 días +150 -> sin payout (375 < 500); día 6 +300 -> gross 525, received 472.5.
+   - trading_days_consistency n=3 c=0.4 (resto igual): +100,+100,+100 -> payout el día 3 gross 150, received 135;
+     +300,+100,+100 -> sin payout el día 3.
+   - min_balance_and_days: min_balance 2100, n 1, fraction 1.0, cap inf, buffer_min 2100, min 500, split 0.9:
+     un día +2700 -> gross 600, received 540, balance 2100.
+   - Políticas en el escenario T9 (día 5): keep_cushion 500 -> gross 750; keep_cushion 1000 -> gross 500 y balance 1000;
+     fixed 300 -> gross 300, received 270, balance 1200.
+   - processing_days sin_datos sin assume -> MissingRuleError; con assume_processing_days=3 en el día 5 -> day_received 8.
+   - Con payout_fee=30 en T9 -> received 645.
+NO escribas el Monte Carlo. PARA al terminar.
+```
+
+### 4.9 FUT-A6a · Bootstrap estacionario y evaluación vectorizada (worktree `E:\tl-fut-a`, tras A3)
+
+```text
+TAREA FUT-A6a. Lee docs/futures/04_SPEC_PROP_EV.md secciones 3, 6 y 10 (T1-T7). Nada más.
+Ficheros permitidos (nuevos): src/tradinglab/prop_economics/simulate.py, tests/test_prop_economics_simulate.py.
+Usa DayPath (paths.py), Program (rules.py) y step_day (account.py); NO los modifiques. numpy y arch ya están instalados.
+
+1. stationary_bootstrap_indices(n_pool: int, horizon: int, n_paths: int, mean_block: float, seed: int) -> np.ndarray
+   (n_paths, horizon) de enteros. rng = np.random.Generator(np.random.PCG64(seed)). Columna 0: rng.integers(0, n_pool,
+   n_paths). Para t >= 1: nuevo = rng.random(n_paths) < 1/mean_block; idx[:, t] = where(nuevo, rng.integers(0, n_pool,
+   n_paths), (idx[:, t-1] + 1) % n_pool). mean_block < 1 -> ValueError.
+2. mean_block_length(daily_pnl: np.ndarray) -> float = max(1.0, float(arch.bootstrap.optimal_block_length(daily_pnl)
+   ["stationary"].iloc[0])).
+3. simulate_evaluation(program, pool: list[DayPath], *, contracts: int, horizon: int, n_paths: int, seed: int,
+   mean_block: float | None = None) -> dict. Si mean_block es None usa mean_block_length(pnl diario del pool).
+   VECTORIZADO con numpy sobre caminos: matriz de marcas del pool rellenada con la última marca hasta el máximo de
+   marcas; mismas reglas que step_day (trailing intradía, rotura con igualdad, DLL pause_day/breach, umbral EOD con
+   bloqueo, consistencia, días mínimos, plazo). Un camino aprobado o roto deja de cambiar.
+   Devuelve: p_pass, p_fail_mll, p_timeout, p_active_end, se_p_pass = sqrt(p(1-p)/n_paths), median_days_to_pass
+   (None si nadie aprueba), idx (la matriz de índices usada).
+4. Tests:
+   - Equivalencia EXACTA con el motor escalar: pool de 6 DayPath sintéticos (incluye uno con DLL que se activa y uno con
+     marcas intradía que rompen en trailing_intraday), n_paths 200, horizon 60, seed 7, mean_block 3.0: para cada camino,
+     aplicar step_day de A3 en orden sobre idx da el MISMO estado final (status y balance con abs < 1e-9).
+   - stationary_bootstrap_indices con mean_block 1.0: ninguna transición t-1 -> t es "siguiente" forzada (es iid);
+     con mean_block 1e9: idx[:, t] == (idx[:, 0] + t) % n_pool.
+   - T1-T7 (S 0, D 2000, T 3000, sin DLL ni consistencia ni días mínimos ni plazo; marks [0, x]; mean_block 1.0;
+     horizon 2000; pool con las proporciones exactas: T1 1 ganadora/1 perdedora; T2 11/9; T3 9/11; T4 y T5 1/1;
+     T6 11/9; T7 1 ganadora de +1000 y 2 perdedoras de -500). T5 = trailing_eod con lock_at None (usa
+     program.model_copy). Con n_paths 20000: |p_pass - esperado| <= 0.014 para T1 0.4, T2 0.637586, T3 0.191266,
+     T4 0.273067, T5 0.262144, T6 0.454480, T7 0.277285 (y static 0.387582).
+   - Los mismos T1-T7 con n_paths 200000 y tolerancia 0.004, marcados @pytest.mark.slow.
+NO escribas la fase financiada ni las métricas de horizonte (eso es FUT-A6b). PARA al terminar.
 ```
 
 ## 5. Siguiente paso de Claude
