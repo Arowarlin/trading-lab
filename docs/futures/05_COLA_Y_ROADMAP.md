@@ -51,10 +51,10 @@ la línea de FUT-A8, que se coordina con el lock `cli-py`.
 
 | ID | Objetivo | Quién | Estado | Depende | Ficheros permitidos | Tests / aceptación | Vuelta atrás |
 |---|---|---|---|---|---|---|---|
-| FUT-A1 | Esquema YAML de programas (pydantic), cargador, caducidad, incógnitas | OpenCode | **READY** (tras OP-1) | — | `src/tradinglab/prop_economics/__init__.py`, `rules.py`; `config/prop_economics/programs/topstep_50k_combine_xfa.yaml`, `synthetic_static.yaml`, `synthetic_trailing.yaml`; `tests/test_prop_economics_rules.py` | prompt §4.2 | borrar el paquete nuevo con `git revert` |
-| FUT-A2 | `DayPath`, constructor desde operaciones, desplazamiento δ | OpenCode | **READY** (tras OP-1) | — | `src/tradinglab/prop_economics/paths.py`; `tests/test_prop_economics_paths.py` | prompt §4.3 | `git revert` |
-| FUT-A3 | Motor de una cuenta en evaluación (drawdown, DLL, objetivo, consistencia, días, plazo) sobre una secuencia dada | OpenCode | READY tras A1+A2 (prompt §4.6) | A1, A2 | `prop_economics/account.py`, `tests/test_prop_economics_account.py` | T8, T10, T13 exactos | `git revert` |
-| FUT-A4 | Fase financiada y payouts | OpenCode | READY tras A3 (prompt §4.8) | A3 | `prop_economics/account.py` (misma tarea que A3 cerrada), `tests/test_prop_economics_payout.py` | T9 exacto | `git revert` |
+| FUT-A1 | Esquema YAML de programas (pydantic), cargador, caducidad, incógnitas | Claude (por encargo del operador, 2026-11-28) | **COMPLETED** (`b4d7c43`, 8 tests) | — | `src/tradinglab/prop_economics/__init__.py`, `rules.py`; `config/prop_economics/programs/topstep_50k_combine_xfa.yaml`, `synthetic_static.yaml`, `synthetic_trailing.yaml`; `tests/test_prop_economics_rules.py` | prompt §4.2 | borrar el paquete nuevo con `git revert` |
+| FUT-A2 | `DayPath`, constructor desde operaciones, desplazamiento δ | Claude (por encargo del operador) | **COMPLETED** (`30a2416`, 9 tests) | — | `src/tradinglab/prop_economics/paths.py`; `tests/test_prop_economics_paths.py` | prompt §4.3 | `git revert` |
+| FUT-A3 | Motor de una cuenta en evaluación (drawdown, DLL, objetivo, consistencia, días, plazo) sobre una secuencia dada | Claude (por encargo del operador) | **COMPLETED** (15 tests) | A1, A2 | `prop_economics/account.py`, `tests/test_prop_economics_account.py` | T8, T10, T13 exactos | `git revert` |
+| FUT-A4 | Fase financiada y payouts | Claude (por encargo del operador) | **COMPLETED** (13 tests; K absoluto) | A3 | `prop_economics/account.py` (misma tarea que A3 cerrada), `tests/test_prop_economics_payout.py` | T9 exacto | `git revert` |
 | FUT-A5 | Tarifas, política de intentos, bankroll | OpenCode | READY tras A1 (prompt §4.7) | A1 | `prop_economics/fees.py`, `tests/test_prop_economics_fees.py` | T11, T12 exactos | `git revert` |
 | FUT-A6a | Bootstrap estacionario (Politis-Romano), evaluación vectorizada, equivalencia exacta con A3, T1-T7 | OpenCode | READY tras A3 (prompt §4.9) | A2, A3 | `prop_economics/simulate.py`, `tests/test_prop_economics_simulate.py` | T1-T7 ±0,014 (rápido) y ±0,004 (`slow`) | `git revert` |
 | FUT-A6b | Fase financiada vectorizada, payouts y cobro, recompra con presupuesto, métricas a 30/90/180/365 días, error MC | OpenCode | BACKLOG (prompt cuando cierren A4 y A6a) | A4, A5, A6a | `simulate.py`, `metrics.py`, tests | equivalencia exacta con A4; métricas de `04 §7.3` | `git revert` |
@@ -309,7 +309,8 @@ B = balance - start_balance de la fase financiada (beneficio). L = umbral (thres
    processing_days: int = 0, lock_after_first_payout: bool = False, lock_value: float | None = None.
    payout_rules_from_program(program, *, assume_processing_days: int | None = None) -> PayoutRules: lee
    phases.funded.payout y phases.funded.max_loss; si processing_days tiene status "sin_datos" y no hay
-   assume_processing_days -> MissingRuleError("processing_days"). lock_value = max_loss.lock_at (número) o None.
+   assume_processing_days -> MissingRuleError("processing_days"). lock_value = K ABSOLUTO (04 §1): "start_balance" -> S,
+   número -> ese número, None -> None.
 2. @dataclass FundedState: start_balance, balance, peak_eod, peak_intraday, threshold, days, status ("active"|"failed_mll"),
    win_days_since, profit_since, best_since, days_since, n_payouts. new_funded(program) -> FundedState
    (balance = start; threshold = start - amount; peaks = start; contadores a 0).
@@ -323,10 +324,10 @@ B = balance - start_balance de la fase financiada (beneficio). L = umbral (thres
       best_since <= c * profit_since y profit_since > 0; min_balance_and_days -> B >= min_balance y days_since >= n.
    d) disponible = min(fraction * B, cap, B - buffer_min). Política: "max_asap" -> w = disponible;
       "fixed" -> w = min(policy_arg, disponible); "keep_cushion" -> w = min(disponible, balance - L_despues - policy_arg),
-      con L_despues = max(L, start + lock_value) si lock_after_first_payout y lock_value no es None; si no, L.
+      con L_despues = max(L, lock_value) si lock_after_first_payout y lock_value no es None; si no, L.
       Si w < min_amount: no hay payout.
    e) Payout: received = split * w - payout_fee; balance -= w; n_payouts += 1; contadores *_since a 0;
-      si lock_after_first_payout y lock_value no es None: threshold = max(threshold, start + lock_value).
+      si lock_after_first_payout y lock_value no es None: threshold = max(threshold, lock_value).
       PayoutEvent(day_requested=day_index, day_received=day_index + processing_days, gross=w, received=received).
 4. Tests EXACTOS (start 0, max_loss trailing_eod 2000 lock_at 0, lock_after_first_payout, winning_days n=5 >=150,
    fraction 0.5, cap 2000, min 125, split 0.9, processing 0, 1 contrato, marks [0, x]):
